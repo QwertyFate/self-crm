@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upgrads CRM</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════
+       ADMIN SCREEN
+  ══════════════════════════════════════ -->
+  <div id="admin-screen" class="hidden">
+    <div class="auth-wrap">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <img src="/images/logo.png" alt="CRM Logo" />
+        </div>
+
+        <!-- ── Admin Login ── -->
+        <div id="admin-view-login">
+          <p class="admin-panel-title">Platform Admin</p>
+          <p class="admin-panel-sub">Enter your admin secret to manage platform invite codes.</p>
+          <form class="auth-form" onsubmit="handleAdminLogin(event)">
+            <div class="auth-field">
+              <label>Admin Secret</label>
+              <input type="password" id="admin-secret-input" required autocomplete="current-password" />
+            </div>
+            <div id="admin-login-error" class="auth-error hidden"></div>
+            <button type="submit" class="btn btn-primary auth-submit">Access panel</button>
+          </form>
+          <div class="auth-link-row" style="margin-top:16px">
+            <a href="/" onclick="location.href='/'">← Back to app</a>
+          </div>
+        </div>
+
+        <!-- ── Admin Dashboard ── -->
+        <div id="admin-view-panel" class="hidden">
+          <div class="admin-panel-header">
+            <p class="admin-panel-title" style="margin:0">Platform Invites</p>
+            <button class="btn btn-primary btn-sm" onclick="adminGenerateCode()">+ Generate</button>
+          </div>
+          <p class="admin-panel-sub">One-time codes that allow someone to create a new workspace on signup.</p>
+          <div id="admin-invites-list" class="admin-invites-list"></div>
+          <div class="auth-link-row" style="margin-top:18px">
+            <a href="#" onclick="adminLogout(event)">Log out of admin</a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       AUTH SCREEN
+  ══════════════════════════════════════ -->
+  <div id="auth-screen" class="hidden">
+    <div class="auth-wrap">
+      <div class="auth-card">
+        <div class="auth-logo">
+          <img src="/images/logo.png" alt="CRM Logo" />
+        </div>
+
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-tab="login">Log in</button>
+          <button class="auth-tab" data-tab="signup">Sign up</button>
+        </div>
+
+        <!-- ── View: Login / Signup ── -->
+        <div id="auth-view-main">
+          <!-- Login -->
+          <form id="login-form" class="auth-form" onsubmit="handleLogin(event)">
+            <div class="auth-field">
+              <label>Email</label>
+              <input type="email" id="login-email" required autocomplete="email" />
+            </div>
+            <div class="auth-field">
+              <label>Password</label>
+              <input type="password" id="login-password" required autocomplete="current-password" />
+            </div>
+            <div id="login-error" class="auth-error hidden"></div>
+            <button type="submit" class="btn btn-primary auth-submit">Log in</button>
+            <div class="auth-link-row">
+              <a href="#" onclick="showForgotPassword(event)">Forgot your password?</a>
+            </div>
+          </form>
+
+          <!-- Signup -->
+          <form id="signup-form" class="auth-form hidden" onsubmit="handleSignup(event)">
+            <div class="auth-mode-toggle">
+              <label class="auth-mode-opt">
+                <input type="radio" name="signup-mode" value="create" checked onchange="toggleSignupMode()" />
+                Create new workspace
+              </label>
+              <label class="auth-mode-opt">
+                <input type="radio" name="signup-mode" value="join" onchange="toggleSignupMode()" />
+                Join existing workspace
+              </label>
+            </div>
+            <div class="auth-field" id="su-workspace-field">
+              <label>Workspace name</label>
+              <input type="text" id="su-workspace" placeholder="e.g. Acme Sales" />
+            </div>
+            <div class="auth-field" id="su-platform-code-field">
+              <label>Platform invite code <span class="auth-hint">(required to create a workspace)</span></label>
+              <input type="text" id="su-platform-code" placeholder="Paste platform code here" autocomplete="off" />
+            </div>
+            <div class="auth-field hidden" id="su-code-field">
+              <label>Workspace invite code</label>
+              <input type="text" id="su-code" placeholder="Paste workspace code here" autocomplete="off" />
+            </div>
+            <div class="auth-field">
+              <label>Your name</label>
+              <input type="text" id="su-name" required autocomplete="name" />
+            </div>
+            <div class="auth-field">
+              <label>Email</label>
+              <input type="email" id="su-email" required autocomplete="email" />
+            </div>
+            <div class="auth-field">
+              <label>Password <span class="auth-hint">(min 6 chars)</span></label>
+              <input type="password" id="su-password" required autocomplete="new-password" />
+            </div>
+            <div id="signup-error" class="auth-error hidden"></div>
+            <button type="submit" class="btn btn-primary auth-submit">Create account</button>
+          </form>
+        </div>
+
+        <!-- ── View: Forgot Password ── -->
+        <div id="auth-view-forgot" class="hidden">
+          <p class="auth-view-title">Reset your password</p>
+          <p class="auth-view-sub">Enter your email and we'll send you a reset link.</p>
+          <form class="auth-form" onsubmit="handleForgotPassword(event)">
+            <div class="auth-field">
+              <label>Email</label>
+              <input type="email" id="forgot-email" required autocomplete="email" />
+            </div>
+            <div id="forgot-error" class="auth-error hidden"></div>
+            <div id="forgot-success" class="auth-success hidden"></div>
+            <div id="forgot-link-box" class="auth-reset-link hidden">
+              <label>Copy this reset link:</label>
+              <div class="reset-link-row">
+                <input type="text" id="forgot-link-val" readonly />
+                <button type="button" class="btn btn-sm" onclick="copyResetLink()">Copy</button>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary auth-submit" id="forgot-btn">Send reset link</button>
+          </form>
+          <div class="auth-link-row">
+            <a href="#" onclick="showMainAuth(event)">← Back to log in</a>
+          </div>
+        </div>
+
+        <!-- ── View: Reset Password ── -->
+        <div id="auth-view-reset" class="hidden">
+          <p class="auth-view-title">Set a new password</p>
+          <form class="auth-form" onsubmit="handleResetPassword(event)">
+            <input type="hidden" id="reset-token" />
+            <div class="auth-field">
+              <label>New password <span class="auth-hint">(min 6 chars)</span></label>
+              <input type="password" id="reset-password" required autocomplete="new-password" />
+            </div>
+            <div class="auth-field">
+              <label>Confirm password</label>
+              <input type="password" id="reset-confirm" required autocomplete="new-password" />
+            </div>
+            <div id="reset-error" class="auth-error hidden"></div>
+            <button type="submit" class="btn btn-primary auth-submit">Set password</button>
+          </form>
+          <div class="auth-link-row">
+            <a href="#" onclick="showMainAuth(event)">← Back to log in</a>
+          </div>
+        </div>
+
+        <div class="admin-link-row">
+          <a href="/?admin" class="admin-link">⚙ Admin</a>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       MAIN APP
+  ══════════════════════════════════════ -->
+  <div id="app" class="hidden">
+    <nav class="sidebar">
+      <div class="sidebar-top">
+        <img src="/images/logo.png" alt="Logo" class="sidebar-logo" />
+        <div class="workspace-name" id="sidebar-workspace"></div>
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="#" data-page="pipeline" class="active">📊 <span data-i18n="nav_pipeline">Pipeline</span></a></li>
+        <li><a href="#" data-page="contacts">👥 <span data-i18n="nav_contacts">Contacts</span></a></li>
+        <li><a href="#" data-page="activities">📋 <span data-i18n="nav_activities">Activities</span></a></li>
+      </ul>
+      <ul class="sidebar-nav sidebar-bottom">
+        <li><a href="#" data-page="settings">⚙️ <span data-i18n="nav_settings">Settings</span></a></li>
+        <li>
+          <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-toggle-btn">
+            <div class="toggle-track" id="dark-toggle-track">
+              <div class="toggle-thumb"></div>
+            </div>
+            <span id="dark-toggle-label" data-i18n="dark_mode">Dark mode</span>
+          </button>
+        </li>
+        <li><a href="#" onclick="logout(event)" class="logout-link">🚪 <span data-i18n="logout">Log out</span></a></li>
+      </ul>
+      <div class="sidebar-user" id="sidebar-user"></div>
+    </nav>
+
+    <main class="content">
+
+      <!-- ── Pipeline ── -->
+      <section id="page-pipeline" class="page active">
+        <div class="page-header">
+          <h1 data-i18n="page_pipeline">Pipeline</h1>
+          <button class="btn btn-primary" onclick="openContactModal()" data-i18n="add_contact">+ Add Contact</button>
+        </div>
+        <div id="pipeline-board" class="pipeline-board"></div>
+      </section>
+
+      <!-- ── Contacts ── -->
+      <section id="page-contacts" class="page">
+        <div class="page-header">
+          <h1 data-i18n="page_contacts">Contacts</h1>
+          <button class="btn btn-primary" onclick="openContactModal()" data-i18n="add_contact">+ Add Contact</button>
+        </div>
+        <div class="toolbar">
+          <input type="text" id="contact-search" data-i18n-ph="search_ph" placeholder="Search contacts…" oninput="filterContacts()" />
+          <div class="toolbar-actions">
+            <button class="btn btn-sm" onclick="openImportModal()" data-i18n="import_csv">⬆ Import CSV</button>
+            <button class="btn btn-sm" onclick="exportContactsCSV()" data-i18n="export_csv">⬇ Export CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead id="contacts-thead"><tr><th>Name</th><th>Company</th><th>Email</th><th>Phone</th><th>Stage</th></tr></thead>
+            <tbody id="contacts-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ── Activities ── -->
+      <section id="page-activities" class="page">
+        <div class="page-header">
+          <h1 data-i18n="page_activities">Activities</h1>
+          <button class="btn btn-primary" onclick="openActivityModal()" data-i18n="log_activity">+ Log Activity</button>
+        </div>
+        <div id="activities-list" class="activities-list"></div>
+      </section>
+
+      <!-- ── Settings ── -->
+      <section id="page-settings" class="page">
+        <div class="page-header"><h1 data-i18n="page_settings">Settings</h1></div>
+        <div class="settings-grid">
+
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="set_stages">Pipeline Stages</h2>
+              <button class="btn btn-primary btn-sm" onclick="openStageModal()" data-i18n="add_btn">+ Add</button>
+            </div>
+            <p class="settings-hint" data-i18n="hint_stages">Drag to reorder. Contacts are unassigned when a stage is deleted.</p>
+            <ul id="stages-list" class="settings-list"></ul>
+          </div>
+
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="set_fields">Custom Fields</h2>
+              <button class="btn btn-primary btn-sm" onclick="openFieldModal()" data-i18n="add_btn">+ Add</button>
+            </div>
+            <p class="settings-hint" data-i18n="hint_fields">Extra properties on every contact.</p>
+            <ul id="fields-list" class="settings-list"></ul>
+          </div>
+
+          <div class="settings-card">
+            <div class="settings-card-header"><h2 data-i18n="set_kanban">Kanban Card Fields</h2></div>
+            <p class="settings-hint" data-i18n="hint_kanban">Choose which fields appear on pipeline cards. Name is always shown.</p>
+            <div id="kanban-fields-list" class="kanban-fields-checks"></div>
+            <div style="padding:12px 0 4px">
+              <button class="btn btn-primary btn-sm" onclick="saveKanbanFields()" data-i18n="save_btn">Save</button>
+            </div>
+          </div>
+
+          <div class="settings-card" id="invites-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="set_invites">Invite Codes</h2>
+              <button class="btn btn-primary btn-sm" onclick="generateInviteCode()" data-i18n="generate_btn">Generate</button>
+            </div>
+            <p class="settings-hint" data-i18n="hint_invites">One-time codes to let people join this workspace.</p>
+            <ul id="invites-list" class="settings-list"></ul>
+          </div>
+
+          <div class="settings-card">
+            <div class="settings-card-header"><h2 data-i18n="set_members">Team Members</h2></div>
+            <ul id="members-list" class="settings-list"></ul>
+          </div>
+
+          <div class="settings-card hidden" id="workspace-name-card">
+            <div class="settings-card-header"><h2 data-i18n="set_workspace">Workspace</h2></div>
+            <p class="settings-hint" data-i18n="hint_workspace">Update the name of this workspace.</p>
+            <div class="workspace-name-row">
+              <input type="text" id="workspace-name-input" class="workspace-name-input" />
+              <button class="btn btn-primary btn-sm" onclick="saveWorkspaceName()" data-i18n="btn_save">Save</button>
+            </div>
+            <div id="workspace-name-msg" class="workspace-name-msg hidden"></div>
+          </div>
+
+          <div class="settings-card">
+            <div class="settings-card-header"><h2 data-i18n="set_language">Language</h2></div>
+            <p class="settings-hint" data-i18n="hint_language">Choose your preferred display language.</p>
+            <div class="lang-options">
+              <label class="lang-opt">
+                <input type="radio" name="language" value="en" onchange="setLanguage('en')" />
+                <span class="lang-flag">🇬🇧</span>
+                <span data-i18n="lang_en">English</span>
+              </label>
+              <label class="lang-opt">
+                <input type="radio" name="language" value="de" onchange="setLanguage('de')" />
+                <span class="lang-flag">🇩🇪</span>
+                <span data-i18n="lang_de">German</span>
+              </label>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ══════════════════════════════════════ MODALS ══════════════════════════════════════ -->
+
+  <!-- Contact Modal -->
+  <div id="contact-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="contact-modal-title">Add Contact</h2>
+        <button class="close-btn" onclick="closeModal('contact-modal')">&times;</button>
+      </div>
+      <form id="contact-form" onsubmit="saveContact(event)">
+        <input type="hidden" id="contact-id" />
+        <div class="form-group"><label><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="cf-name" required /></div>
+        <div class="form-group"><label data-i18n="lbl_company">Company</label><input type="text" id="cf-company" /></div>
+        <div class="form-group"><label data-i18n="lbl_email">Email</label><input type="email" id="cf-email" /></div>
+        <div class="form-group"><label data-i18n="lbl_phone">Phone</label><input type="tel" id="cf-phone" /></div>
+        <div class="form-group"><label data-i18n="lbl_stage">Stage</label><select id="cf-stage"></select></div>
+        <div class="form-group"><label data-i18n="lbl_assignee">Assignee</label><select id="cf-assignee"></select></div>
+        <div id="cf-custom-fields"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('contact-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Contact Detail Modal -->
+  <div id="detail-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="detail-title"></h2>
+        <button class="close-btn" onclick="closeModal('detail-modal')">&times;</button>
+      </div>
+      <div id="detail-body"></div>
+    </div>
+  </div>
+
+  <!-- Activity Modal -->
+  <div id="activity-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Log Activity</h2>
+        <button class="close-btn" onclick="closeModal('activity-modal')">&times;</button>
+      </div>
+      <form id="activity-form" onsubmit="saveActivity(event)">
+        <div class="form-group"><label data-i18n="lbl_type">Type</label>
+          <select id="act-type">
+            <option value="note" data-i18n="act_note">Note</option>
+            <option value="call" data-i18n="act_call">Call</option>
+            <option value="email" data-i18n="act_email">Email</option>
+          </select>
+        </div>
+        <div class="form-group"><label data-i18n="lbl_contact">Contact</label><select id="act-contact"></select></div>
+        <div class="form-group"><label><span data-i18n="lbl_content">Content</span> <span class="req">*</span></label><textarea id="act-content" rows="3" required></textarea></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('activity-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Stage Modal -->
+  <div id="stage-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2 id="stage-modal-title">Add Stage</h2>
+        <button class="close-btn" onclick="closeModal('stage-modal')">&times;</button>
+      </div>
+      <form id="stage-form" onsubmit="saveStage(event)">
+        <input type="hidden" id="stage-id" />
+        <div class="form-group"><label><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="stage-name" required /></div>
+        <div class="form-group"><label data-i18n="lbl_color">Color</label><input type="color" id="stage-color" value="#4f6ef7" /></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('stage-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Field Modal -->
+  <div id="field-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2 id="field-modal-title">Add Field</h2>
+        <button class="close-btn" onclick="closeModal('field-modal')">&times;</button>
+      </div>
+      <form id="field-form" onsubmit="saveField(event)">
+        <input type="hidden" id="field-id" />
+        <div class="form-group"><label><span data-i18n="lbl_field_label">Label</span> <span class="req">*</span></label><input type="text" id="field-name" required oninput="autoKey()" /></div>
+        <div class="form-group"><label data-i18n="lbl_key">Key</label><input type="text" id="field-key" readonly style="opacity:.55" /></div>
+        <div class="form-group"><label data-i18n="lbl_type">Type</label>
+          <select id="field-type" onchange="toggleDropdownOptions()">
+            <option value="text">Text</option>
+            <option value="email">Email</option>
+            <option value="phone">Phone</option>
+            <option value="number">Number</option>
+            <option value="date">Date</option>
+            <option value="url">URL</option>
+            <option value="dropdown">Dropdown</option>
+          </select>
+        </div>
+        <div class="form-group hidden" id="field-options-group">
+          <label data-i18n="lbl_options">Options (one per line)</label>
+          <textarea id="field-options" rows="4" placeholder="Option A&#10;Option B&#10;Option C"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('field-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Import CSV Modal -->
+  <div id="import-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2>Import Contacts from CSV</h2>
+        <button class="close-btn" onclick="closeModal('import-modal')">&times;</button>
+      </div>
+
+      <!-- Step 1: Upload -->
+      <div id="import-step-upload">
+        <div class="import-upload-area" onclick="document.getElementById('import-file-input').click()"
+             ondragover="event.preventDefault()" ondrop="handleImportDrop(event)">
+          <div class="import-upload-icon">📄</div>
+          <p>Drag &amp; drop a CSV here, or <span class="import-browse-link">browse</span></p>
+          <p class="import-upload-hint">First row must be column headers</p>
+          <input type="file" id="import-file-input" accept=".csv,text/csv" style="display:none" onchange="handleImportFile(event)" />
+        </div>
+      </div>
+
+      <!-- Step 2: Map columns -->
+      <div id="import-step-map" class="hidden">
+        <p class="import-info-text" id="import-info-text"></p>
+        <div class="import-map-header-row">
+          <span>CSV column &amp; sample</span>
+          <span></span>
+          <span>Maps to CRM field</span>
+        </div>
+        <div id="import-map-rows" class="import-map-rows"></div>
+        <div class="modal-actions">
+          <button class="btn" onclick="importBack()">← Back</button>
+          <button class="btn btn-primary" id="import-run-btn" onclick="runImport()">Import contacts</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Done -->
+      <div id="import-step-done" class="hidden">
+        <div class="import-done">
+          <div class="import-done-icon">✅</div>
+          <p id="import-done-text"></p>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" onclick="closeModal('import-modal');loadContacts()">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
