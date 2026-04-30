@@ -8,9 +8,11 @@ let stages     = [];
 let fields     = [];
 let activities = [];
 let members    = [];
-let dragContactId = null;
-let dragStageIdx  = null;
-let importData    = null;
+let dragContactId  = null;
+let dragStageIdx   = null;
+let colDragIdx     = null;
+let importData     = null;
+let contactColumns = []; // [{key, visible}] — empty = all visible in default order
 let currentLang   = localStorage.getItem('lang') || 'en';
 
 // ── Translations ──────────────────────────────────────────
@@ -29,6 +31,7 @@ const TRANSLATIONS = {
     logged_by:'by',
     set_stages:'Pipeline Stages', set_fields:'Custom Fields', set_kanban:'Kanban Card Fields',
     set_invites:'Invite Codes', set_members:'Team Members', set_language:'Language', set_workspace:'Workspace',
+    set_contact_cols:'Contact Columns', hint_contact_cols:'Drag to reorder. Name is always first.',
     hint_stages:'Drag to reorder. Contacts are unassigned when a stage is deleted.',
     hint_fields:'Extra properties on every contact.',
     hint_kanban:'Choose which fields appear on pipeline cards. Name is always shown.',
@@ -64,6 +67,7 @@ const TRANSLATIONS = {
     logged_by:'von',
     set_stages:'Pipeline-Phasen', set_fields:'Benutzerdefinierte Felder', set_kanban:'Kanban-Kartenfelder',
     set_invites:'Einladungscodes', set_members:'Teammitglieder', set_language:'Sprache', set_workspace:'Arbeitsbereich',
+    set_contact_cols:'Kontaktspalten', hint_contact_cols:'Zum Neuanordnen ziehen. Name steht immer an erster Stelle.',
     hint_stages:'Zum Neuanordnen ziehen. Kontakte werden bei Phasenlöschung nicht zugewiesen.',
     hint_fields:'Zusätzliche Eigenschaften für jeden Kontakt.',
     hint_kanban:'Felder auswählen, die auf Pipeline-Karten erscheinen. Name wird immer angezeigt.',
@@ -152,7 +156,8 @@ async function init() {
   if (data.user && !resetToken) {
     currentUser      = data.user;
     currentWorkspace = data.workspace;
-    kanbanFields     = data.workspace.kanban_fields || ['company', 'email'];
+    kanbanFields     = data.workspace.kanban_fields    || ['company', 'email'];
+    contactColumns   = data.workspace.contact_columns  || [];
     showApp();
   } else {
     showAuth();
@@ -247,7 +252,8 @@ async function handleLogin(e) {
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
   currentUser      = data.user;
   currentWorkspace = data.workspace;
-  kanbanFields     = data.workspace.kanban_fields || ['company', 'email'];
+  kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
+  contactColumns   = data.workspace.contact_columns || [];
   showApp();
 }
 
@@ -270,7 +276,8 @@ async function handleSignup(e) {
   const me = await api.get('/api/auth/me');
   currentUser      = me.user;
   currentWorkspace = me.workspace;
-  kanbanFields     = me.workspace.kanban_fields || ['company', 'email'];
+  kanbanFields     = me.workspace.kanban_fields   || ['company', 'email'];
+  contactColumns   = me.workspace.contact_columns || [];
   showApp();
 }
 
@@ -460,30 +467,64 @@ async function loadContacts() {
   renderContactsTable(contacts);
 }
 
+// Returns ordered, merged column definitions respecting saved config + current fields
+function effectiveContactColumns() {
+  const BUILTIN = [
+    { key: 'company',     label: () => t('col_company'), type: 'text'     },
+    { key: 'email',       label: () => t('col_email'),   type: 'email'    },
+    { key: 'phone',       label: () => t('col_phone'),   type: 'phone'    },
+    { key: 'stage_id',    label: () => t('col_stage'),   type: 'stage'    },
+    { key: 'assigned_to', label: () => t('col_assignee'),type: 'assignee' },
+  ];
+  const ALL = [
+    ...BUILTIN,
+    ...fields.map(f => ({ key: f.field_key, label: () => f.name, type: f.type })),
+  ];
+
+  if (!contactColumns.length) return ALL.map(c => ({ ...c, visible: true }));
+
+  const savedMap = Object.fromEntries(contactColumns.map(c => [c.key, c.visible]));
+  const ordered  = contactColumns
+    .map(({ key }) => { const def = ALL.find(c => c.key === key); return def ? { ...def, visible: savedMap[key] } : null; })
+    .filter(Boolean);
+  // Append any new fields not in saved config
+  ALL.filter(c => !(c.key in savedMap)).forEach(c => ordered.push({ ...c, visible: true }));
+  return ordered;
+}
+
 function renderContactsTable(list) {
+  const cols = effectiveContactColumns().filter(c => c.visible);
+
   document.getElementById('contacts-thead').innerHTML = `<tr>
-    <th>${t('col_name')}</th><th>${t('col_company')}</th><th>${t('col_email')}</th><th>${t('col_phone')}</th><th>${t('col_stage')}</th><th>${t('col_assignee')}</th>
-    ${fields.map(f => `<th>${esc(f.name)}</th>`).join('')}<th></th>
+    <th>${t('col_name')}</th>
+    ${cols.map(c => `<th>${c.label()}</th>`).join('')}
+    <th></th>
   </tr>`;
 
   document.getElementById('contacts-body').innerHTML = list.map(c => {
-    const stage = stages.find(s => s.id === c.stage_id);
-    const badge = stage
-      ? `<span class="stage-badge"><span class="stage-badge-dot" style="background:${stage.color}"></span>${esc(stage.name)}</span>`
-      : '<span class="muted-dash">—</span>';
-    const customCells = fields.map(f => {
-      const v = c.custom_data?.[f.field_key] ?? '';
-      return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${f.field_key}','${f.type}')">${esc(v) || '<span class="muted-dash">—</span>'}</td>`;
+    const cells = cols.map(col => {
+      const dash = '<span class="muted-dash">—</span>';
+      if (col.key === 'company')
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'company','text')">${esc(c.company||'')||dash}</td>`;
+      if (col.key === 'email')
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'email','email')">${esc(c.email||'')||dash}</td>`;
+      if (col.key === 'phone')
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'phone','phone')">${esc(c.phone||'')||dash}</td>`;
+      if (col.key === 'stage_id') {
+        const stage = stages.find(s => s.id === c.stage_id);
+        const badge = stage ? `<span class="stage-badge"><span class="stage-badge-dot" style="background:${stage.color}"></span>${esc(stage.name)}</span>` : dash;
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'stage_id','stage')">${badge}</td>`;
+      }
+      if (col.key === 'assigned_to')
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'assigned_to','assignee')">${esc(c.assigned_to_name||'')||dash}</td>`;
+      // Custom field
+      const v = c.custom_data?.[col.key] ?? '';
+      return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${col.key}','${col.type}')">${esc(v)||dash}</td>`;
     }).join('');
 
     return `<tr>
       <td><strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong></td>
-      <td class="editable-cell" onclick="startInlineEdit(this,${c.id},'company','text')">${esc(c.company||'') || '<span class="muted-dash">—</span>'}</td>
-      <td class="editable-cell" onclick="startInlineEdit(this,${c.id},'email','email')">${esc(c.email||'') || '<span class="muted-dash">—</span>'}</td>
-      <td class="editable-cell" onclick="startInlineEdit(this,${c.id},'phone','phone')">${esc(c.phone||'') || '<span class="muted-dash">—</span>'}</td>
-      <td class="editable-cell" onclick="startInlineEdit(this,${c.id},'stage_id','stage')">${badge}</td>
-      <td class="editable-cell" onclick="startInlineEdit(this,${c.id},'assigned_to','assignee')">${esc(c.assigned_to_name||'') || '<span class="muted-dash">—</span>'}</td>
-      ${customCells}
+      ${cells}
       <td class="row-actions" style="white-space:nowrap">
         <button class="btn btn-sm btn-ghost" onclick="openDetail(${c.id})">${t('btn_view')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteContact(${c.id})">${t('btn_delete')}</button>
@@ -628,6 +669,7 @@ async function loadSettings() {
   renderStagesList();
   renderFieldsList();
   renderKanbanFields();
+  renderContactColumnSettings();
   if (currentUser?.role === 'owner') {
     document.getElementById('invites-card').classList.remove('hidden');
     loadInvites();
@@ -785,6 +827,52 @@ async function deleteField(id) {
   await api.del(`/api/fields/${id}`);
   invalidate();
   await loadSettings();
+}
+
+// ── Contact column visibility & order ────────────────────
+function renderContactColumnSettings() {
+  const el = document.getElementById('contact-columns-list');
+  if (!el) return;
+  const cols = effectiveContactColumns();
+  el.innerHTML = cols.map((col, i) => `
+    <li class="settings-row col-cfg-row" draggable="true"
+      ondragstart="colDragStart(event,${i})" ondragover="colDragOver(event)" ondrop="colDrop(event,${i})" ondragleave="colDragLeave(event)">
+      <span class="drag-handle">⠿</span>
+      <span class="row-label">${col.label()}</span>
+      <label class="col-vis-toggle">
+        <input type="checkbox" ${col.visible ? 'checked' : ''} onchange="colToggleVisible(${i},this.checked)" />
+      </label>
+    </li>`).join('');
+}
+
+function colDragStart(e, i) {
+  colDragIdx = i;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.classList.add('dragging');
+}
+function colDragOver(e)  { e.preventDefault(); e.currentTarget.classList.add('col-drag-over'); }
+function colDragLeave(e) { e.currentTarget.classList.remove('col-drag-over'); }
+function colDrop(e, targetIdx) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('col-drag-over');
+  if (colDragIdx === null || colDragIdx === targetIdx) { colDragIdx = null; return; }
+  const cols  = effectiveContactColumns();
+  const moved = cols.splice(colDragIdx, 1)[0];
+  cols.splice(targetIdx, 0, moved);
+  colDragIdx     = null;
+  contactColumns = cols.map(({ key, visible }) => ({ key, visible }));
+  renderContactColumnSettings();
+}
+function colToggleVisible(i, visible) {
+  const cols  = effectiveContactColumns();
+  cols[i].visible = visible;
+  contactColumns  = cols.map(({ key, visible }) => ({ key, visible }));
+}
+
+async function saveContactColumns() {
+  await api.patch('/api/workspace/contact-columns', { columns: contactColumns });
+  currentWorkspace.contact_columns = contactColumns;
+  filterContacts();
 }
 
 // ── Kanban field visibility ───────────────────────────────

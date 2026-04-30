@@ -314,6 +314,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .import-done-icon { font-size: 48px; margin-bottom: 12px; }
 #import-done-text { font-size: 16px; font-weight: 500; }
 
+/* ══ CONTACT COLUMN SETTINGS ════════════════════════════ */
+.col-cfg-row { user-select: none; }
+.col-cfg-row.col-drag-over { outline: 2px dashed var(--primary); border-radius: var(--radius); }
+.col-cfg-locked { opacity: .6; }
+.col-vis-toggle { margin-left: auto; display: flex; align-items: center; }
+.col-vis-toggle input { accent-color: var(--primary); width: 15px; height: 15px; cursor: pointer; }
+
 /* ══ WORKSPACE NAME SETTING ══════════════════════════════ */
 .workspace-name-row { display: flex; gap: 8px; align-items: center; }
 .workspace-name-input {

@@ -275,6 +275,21 @@
           </div>
 
           <div class="settings-card">
+            <div class="settings-card-header"><h2 data-i18n="set_contact_cols">Contact Columns</h2></div>
+            <p class="settings-hint" data-i18n="hint_contact_cols">Drag to reorder. Name is always first.</p>
+            <!-- Name is always locked first -->
+            <div class="settings-row col-cfg-row col-cfg-locked">
+              <span class="drag-handle" style="opacity:.25">⠿</span>
+              <span class="row-label" data-i18n="col_name">Name</span>
+              <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
+            </div>
+            <ul id="contact-columns-list" class="settings-list" style="margin-top:6px"></ul>
+            <div style="padding:12px 0 4px">
+              <button class="btn btn-primary btn-sm" onclick="saveContactColumns()" data-i18n="btn_save">Save</button>
+            </div>
+          </div>
+
+          <div class="settings-card">
             <div class="settings-card-header"><h2 data-i18n="set_kanban">Kanban Card Fields</h2></div>
             <p class="settings-hint" data-i18n="hint_kanban">Choose which fields appear on pipeline cards. Name is always shown.</p>
             <div id="kanban-fields-list" class="kanban-fields-checks"></div>
