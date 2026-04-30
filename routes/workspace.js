@@ -55,6 +55,15 @@ router.patch('/name', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.patch('/contact-columns', async (req, res, next) => {
+  try {
+    const { columns } = req.body;
+    if (!Array.isArray(columns)) return res.status(400).json({ error: 'columns must be an array' });
+    await pool.query('UPDATE workspaces SET contact_columns=$1 WHERE id=$2', [columns, req.workspaceId]);
+    res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
 router.patch('/kanban-fields', async (req, res, next) => {
   try {
     const { fields } = req.body;

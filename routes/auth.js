@@ -14,7 +14,7 @@ router.get('/me', async (req, res, next) => {
       [req.session.userId]
     );
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields FROM workspaces WHERE id = $1',
+      'SELECT id, name, kanban_fields, contact_columns FROM workspaces WHERE id = $1',
       [req.session.workspaceId]
     );
 
@@ -23,7 +23,8 @@ router.get('/me', async (req, res, next) => {
       return res.json({ user: null });
     }
 
-    workspace.kanban_fields = workspace.kanban_fields || ['company', 'email'];
+    workspace.kanban_fields    = workspace.kanban_fields    || ['company', 'email'];
+    workspace.contact_columns  = workspace.contact_columns  || [];
     res.json({ user, workspace });
   } catch (e) { next(e); }
 });
@@ -45,10 +46,11 @@ router.post('/login', async (req, res, next) => {
     req.session.userRole    = user.role;
 
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields FROM workspaces WHERE id = $1',
+      'SELECT id, name, kanban_fields, contact_columns FROM workspaces WHERE id = $1',
       [user.workspace_id]
     );
-    workspace.kanban_fields = workspace.kanban_fields || ['company', 'email'];
+    workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
+    workspace.contact_columns = workspace.contact_columns || [];
     res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role }, workspace });
   } catch (e) { next(e); }
 });

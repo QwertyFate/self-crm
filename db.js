@@ -116,6 +116,8 @@ async function seedDefaultStages(workspaceId, client) {
 
 async function initDb() {
   await pool.query(SCHEMA);
+  // Safe migrations for new columns on existing databases
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS contact_columns JSONB NOT NULL DEFAULT '[]'`);
 
   // Print a first-run platform invite code if the database is empty
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
