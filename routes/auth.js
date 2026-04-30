@@ -2,159 +2,210 @@ const express  = require('express');
 const router   = express.Router();
 const bcrypt   = require('bcryptjs');
 const crypto   = require('crypto');
-const { db, seedDefaultStages } = require('../db');
+const { pool, seedDefaultStages } = require('../db');
 const { sendPasswordReset } = require('../utils/mailer');
 
-router.get('/me', (req, res) => {
-  if (!req.session?.userId) return res.json({ user: null });
+router.get('/me', async (req, res, next) => {
+  try {
+    if (!req.session?.userId) return res.json({ user: null });
 
-  const user = db.prepare(
-    'SELECT id, name, email, role, workspace_id FROM users WHERE id = ?'
-  ).get(req.session.userId);
+    const { rows: [user] } = await pool.query(
+      'SELECT id, name, email, role, workspace_id FROM users WHERE id = $1',
+      [req.session.userId]
+    );
+    const { rows: [workspace] } = await pool.query(
+      'SELECT id, name, kanban_fields FROM workspaces WHERE id = $1',
+      [req.session.workspaceId]
+    );
 
-  const workspace = db.prepare(
-    'SELECT id, name, kanban_fields FROM workspaces WHERE id = ?'
-  ).get(req.session.workspaceId);
+    if (!user || !workspace) {
+      req.session.destroy(() => {});
+      return res.json({ user: null });
+    }
 
-  if (!user || !workspace) {
-    req.session.destroy(() => {});
-    return res.json({ user: null });
-  }
-
-  try { workspace.kanban_fields = JSON.parse(workspace.kanban_fields); }
-  catch { workspace.kanban_fields = ['company', 'email']; }
-
-  res.json({ user, workspace });
+    workspace.kanban_fields = workspace.kanban_fields || ['company', 'email'];
+    res.json({ user, workspace });
+  } catch (e) { next(e); }
 });
 
-router.post('/login', (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+router.post('/login', async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim());
-  if (!user || !bcrypt.compareSync(password, user.password_hash))
-    return res.status(401).json({ error: 'Invalid email or password' });
+    const { rows: [user] } = await pool.query(
+      'SELECT * FROM users WHERE email = $1',
+      [email.toLowerCase().trim()]
+    );
+    if (!user || !bcrypt.compareSync(password, user.password_hash))
+      return res.status(401).json({ error: 'Invalid email or password' });
 
-  req.session.userId      = user.id;
-  req.session.workspaceId = user.workspace_id;
-  req.session.userRole    = user.role;
+    req.session.userId      = user.id;
+    req.session.workspaceId = user.workspace_id;
+    req.session.userRole    = user.role;
 
-  const workspace = db.prepare('SELECT id, name, kanban_fields FROM workspaces WHERE id = ?').get(user.workspace_id);
-  try { workspace.kanban_fields = JSON.parse(workspace.kanban_fields); }
-  catch { workspace.kanban_fields = ['company', 'email']; }
-
-  res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role }, workspace });
+    const { rows: [workspace] } = await pool.query(
+      'SELECT id, name, kanban_fields FROM workspaces WHERE id = $1',
+      [user.workspace_id]
+    );
+    workspace.kanban_fields = workspace.kanban_fields || ['company', 'email'];
+    res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role }, workspace });
+  } catch (e) { next(e); }
 });
 
-router.post('/signup', (req, res) => {
-  const { name, email, password, mode, workspace_name, invite_code, platform_invite_code } = req.body;
+router.post('/signup', async (req, res, next) => {
+  try {
+    const { name, email, password, mode, workspace_name, invite_code, platform_invite_code } = req.body;
 
-  if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password required' });
-  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (!name || !email || !password) return res.status(400).json({ error: 'Name, email and password required' });
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
-  const normalizedEmail = email.toLowerCase().trim();
-  if (db.prepare('SELECT id FROM users WHERE email = ?').get(normalizedEmail))
-    return res.status(400).json({ error: 'Email already registered' });
+    const normalizedEmail = email.toLowerCase().trim();
+    const { rows: [existing] } = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
+    if (existing) return res.status(400).json({ error: 'Email already registered' });
 
-  const password_hash = bcrypt.hashSync(password, 10);
+    const password_hash = bcrypt.hashSync(password, 10);
 
-  if (mode === 'create') {
-    if (!workspace_name?.trim()) return res.status(400).json({ error: 'Workspace name required' });
-    if (!platform_invite_code?.trim()) return res.status(400).json({ error: 'Platform invite code required' });
+    if (mode === 'create') {
+      if (!workspace_name?.trim()) return res.status(400).json({ error: 'Workspace name required' });
+      if (!platform_invite_code?.trim()) return res.status(400).json({ error: 'Platform invite code required' });
 
-    const platformInvite = db.prepare(
-      'SELECT * FROM platform_invites WHERE code = ? AND used = 0'
-    ).get(platform_invite_code.trim());
-    if (!platformInvite) return res.status(400).json({ error: 'Invalid or already used platform invite code' });
+      const { rows: [platformInvite] } = await pool.query(
+        'SELECT * FROM platform_invites WHERE code = $1 AND used = 0',
+        [platform_invite_code.trim()]
+      );
+      if (!platformInvite) return res.status(400).json({ error: 'Invalid or already used platform invite code' });
 
-    const result = db.transaction(() => {
-      const ws = db.prepare('INSERT INTO workspaces (name) VALUES (?)').run(workspace_name.trim());
-      seedDefaultStages(ws.lastInsertRowid);
-      const u = db.prepare(
-        'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES (?,?,?,?,?)'
-      ).run(ws.lastInsertRowid, name.trim(), normalizedEmail, password_hash, 'owner');
-      db.prepare('UPDATE platform_invites SET used = 1, used_by_workspace_id = ? WHERE id = ?')
-        .run(ws.lastInsertRowid, platformInvite.id);
-      return { userId: u.lastInsertRowid, workspaceId: ws.lastInsertRowid };
-    })();
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows: [ws] } = await client.query(
+          'INSERT INTO workspaces (name) VALUES ($1) RETURNING id',
+          [workspace_name.trim()]
+        );
+        await seedDefaultStages(ws.id, client);
+        const { rows: [u] } = await client.query(
+          'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+          [ws.id, name.trim(), normalizedEmail, password_hash, 'owner']
+        );
+        await client.query(
+          'UPDATE platform_invites SET used=1, used_by_workspace_id=$1 WHERE id=$2',
+          [ws.id, platformInvite.id]
+        );
+        await client.query('COMMIT');
+        req.session.userId      = u.id;
+        req.session.workspaceId = ws.id;
+        req.session.userRole    = 'owner';
+        return res.status(201).json({ success: true });
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    }
 
-    req.session.userId      = result.userId;
-    req.session.workspaceId = result.workspaceId;
-    req.session.userRole    = 'owner';
-    return res.status(201).json({ success: true });
-  }
+    if (mode === 'join') {
+      if (!invite_code?.trim()) return res.status(400).json({ error: 'Invite code required' });
 
-  if (mode === 'join') {
-    if (!invite_code?.trim()) return res.status(400).json({ error: 'Invite code required' });
+      const { rows: [invite] } = await pool.query(
+        'SELECT * FROM invite_codes WHERE code = $1',
+        [invite_code.trim()]
+      );
+      if (!invite)      return res.status(400).json({ error: 'Invalid invite code' });
+      if (invite.used)  return res.status(400).json({ error: 'Invite code already used' });
 
-    const invite = db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(invite_code.trim());
-    if (!invite)       return res.status(400).json({ error: 'Invalid invite code' });
-    if (invite.used)   return res.status(400).json({ error: 'Invite code already used' });
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const { rows: [u] } = await client.query(
+          'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+          [invite.workspace_id, name.trim(), normalizedEmail, password_hash, 'member']
+        );
+        await client.query(
+          'UPDATE invite_codes SET used=1, used_by=$1 WHERE id=$2',
+          [u.id, invite.id]
+        );
+        await client.query('COMMIT');
+        req.session.userId      = u.id;
+        req.session.workspaceId = invite.workspace_id;
+        req.session.userRole    = 'member';
+        return res.status(201).json({ success: true });
+      } catch (e) {
+        await client.query('ROLLBACK');
+        throw e;
+      } finally {
+        client.release();
+      }
+    }
 
-    const result = db.transaction(() => {
-      const u = db.prepare(
-        'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES (?,?,?,?,?)'
-      ).run(invite.workspace_id, name.trim(), normalizedEmail, password_hash, 'member');
-      db.prepare('UPDATE invite_codes SET used = 1, used_by = ? WHERE id = ?').run(u.lastInsertRowid, invite.id);
-      return { userId: u.lastInsertRowid, workspaceId: invite.workspace_id };
-    })();
-
-    req.session.userId      = result.userId;
-    req.session.workspaceId = result.workspaceId;
-    req.session.userRole    = 'member';
-    return res.status(201).json({ success: true });
-  }
-
-  res.status(400).json({ error: 'mode must be "create" or "join"' });
+    res.status(400).json({ error: 'mode must be "create" or "join"' });
+  } catch (e) { next(e); }
 });
 
 router.post('/logout', (req, res) => {
   req.session.destroy(() => res.json({ success: true }));
 });
 
-router.post('/forgot-password', async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ error: 'Email required' });
+router.post('/forgot-password', async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
 
-  const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(email.toLowerCase().trim());
-  // Always respond success to prevent email enumeration
-  if (!user) return res.json({ success: true, message: 'If that email exists, a reset link has been sent.' });
+    const { rows: [user] } = await pool.query(
+      'SELECT id, email FROM users WHERE email = $1',
+      [email.toLowerCase().trim()]
+    );
+    if (!user) return res.json({ success: true, message: 'If that email exists, a reset link has been sent.' });
 
-  // Invalidate any existing unused tokens for this user
-  db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
+    await pool.query('DELETE FROM password_resets WHERE user_id = $1', [user.id]);
 
-  const token     = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
-  db.prepare('INSERT INTO password_resets (user_id, token, expires_at) VALUES (?,?,?)').run(user.id, token, expiresAt);
+    const token     = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    await pool.query(
+      'INSERT INTO password_resets (user_id, token, expires_at) VALUES ($1,$2,$3)',
+      [user.id, token, expiresAt]
+    );
 
-  const base     = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-  const resetUrl = `${base}?reset=${token}`;
+    const base     = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const resetUrl = `${base}?reset=${token}`;
+    const result   = await sendPasswordReset(user.email, resetUrl);
 
-  const result = await sendPasswordReset(user.email, resetUrl);
-
-  if (result.sent) {
-    res.json({ success: true, message: 'Reset link sent — check your email.' });
-  } else {
-    // No SMTP configured: return the link so the admin can pass it on
-    res.json({ success: true, resetUrl, message: 'Email not configured. Copy the link below.' });
-  }
+    if (result.sent) {
+      res.json({ success: true, message: 'Reset link sent — check your email.' });
+    } else {
+      res.json({ success: true, resetUrl, message: 'Email not configured. Copy the link below.' });
+    }
+  } catch (e) { next(e); }
 });
 
-router.post('/reset-password', (req, res) => {
-  const { token, password } = req.body;
-  if (!token || !password) return res.status(400).json({ error: 'Token and password required' });
-  if (password.length < 6)  return res.status(400).json({ error: 'Password must be at least 6 characters' });
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'Token and password required' });
+    if (password.length < 6)  return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
-  const reset = db.prepare('SELECT * FROM password_resets WHERE token = ? AND used = 0').get(token);
-  if (!reset)                          return res.status(400).json({ error: 'Invalid or expired reset link' });
-  if (new Date(reset.expires_at) < new Date()) return res.status(400).json({ error: 'Reset link has expired' });
+    const { rows: [reset] } = await pool.query(
+      'SELECT * FROM password_resets WHERE token = $1 AND used = 0',
+      [token]
+    );
+    if (!reset)                        return res.status(400).json({ error: 'Invalid or expired reset link' });
+    if (new Date(reset.expires_at) < new Date()) return res.status(400).json({ error: 'Reset link has expired' });
 
-  db.transaction(() => {
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(password, 10), reset.user_id);
-    db.prepare('UPDATE password_resets SET used = 1 WHERE id = ?').run(reset.id);
-  })();
-
-  res.json({ success: true });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE users SET password_hash=$1 WHERE id=$2', [bcrypt.hashSync(password, 10), reset.user_id]);
+      await client.query('UPDATE password_resets SET used=1 WHERE id=$1', [reset.id]);
+      await client.query('COMMIT');
+      res.json({ success: true });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (e) { next(e); }
 });
 
 module.exports = router;

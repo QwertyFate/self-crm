@@ -1,46 +1,88 @@
 const express     = require('express');
 const router      = express.Router();
-const { db }      = require('../db');
+const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
 
-router.get('/', (req, res) => {
-  res.json(db.prepare('SELECT * FROM stages WHERE workspace_id=? ORDER BY position ASC, id ASC').all(req.workspaceId));
+router.get('/', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM stages WHERE workspace_id=$1 ORDER BY position ASC, id ASC',
+      [req.workspaceId]
+    );
+    res.json(rows);
+  } catch (e) { next(e); }
 });
 
-router.post('/', (req, res) => {
-  const { name, color } = req.body;
-  if (!name) return res.status(400).json({ error: 'Name is required' });
-  const maxPos = db.prepare('SELECT MAX(position) as m FROM stages WHERE workspace_id=?').get(req.workspaceId).m ?? -1;
+router.post('/', async (req, res, next) => {
   try {
-    const result = db.prepare('INSERT INTO stages (workspace_id, name, color, position) VALUES (?,?,?,?)').run(req.workspaceId, name, color||'#4f6ef7', maxPos+1);
-    res.status(201).json({ id: result.lastInsertRowid, name, color: color||'#4f6ef7', position: maxPos+1 });
-  } catch { res.status(400).json({ error: 'Stage name already exists' }); }
+    const { name, color } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+    const { rows: [{ m }] } = await pool.query(
+      'SELECT COALESCE(MAX(position), -1) AS m FROM stages WHERE workspace_id=$1',
+      [req.workspaceId]
+    );
+    const { rows: [row] } = await pool.query(
+      'INSERT INTO stages (workspace_id, name, color, position) VALUES ($1,$2,$3,$4) RETURNING id',
+      [req.workspaceId, name, color||'#4f6ef7', m + 1]
+    );
+    res.status(201).json({ id: row.id, name, color: color||'#4f6ef7', position: m + 1 });
+  } catch (e) {
+    if (e.code === '23505') return res.status(400).json({ error: 'Stage name already exists' });
+    next(e);
+  }
 });
 
-router.put('/:id', (req, res) => {
-  const { name, color } = req.body;
-  if (!name) return res.status(400).json({ error: 'Name is required' });
+router.put('/:id', async (req, res, next) => {
   try {
-    const result = db.prepare('UPDATE stages SET name=?, color=? WHERE id=? AND workspace_id=?').run(name, color||'#4f6ef7', req.params.id, req.workspaceId);
-    if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+    const { name, color } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+    const result = await pool.query(
+      'UPDATE stages SET name=$1, color=$2 WHERE id=$3 AND workspace_id=$4',
+      [name, color||'#4f6ef7', req.params.id, req.workspaceId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
-  } catch { res.status(400).json({ error: 'Stage name already exists' }); }
+  } catch (e) {
+    if (e.code === '23505') return res.status(400).json({ error: 'Stage name already exists' });
+    next(e);
+  }
 });
 
-router.patch('/reorder', (req, res) => {
-  const { ids } = req.body;
-  if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
-  const update = db.prepare('UPDATE stages SET position=? WHERE id=? AND workspace_id=?');
-  db.transaction(() => ids.forEach((id, i) => update.run(i, id, req.workspaceId)))();
-  res.json({ success: true });
+router.patch('/reorder', async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (let i = 0; i < ids.length; i++) {
+        await client.query(
+          'UPDATE stages SET position=$1 WHERE id=$2 AND workspace_id=$3',
+          [i, ids[i], req.workspaceId]
+        );
+      }
+      await client.query('COMMIT');
+      res.json({ success: true });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (e) { next(e); }
 });
 
-router.delete('/:id', (req, res) => {
-  const result = db.prepare('DELETE FROM stages WHERE id=? AND workspace_id=?').run(req.params.id, req.workspaceId);
-  if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
-  res.json({ success: true });
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM stages WHERE id=$1 AND workspace_id=$2',
+      [req.params.id, req.workspaceId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (e) { next(e); }
 });
 
 module.exports = router;
