@@ -870,8 +870,27 @@ function colToggleVisible(i, visible) {
 }
 
 async function saveContactColumns() {
-  await api.patch('/api/workspace/contact-columns', { columns: contactColumns });
-  currentWorkspace.contact_columns = contactColumns;
+  // Snapshot effective columns so we always save a full list, not just []
+  const toSave = effectiveContactColumns().map(({ key, visible }) => ({ key, visible }));
+  const btn    = document.getElementById('save-contact-cols-btn');
+  const msgEl  = document.getElementById('contact-cols-msg');
+
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  msgEl?.classList.add('hidden');
+
+  const res = await api.patch('/api/workspace/contact-columns', { columns: toSave });
+
+  if (btn) { btn.disabled = false; btn.textContent = t('btn_save'); }
+
+  if (res.error) {
+    if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); }
+    return;
+  }
+
+  contactColumns = toSave;
+  currentWorkspace.contact_columns = toSave;
+  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  setTimeout(() => msgEl?.classList.add('hidden'), 2500);
   filterContacts();
 }
 
