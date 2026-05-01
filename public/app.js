@@ -13,6 +13,10 @@ let dragStageIdx   = null;
 let colDragIdx     = null;
 let importData     = null;
 let contactColumns = []; // [{key, visible}] — empty = all visible in default order
+let colWidths      = {}; // {colKey: widthPx} — persisted per workspace in localStorage
+let resizingCol    = null;
+let currentPage    = 1;
+const PAGE_SIZE    = 25;
 let currentLang   = localStorage.getItem('lang') || 'en';
 
 // ── Translations ──────────────────────────────────────────
@@ -191,6 +195,7 @@ function showApp() {
   document.getElementById('sidebar-workspace').textContent = currentWorkspace?.name || '';
   document.getElementById('sidebar-user').textContent = currentUser?.name || '';
   applyTranslations();
+  loadColWidths();
   loadPipeline();
 }
 
@@ -464,7 +469,43 @@ async function onDrop(e, stageId) {
 async function loadContacts() {
   await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
   contacts = await api.get('/api/contacts');
+  currentPage = 1;
   renderContactsTable(contacts);
+}
+
+// ── Column width persistence (per-user, stored in DB) ────
+function loadColWidths() {
+  colWidths = { ...(currentUser?.column_widths || {}) };
+}
+function saveColWidths() {
+  if (currentUser) currentUser.column_widths = { ...colWidths };
+  api.patch('/api/auth/preferences', { column_widths: colWidths });
+}
+
+// ── Column resize handlers ────────────────────────────────
+function startColResize(e, colKey, colEl) {
+  e.preventDefault();
+  e.stopPropagation();
+  resizingCol = { colKey, colEl, startX: e.clientX, startW: colWidths[colKey] || parseInt(colEl.style.width) || 100 };
+  document.addEventListener('mousemove', onColResize);
+  document.addEventListener('mouseup', stopColResize);
+  document.body.style.cursor    = 'col-resize';
+  document.body.style.userSelect = 'none';
+}
+function onColResize(e) {
+  if (!resizingCol) return;
+  const newW = Math.max(50, resizingCol.startW + (e.clientX - resizingCol.startX));
+  resizingCol.colEl.style.width = newW + 'px';
+  colWidths[resizingCol.colKey] = Math.round(newW);
+}
+function stopColResize() {
+  if (!resizingCol) return;
+  document.removeEventListener('mousemove', onColResize);
+  document.removeEventListener('mouseup', stopColResize);
+  document.body.style.cursor    = '';
+  document.body.style.userSelect = '';
+  saveColWidths();
+  resizingCol = null;
 }
 
 // Returns ordered, merged column definitions respecting saved config + current fields
@@ -493,44 +534,97 @@ function effectiveContactColumns() {
 }
 
 function renderContactsTable(list) {
-  const cols = effectiveContactColumns().filter(c => c.visible);
+  const table = document.getElementById('contacts-table');
+  if (!table) return;
+  const visibleCols = effectiveContactColumns().filter(c => c.visible);
+  const colKeys     = ['_name', ...visibleCols.map(c => c.key), '_actions'];
 
+  // Remove existing colgroup + reset layout so the browser auto-sizes for measurement
+  const existingCg = table.querySelector('colgroup');
+  if (existingCg) table.removeChild(existingCg);
+  table.style.tableLayout = '';
+
+  // Build thead (no resize handles yet — added via DOM after measurement)
   document.getElementById('contacts-thead').innerHTML = `<tr>
-    <th>${t('col_name')}</th>
-    ${cols.map(c => `<th>${c.label()}</th>`).join('')}
-    <th></th>
+    ${colKeys.map(k => {
+      const col = visibleCols.find(c => c.key === k);
+      const label = k === '_name' ? t('col_name') : k === '_actions' ? '' : col?.label() || '';
+      return `<th data-col-key="${k}">${label}</th>`;
+    }).join('')}
   </tr>`;
 
-  document.getElementById('contacts-body').innerHTML = list.map(c => {
-    const cells = cols.map(col => {
-      const dash = '<span class="muted-dash">—</span>';
+  // Paginate
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const pageList = list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Build tbody
+  document.getElementById('contacts-body').innerHTML = pageList.map(c => {
+    const dash  = '<span class="muted-dash">—</span>';
+    const cells = visibleCols.map(col => {
       if (col.key === 'company')
-        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'company','text')">${esc(c.company||'')||dash}</td>`;
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'company','text')" title="${esc(c.company||'')}">${esc(c.company||'')||dash}</td>`;
       if (col.key === 'email')
-        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'email','email')">${esc(c.email||'')||dash}</td>`;
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'email','email')" title="${esc(c.email||'')}">${esc(c.email||'')||dash}</td>`;
       if (col.key === 'phone')
-        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'phone','phone')">${esc(c.phone||'')||dash}</td>`;
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'phone','phone')" title="${esc(c.phone||'')}">${esc(c.phone||'')||dash}</td>`;
       if (col.key === 'stage_id') {
         const stage = stages.find(s => s.id === c.stage_id);
         const badge = stage ? `<span class="stage-badge"><span class="stage-badge-dot" style="background:${stage.color}"></span>${esc(stage.name)}</span>` : dash;
         return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'stage_id','stage')">${badge}</td>`;
       }
       if (col.key === 'assigned_to')
-        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'assigned_to','assignee')">${esc(c.assigned_to_name||'')||dash}</td>`;
-      // Custom field
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'assigned_to','assignee')" title="${esc(c.assigned_to_name||'')}">${esc(c.assigned_to_name||'')||dash}</td>`;
       const v = c.custom_data?.[col.key] ?? '';
-      return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${col.key}','${col.type}')">${esc(v)||dash}</td>`;
+      return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${col.key}','${col.type}')" title="${esc(v)}">${esc(v)||dash}</td>`;
     }).join('');
 
     return `<tr>
-      <td><strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong></td>
+      <td title="${esc(c.name)}"><strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong></td>
       ${cells}
-      <td class="row-actions" style="white-space:nowrap">
+      <td class="row-actions">
         <button class="btn btn-sm btn-ghost" onclick="openDetail(${c.id})">${t('btn_view')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteContact(${c.id})">${t('btn_delete')}</button>
       </td>
     </tr>`;
   }).join('');
+
+  // Render pagination bar
+  renderPagination(list.length);
+
+  // Measure natural widths for any column not yet in colWidths (forces reflow)
+  let measured = false;
+  if (!colWidths['_actions']) { colWidths['_actions'] = 116; measured = true; }
+  document.querySelectorAll('#contacts-thead th').forEach(th => {
+    const key = th.dataset.colKey;
+    if (key && !colWidths[key]) {
+      colWidths[key] = Math.max(60, Math.round(th.getBoundingClientRect().width));
+      measured = true;
+    }
+  });
+  if (measured) saveColWidths();
+
+  // Build and insert colgroup with stored widths
+  const cg = document.createElement('colgroup');
+  colKeys.forEach(key => {
+    const col = document.createElement('col');
+    col.style.width = (colWidths[key] || 100) + 'px';
+    cg.appendChild(col);
+  });
+  table.insertBefore(cg, table.firstChild);
+  table.style.tableLayout = 'fixed';
+
+  // Add resize handles to th elements (except the last actions column)
+  const ths  = document.querySelectorAll('#contacts-thead th');
+  const cols = cg.children;
+  ths.forEach((th, i) => {
+    if (colKeys[i] === '_actions') return;
+    const handle = document.createElement('div');
+    handle.className = 'col-resize-handle';
+    const colEl = cols[i];
+    handle.addEventListener('mousedown', e => startColResize(e, colKeys[i], colEl));
+    th.appendChild(handle);
+  });
 }
 
 function startInlineEdit(td, contactId, fieldKey, fieldType) {
@@ -626,6 +720,11 @@ async function commitInlineEdit(contactId, fieldKey, fieldType, value) {
   if (document.getElementById('page-pipeline').classList.contains('active')) renderPipeline();
 }
 
+function onContactSearch() {
+  currentPage = 1;
+  filterContacts();
+}
+
 function filterContacts() {
   const q = document.getElementById('contact-search').value.toLowerCase();
   renderContactsTable(contacts.filter(c =>
@@ -633,6 +732,43 @@ function filterContacts() {
     (c.company||'').toLowerCase().includes(q) ||
     (c.email||'').toLowerCase().includes(q)
   ));
+}
+
+function goToPage(page) {
+  currentPage = page;
+  filterContacts();
+}
+
+function renderPagination(total) {
+  const el = document.getElementById('contacts-pagination');
+  if (!el) return;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  const start = (currentPage - 1) * PAGE_SIZE + 1;
+  const end   = Math.min(currentPage * PAGE_SIZE, total);
+
+  const pages = buildPageNumbers(currentPage, totalPages);
+  el.innerHTML = `
+    <span class="pagination-info">Showing ${start}–${end} of ${total}</span>
+    <div class="pagination-controls">
+      <button class="page-btn" onclick="goToPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>
+      ${pages.map(p => p === '…'
+        ? '<span class="page-ellipsis">…</span>'
+        : `<button class="page-btn${p===currentPage?' active':''}" onclick="goToPage(${p})">${p}</button>`
+      ).join('')}
+      <button class="page-btn" onclick="goToPage(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>›</button>
+    </div>`;
+}
+
+function buildPageNumbers(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [1];
+  if (current > 3) pages.push('…');
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
+  if (current < total - 2) pages.push('…');
+  pages.push(total);
+  return pages;
 }
 
 // ══════════════════════════════════════════════════════════
