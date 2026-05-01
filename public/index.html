@@ -228,18 +228,19 @@
           <button class="btn btn-primary" onclick="openContactModal()" data-i18n="add_contact">+ Add Contact</button>
         </div>
         <div class="toolbar">
-          <input type="text" id="contact-search" data-i18n-ph="search_ph" placeholder="Search contacts…" oninput="filterContacts()" />
+          <input type="text" id="contact-search" data-i18n-ph="search_ph" placeholder="Search contacts…" oninput="onContactSearch()" />
           <div class="toolbar-actions">
             <button class="btn btn-sm" onclick="openImportModal()" data-i18n="import_csv">⬆ Import CSV</button>
             <button class="btn btn-sm" onclick="exportContactsCSV()" data-i18n="export_csv">⬇ Export CSV</button>
           </div>
         </div>
         <div class="table-wrap">
-          <table class="table">
-            <thead id="contacts-thead"><tr><th>Name</th><th>Company</th><th>Email</th><th>Phone</th><th>Stage</th></tr></thead>
+          <table class="table" id="contacts-table">
+            <thead id="contacts-thead"></thead>
             <tbody id="contacts-body"></tbody>
           </table>
         </div>
+        <div id="contacts-pagination" class="pagination-bar"></div>
       </section>
 
       <!-- ── Activities ── -->
@@ -284,8 +285,9 @@
               <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
             </div>
             <ul id="contact-columns-list" class="settings-list" style="margin-top:6px"></ul>
-            <div style="padding:12px 0 4px">
-              <button class="btn btn-primary btn-sm" onclick="saveContactColumns()" data-i18n="btn_save">Save</button>
+            <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
+              <button id="save-contact-cols-btn" class="btn btn-primary btn-sm" onclick="saveContactColumns()" data-i18n="btn_save">Save</button>
+              <span id="contact-cols-msg" class="workspace-name-msg hidden"></span>
             </div>
           </div>
 

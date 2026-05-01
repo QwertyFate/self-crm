@@ -48,7 +48,7 @@ router.post('/import', async (req, res, next) => {
         await client.query(
           'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
           [req.workspaceId, row.name.trim(), row.email||null, row.phone||null,
-           row.company||null, row.stage_id||null, req.userId, row.custom_data||{}]
+           row.company||null, row.stage_id||null, req.userId, JSON.stringify(row.custom_data||{})]
         );
         count++;
       }
@@ -95,7 +95,7 @@ router.post('/', async (req, res, next) => {
     const assignee = assigned_to ? Number(assigned_to) : req.userId;
     const { rows: [row] } = await pool.query(
       'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-      [req.workspaceId, name, email||null, phone||null, company||null, stage_id||null, assignee, custom_data||{}]
+      [req.workspaceId, name, email||null, phone||null, company||null, stage_id||null, assignee, JSON.stringify(custom_data||{})]
     );
     res.status(201).json({ id: row.id });
   } catch (e) { next(e); }
@@ -107,7 +107,7 @@ router.put('/:id', async (req, res, next) => {
     if (!name) return res.status(400).json({ error: 'Name is required' });
     const result = await pool.query(
       'UPDATE contacts SET name=$1, email=$2, phone=$3, company=$4, stage_id=$5, assigned_to=$6, custom_data=$7, updated_at=NOW() WHERE id=$8 AND workspace_id=$9',
-      [name, email||null, phone||null, company||null, stage_id||null, assigned_to||null, custom_data||{}, req.params.id, req.workspaceId]
+      [name, email||null, phone||null, company||null, stage_id||null, assigned_to||null, JSON.stringify(custom_data||{}), req.params.id, req.workspaceId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });

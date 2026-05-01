@@ -28,7 +28,7 @@ router.post('/', async (req, res, next) => {
     );
     const { rows: [row] } = await pool.query(
       'INSERT INTO custom_fields (workspace_id, name, field_key, type, options, position) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-      [req.workspaceId, name, field_key, type, options||[], m + 1]
+      [req.workspaceId, name, field_key, type, JSON.stringify(options||[]), m + 1]
     );
     res.status(201).json({ id: row.id });
   } catch (e) {
@@ -44,7 +44,7 @@ router.put('/:id', async (req, res, next) => {
     if (!VALID_TYPES.includes(type)) return res.status(400).json({ error: 'Invalid type' });
     const result = await pool.query(
       'UPDATE custom_fields SET name=$1, type=$2, options=$3 WHERE id=$4 AND workspace_id=$5',
-      [name, type, options||[], req.params.id, req.workspaceId]
+      [name, type, JSON.stringify(options||[]), req.params.id, req.workspaceId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
