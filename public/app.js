@@ -37,6 +37,7 @@ const TRANSLATIONS = {
     drop_here:'Drop contacts here', unassigned:'Unassigned',
     act_note:'Note', act_call:'Call', act_email:'Email', act_whatsapp:'WhatsApp',
     logged_by:'by',
+    tab_general:'General', tab_pipeline:'Pipeline', tab_contacts:'Contacts', tab_team:'Team',
     set_stages:'Pipeline Stages', set_fields:'Custom Fields', set_kanban:'Kanban Card Fields',
     set_invites:'Invite Codes', set_members:'Team Members', set_language:'Language', set_workspace:'Workspace',
     set_contact_cols:'Contact Columns', hint_contact_cols:'Drag to reorder. Name is always first.',
@@ -76,6 +77,7 @@ const TRANSLATIONS = {
     drop_here:'Kontakte hierher ziehen', unassigned:'Nicht zugewiesen',
     act_note:'Notiz', act_call:'Anruf', act_email:'E-Mail', act_whatsapp:'WhatsApp',
     logged_by:'von',
+    tab_general:'Allgemein', tab_pipeline:'Pipeline', tab_contacts:'Kontakte', tab_team:'Team',
     set_stages:'Pipeline-Phasen', set_fields:'Benutzerdefinierte Felder', set_kanban:'Kanban-Kartenfelder',
     set_invites:'Einladungscodes', set_members:'Teammitglieder', set_language:'Sprache', set_workspace:'Arbeitsbereich',
     set_contact_cols:'Kontaktspalten', hint_contact_cols:'Zum Neuanordnen ziehen. Name steht immer an erster Stelle.',
@@ -1006,6 +1008,18 @@ async function deleteActivity(id) {
 // ══════════════════════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════════════════════
+let currentSettingsTab = 'general';
+
+function switchSettingsTab(tab) {
+  currentSettingsTab = tab;
+  document.querySelectorAll('.settings-tab').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.tab === tab)
+  );
+  document.querySelectorAll('.settings-pane').forEach(pane =>
+    pane.classList.toggle('active', pane.id === `settings-pane-${tab}`)
+  );
+}
+
 async function loadSettings() {
   [stages, fields] = await Promise.all([api.get('/api/stages'), api.get('/api/fields')]);
   renderStagesList();
@@ -1015,6 +1029,8 @@ async function loadSettings() {
   // Populate WA template textarea
   const waEl = document.getElementById('wa-template-input');
   if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? 'Hi {{name}}, ';
+  // Restore active tab
+  switchSettingsTab(currentSettingsTab);
   if (currentUser?.role === 'owner') {
     document.getElementById('invites-card').classList.remove('hidden');
     loadInvites();
