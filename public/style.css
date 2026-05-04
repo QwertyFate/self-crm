@@ -314,6 +314,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .import-done-icon { font-size: 48px; margin-bottom: 12px; }
 #import-done-text { font-size: 16px; font-weight: 500; }
 
+/* ══ WHATSAPP ════════════════════════════════════════════ */
+.btn-wa {
+  color: #25D366; border-color: transparent; background: transparent;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 7px;
+}
+.btn-wa:hover { background: rgba(37,211,102,.12); border-color: #25D366; }
+.wa-detail-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: #25D366; text-decoration: none; font-size: 12px;
+  padding: 2px 8px; border: 1px solid #25D366;
+  border-radius: 20px; margin-left: 6px; transition: background .12s;
+}
+.wa-detail-link:hover { background: rgba(37,211,102,.1); }
+.act-icon.whatsapp { background: rgba(37,211,102,.15); color: #25D366; }
+
 /* ══ CONTACT FILTERS ═════════════════════════════════════ */
 .filter-toggle-btn.active { background: color-mix(in srgb, var(--primary) 12%, var(--card-bg)); border-color: var(--primary); color: var(--primary); }
 .filter-badge {

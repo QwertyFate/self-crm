@@ -119,6 +119,9 @@ async function initDb() {
   // Safe migrations for new columns on existing databases
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS contact_columns JSONB NOT NULL DEFAULT '[]'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS column_widths JSONB NOT NULL DEFAULT '{}'`);
+  // Allow whatsapp as an activity type
+  await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);
+  await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp'))`);
 
   // Print a first-run platform invite code if the database is empty
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
