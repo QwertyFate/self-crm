@@ -40,6 +40,9 @@ const TRANSLATIONS = {
     set_stages:'Pipeline Stages', set_fields:'Custom Fields', set_kanban:'Kanban Card Fields',
     set_invites:'Invite Codes', set_members:'Team Members', set_language:'Language', set_workspace:'Workspace',
     set_contact_cols:'Contact Columns', hint_contact_cols:'Drag to reorder. Name is always first.',
+    set_wa_template:'WhatsApp Message Template',
+    hint_wa_template:'Written when you tap the WhatsApp button on a contact.',
+    wa_vars:'Available variables:',
     hint_stages:'Drag to reorder. Contacts are unassigned when a stage is deleted.',
     hint_fields:'Extra properties on every contact.',
     hint_kanban:'Choose which fields appear on pipeline cards. Name is always shown.',
@@ -76,6 +79,9 @@ const TRANSLATIONS = {
     set_stages:'Pipeline-Phasen', set_fields:'Benutzerdefinierte Felder', set_kanban:'Kanban-Kartenfelder',
     set_invites:'Einladungscodes', set_members:'Teammitglieder', set_language:'Sprache', set_workspace:'Arbeitsbereich',
     set_contact_cols:'Kontaktspalten', hint_contact_cols:'Zum Neuanordnen ziehen. Name steht immer an erster Stelle.',
+    set_wa_template:'WhatsApp-Nachrichtenvorlage',
+    hint_wa_template:'Wird beim Klicken auf den WhatsApp-Button des Kontakts vorausgefüllt.',
+    wa_vars:'Verfügbare Variablen:',
     hint_stages:'Zum Neuanordnen ziehen. Kontakte werden bei Phasenlöschung nicht zugewiesen.',
     hint_fields:'Zusätzliche Eigenschaften für jeden Kontakt.',
     hint_kanban:'Felder auswählen, die auf Pipeline-Karten erscheinen. Name wird immer angezeigt.',
@@ -128,11 +134,16 @@ function setLanguage(lang) {
 
 const WA_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="vertical-align:middle"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>`;
 const ICONS = { note: '📝', call: '📞', email: '✉️', whatsapp: WA_SVG };
-function waLink(phone, name) {
+function waLink(phone, contact) {
   if (!phone) return null;
   const digits = phone.replace(/\D/g, '');
   if (digits.length < 6) return null;
-  return `https://wa.me/${digits}?text=${encodeURIComponent('Hi ' + (name || '') + ', ')}`;
+  const name    = typeof contact === 'string' ? contact : (contact?.name    || '');
+  const company = typeof contact === 'string' ? ''      : (contact?.company || '');
+  const tpl = (currentWorkspace?.whatsapp_template || 'Hi {{name}}, ')
+    .replace(/\{\{name\}\}/g,    name)
+    .replace(/\{\{company\}\}/g, company);
+  return `https://wa.me/${digits}?text=${encodeURIComponent(tpl)}`;
 }
 
 const BUILTIN_FIELDS = [
@@ -648,7 +659,7 @@ function renderContactsTable(list) {
       <td title="${esc(c.name)}"><strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong></td>
       ${cells}
       <td class="row-actions">
-        ${waLink(c.phone, c.name) ? `<a class="btn btn-sm btn-wa" href="${waLink(c.phone, c.name)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG}</a>` : ''}
+        ${waLink(c.phone, c) ? `<a class="btn btn-sm btn-wa" href="${waLink(c.phone, c)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG}</a>` : ''}
         <button class="btn btn-sm btn-ghost" onclick="openDetail(${c.id})">${t('btn_view')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteContact(${c.id})">${t('btn_delete')}</button>
       </td>
@@ -1001,6 +1012,9 @@ async function loadSettings() {
   renderFieldsList();
   renderKanbanFields();
   renderContactColumnSettings();
+  // Populate WA template textarea
+  const waEl = document.getElementById('wa-template-input');
+  if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? 'Hi {{name}}, ';
   if (currentUser?.role === 'owner') {
     document.getElementById('invites-card').classList.remove('hidden');
     loadInvites();
@@ -1034,6 +1048,37 @@ async function saveWorkspaceName() {
   msgEl.className = 'workspace-name-msg success';
   msgEl.classList.remove('hidden');
   setTimeout(() => msgEl.classList.add('hidden'), 2500);
+}
+
+function insertWaVar(variable) {
+  const el = document.getElementById('wa-template-input');
+  if (!el) return;
+  const start = el.selectionStart;
+  const end   = el.selectionEnd;
+  el.value = el.value.slice(0, start) + variable + el.value.slice(end);
+  el.selectionStart = el.selectionEnd = start + variable.length;
+  el.focus();
+}
+
+async function saveWaTemplate() {
+  const textarea = document.getElementById('wa-template-input');
+  const msgEl    = document.getElementById('wa-template-msg');
+  const template = textarea.value;
+
+  const btn = document.getElementById('save-wa-template-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  msgEl?.classList.add('hidden');
+
+  const res = await api.patch('/api/workspace/whatsapp-template', { template });
+
+  if (btn) { btn.disabled = false; btn.textContent = t('btn_save'); }
+  if (res.error) {
+    if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); }
+    return;
+  }
+  currentWorkspace.whatsapp_template = template;
+  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
 // ── Stages ────────────────────────────────────────────────
@@ -1392,7 +1437,7 @@ async function openDetail(id) {
   const infoFields = [
     ['Company',  c.company],
     ['Email',    c.email   ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : null],
-    ['Phone',    c.phone ? `${esc(c.phone)}${waLink(c.phone, c.name) ? ` <a class="wa-detail-link" href="${waLink(c.phone, c.name)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG} WhatsApp</a>` : ''}` : null],
+    ['Phone',    c.phone ? `${esc(c.phone)}${waLink(c.phone, c) ? ` <a class="wa-detail-link" href="${waLink(c.phone, c)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG} WhatsApp</a>` : ''}` : null],
     ['Assignee', c.assigned_to_name],
     ...fields.map(f => {
       const val = c.custom_data?.[f.field_key];

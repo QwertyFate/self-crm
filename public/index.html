@@ -330,6 +330,22 @@
           </div>
 
           <div class="settings-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="set_wa_template">WhatsApp Message Template</h2>
+            </div>
+            <p class="settings-hint" data-i18n="hint_wa_template">Written when you tap the WhatsApp button on a contact.</p>
+            <textarea id="wa-template-input" class="settings-textarea" rows="3" placeholder="Hi {{name}}, "></textarea>
+            <p class="wa-vars-hint"><span data-i18n="wa_vars">Available variables:</span>
+              <code class="wa-var-chip" onclick="insertWaVar('{{name}}')">{{name}}</code>
+              <code class="wa-var-chip" onclick="insertWaVar('{{company}}')">{{company}}</code>
+            </p>
+            <div style="padding:8px 0 4px;display:flex;align-items:center;gap:10px">
+              <button id="save-wa-template-btn" class="btn btn-primary btn-sm" onclick="saveWaTemplate()" data-i18n="btn_save">Save</button>
+              <span id="wa-template-msg" class="workspace-name-msg hidden"></span>
+            </div>
+          </div>
+
+          <div class="settings-card">
             <div class="settings-card-header"><h2 data-i18n="set_language">Language</h2></div>
             <p class="settings-hint" data-i18n="hint_language">Choose your preferred display language.</p>
             <div class="lang-options">
