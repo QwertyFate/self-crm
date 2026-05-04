@@ -17,6 +17,10 @@ let colWidths      = {}; // {colKey: widthPx} — persisted per workspace in loc
 let resizingCol    = null;
 let currentPage    = 1;
 const PAGE_SIZE    = 25;
+let sortKey        = null; // column key currently sorted, null = default order
+let sortDir        = 'asc'; // 'asc' | 'desc'
+let activeFilters  = {}; // { field_key: ['value1', 'value2'] }
+let filterPanelOpen = false;
 let currentLang   = localStorage.getItem('lang') || 'en';
 
 // ── Translations ──────────────────────────────────────────
@@ -27,7 +31,7 @@ const TRANSLATIONS = {
     page_pipeline:'Pipeline', page_contacts:'Contacts', page_activities:'Activities', page_settings:'Settings',
     add_contact:'+ Add Contact', log_activity:'+ Log Activity',
     import_csv:'⬆ Import CSV', export_csv:'⬇ Export CSV',
-    col_name:'Name', col_company:'Company', col_email:'Email', col_phone:'Phone', col_stage:'Stage', col_assignee:'Assignee',
+    col_name:'Name', col_company:'Company', col_email:'Email', col_phone:'Phone', col_stage:'Stage', col_assignee:'Assignee', col_created_at:'Date Added',
     search_ph:'Search contacts…',
     no_activities:'No activities yet.', no_fields:'No custom fields yet.',
     drop_here:'Drop contacts here', unassigned:'Unassigned',
@@ -63,7 +67,7 @@ const TRANSLATIONS = {
     page_pipeline:'Pipeline', page_contacts:'Kontakte', page_activities:'Aktivitäten', page_settings:'Einstellungen',
     add_contact:'+ Kontakt hinzufügen', log_activity:'+ Aktivität erfassen',
     import_csv:'⬆ CSV importieren', export_csv:'⬇ CSV exportieren',
-    col_name:'Name', col_company:'Unternehmen', col_email:'E-Mail', col_phone:'Telefon', col_stage:'Phase', col_assignee:'Zuständig',
+    col_name:'Name', col_company:'Unternehmen', col_email:'E-Mail', col_phone:'Telefon', col_stage:'Phase', col_assignee:'Zuständig', col_created_at:'Hinzugefügt am',
     search_ph:'Kontakte suchen…',
     no_activities:'Noch keine Aktivitäten.', no_fields:'Noch keine benutzerdefinierten Felder.',
     drop_here:'Kontakte hierher ziehen', unassigned:'Nicht zugewiesen',
@@ -470,7 +474,8 @@ async function loadContacts() {
   await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
   contacts = await api.get('/api/contacts');
   currentPage = 1;
-  renderContactsTable(contacts);
+  renderFilterChips(); // refresh chips in case members/stages changed
+  filterContacts();
 }
 
 // ── Column width persistence (per-user, stored in DB) ────
@@ -511,26 +516,68 @@ function stopColResize() {
 // Returns ordered, merged column definitions respecting saved config + current fields
 function effectiveContactColumns() {
   const BUILTIN = [
-    { key: 'company',     label: () => t('col_company'), type: 'text'     },
-    { key: 'email',       label: () => t('col_email'),   type: 'email'    },
-    { key: 'phone',       label: () => t('col_phone'),   type: 'phone'    },
-    { key: 'stage_id',    label: () => t('col_stage'),   type: 'stage'    },
-    { key: 'assigned_to', label: () => t('col_assignee'),type: 'assignee' },
+    { key: 'company',     label: () => t('col_company'),    type: 'text',     show: true  },
+    { key: 'email',       label: () => t('col_email'),      type: 'email',    show: true  },
+    { key: 'phone',       label: () => t('col_phone'),      type: 'phone',    show: true  },
+    { key: 'stage_id',    label: () => t('col_stage'),      type: 'stage',    show: true  },
+    { key: 'assigned_to', label: () => t('col_assignee'),   type: 'assignee', show: true  },
+    { key: 'created_at',  label: () => t('col_created_at'), type: 'date',     show: false },
   ];
   const ALL = [
     ...BUILTIN,
-    ...fields.map(f => ({ key: f.field_key, label: () => f.name, type: f.type })),
+    ...fields.map(f => ({ key: f.field_key, label: () => f.name, type: f.type, show: true })),
   ];
 
-  if (!contactColumns.length) return ALL.map(c => ({ ...c, visible: true }));
+  if (!contactColumns.length) return ALL.map(c => ({ ...c, visible: c.show }));
 
   const savedMap = Object.fromEntries(contactColumns.map(c => [c.key, c.visible]));
   const ordered  = contactColumns
     .map(({ key }) => { const def = ALL.find(c => c.key === key); return def ? { ...def, visible: savedMap[key] } : null; })
     .filter(Boolean);
-  // Append any new fields not in saved config
-  ALL.filter(c => !(c.key in savedMap)).forEach(c => ordered.push({ ...c, visible: true }));
+  // Append any new fields not in saved config, using their default show value
+  ALL.filter(c => !(c.key in savedMap)).forEach(c => ordered.push({ ...c, visible: c.show }));
   return ordered;
+}
+
+// ── Sort ──────────────────────────────────────────────────
+function toggleSort(key) {
+  if (sortKey === key) {
+    if (sortDir === 'asc') { sortDir = 'desc'; }
+    else { sortKey = null; sortDir = 'asc'; } // third click = reset
+  } else {
+    sortKey = key;
+    sortDir = 'asc';
+  }
+  currentPage = 1;
+  filterContacts();
+}
+
+function getSortValue(c, key) {
+  if (key === '_name')       return (c.name || '').toLowerCase();
+  if (key === 'company')     return (c.company || '').toLowerCase();
+  if (key === 'email')       return (c.email || '').toLowerCase();
+  if (key === 'phone')       return (c.phone || '').toLowerCase();
+  if (key === 'stage_id')    return (c.stage_name || '').toLowerCase();
+  if (key === 'assigned_to') return (c.assigned_to_name || '').toLowerCase();
+  if (key === 'created_at')  return c.created_at ? new Date(c.created_at).getTime() : 0;
+  const f = fields.find(f => f.field_key === key);
+  const v = c.custom_data?.[key];
+  if (f?.type === 'number') return parseFloat(v) || 0;
+  if (f?.type === 'date')   return v ? new Date(v).getTime() : 0;
+  return (v || '').toString().toLowerCase();
+}
+
+function sortContacts(list) {
+  if (!sortKey) return list;
+  return [...list].sort((a, b) => {
+    const va = getSortValue(a, sortKey);
+    const vb = getSortValue(b, sortKey);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
 }
 
 function renderContactsTable(list) {
@@ -544,19 +591,27 @@ function renderContactsTable(list) {
   if (existingCg) table.removeChild(existingCg);
   table.style.tableLayout = '';
 
-  // Build thead (no resize handles yet — added via DOM after measurement)
+  // Sort the full list before paginating
+  const sorted = sortContacts(list);
+
+  // Build thead with sort indicators (no resize handles yet — added via DOM after measurement)
   document.getElementById('contacts-thead').innerHTML = `<tr>
     ${colKeys.map(k => {
-      const col = visibleCols.find(c => c.key === k);
+      const col   = visibleCols.find(c => c.key === k);
       const label = k === '_name' ? t('col_name') : k === '_actions' ? '' : col?.label() || '';
-      return `<th data-col-key="${k}">${label}</th>`;
+      if (k === '_actions') return `<th data-col-key="${k}"></th>`;
+      const isActive = sortKey === k;
+      const icon = isActive
+        ? `<span class="sort-icon active">${sortDir === 'asc' ? '↑' : '↓'}</span>`
+        : `<span class="sort-icon">⇅</span>`;
+      return `<th data-col-key="${k}" class="sortable-col${isActive ? ' sort-active' : ''}" onclick="toggleSort('${k}')">${label}${icon}</th>`;
     }).join('')}
   </tr>`;
 
-  // Paginate
-  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  // Paginate the sorted list
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   if (currentPage > totalPages) currentPage = totalPages;
-  const pageList = list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageList = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // Build tbody
   document.getElementById('contacts-body').innerHTML = pageList.map(c => {
@@ -575,6 +630,8 @@ function renderContactsTable(list) {
       }
       if (col.key === 'assigned_to')
         return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'assigned_to','assignee')" title="${esc(c.assigned_to_name||'')}">${esc(c.assigned_to_name||'')||dash}</td>`;
+      if (col.key === 'created_at')
+        return `<td title="${esc(String(c.created_at||''))}">${fmtDate(c.created_at)||dash}</td>`;
       const v = c.custom_data?.[col.key] ?? '';
       return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${col.key}','${col.type}')" title="${esc(v)}">${esc(v)||dash}</td>`;
     }).join('');
@@ -590,7 +647,7 @@ function renderContactsTable(list) {
   }).join('');
 
   // Render pagination bar
-  renderPagination(list.length);
+  renderPagination(sorted.length);
 
   // Measure natural widths for any column not yet in colWidths (forces reflow)
   let measured = false;
@@ -622,7 +679,8 @@ function renderContactsTable(list) {
     const handle = document.createElement('div');
     handle.className = 'col-resize-handle';
     const colEl = cols[i];
-    handle.addEventListener('mousedown', e => startColResize(e, colKeys[i], colEl));
+    handle.addEventListener('mousedown', e => { e.stopPropagation(); startColResize(e, colKeys[i], colEl); });
+    handle.addEventListener('click', e => e.stopPropagation());
     th.appendChild(handle);
   });
 }
@@ -727,11 +785,139 @@ function onContactSearch() {
 
 function filterContacts() {
   const q = document.getElementById('contact-search').value.toLowerCase();
-  renderContactsTable(contacts.filter(c =>
+  let filtered = contacts.filter(c =>
     c.name.toLowerCase().includes(q) ||
     (c.company||'').toLowerCase().includes(q) ||
     (c.email||'').toLowerCase().includes(q)
-  ));
+  );
+
+  for (const [key, values] of Object.entries(activeFilters)) {
+    if (!values?.length) continue;
+    filtered = filtered.filter(c => {
+      const cv = key === 'stage_id'    ? (c.stage_id    == null ? '' : String(c.stage_id))
+               : key === 'assigned_to' ? (c.assigned_to == null ? '' : String(c.assigned_to))
+               : String(c.custom_data?.[key] ?? '');
+      return values.includes(cv);
+    });
+  }
+
+  renderContactsTable(filtered);
+}
+
+// ══════════════════════════════════════════════════════════
+// CONTACT FILTERS
+// ══════════════════════════════════════════════════════════
+function toggleFilterPanel() {
+  filterPanelOpen = !filterPanelOpen;
+  const panel = document.getElementById('filter-panel');
+  const btn   = document.getElementById('filter-toggle-btn');
+  panel?.classList.toggle('hidden', !filterPanelOpen);
+  btn?.classList.toggle('active', filterPanelOpen);
+  if (filterPanelOpen) renderFilterPanel();
+}
+
+function isFiltered(key, value) {
+  return (activeFilters[key] || []).includes(value);
+}
+
+function toggleFilter(key, value) {
+  if (!activeFilters[key]) activeFilters[key] = [];
+  const idx = activeFilters[key].indexOf(value);
+  if (idx >= 0) activeFilters[key].splice(idx, 1); else activeFilters[key].push(value);
+  if (!activeFilters[key].length) delete activeFilters[key];
+  renderFilterPanel();
+  renderFilterChips();
+  currentPage = 1;
+  filterContacts();
+}
+
+function clearAllFilters() {
+  activeFilters = {};
+  renderFilterPanel();
+  renderFilterChips();
+  currentPage = 1;
+  filterContacts();
+}
+
+function renderFilterPanel() {
+  const el = document.getElementById('filter-panel');
+  if (!el || !filterPanelOpen) return;
+
+  const hasFilters = Object.keys(activeFilters).length > 0;
+
+  const mkOpt = (key, value, label, style = '') => {
+    const on = isFiltered(key, value);
+    return `<button class="filter-opt${on ? ' active' : ''}" style="${style}" onclick="toggleFilter('${key}','${value}')">${label}</button>`;
+  };
+
+  const sections = [];
+
+  // Stage
+  if (stages.length) {
+    const opts = [
+      mkOpt('stage_id', '', t('detail_unassigned')),
+      ...stages.map(s => mkOpt('stage_id', String(s.id), esc(s.name),
+        isFiltered('stage_id', String(s.id)) ? `background:${s.color};border-color:${s.color};color:#fff` : `border-color:${s.color}40`
+      ))
+    ].join('');
+    sections.push(`<div class="filter-section"><div class="filter-section-label">${t('col_stage')}</div><div class="filter-options">${opts}</div></div>`);
+  }
+
+  // Assignee
+  if (members.length) {
+    const opts = [
+      mkOpt('assigned_to', '', t('detail_unassigned')),
+      ...members.map(m => mkOpt('assigned_to', String(m.id), esc(m.name)))
+    ].join('');
+    sections.push(`<div class="filter-section"><div class="filter-section-label">${t('col_assignee')}</div><div class="filter-options">${opts}</div></div>`);
+  }
+
+  // Custom dropdown fields
+  fields.filter(f => f.type === 'dropdown' && f.options?.length).forEach(f => {
+    const opts = f.options.map(o => mkOpt(f.field_key, o, esc(o))).join('');
+    sections.push(`<div class="filter-section"><div class="filter-section-label">${esc(f.name)}</div><div class="filter-options">${opts}</div></div>`);
+  });
+
+  el.innerHTML = `
+    <div class="filter-panel-header">
+      <span class="filter-panel-title">Filters</span>
+      ${hasFilters ? `<button class="btn btn-sm btn-ghost" onclick="clearAllFilters()">Clear all</button>` : ''}
+    </div>
+    <div class="filter-sections">${sections.join('') || '<p style="color:var(--muted);font-size:13px">No filterable fields available.</p>'}</div>`;
+}
+
+function renderFilterChips() {
+  const el = document.getElementById('filter-chips');
+  if (!el) return;
+
+  const chips = [];
+  for (const [key, values] of Object.entries(activeFilters)) {
+    if (!values?.length) continue;
+    values.forEach(v => {
+      let prefix, label;
+      if (key === 'stage_id') {
+        prefix = t('col_stage');
+        label  = v === '' ? t('detail_unassigned') : esc(stages.find(s => String(s.id) === v)?.name || v);
+      } else if (key === 'assigned_to') {
+        prefix = t('col_assignee');
+        label  = v === '' ? t('detail_unassigned') : esc(members.find(m => String(m.id) === v)?.name || v);
+      } else {
+        const f = fields.find(f => f.field_key === key);
+        prefix = esc(f?.name || key);
+        label  = esc(v);
+      }
+      chips.push(`<span class="filter-chip"><span class="filter-chip-label">${prefix}:</span> ${label}
+        <button class="filter-chip-remove" onclick="toggleFilter('${key}','${v.replace(/'/g, '&apos;')}')">✕</button>
+      </span>`);
+    });
+  }
+
+  el.innerHTML = chips.join('');
+  el.classList.toggle('hidden', chips.length === 0);
+
+  const count = Object.values(activeFilters).reduce((n, v) => n + v.length, 0);
+  const badge = document.getElementById('filter-badge');
+  if (badge) { badge.textContent = count; badge.classList.toggle('hidden', count === 0); }
 }
 
 function goToPage(page) {
