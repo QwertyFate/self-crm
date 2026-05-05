@@ -191,7 +191,7 @@
         <div class="workspace-name" id="sidebar-workspace"></div>
       </div>
       <ul class="sidebar-nav">
-        <li><a href="#" data-page="pipeline" class="active">📊 <span data-i18n="nav_pipeline">Pipeline</span></a></li>
+        <li><a href="#" data-page="deals" class="active">🤝 <span data-i18n="nav_deals">Deals</span></a></li>
         <li><a href="#" data-page="contacts">👥 <span data-i18n="nav_contacts">Contacts</span></a></li>
         <li><a href="#" data-page="activities">📋 <span data-i18n="nav_activities">Activities</span></a></li>
       </ul>
@@ -212,13 +212,30 @@
 
     <main class="content">
 
-      <!-- ── Pipeline ── -->
-      <section id="page-pipeline" class="page active">
+      <!-- ── Deals ── -->
+      <section id="page-deals" class="page active">
         <div class="page-header">
-          <h1 data-i18n="page_pipeline">Pipeline</h1>
-          <button class="btn btn-primary" onclick="openContactModal()" data-i18n="add_contact">+ Add Contact</button>
+          <h1 data-i18n="nav_deals">Deals</h1>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="view-toggle">
+              <button class="view-toggle-btn active" id="deal-view-kanban" onclick="setDealView('kanban')" title="Kanban view">
+                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="0" width="6" height="6" rx="1"/><rect x="8" y="0" width="6" height="6" rx="1"/><rect x="0" y="8" width="6" height="6" rx="1"/><rect x="8" y="8" width="6" height="6" rx="1"/></svg>
+              </button>
+              <button class="view-toggle-btn" id="deal-view-list" onclick="setDealView('list')" title="List view">
+                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="1" width="14" height="2.5" rx="1.25"/><rect x="0" y="5.75" width="14" height="2.5" rx="1.25"/><rect x="0" y="10.5" width="14" height="2.5" rx="1.25"/></svg>
+              </button>
+            </div>
+            <select id="deals-pipeline-select" class="deals-pipeline-select" onchange="onPipelineChange()"></select>
+            <button class="btn btn-primary" onclick="openDealModal()" data-i18n="add_deal">+ Add Deal</button>
+          </div>
         </div>
-        <div id="pipeline-board" class="pipeline-board"></div>
+        <div id="deals-board" class="pipeline-board"></div>
+        <div id="deals-list-view" class="table-wrap hidden">
+          <table class="table" id="deals-table">
+            <thead id="deals-thead"></thead>
+            <tbody id="deals-tbody"></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- ── Contacts ── -->
@@ -263,7 +280,7 @@
 
         <nav class="settings-tabs">
           <button class="settings-tab active" data-tab="general"  onclick="switchSettingsTab('general')"  data-i18n="tab_general">General</button>
-          <button class="settings-tab"         data-tab="pipeline" onclick="switchSettingsTab('pipeline')" data-i18n="tab_pipeline">Pipeline</button>
+          <button class="settings-tab"         data-tab="deals"    onclick="switchSettingsTab('deals')"    data-i18n="tab_deals">Deals</button>
           <button class="settings-tab"         data-tab="contacts" onclick="switchSettingsTab('contacts')" data-i18n="tab_contacts">Contacts</button>
           <button class="settings-tab"         data-tab="team"     onclick="switchSettingsTab('team')"     data-i18n="tab_team">Team</button>
         </nav>
@@ -320,26 +337,26 @@
             </div>
           </div>
 
-          <!-- ── Pipeline ── -->
-          <div id="settings-pane-pipeline" class="settings-pane">
+          <!-- ── Deals ── -->
+          <div id="settings-pane-deals" class="settings-pane">
             <div class="settings-grid">
 
-              <div class="settings-card">
+              <div class="settings-card" style="grid-column:1/-1">
                 <div class="settings-card-header">
-                  <h2 data-i18n="set_stages">Pipeline Stages</h2>
-                  <button class="btn btn-primary btn-sm" onclick="openStageModal()" data-i18n="add_btn">+ Add</button>
+                  <h2 data-i18n="set_pipelines">Pipelines</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openNewPipelineModal()" data-i18n="add_btn">+ Add</button>
                 </div>
-                <p class="settings-hint" data-i18n="hint_stages">Drag to reorder. Contacts are unassigned when a stage is deleted.</p>
-                <ul id="stages-list" class="settings-list"></ul>
+                <p class="settings-hint" data-i18n="hint_pipelines">Each pipeline has its own stages. Deals belong to one pipeline.</p>
+                <div id="pipelines-list"></div>
               </div>
 
               <div class="settings-card">
-                <div class="settings-card-header"><h2 data-i18n="set_kanban">Kanban Card Fields</h2></div>
-                <p class="settings-hint" data-i18n="hint_kanban">Choose which fields appear on pipeline cards. Name is always shown.</p>
-                <div id="kanban-fields-list" class="kanban-fields-checks"></div>
-                <div style="padding:12px 0 4px">
-                  <button class="btn btn-primary btn-sm" onclick="saveKanbanFields()" data-i18n="save_btn">Save</button>
+                <div class="settings-card-header">
+                  <h2 data-i18n="set_deal_fields">Deal Fields</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openDealFieldModal()" data-i18n="add_btn">+ Add</button>
                 </div>
+                <p class="settings-hint" data-i18n="hint_deal_fields">Extra properties on every deal.</p>
+                <ul id="deal-fields-list" class="settings-list"></ul>
               </div>
 
             </div>
@@ -348,6 +365,15 @@
           <!-- ── Contacts ── -->
           <div id="settings-pane-contacts" class="settings-pane">
             <div class="settings-grid">
+
+              <div class="settings-card">
+                <div class="settings-card-header">
+                  <h2 data-i18n="set_stages">Contact Stages</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openStageModal()" data-i18n="add_btn">+ Add</button>
+                </div>
+                <p class="settings-hint" data-i18n="hint_stages">Drag to reorder. Used as a status field on each contact.</p>
+                <ul id="stages-list" class="settings-list"></ul>
+              </div>
 
               <div class="settings-card">
                 <div class="settings-card-header">
@@ -513,6 +539,78 @@
         </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('field-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Deal Modal -->
+  <div id="deal-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="deal-modal-title">Add Deal</h2>
+        <button class="close-btn" onclick="closeModal('deal-modal')">&times;</button>
+      </div>
+      <form id="deal-form" onsubmit="saveDeal(event)">
+        <input type="hidden" id="deal-id" />
+        <div class="form-group"><label data-i18n="lbl_deal_title">Title <span class="req">*</span></label><input type="text" id="df-title" required /></div>
+        <div class="form-group"><label data-i18n="lbl_contact">Contact</label><select id="df-contact"></select></div>
+        <div class="form-group"><label data-i18n="nav_deals">Pipeline <span class="req">*</span></label><select id="df-pipeline" onchange="onDealPipelineChange()" required></select></div>
+        <div class="form-group"><label data-i18n="lbl_stage">Stage</label><select id="df-stage"></select></div>
+        <div class="form-group"><label data-i18n="lbl_deal_value">Value</label><input type="number" id="df-value" min="0" step="0.01" /></div>
+        <div class="form-group"><label data-i18n="lbl_assignee">Assignee</label><select id="df-assignee"></select></div>
+        <div id="df-custom-fields"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('deal-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- New Pipeline Modal -->
+  <div id="new-pipeline-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2 id="pipeline-modal-title">New Pipeline</h2>
+        <button class="close-btn" onclick="closeModal('new-pipeline-modal')">&times;</button>
+      </div>
+      <form id="new-pipeline-form" onsubmit="saveNewPipeline(event)">
+        <input type="hidden" id="pipeline-edit-id" />
+        <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="pipeline-name-input" required /></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('new-pipeline-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Deal Field Modal -->
+  <div id="deal-field-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2 id="deal-field-modal-title">Add Deal Field</h2>
+        <button class="close-btn" onclick="closeModal('deal-field-modal')">&times;</button>
+      </div>
+      <form id="deal-field-form" onsubmit="saveDealField(event)">
+        <input type="hidden" id="deal-field-id" />
+        <div class="form-group"><label>Label <span class="req">*</span></label><input type="text" id="dff-name" required oninput="autoDealFieldKey()" /></div>
+        <div class="form-group"><label data-i18n="lbl_key">Key</label><input type="text" id="dff-key" readonly style="opacity:.55" /></div>
+        <div class="form-group"><label data-i18n="lbl_type">Type</label>
+          <select id="dff-type" onchange="toggleDealFieldOptions()">
+            <option value="text">Text</option><option value="number">Number</option>
+            <option value="dropdown">Dropdown</option><option value="date">Date</option>
+            <option value="url">URL</option>
+          </select>
+        </div>
+        <div class="form-group hidden" id="dff-options-group">
+          <label data-i18n="lbl_options">Options (one per line)</label>
+          <textarea id="dff-options" rows="4" placeholder="Option A&#10;Option B"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('deal-field-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
         </div>
       </form>

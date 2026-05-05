@@ -8,8 +8,15 @@ let stages     = [];
 let fields     = [];
 let activities = [];
 let members    = [];
-let dragContactId  = null;
-let dragStageIdx   = null;
+let pipelines        = [];
+let deals            = [];
+let dealFields       = [];
+let dealKanbanFields = ['contact', 'value'];
+let currentPipelineId = null;
+let dealViewMode      = localStorage.getItem('dealViewMode') || 'kanban';
+let dragDealId        = null;
+let dragContactId    = null;
+let dragStageIdx     = null;
 let colDragIdx     = null;
 let importData     = null;
 let contactColumns = []; // [{key, visible}] — empty = all visible in default order
@@ -26,7 +33,12 @@ let currentLang   = localStorage.getItem('lang') || 'en';
 // ── Translations ──────────────────────────────────────────
 const TRANSLATIONS = {
   en: {
-    nav_pipeline:'Pipeline', nav_contacts:'Contacts', nav_activities:'Activities', nav_settings:'Settings',
+    nav_deals:'Deals', nav_contacts:'Contacts', nav_activities:'Activities', nav_settings:'Settings',
+    add_deal:'+ Add Deal', lbl_deal_title:'Title', lbl_deal_value:'Value',
+    tab_deals:'Deals', set_pipelines:'Pipelines', hint_pipelines:'Each pipeline has its own stages. Deals belong to one pipeline.',
+    set_deal_fields:'Deal Fields', hint_deal_fields:'Extra properties on every deal.',
+    no_pipelines:'No pipelines yet. Create one in Settings → Deals.',
+    no_deals:'No deals in this stage.',
     dark_mode:'Dark mode', light_mode:'Light mode', logout:'Log out',
     page_pipeline:'Pipeline', page_contacts:'Contacts', page_activities:'Activities', page_settings:'Settings',
     add_contact:'+ Add Contact', log_activity:'+ Log Activity',
@@ -66,7 +78,12 @@ const TRANSLATIONS = {
     lang_en:'English', lang_de:'German',
   },
   de: {
-    nav_pipeline:'Pipeline', nav_contacts:'Kontakte', nav_activities:'Aktivitäten', nav_settings:'Einstellungen',
+    nav_deals:'Deals', nav_contacts:'Kontakte', nav_activities:'Aktivitäten', nav_settings:'Einstellungen',
+    add_deal:'+ Deal hinzufügen', lbl_deal_title:'Titel', lbl_deal_value:'Wert',
+    tab_deals:'Deals', set_pipelines:'Pipelines', hint_pipelines:'Jede Pipeline hat eigene Phasen. Deals gehören zu einer Pipeline.',
+    set_deal_fields:'Deal-Felder', hint_deal_fields:'Zusätzliche Eigenschaften für jeden Deal.',
+    no_pipelines:'Noch keine Pipelines. Erstelle eine unter Einstellungen → Deals.',
+    no_deals:'Keine Deals in dieser Phase.',
     dark_mode:'Dunkelmodus', light_mode:'Hellmodus', logout:'Abmelden',
     page_pipeline:'Pipeline', page_contacts:'Kontakte', page_activities:'Aktivitäten', page_settings:'Einstellungen',
     add_contact:'+ Kontakt hinzufügen', log_activity:'+ Aktivität erfassen',
@@ -128,7 +145,7 @@ function setLanguage(lang) {
   applyTranslations();
   // Re-render current page so dynamic strings update
   const page = document.querySelector('.page.active')?.id.replace('page-', '');
-  if (page === 'pipeline')   renderPipeline();
+  if (page === 'deals')      loadDeals();
   if (page === 'contacts')   filterContacts();
   if (page === 'activities') loadActivities();
   if (page === 'settings')   loadSettings();
@@ -221,7 +238,7 @@ function showApp() {
   document.getElementById('sidebar-user').textContent = currentUser?.name || '';
   applyTranslations();
   loadColWidths();
-  loadPipeline();
+  loadDeals();
 }
 
 function showAuthView(view) {
@@ -390,102 +407,181 @@ function switchPage(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelector(`.sidebar-nav a[data-page="${page}"]`)?.classList.add('active');
   document.getElementById(`page-${page}`).classList.add('active');
-  if (page === 'pipeline')   loadPipeline();
+  if (page === 'deals')      loadDeals();
   if (page === 'contacts')   loadContacts();
   if (page === 'activities') loadActivities();
   if (page === 'settings')   loadSettings();
 }
 
 // ── Shared loaders ────────────────────────────────────────
-function invalidate() { contacts = []; stages = []; fields = []; members = []; }
+function invalidate() { contacts = []; stages = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }
 async function ensureStages()   { if (!stages.length)   stages   = await api.get('/api/stages'); }
 async function ensureFields()   { if (!fields.length)   fields   = await api.get('/api/fields'); }
 async function ensureContacts() { if (!contacts.length) contacts = await api.get('/api/contacts'); }
 async function ensureMembers()  { if (!members.length)  members  = await api.get('/api/workspace/members'); }
 
 // ══════════════════════════════════════════════════════════
-// PIPELINE
+// DEALS
 // ══════════════════════════════════════════════════════════
-async function loadPipeline() {
-  await Promise.all([ensureStages(), ensureFields(), ensureContacts()]);
-  renderPipeline();
+async function loadDeals() {
+  await ensureMembers();
+  [pipelines, dealFields] = await Promise.all([
+    api.get('/api/pipelines'),
+    api.get('/api/deal-fields'),
+  ]);
+  dealKanbanFields = currentWorkspace?.deal_kanban_fields || ['contact', 'value'];
+
+  const sel = document.getElementById('deals-pipeline-select');
+  if (sel) {
+    sel.innerHTML = `<option value="">— All pipelines —</option>` +
+      pipelines.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    // Kanban needs a specific pipeline — default to first if none chosen
+    if (dealViewMode === 'kanban' && !currentPipelineId && pipelines.length)
+      currentPipelineId = pipelines[0]?.id || null;
+    if (!pipelines.find(p => p.id === currentPipelineId)) currentPipelineId = null;
+    sel.value = currentPipelineId || '';
+  }
+
+  const url = currentPipelineId ? `/api/deals?pipeline_id=${currentPipelineId}` : '/api/deals';
+  deals = await api.get(url);
+  setDealView(dealViewMode);
 }
 
-function renderPipeline() {
-  const board = document.getElementById('pipeline-board');
+async function onPipelineChange() {
+  const sel = document.getElementById('deals-pipeline-select');
+  currentPipelineId = sel.value ? parseInt(sel.value) : null;
+  // Kanban needs a specific pipeline
+  if (dealViewMode === 'kanban' && !currentPipelineId && pipelines.length) {
+    currentPipelineId = pipelines[0].id;
+    sel.value = currentPipelineId;
+  }
+  const url = currentPipelineId ? `/api/deals?pipeline_id=${currentPipelineId}` : '/api/deals';
+  deals = await api.get(url);
+  if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
+}
 
-  const unassigned = contacts.filter(c => !c.stage_id);
-  const cols = [
-    { id: null, name: t('unassigned'), color: '#9ca3af', items: unassigned },
-    ...stages.map(s => ({ ...s, items: contacts.filter(c => c.stage_id === s.id) })),
-  ];
+function setDealView(mode) {
+  dealViewMode = mode;
+  localStorage.setItem('dealViewMode', mode);
+  document.getElementById('deals-board')?.classList.toggle('hidden', mode === 'list');
+  document.getElementById('deals-list-view')?.classList.toggle('hidden', mode === 'kanban');
+  document.getElementById('deal-view-kanban')?.classList.toggle('active', mode === 'kanban');
+  document.getElementById('deal-view-list')?.classList.toggle('active', mode === 'list');
+  if (mode === 'list') renderDealsList(); else renderDealsBoard();
+}
 
-  board.innerHTML = cols.map(col => `
+function renderDealsList() {
+  const thead = document.getElementById('deals-thead');
+  const tbody = document.getElementById('deals-tbody');
+  if (!thead || !tbody) return;
+
+  const showPipeline = !currentPipelineId;
+  thead.innerHTML = `<tr>
+    <th>Title</th>
+    ${showPipeline ? '<th>Pipeline</th>' : ''}
+    <th>Stage</th>
+    <th>Contact</th>
+    <th>Value</th>
+    <th>Assignee</th>
+    <th>Date Added</th>
+  </tr>`;
+
+  if (!deals.length) {
+    const span = 6 + (showPipeline ? 1 : 0);
+    tbody.innerHTML = `<tr><td colspan="${span}" style="text-align:center;color:var(--muted);padding:28px">No deals found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = deals.map(d => {
+    const dash = '<span class="muted-dash">—</span>';
+    const pName = showPipeline ? (pipelines.find(p => p.id === d.pipeline_id)?.name || '—') : null;
+    const badge = d.stage_name
+      ? `<span class="stage-badge"><span class="stage-badge-dot" style="background:${d.stage_color}"></span>${esc(d.stage_name)}</span>`
+      : dash;
+    const val = d.value != null ? `<span class="deal-value-chip">€ ${Number(d.value).toLocaleString()}</span>` : dash;
+    return `<tr class="deal-list-row" onclick="openDealModal(${d.id})">
+      <td><strong>${esc(d.title)}</strong></td>
+      ${showPipeline ? `<td>${esc(pName)}</td>` : ''}
+      <td>${badge}</td>
+      <td>${d.contact_name ? esc(d.contact_name) : dash}</td>
+      <td>${val}</td>
+      <td>${d.assigned_to_name ? esc(d.assigned_to_name) : dash}</td>
+      <td>${fmtDate(d.created_at)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderDealsBoard() {
+  const board = document.getElementById('deals-board');
+  if (!board) return;
+
+  if (!pipelines.length) {
+    board.innerHTML = `<div style="padding:40px;color:var(--muted);font-size:14px">${t('no_pipelines')}</div>`;
+    return;
+  }
+
+  const pipeline = pipelines.find(p => p.id === currentPipelineId);
+  if (!pipeline) return;
+  const pipelineStages = pipeline.stages || [];
+
+  board.innerHTML = pipelineStages.map(stage => {
+    const stageDeals = deals.filter(d => d.stage_id === stage.id);
+    return `
     <div class="pipeline-col">
       <div class="col-header">
-        <span class="col-dot" style="background:${col.color}"></span>
-        <span class="col-name">${esc(col.name)}</span>
-        <span class="col-count">${col.items.length}</span>
+        <span class="col-dot" style="background:${stage.color}"></span>
+        <span class="col-name">${esc(stage.name)}</span>
+        <span class="col-count">${stageDeals.length}</span>
       </div>
       <div class="col-cards"
-        data-stage-id="${col.id ?? 'null'}"
-        ondragover="onDragOver(event)"
-        ondragleave="onDragLeave(event)"
-        ondrop="onDrop(event, ${col.id ?? null})">
-        ${col.items.length
-          ? col.items.map(c => contactCard(c)).join('')
-          : `<div class="col-empty">${t('drop_here')}</div>`}
+        ondragover="dealDragOver(event)" ondragleave="dealDragLeave(event)"
+        ondrop="dealDrop(event,${stage.id})">
+        ${stageDeals.length ? stageDeals.map(dealCard).join('') : `<div class="col-empty">${t('no_deals')}</div>`}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
-function contactCard(c) {
-  const visibleFields = kanbanFields.map(key => {
-    if (key === 'company'  && c.company)           return { val: c.company,           isLink: false };
-    if (key === 'email'    && c.email)              return { val: c.email,             isLink: true  };
-    if (key === 'phone'    && c.phone)              return { val: c.phone,             isLink: false };
-    if (key === 'assignee' && c.assigned_to_name)  return { val: c.assigned_to_name,  isLink: false };
-    const f = fields.find(f => f.field_key === key);
-    if (f) {
-      const val = c.custom_data?.[key];
-      if (val) return { val, isLink: f.type === 'url' || f.type === 'email' };
-    }
-    return null;
-  }).filter(Boolean);
-
+function dealCard(d) {
+  const fmtVal = d.value != null ? Number(d.value).toLocaleString() : null;
   return `
-    <div class="contact-card" draggable="true" data-id="${c.id}"
-      ondragstart="onDragStart(event, ${c.id})" ondragend="onDragEnd(event)"
-      onclick="openDetail(${c.id})">
-      <div class="card-name">${esc(c.name)}</div>
-      ${visibleFields.map(f => `<div class="card-field${f.isLink ? ' link' : ''}">${esc(f.val)}</div>`).join('')}
+    <div class="contact-card deal-card" draggable="true" data-id="${d.id}"
+      ondragstart="dealDragStart(event,${d.id})" ondragend="dealDragEnd(event)"
+      onclick="openDealModal(${d.id})">
+      <div class="card-name">${esc(d.title)}</div>
+      ${d.contact_name ? `<div class="card-field">👤 ${esc(d.contact_name)}</div>` : ''}
+      ${fmtVal != null ? `<div class="card-field deal-value-chip">€ ${fmtVal}</div>` : ''}
+      ${d.assigned_to_name ? `<div class="card-field">→ ${esc(d.assigned_to_name)}</div>` : ''}
       <div class="card-actions">
-        <button class="btn btn-sm btn-ghost btn-icon" title="Edit" onclick="event.stopPropagation();openContactModal(${c.id})">✏️</button>
-        <button class="btn btn-sm btn-danger btn-icon" title="Delete" onclick="event.stopPropagation();deleteContact(${c.id})">✕</button>
+        <button class="btn btn-sm btn-danger btn-icon" title="Delete"
+          onclick="event.stopPropagation();deleteDeal(${d.id})">✕</button>
       </div>
     </div>`;
 }
 
-// ── Drag & Drop ───────────────────────────────────────────
-function onDragStart(e, id) {
-  dragContactId = id;
+// ── Deal Drag & Drop ──────────────────────────────────────
+function dealDragStart(e, id) {
+  dragDealId = id;
   e.dataTransfer.effectAllowed = 'move';
   setTimeout(() => e.target.classList.add('dragging'), 0);
 }
-function onDragEnd(e)   { e.target.classList.remove('dragging'); }
-function onDragOver(e)  { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
-function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+function dealDragEnd(e)   { e.target.classList.remove('dragging'); }
+function dealDragOver(e)  { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+function dealDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
 
-async function onDrop(e, stageId) {
+async function dealDrop(e, stageId) {
   e.preventDefault();
   e.currentTarget.classList.remove('drag-over');
-  if (!dragContactId) return;
-  const contact = contacts.find(c => c.id === dragContactId);
-  if (!contact || contact.stage_id === stageId) return;
-  contact.stage_id = stageId;
-  renderPipeline();
-  await api.patch(`/api/contacts/${dragContactId}/stage`, { stage_id: stageId });
-  dragContactId = null;
+  if (!dragDealId) return;
+  const deal = deals.find(d => d.id === dragDealId);
+  if (!deal || deal.stage_id === stageId) return;
+  deal.stage_id = stageId;
+  const stage = (pipelines.find(p => p.id === currentPipelineId)?.stages || []).find(s => s.id === stageId);
+  deal.stage_name  = stage?.name  || null;
+  deal.stage_color = stage?.color || null;
+  if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
+  await api.patch(`/api/deals/${dragDealId}/stage`, { stage_id: stageId });
+  dragDealId = null;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -793,7 +889,7 @@ async function commitInlineEdit(contactId, fieldKey, fieldType, value) {
   });
 
   filterContacts();
-  if (document.getElementById('page-pipeline').classList.contains('active')) renderPipeline();
+  if (document.getElementById('page-deals').classList.contains('active')) renderDealsBoard();
 }
 
 function onContactSearch() {
@@ -1020,11 +1116,15 @@ async function loadSettings() {
   [stages, fields] = await Promise.all([api.get('/api/stages'), api.get('/api/fields')]);
   renderStagesList();
   renderFieldsList();
-  renderKanbanFields();
   renderContactColumnSettings();
   // Populate WA template textarea
   const waEl = document.getElementById('wa-template-input');
   if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? 'Hi {{name}}, ';
+  // Load deals settings
+  pipelines    = await api.get('/api/pipelines');
+  dealFields   = await api.get('/api/deal-fields');
+  renderPipelinesSettings();
+  renderDealFieldsList();
   // Restore active tab
   switchSettingsTab(currentSettingsTab);
   if (currentUser?.role === 'owner') {
@@ -1060,6 +1160,184 @@ async function saveWorkspaceName() {
   msgEl.className = 'workspace-name-msg success';
   msgEl.classList.remove('hidden');
   setTimeout(() => msgEl.classList.add('hidden'), 2500);
+}
+
+// ── Pipeline Settings ─────────────────────────────────────
+function renderPipelinesSettings() {
+  const el = document.getElementById('pipelines-list');
+  if (!el) return;
+  if (!pipelines.length) {
+    el.innerHTML = `<p style="color:var(--muted);font-size:13px;padding:8px 0">No pipelines yet.</p>`;
+    return;
+  }
+  el.innerHTML = pipelines.map(p => `
+    <div class="pipeline-settings-row">
+      <div class="pipeline-settings-header">
+        <span class="row-label" style="font-weight:600">📌 ${esc(p.name)}</span>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-sm btn-ghost btn-icon" onclick="editPipeline(${p.id},'${esc(p.name).replace(/'/g,'&apos;')}')">✏️</button>
+          <button class="btn btn-sm btn-danger btn-icon" onclick="deletePipeline(${p.id})">✕</button>
+        </div>
+      </div>
+      <div class="pipeline-stages-list">
+        ${(p.stages||[]).map((s,i) => `
+          <div class="settings-row pipeline-stage-row" draggable="true"
+            ondragstart="pipelineStageDragStart(event,${p.id},${i})"
+            ondragover="pipelineStageDragOver(event)"
+            ondrop="pipelineStageDrop(event,${p.id},${i})">
+            <span class="drag-handle">⠿</span>
+            <span class="row-dot" style="background:${s.color}"></span>
+            <span class="row-label">${esc(s.name)}</span>
+            <div class="row-actions">
+              <button class="btn btn-sm btn-ghost btn-icon" onclick="editPipelineStage(${p.id},${s.id},'${esc(s.name).replace(/'/g,'&apos;')}','${s.color}')">✏️</button>
+              <button class="btn btn-sm btn-danger btn-icon" onclick="deletePipelineStage(${p.id},${s.id})">✕</button>
+            </div>
+          </div>`).join('')}
+        <button class="btn btn-sm btn-ghost" style="margin-top:6px" onclick="addPipelineStage(${p.id})">+ Add stage</button>
+      </div>
+    </div>`).join('');
+}
+
+let pipelineStageDragIdx = null;
+let pipelineStageDragPid = null;
+function pipelineStageDragStart(e, pid, i) { pipelineStageDragPid = pid; pipelineStageDragIdx = i; e.dataTransfer.effectAllowed = 'move'; }
+function pipelineStageDragOver(e) { e.preventDefault(); }
+async function pipelineStageDrop(e, pid, targetIdx) {
+  e.preventDefault();
+  if (pipelineStageDragPid !== pid || pipelineStageDragIdx === null || pipelineStageDragIdx === targetIdx) return;
+  const p = pipelines.find(p => p.id === pid);
+  const moved = p.stages.splice(pipelineStageDragIdx, 1)[0];
+  p.stages.splice(targetIdx, 0, moved);
+  pipelineStageDragIdx = null;
+  renderPipelinesSettings();
+  await api.patch(`/api/pipelines/${pid}/stages/reorder`, { ids: p.stages.map(s => s.id) });
+}
+
+function openNewPipelineModal(id, name) {
+  document.getElementById('new-pipeline-form').reset();
+  document.getElementById('pipeline-edit-id').value = id || '';
+  document.getElementById('pipeline-name-input').value = name || '';
+  document.getElementById('pipeline-modal-title').textContent = id ? 'Rename Pipeline' : 'New Pipeline';
+  document.getElementById('new-pipeline-modal').classList.remove('hidden');
+}
+function editPipeline(id, name) { openNewPipelineModal(id, name); }
+
+async function saveNewPipeline(e) {
+  e.preventDefault();
+  const id   = document.getElementById('pipeline-edit-id').value;
+  const name = document.getElementById('pipeline-name-input').value.trim();
+  if (!name) return;
+  if (id) await api.put(`/api/pipelines/${id}`, { name });
+  else    await api.post('/api/pipelines', { name });
+  closeModal('new-pipeline-modal');
+  pipelines = await api.get('/api/pipelines');
+  renderPipelinesSettings();
+  // Refresh pipeline selector on deals page if open
+  const sel = document.getElementById('deals-pipeline-select');
+  if (sel) {
+    sel.innerHTML = pipelines.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    if (currentPipelineId) sel.value = currentPipelineId;
+  }
+}
+
+async function deletePipeline(id) {
+  if (!confirm('Delete this pipeline and all its deals?')) return;
+  await api.del(`/api/pipelines/${id}`);
+  pipelines = pipelines.filter(p => p.id !== id);
+  if (currentPipelineId === id) { currentPipelineId = pipelines[0]?.id || null; deals = []; }
+  renderPipelinesSettings();
+}
+
+async function addPipelineStage(pipelineId) {
+  const name = prompt('Stage name:');
+  if (!name?.trim()) return;
+  const color = '#' + Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0');
+  const res = await api.post(`/api/pipelines/${pipelineId}/stages`, { name: name.trim(), color });
+  if (res.error) { alert(res.error); return; }
+  pipelines = await api.get('/api/pipelines');
+  renderPipelinesSettings();
+}
+
+async function editPipelineStage(pipelineId, stageId, currentName, currentColor) {
+  const name = prompt('Stage name:', currentName);
+  if (!name?.trim()) return;
+  await api.put(`/api/pipelines/${pipelineId}/stages/${stageId}`, { name: name.trim(), color: currentColor });
+  pipelines = await api.get('/api/pipelines');
+  renderPipelinesSettings();
+}
+
+async function deletePipelineStage(pipelineId, stageId) {
+  if (!confirm('Delete this stage? Deals in it will become unsorted.')) return;
+  await api.del(`/api/pipelines/${pipelineId}/stages/${stageId}`);
+  pipelines = await api.get('/api/pipelines');
+  renderPipelinesSettings();
+}
+
+// ── Deal Fields ───────────────────────────────────────────
+function renderDealFieldsList() {
+  const el = document.getElementById('deal-fields-list');
+  if (!el) return;
+  if (!dealFields.length) { el.innerHTML = `<li style="color:var(--muted);font-size:13px;padding:6px 10px">No deal fields yet.</li>`; return; }
+  el.innerHTML = dealFields.map(f => `
+    <li class="settings-row">
+      <span class="row-label">${esc(f.name)}</span>
+      <span class="row-sub">${f.type}</span>
+      <div class="row-actions">
+        <button class="btn btn-sm btn-ghost btn-icon" onclick="openDealFieldModal(${f.id})">✏️</button>
+        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteDealField(${f.id})">✕</button>
+      </div>
+    </li>`).join('');
+}
+
+function openDealFieldModal(id) {
+  document.getElementById('deal-field-form').reset();
+  document.getElementById('deal-field-id').value = id || '';
+  document.getElementById('dff-options-group').classList.add('hidden');
+  document.getElementById('deal-field-modal-title').textContent = id ? 'Edit Deal Field' : 'Add Deal Field';
+  if (id) {
+    const f = dealFields.find(f => f.id === id);
+    document.getElementById('dff-name').value = f.name;
+    document.getElementById('dff-key').value  = f.field_key;
+    document.getElementById('dff-type').value = f.type;
+    document.getElementById('dff-options').value = (f.options||[]).join('\n');
+    if (f.type === 'dropdown') document.getElementById('dff-options-group').classList.remove('hidden');
+  }
+  document.getElementById('deal-field-modal').classList.remove('hidden');
+}
+
+function autoDealFieldKey() {
+  if (document.getElementById('deal-field-id').value) return;
+  document.getElementById('dff-key').value = document.getElementById('dff-name').value
+    .toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
+}
+function toggleDealFieldOptions() {
+  document.getElementById('dff-options-group').classList.toggle('hidden', document.getElementById('dff-type').value !== 'dropdown');
+}
+
+async function saveDealField(e) {
+  e.preventDefault();
+  const id   = document.getElementById('deal-field-id').value;
+  const type = document.getElementById('dff-type').value;
+  const payload = {
+    name:      document.getElementById('dff-name').value,
+    field_key: document.getElementById('dff-key').value,
+    type,
+    options: type === 'dropdown'
+      ? document.getElementById('dff-options').value.split('\n').map(s => s.trim()).filter(Boolean)
+      : [],
+  };
+  const res = id ? await api.put(`/api/deal-fields/${id}`, payload) : await api.post('/api/deal-fields', payload);
+  if (res.error) { alert(res.error); return; }
+  closeModal('deal-field-modal');
+  dealFields = await api.get('/api/deal-fields');
+  renderDealFieldsList();
+}
+
+async function deleteDealField(id) {
+  if (!confirm('Delete this field?')) return;
+  await api.del(`/api/deal-fields/${id}`);
+  dealFields = dealFields.filter(f => f.id !== id);
+  renderDealFieldsList();
 }
 
 function insertWaVar(variable) {
@@ -1284,11 +1562,13 @@ async function saveContactColumns() {
 
 // ── Kanban field visibility ───────────────────────────────
 function renderKanbanFields() {
+  const el = document.getElementById('kanban-fields-list');
+  if (!el) return;
   const allOptions = [
     ...BUILTIN_FIELDS,
     ...fields.map(f => ({ key: f.field_key, label: f.name, type: f.type })),
   ];
-  document.getElementById('kanban-fields-list').innerHTML = allOptions.map(f => `
+  el.innerHTML = allOptions.map(f => `
     <label class="kanban-check-row">
       <input type="checkbox" value="${esc(f.key)}" ${kanbanFields.includes(f.key) ? 'checked' : ''} />
       <span class="kanban-check-label">${esc(f.label)}</span>
@@ -1426,7 +1706,7 @@ async function saveContact(e) {
   closeModal('contact-modal');
   invalidate();
   const page = document.querySelector('.page.active')?.id.replace('page-', '');
-  if (page === 'pipeline') loadPipeline(); else loadContacts();
+  if (page === 'deals') loadDeals(); else loadContacts();
 }
 
 async function deleteContact(id) {
@@ -1435,20 +1715,23 @@ async function deleteContact(id) {
   closeModal('detail-modal');
   invalidate();
   const page = document.querySelector('.page.active')?.id.replace('page-', '');
-  if (page === 'pipeline') loadPipeline(); else loadContacts();
+  if (page === 'deals') loadDeals(); else loadContacts();
 }
 
 // ══════════════════════════════════════════════════════════
 // CONTACT DETAIL
 // ══════════════════════════════════════════════════════════
 async function openDetail(id) {
-  await Promise.all([ensureStages(), ensureFields()]);
-  const c = await api.get(`/api/contacts/${id}`);
+  await Promise.all([ensureFields()]);
+  const [c, contactDeals] = await Promise.all([
+    api.get(`/api/contacts/${id}`),
+    api.get(`/api/deals?contact_id=${id}`),
+  ]);
   document.getElementById('detail-title').textContent = c.name;
 
   const infoFields = [
     ['Company',  c.company],
-    ['Email',    c.email   ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : null],
+    ['Email',    c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : null],
     ['Phone',    c.phone ? `${esc(c.phone)}${waLink(c.phone, c) ? ` <a class="wa-detail-link" href="${waLink(c.phone, c)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG} WhatsApp</a>` : ''}` : null],
     ['Assignee', c.assigned_to_name],
     ...fields.map(f => {
@@ -1467,18 +1750,12 @@ async function openDetail(id) {
       </div>
     </div>
     <div class="detail-section">
-      <h3>${t('detail_stage')}</h3>
-      <div class="stage-pills">
-        <div class="stage-pill ${!c.stage_id ? 'active' : ''}"
-          style="${!c.stage_id ? 'background:#9ca3af' : ''}"
-          onclick="moveContactStage(${id}, null, this)">${t('detail_unassigned')}</div>
-        ${stages.map(s => `
-          <div class="stage-pill ${c.stage_id===s.id ? 'active' : ''}"
-            style="${c.stage_id===s.id ? `background:${s.color}` : ''}"
-            onclick="moveContactStage(${id}, ${s.id}, this)">
-            <span style="width:7px;height:7px;border-radius:50%;background:${s.color};display:inline-block"></span>
-            ${esc(s.name)}
-          </div>`).join('')}
+      <div class="detail-section-header">
+        <h3>Deals</h3>
+        <button class="btn btn-sm btn-primary" onclick="closeModal('detail-modal');openDealModalForContact(${id})">+ Add Deal</button>
+      </div>
+      <div class="contact-deals-list" id="contact-deals-list">
+        ${renderContactDeals(contactDeals)}
       </div>
     </div>
     <div class="detail-section">
@@ -1502,6 +1779,32 @@ async function openDetail(id) {
   document.getElementById('detail-modal').classList.remove('hidden');
 }
 
+function renderContactDeals(deals) {
+  if (!deals?.length) return `<p style="color:var(--muted);font-size:12px;padding:4px 0">No deals yet.</p>`;
+  return deals.map(d => {
+    const fmtVal = d.value != null ? `€ ${Number(d.value).toLocaleString()}` : null;
+    return `
+      <div class="contact-deal-row" onclick="closeModal('detail-modal');openDealModal(${d.id})">
+        <div class="contact-deal-title">${esc(d.title)}</div>
+        <div class="contact-deal-meta">
+          ${d.stage_name ? `<span class="contact-deal-stage" style="border-color:${d.stage_color||'var(--border)'}">
+            <span style="width:7px;height:7px;border-radius:50%;background:${d.stage_color||'#9ca3af'};display:inline-block;flex-shrink:0"></span>
+            ${esc(d.stage_name)}
+          </span>` : ''}
+          ${fmtVal ? `<span class="contact-deal-value">${fmtVal}</span>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function openDealModalForContact(contactId) {
+  if (!pipelines.length) pipelines = await api.get('/api/pipelines');
+  await openDealModal(null);
+  // Pre-select the contact after the modal is open
+  const sel = document.getElementById('df-contact');
+  if (sel) sel.value = contactId;
+}
+
 function renderMiniActs(acts) {
   if (!acts?.length) return `<p style="color:var(--muted);font-size:12px">${t('no_activities')}</p>`;
   return acts.map(a => `
@@ -1522,7 +1825,7 @@ async function moveContactStage(contactId, stageId, el) {
   await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: stageId });
   const c = contacts.find(c => c.id === contactId);
   if (c) c.stage_id = stageId;
-  if (document.getElementById('page-pipeline').classList.contains('active')) renderPipeline();
+  if (document.getElementById('page-deals').classList.contains('active')) renderDealsBoard();
 }
 
 async function logInlineActivity(contactId) {
@@ -1532,6 +1835,89 @@ async function logInlineActivity(contactId) {
   document.getElementById('inline-content').value = '';
   const c = await api.get(`/api/contacts/${contactId}`);
   document.getElementById('detail-acts').innerHTML = renderMiniActs(c.activities);
+}
+
+// ══════════════════════════════════════════════════════════
+// DEAL MODAL
+// ══════════════════════════════════════════════════════════
+async function openDealModal(id) {
+  await Promise.all([ensureContacts(), ensureMembers()]);
+  if (!pipelines.length) pipelines = await api.get('/api/pipelines');
+
+  document.getElementById('deal-form').reset();
+  document.getElementById('deal-id').value    = id || '';
+  document.getElementById('deal-modal-title').textContent = id ? 'Edit Deal' : 'Add Deal';
+
+  // Populate pipeline dropdown
+  const pipelineSel = document.getElementById('df-pipeline');
+  pipelineSel.innerHTML = pipelines.map(p =>
+    `<option value="${p.id}" ${currentPipelineId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`
+  ).join('');
+
+  // Populate stages based on selected pipeline
+  populateDealStages(pipelineSel.value ? parseInt(pipelineSel.value) : null, null);
+
+  // Populate contact dropdown
+  const contactSel = document.getElementById('df-contact');
+  contactSel.innerHTML = `<option value="">— No contact —</option>` +
+    contacts.map(c => `<option value="${c.id}">${esc(c.name)}${c.company ? ` (${esc(c.company)})` : ''}</option>`).join('');
+
+  // Populate assignee dropdown
+  const assigneeSel = document.getElementById('df-assignee');
+  assigneeSel.innerHTML = `<option value="">— Unassigned —</option>` +
+    members.map(m => `<option value="${m.id}"${m.id === currentUser?.id ? ' selected' : ''}>${esc(m.name)}</option>`).join('');
+
+  if (id) {
+    const d = await api.get(`/api/deals/${id}`);
+    document.getElementById('df-title').value = d.title;
+    document.getElementById('df-value').value = d.value != null ? d.value : '';
+    pipelineSel.value = d.pipeline_id || '';
+    populateDealStages(d.pipeline_id, d.stage_id);
+    contactSel.value  = d.contact_id  || '';
+    assigneeSel.value = d.assigned_to || '';
+  }
+
+  document.getElementById('deal-modal').classList.remove('hidden');
+}
+
+function populateDealStages(pipelineId, selectedStageId) {
+  const pipeline = pipelines.find(p => p.id === pipelineId);
+  const stageSel = document.getElementById('df-stage');
+  stageSel.innerHTML = `<option value="">— No stage —</option>` +
+    (pipeline?.stages || []).map(s =>
+      `<option value="${s.id}" ${selectedStageId === s.id ? 'selected' : ''}>${esc(s.name)}</option>`
+    ).join('');
+}
+
+function onDealPipelineChange() {
+  const pid = parseInt(document.getElementById('df-pipeline').value) || null;
+  populateDealStages(pid, null);
+}
+
+async function saveDeal(e) {
+  e.preventDefault();
+  const id = document.getElementById('deal-id').value;
+  const payload = {
+    title:       document.getElementById('df-title').value,
+    contact_id:  document.getElementById('df-contact').value  || null,
+    pipeline_id: parseInt(document.getElementById('df-pipeline').value),
+    stage_id:    document.getElementById('df-stage').value    || null,
+    value:       document.getElementById('df-value').value    || null,
+    assigned_to: document.getElementById('df-assignee').value || null,
+    custom_data: {},
+  };
+  if (id) await api.put(`/api/deals/${id}`, payload);
+  else     await api.post('/api/deals', payload);
+  closeModal('deal-modal');
+  deals = await api.get(`/api/deals?pipeline_id=${currentPipelineId}`);
+  if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
+}
+
+async function deleteDeal(id) {
+  if (!confirm('Delete this deal?')) return;
+  await api.del(`/api/deals/${id}`);
+  deals = deals.filter(d => d.id !== id);
+  if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
 }
 
 // ══════════════════════════════════════════════════════════

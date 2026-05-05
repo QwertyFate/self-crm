@@ -2,7 +2,7 @@ const express  = require('express');
 const router   = express.Router();
 const bcrypt   = require('bcryptjs');
 const crypto   = require('crypto');
-const { pool, seedDefaultStages } = require('../db');
+const { pool, seedDefaultStages, seedDefaultPipeline } = require('../db');
 const { sendPasswordReset } = require('../utils/mailer');
 
 router.get('/me', async (req, res, next) => {
@@ -15,7 +15,7 @@ router.get('/me', async (req, res, next) => {
     );
     if (user) user.column_widths = user.column_widths || {};
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template FROM workspaces WHERE id = $1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields FROM workspaces WHERE id = $1',
       [req.session.workspaceId]
     );
 
@@ -47,7 +47,7 @@ router.post('/login', async (req, res, next) => {
     req.session.userRole    = user.role;
 
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template FROM workspaces WHERE id = $1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields FROM workspaces WHERE id = $1',
       [user.workspace_id]
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
@@ -86,7 +86,7 @@ router.post('/signup', async (req, res, next) => {
           'INSERT INTO workspaces (name) VALUES ($1) RETURNING id',
           [workspace_name.trim()]
         );
-        await seedDefaultStages(ws.id, client);
+        await seedDefaultPipeline(ws.id, client);
         const { rows: [u] } = await client.query(
           'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
           [ws.id, name.trim(), normalizedEmail, password_hash, 'owner']
