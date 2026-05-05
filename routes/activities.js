@@ -24,7 +24,7 @@ router.post('/', async (req, res, next) => {
   try {
     const { contact_id, type, content } = req.body;
     if (!content) return res.status(400).json({ error: 'Content required' });
-    if (!['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+    if (!['note','call','email'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
     const { rows: [row] } = await pool.query(
       'INSERT INTO activities (workspace_id, contact_id, type, content, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING id',
       [req.workspaceId, contact_id||null, type, content, req.userId]
