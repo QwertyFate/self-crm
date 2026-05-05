@@ -17,6 +17,10 @@ let colWidths      = {}; // {colKey: widthPx} — persisted per workspace in loc
 let resizingCol    = null;
 let currentPage    = 1;
 const PAGE_SIZE    = 25;
+let sortKey        = null; // column key currently sorted, null = default order
+let sortDir        = 'asc'; // 'asc' | 'desc'
+let activeFilters  = {}; // { field_key: ['value1', 'value2'] }
+let filterPanelOpen = false;
 let currentLang   = localStorage.getItem('lang') || 'en';
 
 // ── Translations ──────────────────────────────────────────
@@ -27,15 +31,19 @@ const TRANSLATIONS = {
     page_pipeline:'Pipeline', page_contacts:'Contacts', page_activities:'Activities', page_settings:'Settings',
     add_contact:'+ Add Contact', log_activity:'+ Log Activity',
     import_csv:'⬆ Import CSV', export_csv:'⬇ Export CSV',
-    col_name:'Name', col_company:'Company', col_email:'Email', col_phone:'Phone', col_stage:'Stage', col_assignee:'Assignee',
+    col_name:'Name', col_company:'Company', col_email:'Email', col_phone:'Phone', col_stage:'Stage', col_assignee:'Assignee', col_created_at:'Date Added',
     search_ph:'Search contacts…',
     no_activities:'No activities yet.', no_fields:'No custom fields yet.',
     drop_here:'Drop contacts here', unassigned:'Unassigned',
-    act_note:'Note', act_call:'Call', act_email:'Email',
+    act_note:'Note', act_call:'Call', act_email:'Email', act_whatsapp:'WhatsApp',
     logged_by:'by',
+    tab_general:'General', tab_pipeline:'Pipeline', tab_contacts:'Contacts', tab_team:'Team',
     set_stages:'Pipeline Stages', set_fields:'Custom Fields', set_kanban:'Kanban Card Fields',
     set_invites:'Invite Codes', set_members:'Team Members', set_language:'Language', set_workspace:'Workspace',
     set_contact_cols:'Contact Columns', hint_contact_cols:'Drag to reorder. Name is always first.',
+    set_wa_template:'WhatsApp Message Template',
+    hint_wa_template:'Written when you tap the WhatsApp button on a contact.',
+    wa_vars:'Available variables:',
     hint_stages:'Drag to reorder. Contacts are unassigned when a stage is deleted.',
     hint_fields:'Extra properties on every contact.',
     hint_kanban:'Choose which fields appear on pipeline cards. Name is always shown.',
@@ -63,15 +71,19 @@ const TRANSLATIONS = {
     page_pipeline:'Pipeline', page_contacts:'Kontakte', page_activities:'Aktivitäten', page_settings:'Einstellungen',
     add_contact:'+ Kontakt hinzufügen', log_activity:'+ Aktivität erfassen',
     import_csv:'⬆ CSV importieren', export_csv:'⬇ CSV exportieren',
-    col_name:'Name', col_company:'Unternehmen', col_email:'E-Mail', col_phone:'Telefon', col_stage:'Phase', col_assignee:'Zuständig',
+    col_name:'Name', col_company:'Unternehmen', col_email:'E-Mail', col_phone:'Telefon', col_stage:'Phase', col_assignee:'Zuständig', col_created_at:'Hinzugefügt am',
     search_ph:'Kontakte suchen…',
     no_activities:'Noch keine Aktivitäten.', no_fields:'Noch keine benutzerdefinierten Felder.',
     drop_here:'Kontakte hierher ziehen', unassigned:'Nicht zugewiesen',
-    act_note:'Notiz', act_call:'Anruf', act_email:'E-Mail',
+    act_note:'Notiz', act_call:'Anruf', act_email:'E-Mail', act_whatsapp:'WhatsApp',
     logged_by:'von',
+    tab_general:'Allgemein', tab_pipeline:'Pipeline', tab_contacts:'Kontakte', tab_team:'Team',
     set_stages:'Pipeline-Phasen', set_fields:'Benutzerdefinierte Felder', set_kanban:'Kanban-Kartenfelder',
     set_invites:'Einladungscodes', set_members:'Teammitglieder', set_language:'Sprache', set_workspace:'Arbeitsbereich',
     set_contact_cols:'Kontaktspalten', hint_contact_cols:'Zum Neuanordnen ziehen. Name steht immer an erster Stelle.',
+    set_wa_template:'WhatsApp-Nachrichtenvorlage',
+    hint_wa_template:'Wird beim Klicken auf den WhatsApp-Button des Kontakts vorausgefüllt.',
+    wa_vars:'Verfügbare Variablen:',
     hint_stages:'Zum Neuanordnen ziehen. Kontakte werden bei Phasenlöschung nicht zugewiesen.',
     hint_fields:'Zusätzliche Eigenschaften für jeden Kontakt.',
     hint_kanban:'Felder auswählen, die auf Pipeline-Karten erscheinen. Name wird immer angezeigt.',
@@ -122,7 +134,20 @@ function setLanguage(lang) {
   if (page === 'settings')   loadSettings();
 }
 
-const ICONS = { note: '📝', call: '📞', email: '✉️' };
+const WA_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="vertical-align:middle"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>`;
+const ICONS = { note: '📝', call: '📞', email: '✉️', whatsapp: WA_SVG };
+function waLink(phone, contact) {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 6) return null;
+  const name    = typeof contact === 'string' ? contact : (contact?.name    || '');
+  const company = typeof contact === 'string' ? ''      : (contact?.company || '');
+  const tpl = (currentWorkspace?.whatsapp_template || 'Hi {{name}}, ')
+    .replace(/\{\{name\}\}/g,    name)
+    .replace(/\{\{company\}\}/g, company);
+  return `https://wa.me/${digits}?text=${encodeURIComponent(tpl)}`;
+}
+
 const BUILTIN_FIELDS = [
   { key: 'company',  label: 'Company',  type: 'text' },
   { key: 'email',    label: 'Email',    type: 'email' },
@@ -470,7 +495,8 @@ async function loadContacts() {
   await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
   contacts = await api.get('/api/contacts');
   currentPage = 1;
-  renderContactsTable(contacts);
+  renderFilterChips(); // refresh chips in case members/stages changed
+  filterContacts();
 }
 
 // ── Column width persistence (per-user, stored in DB) ────
@@ -511,26 +537,68 @@ function stopColResize() {
 // Returns ordered, merged column definitions respecting saved config + current fields
 function effectiveContactColumns() {
   const BUILTIN = [
-    { key: 'company',     label: () => t('col_company'), type: 'text'     },
-    { key: 'email',       label: () => t('col_email'),   type: 'email'    },
-    { key: 'phone',       label: () => t('col_phone'),   type: 'phone'    },
-    { key: 'stage_id',    label: () => t('col_stage'),   type: 'stage'    },
-    { key: 'assigned_to', label: () => t('col_assignee'),type: 'assignee' },
+    { key: 'company',     label: () => t('col_company'),    type: 'text',     show: true  },
+    { key: 'email',       label: () => t('col_email'),      type: 'email',    show: true  },
+    { key: 'phone',       label: () => t('col_phone'),      type: 'phone',    show: true  },
+    { key: 'stage_id',    label: () => t('col_stage'),      type: 'stage',    show: true  },
+    { key: 'assigned_to', label: () => t('col_assignee'),   type: 'assignee', show: true  },
+    { key: 'created_at',  label: () => t('col_created_at'), type: 'date',     show: false },
   ];
   const ALL = [
     ...BUILTIN,
-    ...fields.map(f => ({ key: f.field_key, label: () => f.name, type: f.type })),
+    ...fields.map(f => ({ key: f.field_key, label: () => f.name, type: f.type, show: true })),
   ];
 
-  if (!contactColumns.length) return ALL.map(c => ({ ...c, visible: true }));
+  if (!contactColumns.length) return ALL.map(c => ({ ...c, visible: c.show }));
 
   const savedMap = Object.fromEntries(contactColumns.map(c => [c.key, c.visible]));
   const ordered  = contactColumns
     .map(({ key }) => { const def = ALL.find(c => c.key === key); return def ? { ...def, visible: savedMap[key] } : null; })
     .filter(Boolean);
-  // Append any new fields not in saved config
-  ALL.filter(c => !(c.key in savedMap)).forEach(c => ordered.push({ ...c, visible: true }));
+  // Append any new fields not in saved config, using their default show value
+  ALL.filter(c => !(c.key in savedMap)).forEach(c => ordered.push({ ...c, visible: c.show }));
   return ordered;
+}
+
+// ── Sort ──────────────────────────────────────────────────
+function toggleSort(key) {
+  if (sortKey === key) {
+    if (sortDir === 'asc') { sortDir = 'desc'; }
+    else { sortKey = null; sortDir = 'asc'; } // third click = reset
+  } else {
+    sortKey = key;
+    sortDir = 'asc';
+  }
+  currentPage = 1;
+  filterContacts();
+}
+
+function getSortValue(c, key) {
+  if (key === '_name')       return (c.name || '').toLowerCase();
+  if (key === 'company')     return (c.company || '').toLowerCase();
+  if (key === 'email')       return (c.email || '').toLowerCase();
+  if (key === 'phone')       return (c.phone || '').toLowerCase();
+  if (key === 'stage_id')    return (c.stage_name || '').toLowerCase();
+  if (key === 'assigned_to') return (c.assigned_to_name || '').toLowerCase();
+  if (key === 'created_at')  return c.created_at ? new Date(c.created_at).getTime() : 0;
+  const f = fields.find(f => f.field_key === key);
+  const v = c.custom_data?.[key];
+  if (f?.type === 'number') return parseFloat(v) || 0;
+  if (f?.type === 'date')   return v ? new Date(v).getTime() : 0;
+  return (v || '').toString().toLowerCase();
+}
+
+function sortContacts(list) {
+  if (!sortKey) return list;
+  return [...list].sort((a, b) => {
+    const va = getSortValue(a, sortKey);
+    const vb = getSortValue(b, sortKey);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
 }
 
 function renderContactsTable(list) {
@@ -544,19 +612,27 @@ function renderContactsTable(list) {
   if (existingCg) table.removeChild(existingCg);
   table.style.tableLayout = '';
 
-  // Build thead (no resize handles yet — added via DOM after measurement)
+  // Sort the full list before paginating
+  const sorted = sortContacts(list);
+
+  // Build thead with sort indicators (no resize handles yet — added via DOM after measurement)
   document.getElementById('contacts-thead').innerHTML = `<tr>
     ${colKeys.map(k => {
-      const col = visibleCols.find(c => c.key === k);
+      const col   = visibleCols.find(c => c.key === k);
       const label = k === '_name' ? t('col_name') : k === '_actions' ? '' : col?.label() || '';
-      return `<th data-col-key="${k}">${label}</th>`;
+      if (k === '_actions') return `<th data-col-key="${k}"></th>`;
+      const isActive = sortKey === k;
+      const icon = isActive
+        ? `<span class="sort-icon active">${sortDir === 'asc' ? '↑' : '↓'}</span>`
+        : `<span class="sort-icon">⇅</span>`;
+      return `<th data-col-key="${k}" class="sortable-col${isActive ? ' sort-active' : ''}" onclick="toggleSort('${k}')">${label}${icon}</th>`;
     }).join('')}
   </tr>`;
 
-  // Paginate
-  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  // Paginate the sorted list
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   if (currentPage > totalPages) currentPage = totalPages;
-  const pageList = list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageList = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // Build tbody
   document.getElementById('contacts-body').innerHTML = pageList.map(c => {
@@ -575,6 +651,8 @@ function renderContactsTable(list) {
       }
       if (col.key === 'assigned_to')
         return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'assigned_to','assignee')" title="${esc(c.assigned_to_name||'')}">${esc(c.assigned_to_name||'')||dash}</td>`;
+      if (col.key === 'created_at')
+        return `<td title="${esc(String(c.created_at||''))}">${fmtDate(c.created_at)||dash}</td>`;
       const v = c.custom_data?.[col.key] ?? '';
       return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${col.key}','${col.type}')" title="${esc(v)}">${esc(v)||dash}</td>`;
     }).join('');
@@ -583,6 +661,7 @@ function renderContactsTable(list) {
       <td title="${esc(c.name)}"><strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong></td>
       ${cells}
       <td class="row-actions">
+        ${waLink(c.phone, c) ? `<a class="btn btn-sm btn-wa" href="${waLink(c.phone, c)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG}</a>` : ''}
         <button class="btn btn-sm btn-ghost" onclick="openDetail(${c.id})">${t('btn_view')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteContact(${c.id})">${t('btn_delete')}</button>
       </td>
@@ -590,11 +669,11 @@ function renderContactsTable(list) {
   }).join('');
 
   // Render pagination bar
-  renderPagination(list.length);
+  renderPagination(sorted.length);
 
   // Measure natural widths for any column not yet in colWidths (forces reflow)
   let measured = false;
-  if (!colWidths['_actions']) { colWidths['_actions'] = 116; measured = true; }
+  if (!colWidths['_actions']) { colWidths['_actions'] = 152; measured = true; }
   document.querySelectorAll('#contacts-thead th').forEach(th => {
     const key = th.dataset.colKey;
     if (key && !colWidths[key]) {
@@ -622,7 +701,8 @@ function renderContactsTable(list) {
     const handle = document.createElement('div');
     handle.className = 'col-resize-handle';
     const colEl = cols[i];
-    handle.addEventListener('mousedown', e => startColResize(e, colKeys[i], colEl));
+    handle.addEventListener('mousedown', e => { e.stopPropagation(); startColResize(e, colKeys[i], colEl); });
+    handle.addEventListener('click', e => e.stopPropagation());
     th.appendChild(handle);
   });
 }
@@ -727,11 +807,139 @@ function onContactSearch() {
 
 function filterContacts() {
   const q = document.getElementById('contact-search').value.toLowerCase();
-  renderContactsTable(contacts.filter(c =>
+  let filtered = contacts.filter(c =>
     c.name.toLowerCase().includes(q) ||
     (c.company||'').toLowerCase().includes(q) ||
     (c.email||'').toLowerCase().includes(q)
-  ));
+  );
+
+  for (const [key, values] of Object.entries(activeFilters)) {
+    if (!values?.length) continue;
+    filtered = filtered.filter(c => {
+      const cv = key === 'stage_id'    ? (c.stage_id    == null ? '' : String(c.stage_id))
+               : key === 'assigned_to' ? (c.assigned_to == null ? '' : String(c.assigned_to))
+               : String(c.custom_data?.[key] ?? '');
+      return values.includes(cv);
+    });
+  }
+
+  renderContactsTable(filtered);
+}
+
+// ══════════════════════════════════════════════════════════
+// CONTACT FILTERS
+// ══════════════════════════════════════════════════════════
+function toggleFilterPanel() {
+  filterPanelOpen = !filterPanelOpen;
+  const panel = document.getElementById('filter-panel');
+  const btn   = document.getElementById('filter-toggle-btn');
+  panel?.classList.toggle('hidden', !filterPanelOpen);
+  btn?.classList.toggle('active', filterPanelOpen);
+  if (filterPanelOpen) renderFilterPanel();
+}
+
+function isFiltered(key, value) {
+  return (activeFilters[key] || []).includes(value);
+}
+
+function toggleFilter(key, value) {
+  if (!activeFilters[key]) activeFilters[key] = [];
+  const idx = activeFilters[key].indexOf(value);
+  if (idx >= 0) activeFilters[key].splice(idx, 1); else activeFilters[key].push(value);
+  if (!activeFilters[key].length) delete activeFilters[key];
+  renderFilterPanel();
+  renderFilterChips();
+  currentPage = 1;
+  filterContacts();
+}
+
+function clearAllFilters() {
+  activeFilters = {};
+  renderFilterPanel();
+  renderFilterChips();
+  currentPage = 1;
+  filterContacts();
+}
+
+function renderFilterPanel() {
+  const el = document.getElementById('filter-panel');
+  if (!el || !filterPanelOpen) return;
+
+  const hasFilters = Object.keys(activeFilters).length > 0;
+
+  const mkOpt = (key, value, label, style = '') => {
+    const on = isFiltered(key, value);
+    return `<button class="filter-opt${on ? ' active' : ''}" style="${style}" onclick="toggleFilter('${key}','${value}')">${label}</button>`;
+  };
+
+  const sections = [];
+
+  // Stage
+  if (stages.length) {
+    const opts = [
+      mkOpt('stage_id', '', t('detail_unassigned')),
+      ...stages.map(s => mkOpt('stage_id', String(s.id), esc(s.name),
+        isFiltered('stage_id', String(s.id)) ? `background:${s.color};border-color:${s.color};color:#fff` : `border-color:${s.color}40`
+      ))
+    ].join('');
+    sections.push(`<div class="filter-section"><div class="filter-section-label">${t('col_stage')}</div><div class="filter-options">${opts}</div></div>`);
+  }
+
+  // Assignee
+  if (members.length) {
+    const opts = [
+      mkOpt('assigned_to', '', t('detail_unassigned')),
+      ...members.map(m => mkOpt('assigned_to', String(m.id), esc(m.name)))
+    ].join('');
+    sections.push(`<div class="filter-section"><div class="filter-section-label">${t('col_assignee')}</div><div class="filter-options">${opts}</div></div>`);
+  }
+
+  // Custom dropdown fields
+  fields.filter(f => f.type === 'dropdown' && f.options?.length).forEach(f => {
+    const opts = f.options.map(o => mkOpt(f.field_key, o, esc(o))).join('');
+    sections.push(`<div class="filter-section"><div class="filter-section-label">${esc(f.name)}</div><div class="filter-options">${opts}</div></div>`);
+  });
+
+  el.innerHTML = `
+    <div class="filter-panel-header">
+      <span class="filter-panel-title">Filters</span>
+      ${hasFilters ? `<button class="btn btn-sm btn-ghost" onclick="clearAllFilters()">Clear all</button>` : ''}
+    </div>
+    <div class="filter-sections">${sections.join('') || '<p style="color:var(--muted);font-size:13px">No filterable fields available.</p>'}</div>`;
+}
+
+function renderFilterChips() {
+  const el = document.getElementById('filter-chips');
+  if (!el) return;
+
+  const chips = [];
+  for (const [key, values] of Object.entries(activeFilters)) {
+    if (!values?.length) continue;
+    values.forEach(v => {
+      let prefix, label;
+      if (key === 'stage_id') {
+        prefix = t('col_stage');
+        label  = v === '' ? t('detail_unassigned') : esc(stages.find(s => String(s.id) === v)?.name || v);
+      } else if (key === 'assigned_to') {
+        prefix = t('col_assignee');
+        label  = v === '' ? t('detail_unassigned') : esc(members.find(m => String(m.id) === v)?.name || v);
+      } else {
+        const f = fields.find(f => f.field_key === key);
+        prefix = esc(f?.name || key);
+        label  = esc(v);
+      }
+      chips.push(`<span class="filter-chip"><span class="filter-chip-label">${prefix}:</span> ${label}
+        <button class="filter-chip-remove" onclick="toggleFilter('${key}','${v.replace(/'/g, '&apos;')}')">✕</button>
+      </span>`);
+    });
+  }
+
+  el.innerHTML = chips.join('');
+  el.classList.toggle('hidden', chips.length === 0);
+
+  const count = Object.values(activeFilters).reduce((n, v) => n + v.length, 0);
+  const badge = document.getElementById('filter-badge');
+  if (badge) { badge.textContent = count; badge.classList.toggle('hidden', count === 0); }
 }
 
 function goToPage(page) {
@@ -800,12 +1008,29 @@ async function deleteActivity(id) {
 // ══════════════════════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════════════════════
+let currentSettingsTab = 'general';
+
+function switchSettingsTab(tab) {
+  currentSettingsTab = tab;
+  document.querySelectorAll('.settings-tab').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.tab === tab)
+  );
+  document.querySelectorAll('.settings-pane').forEach(pane =>
+    pane.classList.toggle('active', pane.id === `settings-pane-${tab}`)
+  );
+}
+
 async function loadSettings() {
   [stages, fields] = await Promise.all([api.get('/api/stages'), api.get('/api/fields')]);
   renderStagesList();
   renderFieldsList();
   renderKanbanFields();
   renderContactColumnSettings();
+  // Populate WA template textarea
+  const waEl = document.getElementById('wa-template-input');
+  if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? 'Hi {{name}}, ';
+  // Restore active tab
+  switchSettingsTab(currentSettingsTab);
   if (currentUser?.role === 'owner') {
     document.getElementById('invites-card').classList.remove('hidden');
     loadInvites();
@@ -839,6 +1064,37 @@ async function saveWorkspaceName() {
   msgEl.className = 'workspace-name-msg success';
   msgEl.classList.remove('hidden');
   setTimeout(() => msgEl.classList.add('hidden'), 2500);
+}
+
+function insertWaVar(variable) {
+  const el = document.getElementById('wa-template-input');
+  if (!el) return;
+  const start = el.selectionStart;
+  const end   = el.selectionEnd;
+  el.value = el.value.slice(0, start) + variable + el.value.slice(end);
+  el.selectionStart = el.selectionEnd = start + variable.length;
+  el.focus();
+}
+
+async function saveWaTemplate() {
+  const textarea = document.getElementById('wa-template-input');
+  const msgEl    = document.getElementById('wa-template-msg');
+  const template = textarea.value;
+
+  const btn = document.getElementById('save-wa-template-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  msgEl?.classList.add('hidden');
+
+  const res = await api.patch('/api/workspace/whatsapp-template', { template });
+
+  if (btn) { btn.disabled = false; btn.textContent = t('btn_save'); }
+  if (res.error) {
+    if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); }
+    return;
+  }
+  currentWorkspace.whatsapp_template = template;
+  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
 // ── Stages ────────────────────────────────────────────────
@@ -1197,7 +1453,7 @@ async function openDetail(id) {
   const infoFields = [
     ['Company',  c.company],
     ['Email',    c.email   ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : null],
-    ['Phone',    c.phone],
+    ['Phone',    c.phone ? `${esc(c.phone)}${waLink(c.phone, c) ? ` <a class="wa-detail-link" href="${waLink(c.phone, c)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG} WhatsApp</a>` : ''}` : null],
     ['Assignee', c.assigned_to_name],
     ...fields.map(f => {
       const val = c.custom_data?.[f.field_key];
@@ -1235,7 +1491,10 @@ async function openDetail(id) {
     </div>
     <div class="inline-log">
       <select id="inline-type">
-        <option value="note">Note</option><option value="call">Call</option><option value="email">Email</option>
+        <option value="note">${t('act_note')}</option>
+        <option value="call">${t('act_call')}</option>
+        <option value="email">${t('act_email')}</option>
+        <option value="whatsapp">${t('act_whatsapp')}</option>
       </select>
       <input type="text" id="inline-content" placeholder="${t('detail_log_ph')}" />
       <button class="btn btn-primary btn-sm" onclick="logInlineActivity(${id})">${t('btn_log')}</button>

@@ -230,10 +230,15 @@
         <div class="toolbar">
           <input type="text" id="contact-search" data-i18n-ph="search_ph" placeholder="Search contacts…" oninput="onContactSearch()" />
           <div class="toolbar-actions">
+            <button class="btn btn-sm filter-toggle-btn" id="filter-toggle-btn" onclick="toggleFilterPanel()">
+              ⊕ Filter <span id="filter-badge" class="filter-badge hidden">0</span>
+            </button>
             <button class="btn btn-sm" onclick="openImportModal()" data-i18n="import_csv">⬆ Import CSV</button>
             <button class="btn btn-sm" onclick="exportContactsCSV()" data-i18n="export_csv">⬇ Export CSV</button>
           </div>
         </div>
+        <div id="filter-panel" class="filter-panel hidden"></div>
+        <div id="filter-chips" class="filter-chips hidden"></div>
         <div class="table-wrap">
           <table class="table" id="contacts-table">
             <thead id="contacts-thead"></thead>
@@ -255,89 +260,140 @@
       <!-- ── Settings ── -->
       <section id="page-settings" class="page">
         <div class="page-header"><h1 data-i18n="page_settings">Settings</h1></div>
-        <div class="settings-grid">
 
-          <div class="settings-card">
-            <div class="settings-card-header">
-              <h2 data-i18n="set_stages">Pipeline Stages</h2>
-              <button class="btn btn-primary btn-sm" onclick="openStageModal()" data-i18n="add_btn">+ Add</button>
+        <nav class="settings-tabs">
+          <button class="settings-tab active" data-tab="general"  onclick="switchSettingsTab('general')"  data-i18n="tab_general">General</button>
+          <button class="settings-tab"         data-tab="pipeline" onclick="switchSettingsTab('pipeline')" data-i18n="tab_pipeline">Pipeline</button>
+          <button class="settings-tab"         data-tab="contacts" onclick="switchSettingsTab('contacts')" data-i18n="tab_contacts">Contacts</button>
+          <button class="settings-tab"         data-tab="team"     onclick="switchSettingsTab('team')"     data-i18n="tab_team">Team</button>
+        </nav>
+
+        <div class="settings-tab-body">
+
+          <!-- ── General ── -->
+          <div id="settings-pane-general" class="settings-pane active">
+            <div class="settings-grid">
+
+              <div class="settings-card hidden" id="workspace-name-card">
+                <div class="settings-card-header"><h2 data-i18n="set_workspace">Workspace</h2></div>
+                <p class="settings-hint" data-i18n="hint_workspace">Update the name of this workspace.</p>
+                <div class="workspace-name-row">
+                  <input type="text" id="workspace-name-input" class="workspace-name-input" />
+                  <button class="btn btn-primary btn-sm" onclick="saveWorkspaceName()" data-i18n="btn_save">Save</button>
+                </div>
+                <div id="workspace-name-msg" class="workspace-name-msg hidden"></div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header">
+                  <h2 data-i18n="set_wa_template">WhatsApp Message Template</h2>
+                </div>
+                <p class="settings-hint" data-i18n="hint_wa_template">Written when you tap the WhatsApp button on a contact.</p>
+                <textarea id="wa-template-input" class="settings-textarea" rows="3" placeholder="Hi {{name}}, "></textarea>
+                <p class="wa-vars-hint"><span data-i18n="wa_vars">Available variables:</span>
+                  <code class="wa-var-chip" onclick="insertWaVar('{{name}}')">{{name}}</code>
+                  <code class="wa-var-chip" onclick="insertWaVar('{{company}}')">{{company}}</code>
+                </p>
+                <div style="padding:8px 0 4px;display:flex;align-items:center;gap:10px">
+                  <button id="save-wa-template-btn" class="btn btn-primary btn-sm" onclick="saveWaTemplate()" data-i18n="btn_save">Save</button>
+                  <span id="wa-template-msg" class="workspace-name-msg hidden"></span>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_language">Language</h2></div>
+                <p class="settings-hint" data-i18n="hint_language">Choose your preferred display language.</p>
+                <div class="lang-options">
+                  <label class="lang-opt">
+                    <input type="radio" name="language" value="en" onchange="setLanguage('en')" />
+                    <span class="lang-flag">🇬🇧</span>
+                    <span data-i18n="lang_en">English</span>
+                  </label>
+                  <label class="lang-opt">
+                    <input type="radio" name="language" value="de" onchange="setLanguage('de')" />
+                    <span class="lang-flag">🇩🇪</span>
+                    <span data-i18n="lang_de">German</span>
+                  </label>
+                </div>
+              </div>
+
             </div>
-            <p class="settings-hint" data-i18n="hint_stages">Drag to reorder. Contacts are unassigned when a stage is deleted.</p>
-            <ul id="stages-list" class="settings-list"></ul>
           </div>
 
-          <div class="settings-card">
-            <div class="settings-card-header">
-              <h2 data-i18n="set_fields">Custom Fields</h2>
-              <button class="btn btn-primary btn-sm" onclick="openFieldModal()" data-i18n="add_btn">+ Add</button>
-            </div>
-            <p class="settings-hint" data-i18n="hint_fields">Extra properties on every contact.</p>
-            <ul id="fields-list" class="settings-list"></ul>
-          </div>
+          <!-- ── Pipeline ── -->
+          <div id="settings-pane-pipeline" class="settings-pane">
+            <div class="settings-grid">
 
-          <div class="settings-card">
-            <div class="settings-card-header"><h2 data-i18n="set_contact_cols">Contact Columns</h2></div>
-            <p class="settings-hint" data-i18n="hint_contact_cols">Drag to reorder. Name is always first.</p>
-            <!-- Name is always locked first -->
-            <div class="settings-row col-cfg-row col-cfg-locked">
-              <span class="drag-handle" style="opacity:.25">⠿</span>
-              <span class="row-label" data-i18n="col_name">Name</span>
-              <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
-            </div>
-            <ul id="contact-columns-list" class="settings-list" style="margin-top:6px"></ul>
-            <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
-              <button id="save-contact-cols-btn" class="btn btn-primary btn-sm" onclick="saveContactColumns()" data-i18n="btn_save">Save</button>
-              <span id="contact-cols-msg" class="workspace-name-msg hidden"></span>
-            </div>
-          </div>
+              <div class="settings-card">
+                <div class="settings-card-header">
+                  <h2 data-i18n="set_stages">Pipeline Stages</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openStageModal()" data-i18n="add_btn">+ Add</button>
+                </div>
+                <p class="settings-hint" data-i18n="hint_stages">Drag to reorder. Contacts are unassigned when a stage is deleted.</p>
+                <ul id="stages-list" class="settings-list"></ul>
+              </div>
 
-          <div class="settings-card">
-            <div class="settings-card-header"><h2 data-i18n="set_kanban">Kanban Card Fields</h2></div>
-            <p class="settings-hint" data-i18n="hint_kanban">Choose which fields appear on pipeline cards. Name is always shown.</p>
-            <div id="kanban-fields-list" class="kanban-fields-checks"></div>
-            <div style="padding:12px 0 4px">
-              <button class="btn btn-primary btn-sm" onclick="saveKanbanFields()" data-i18n="save_btn">Save</button>
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_kanban">Kanban Card Fields</h2></div>
+                <p class="settings-hint" data-i18n="hint_kanban">Choose which fields appear on pipeline cards. Name is always shown.</p>
+                <div id="kanban-fields-list" class="kanban-fields-checks"></div>
+                <div style="padding:12px 0 4px">
+                  <button class="btn btn-primary btn-sm" onclick="saveKanbanFields()" data-i18n="save_btn">Save</button>
+                </div>
+              </div>
+
             </div>
           </div>
 
-          <div class="settings-card" id="invites-card">
-            <div class="settings-card-header">
-              <h2 data-i18n="set_invites">Invite Codes</h2>
-              <button class="btn btn-primary btn-sm" onclick="generateInviteCode()" data-i18n="generate_btn">Generate</button>
+          <!-- ── Contacts ── -->
+          <div id="settings-pane-contacts" class="settings-pane">
+            <div class="settings-grid">
+
+              <div class="settings-card">
+                <div class="settings-card-header">
+                  <h2 data-i18n="set_fields">Custom Fields</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openFieldModal()" data-i18n="add_btn">+ Add</button>
+                </div>
+                <p class="settings-hint" data-i18n="hint_fields">Extra properties on every contact.</p>
+                <ul id="fields-list" class="settings-list"></ul>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_contact_cols">Contact Columns</h2></div>
+                <p class="settings-hint" data-i18n="hint_contact_cols">Drag to reorder. Name is always first.</p>
+                <div class="settings-row col-cfg-row col-cfg-locked">
+                  <span class="drag-handle" style="opacity:.25">⠿</span>
+                  <span class="row-label" data-i18n="col_name">Name</span>
+                  <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
+                </div>
+                <ul id="contact-columns-list" class="settings-list" style="margin-top:6px"></ul>
+                <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
+                  <button id="save-contact-cols-btn" class="btn btn-primary btn-sm" onclick="saveContactColumns()" data-i18n="btn_save">Save</button>
+                  <span id="contact-cols-msg" class="workspace-name-msg hidden"></span>
+                </div>
+              </div>
+
             </div>
-            <p class="settings-hint" data-i18n="hint_invites">One-time codes to let people join this workspace.</p>
-            <ul id="invites-list" class="settings-list"></ul>
           </div>
 
-          <div class="settings-card">
-            <div class="settings-card-header"><h2 data-i18n="set_members">Team Members</h2></div>
-            <ul id="members-list" class="settings-list"></ul>
-          </div>
+          <!-- ── Team ── -->
+          <div id="settings-pane-team" class="settings-pane">
+            <div class="settings-grid">
 
-          <div class="settings-card hidden" id="workspace-name-card">
-            <div class="settings-card-header"><h2 data-i18n="set_workspace">Workspace</h2></div>
-            <p class="settings-hint" data-i18n="hint_workspace">Update the name of this workspace.</p>
-            <div class="workspace-name-row">
-              <input type="text" id="workspace-name-input" class="workspace-name-input" />
-              <button class="btn btn-primary btn-sm" onclick="saveWorkspaceName()" data-i18n="btn_save">Save</button>
-            </div>
-            <div id="workspace-name-msg" class="workspace-name-msg hidden"></div>
-          </div>
+              <div class="settings-card" id="invites-card">
+                <div class="settings-card-header">
+                  <h2 data-i18n="set_invites">Invite Codes</h2>
+                  <button class="btn btn-primary btn-sm" onclick="generateInviteCode()" data-i18n="generate_btn">Generate</button>
+                </div>
+                <p class="settings-hint" data-i18n="hint_invites">One-time codes to let people join this workspace.</p>
+                <ul id="invites-list" class="settings-list"></ul>
+              </div>
 
-          <div class="settings-card">
-            <div class="settings-card-header"><h2 data-i18n="set_language">Language</h2></div>
-            <p class="settings-hint" data-i18n="hint_language">Choose your preferred display language.</p>
-            <div class="lang-options">
-              <label class="lang-opt">
-                <input type="radio" name="language" value="en" onchange="setLanguage('en')" />
-                <span class="lang-flag">🇬🇧</span>
-                <span data-i18n="lang_en">English</span>
-              </label>
-              <label class="lang-opt">
-                <input type="radio" name="language" value="de" onchange="setLanguage('de')" />
-                <span class="lang-flag">🇩🇪</span>
-                <span data-i18n="lang_de">German</span>
-              </label>
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_members">Team Members</h2></div>
+                <ul id="members-list" class="settings-list"></ul>
+              </div>
+
             </div>
           </div>
 
@@ -397,6 +453,7 @@
             <option value="note" data-i18n="act_note">Note</option>
             <option value="call" data-i18n="act_call">Call</option>
             <option value="email" data-i18n="act_email">Email</option>
+            <option value="whatsapp" data-i18n="act_whatsapp">WhatsApp</option>
           </select>
         </div>
         <div class="form-group"><label data-i18n="lbl_contact">Contact</label><select id="act-contact"></select></div>
