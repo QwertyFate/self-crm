@@ -15,7 +15,7 @@ router.get('/me', async (req, res, next) => {
     );
     if (user) user.column_widths = user.column_widths || {};
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template FROM workspaces WHERE id = $1',
+      'SELECT id, name, kanban_fields, contact_columns FROM workspaces WHERE id = $1',
       [req.session.workspaceId]
     );
 
@@ -47,7 +47,7 @@ router.post('/login', async (req, res, next) => {
     req.session.userRole    = user.role;
 
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template FROM workspaces WHERE id = $1',
+      'SELECT id, name, kanban_fields, contact_columns FROM workspaces WHERE id = $1',
       [user.workspace_id]
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
