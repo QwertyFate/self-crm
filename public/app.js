@@ -35,11 +35,15 @@ const TRANSLATIONS = {
     search_ph:'Search contacts…',
     no_activities:'No activities yet.', no_fields:'No custom fields yet.',
     drop_here:'Drop contacts here', unassigned:'Unassigned',
-    act_note:'Note', act_call:'Call', act_email:'Email',
+    act_note:'Note', act_call:'Call', act_email:'Email', act_whatsapp:'WhatsApp',
     logged_by:'by',
+    tab_general:'General', tab_pipeline:'Pipeline', tab_contacts:'Contacts', tab_team:'Team',
     set_stages:'Pipeline Stages', set_fields:'Custom Fields', set_kanban:'Kanban Card Fields',
     set_invites:'Invite Codes', set_members:'Team Members', set_language:'Language', set_workspace:'Workspace',
     set_contact_cols:'Contact Columns', hint_contact_cols:'Drag to reorder. Name is always first.',
+    set_wa_template:'WhatsApp Message Template',
+    hint_wa_template:'Written when you tap the WhatsApp button on a contact.',
+    wa_vars:'Available variables:',
     hint_stages:'Drag to reorder. Contacts are unassigned when a stage is deleted.',
     hint_fields:'Extra properties on every contact.',
     hint_kanban:'Choose which fields appear on pipeline cards. Name is always shown.',
@@ -71,11 +75,15 @@ const TRANSLATIONS = {
     search_ph:'Kontakte suchen…',
     no_activities:'Noch keine Aktivitäten.', no_fields:'Noch keine benutzerdefinierten Felder.',
     drop_here:'Kontakte hierher ziehen', unassigned:'Nicht zugewiesen',
-    act_note:'Notiz', act_call:'Anruf', act_email:'E-Mail',
+    act_note:'Notiz', act_call:'Anruf', act_email:'E-Mail', act_whatsapp:'WhatsApp',
     logged_by:'von',
+    tab_general:'Allgemein', tab_pipeline:'Pipeline', tab_contacts:'Kontakte', tab_team:'Team',
     set_stages:'Pipeline-Phasen', set_fields:'Benutzerdefinierte Felder', set_kanban:'Kanban-Kartenfelder',
     set_invites:'Einladungscodes', set_members:'Teammitglieder', set_language:'Sprache', set_workspace:'Arbeitsbereich',
     set_contact_cols:'Kontaktspalten', hint_contact_cols:'Zum Neuanordnen ziehen. Name steht immer an erster Stelle.',
+    set_wa_template:'WhatsApp-Nachrichtenvorlage',
+    hint_wa_template:'Wird beim Klicken auf den WhatsApp-Button des Kontakts vorausgefüllt.',
+    wa_vars:'Verfügbare Variablen:',
     hint_stages:'Zum Neuanordnen ziehen. Kontakte werden bei Phasenlöschung nicht zugewiesen.',
     hint_fields:'Zusätzliche Eigenschaften für jeden Kontakt.',
     hint_kanban:'Felder auswählen, die auf Pipeline-Karten erscheinen. Name wird immer angezeigt.',
@@ -126,7 +134,20 @@ function setLanguage(lang) {
   if (page === 'settings')   loadSettings();
 }
 
-const ICONS = { note: '📝', call: '📞', email: '✉️' };
+const WA_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="vertical-align:middle"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>`;
+const ICONS = { note: '📝', call: '📞', email: '✉️', whatsapp: WA_SVG };
+function waLink(phone, contact) {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 6) return null;
+  const name    = typeof contact === 'string' ? contact : (contact?.name    || '');
+  const company = typeof contact === 'string' ? ''      : (contact?.company || '');
+  const tpl = (currentWorkspace?.whatsapp_template || 'Hi {{name}}, ')
+    .replace(/\{\{name\}\}/g,    name)
+    .replace(/\{\{company\}\}/g, company);
+  return `https://wa.me/${digits}?text=${encodeURIComponent(tpl)}`;
+}
+
 const BUILTIN_FIELDS = [
   { key: 'company',  label: 'Company',  type: 'text' },
   { key: 'email',    label: 'Email',    type: 'email' },
@@ -584,7 +605,7 @@ function renderContactsTable(list) {
   const table = document.getElementById('contacts-table');
   if (!table) return;
   const visibleCols = effectiveContactColumns().filter(c => c.visible);
-  const colKeys     = ['_name', ...visibleCols.map(c => c.key), '_actions'];
+  const colKeys     = ['_name', ...visibleCols.map(c => c.key)];
 
   // Remove existing colgroup + reset layout so the browser auto-sizes for measurement
   const existingCg = table.querySelector('colgroup');
@@ -598,8 +619,7 @@ function renderContactsTable(list) {
   document.getElementById('contacts-thead').innerHTML = `<tr>
     ${colKeys.map(k => {
       const col   = visibleCols.find(c => c.key === k);
-      const label = k === '_name' ? t('col_name') : k === '_actions' ? '' : col?.label() || '';
-      if (k === '_actions') return `<th data-col-key="${k}"></th>`;
+      const label = k === '_name' ? t('col_name') : col?.label() || '';
       const isActive = sortKey === k;
       const icon = isActive
         ? `<span class="sort-icon active">${sortDir === 'asc' ? '↑' : '↓'}</span>`
@@ -636,13 +656,13 @@ function renderContactsTable(list) {
       return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${col.key}','${col.type}')" title="${esc(v)}">${esc(v)||dash}</td>`;
     }).join('');
 
+    const waHref = waLink(c.phone, c);
     return `<tr>
-      <td title="${esc(c.name)}"><strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong></td>
-      ${cells}
-      <td class="row-actions">
-        <button class="btn btn-sm btn-ghost" onclick="openDetail(${c.id})">${t('btn_view')}</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteContact(${c.id})">${t('btn_delete')}</button>
+      <td class="name-cell" title="${esc(c.name)}">
+        ${waHref ? `<a class="btn-wa-inline" href="${waHref}" target="_blank" rel="noopener" title="WhatsApp ${esc(c.name)}">${WA_SVG}</a>` : ''}
+        <strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong>
       </td>
+      ${cells}
     </tr>`;
   }).join('');
 
@@ -651,7 +671,6 @@ function renderContactsTable(list) {
 
   // Measure natural widths for any column not yet in colWidths (forces reflow)
   let measured = false;
-  if (!colWidths['_actions']) { colWidths['_actions'] = 116; measured = true; }
   document.querySelectorAll('#contacts-thead th').forEach(th => {
     const key = th.dataset.colKey;
     if (key && !colWidths[key]) {
@@ -675,7 +694,6 @@ function renderContactsTable(list) {
   const ths  = document.querySelectorAll('#contacts-thead th');
   const cols = cg.children;
   ths.forEach((th, i) => {
-    if (colKeys[i] === '_actions') return;
     const handle = document.createElement('div');
     handle.className = 'col-resize-handle';
     const colEl = cols[i];
@@ -986,12 +1004,29 @@ async function deleteActivity(id) {
 // ══════════════════════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════════════════════
+let currentSettingsTab = 'general';
+
+function switchSettingsTab(tab) {
+  currentSettingsTab = tab;
+  document.querySelectorAll('.settings-tab').forEach(btn =>
+    btn.classList.toggle('active', btn.dataset.tab === tab)
+  );
+  document.querySelectorAll('.settings-pane').forEach(pane =>
+    pane.classList.toggle('active', pane.id === `settings-pane-${tab}`)
+  );
+}
+
 async function loadSettings() {
   [stages, fields] = await Promise.all([api.get('/api/stages'), api.get('/api/fields')]);
   renderStagesList();
   renderFieldsList();
   renderKanbanFields();
   renderContactColumnSettings();
+  // Populate WA template textarea
+  const waEl = document.getElementById('wa-template-input');
+  if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? 'Hi {{name}}, ';
+  // Restore active tab
+  switchSettingsTab(currentSettingsTab);
   if (currentUser?.role === 'owner') {
     document.getElementById('invites-card').classList.remove('hidden');
     loadInvites();
@@ -1025,6 +1060,37 @@ async function saveWorkspaceName() {
   msgEl.className = 'workspace-name-msg success';
   msgEl.classList.remove('hidden');
   setTimeout(() => msgEl.classList.add('hidden'), 2500);
+}
+
+function insertWaVar(variable) {
+  const el = document.getElementById('wa-template-input');
+  if (!el) return;
+  const start = el.selectionStart;
+  const end   = el.selectionEnd;
+  el.value = el.value.slice(0, start) + variable + el.value.slice(end);
+  el.selectionStart = el.selectionEnd = start + variable.length;
+  el.focus();
+}
+
+async function saveWaTemplate() {
+  const textarea = document.getElementById('wa-template-input');
+  const msgEl    = document.getElementById('wa-template-msg');
+  const template = textarea.value;
+
+  const btn = document.getElementById('save-wa-template-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  msgEl?.classList.add('hidden');
+
+  const res = await api.patch('/api/workspace/whatsapp-template', { template });
+
+  if (btn) { btn.disabled = false; btn.textContent = t('btn_save'); }
+  if (res.error) {
+    if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); }
+    return;
+  }
+  currentWorkspace.whatsapp_template = template;
+  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
 // ── Stages ────────────────────────────────────────────────
@@ -1383,7 +1449,7 @@ async function openDetail(id) {
   const infoFields = [
     ['Company',  c.company],
     ['Email',    c.email   ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : null],
-    ['Phone',    c.phone],
+    ['Phone',    c.phone ? `${esc(c.phone)}${waLink(c.phone, c) ? ` <a class="wa-detail-link" href="${waLink(c.phone, c)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG} WhatsApp</a>` : ''}` : null],
     ['Assignee', c.assigned_to_name],
     ...fields.map(f => {
       const val = c.custom_data?.[f.field_key];
@@ -1421,7 +1487,10 @@ async function openDetail(id) {
     </div>
     <div class="inline-log">
       <select id="inline-type">
-        <option value="note">Note</option><option value="call">Call</option><option value="email">Email</option>
+        <option value="note">${t('act_note')}</option>
+        <option value="call">${t('act_call')}</option>
+        <option value="email">${t('act_email')}</option>
+        <option value="whatsapp">${t('act_whatsapp')}</option>
       </select>
       <input type="text" id="inline-content" placeholder="${t('detail_log_ph')}" />
       <button class="btn btn-primary btn-sm" onclick="logInlineActivity(${id})">${t('btn_log')}</button>
@@ -1610,7 +1679,31 @@ function exportContactsCSV() {
 // ══════════════════════════════════════════════════════════
 // CSV IMPORT
 // ══════════════════════════════════════════════════════════
-function parseCSV(text) {
+// Decode file respecting BOM — handles UTF-16 LE/BE and UTF-8 BOM
+async function readFileText(file) {
+  const buf   = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  if (bytes[0] === 0xFF && bytes[1] === 0xFE)
+    return new TextDecoder('utf-16le').decode(buf).replace(/^﻿/, '');
+  if (bytes[0] === 0xFE && bytes[1] === 0xFF)
+    return new TextDecoder('utf-16be').decode(buf).replace(/^﻿/, '');
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF)
+    return new TextDecoder('utf-8').decode(buf.slice(3));
+  return file.text();
+}
+
+// Detect the delimiter used in the first line
+function detectDelimiter(text) {
+  const first = text.split(/\r?\n/).find(l => l.trim()) || '';
+  const tabs   = (first.match(/\t/g)  || []).length;
+  const commas = (first.match(/,/g)   || []).length;
+  const semis  = (first.match(/;/g)   || []).length;
+  if (tabs > commas && tabs > semis) return '\t';
+  if (semis > commas) return ';';
+  return ',';
+}
+
+function parseCSV(text, delimiter = ',') {
   const result = [];
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
@@ -1621,7 +1714,7 @@ function parseCSV(text) {
       if (ch === '"') {
         if (inQ && line[i+1] === '"') { cur += '"'; i++; }
         else inQ = !inQ;
-      } else if (ch === ',' && !inQ) { row.push(cur); cur = ''; }
+      } else if (ch === delimiter && !inQ) { row.push(cur); cur = ''; }
       else cur += ch;
     }
     row.push(cur);
@@ -1635,13 +1728,18 @@ function toFieldKey(str) {
 }
 
 function autoMapHeader(header) {
-  const h = header.toLowerCase().trim();
-  if (['name','full name','contact name','contact'].includes(h)) return 'name';
-  if (['email','e-mail','email address'].includes(h)) return 'email';
-  if (['phone','mobile','telephone','tel','phone number','phone no'].includes(h)) return 'phone';
-  if (['company','organization','org','account','company name'].includes(h)) return 'company';
-  if (['stage','status','pipeline stage','deal stage'].includes(h)) return 'stage';
-  if (['assignee','owner','assigned to','assigned_to'].includes(h)) return 'assignee';
+  const h = header.toLowerCase().trim().replace(/\s+/g, ' ');
+  if (['name','full name','contact name','contact',
+       'vollständiger_name','vollständiger name','full_name','vor- und nachname'].includes(h)) return 'name';
+  if (['email','e-mail','email address','e-mail-adresse','emailadresse',
+       'e_mail','email_address'].includes(h)) return 'email';
+  if (['phone','mobile','telephone','tel','phone number','phone no',
+       'telefonnummer','telefon','handy','mobilnummer','mobile number',
+       'phone_number','telefonnr'].includes(h)) return 'phone';
+  if (['company','organization','org','account','company name',
+       'firma','unternehmen','firmenname'].includes(h)) return 'company';
+  if (['stage','status','pipeline stage','deal stage','phase'].includes(h)) return 'stage';
+  if (['assignee','owner','assigned to','assigned_to','zuständig'].includes(h)) return 'assignee';
   const cf = fields.find(f => f.name.toLowerCase() === h || f.field_key === toFieldKey(h));
   if (cf) return `custom:${cf.field_key}`;
   return 'skip';
@@ -1673,11 +1771,9 @@ function handleImportFile(e) {
 }
 
 async function processImportFile(file) {
-  if (!file.name.endsWith('.csv') && file.type !== 'text/csv') {
-    alert('Please upload a .csv file.'); return;
-  }
-  const text = await file.text();
-  const allRows = parseCSV(text);
+  const text      = await readFileText(file);
+  const delimiter = detectDelimiter(text);
+  const allRows   = parseCSV(text, delimiter);
   if (allRows.length < 2) { alert('CSV must have a header row and at least one data row.'); return; }
 
   await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
@@ -1788,7 +1884,7 @@ async function runImport() {
       if (!val || m.mapTo === 'skip') return;
       if      (m.mapTo === 'name')    c.name    = val;
       else if (m.mapTo === 'email')   c.email   = val;
-      else if (m.mapTo === 'phone')   c.phone   = val;
+      else if (m.mapTo === 'phone')   c.phone   = val.replace(/^p:/i, '').trim();
       else if (m.mapTo === 'company') c.company = val;
       else if (m.mapTo === 'stage') {
         const s = stages.find(s => s.name.toLowerCase() === val.toLowerCase());
