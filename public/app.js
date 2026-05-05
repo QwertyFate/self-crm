@@ -14,6 +14,8 @@ let dealFields       = [];
 let dealKanbanFields = ['contact', 'value'];
 let currentPipelineId = null;
 let dealViewMode      = localStorage.getItem('dealViewMode') || 'kanban';
+let dealColumns       = []; // [{key, visible}] per-user, saved in DB
+let dealColDragIdx    = null;
 let dragDealId        = null;
 let dragContactId    = null;
 let dragStageIdx     = null;
@@ -204,6 +206,7 @@ async function init() {
     currentWorkspace = data.workspace;
     kanbanFields     = data.workspace.kanban_fields    || ['company', 'email'];
     contactColumns   = data.workspace.contact_columns  || [];
+    dealColumns      = Array.isArray(data.user?.deal_columns) ? data.user.deal_columns : [];
     showApp();
   } else {
     showAuth();
@@ -301,6 +304,7 @@ async function handleLogin(e) {
   currentWorkspace = data.workspace;
   kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = data.workspace.contact_columns || [];
+  dealColumns      = Array.isArray(data.user?.deal_columns) ? data.user.deal_columns : [];
   showApp();
 }
 
@@ -325,6 +329,7 @@ async function handleSignup(e) {
   currentWorkspace = me.workspace;
   kanbanFields     = me.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = me.workspace.contact_columns || [];
+  dealColumns      = Array.isArray(me.user?.deal_columns) ? me.user.deal_columns : [];
   showApp();
 }
 
@@ -435,10 +440,11 @@ async function loadDeals() {
   if (sel) {
     sel.innerHTML = `<option value="">— All pipelines —</option>` +
       pipelines.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
-    // Kanban needs a specific pipeline — default to first if none chosen
+    // On first load in kanban mode with nothing selected, default to first pipeline
     if (dealViewMode === 'kanban' && !currentPipelineId && pipelines.length)
-      currentPipelineId = pipelines[0]?.id || null;
-    if (!pipelines.find(p => p.id === currentPipelineId)) currentPipelineId = null;
+      currentPipelineId = pipelines[0].id;
+    if (currentPipelineId && !pipelines.find(p => p.id === currentPipelineId))
+      currentPipelineId = null;
     sel.value = currentPipelineId || '';
   }
 
@@ -450,11 +456,6 @@ async function loadDeals() {
 async function onPipelineChange() {
   const sel = document.getElementById('deals-pipeline-select');
   currentPipelineId = sel.value ? parseInt(sel.value) : null;
-  // Kanban needs a specific pipeline
-  if (dealViewMode === 'kanban' && !currentPipelineId && pipelines.length) {
-    currentPipelineId = pipelines[0].id;
-    sel.value = currentPipelineId;
-  }
   const url = currentPipelineId ? `/api/deals?pipeline_id=${currentPipelineId}` : '/api/deals';
   deals = await api.get(url);
   if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
@@ -470,43 +471,124 @@ function setDealView(mode) {
   if (mode === 'list') renderDealsList(); else renderDealsBoard();
 }
 
+// ── Deal column config (per-user) ─────────────────────────
+function effectiveDealColumns() {
+  const BUILTIN = [
+    { key: 'stage',       label: () => t('col_stage'),      show: true  },
+    { key: 'contact',     label: () => t('lbl_contact'),    show: true  },
+    { key: 'value',       label: () => t('lbl_deal_value'), show: true  },
+    { key: 'assigned_to', label: () => t('col_assignee'),   show: true  },
+    { key: 'created_at',  label: () => t('col_created_at'), show: false },
+  ];
+  const ALL = [
+    ...BUILTIN,
+    ...dealFields.map(f => ({ key: `custom:${f.field_key}`, label: () => f.name, show: true })),
+  ];
+  if (!dealColumns.length) return ALL.map(c => ({ ...c, visible: c.show }));
+  const savedMap = Object.fromEntries(dealColumns.map(c => [c.key, c.visible]));
+  const ordered  = dealColumns
+    .map(({ key }) => { const def = ALL.find(c => c.key === key); return def ? { ...def, visible: savedMap[key] } : null; })
+    .filter(Boolean);
+  ALL.filter(c => !(c.key in savedMap)).forEach(c => ordered.push({ ...c, visible: c.show }));
+  return ordered;
+}
+
+function renderDealColumnSettings() {
+  const el = document.getElementById('deal-columns-list');
+  if (!el) return;
+  const cols = effectiveDealColumns();
+  el.innerHTML = cols.map((col, i) => `
+    <li class="settings-row col-cfg-row" draggable="true"
+      ondragstart="dealColDragStart(event,${i})" ondragover="colDragOver(event)" ondrop="dealColDrop(event,${i})" ondragleave="colDragLeave(event)">
+      <span class="drag-handle">⠿</span>
+      <span class="row-label">${col.label()}</span>
+      <label class="col-vis-toggle">
+        <input type="checkbox" ${col.visible ? 'checked' : ''} onchange="dealColToggle(${i},this.checked)" />
+      </label>
+    </li>`).join('');
+}
+
+function dealColDragStart(e, i) { dealColDragIdx = i; e.dataTransfer.effectAllowed = 'move'; }
+function dealColDrop(e, targetIdx) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('col-drag-over');
+  if (dealColDragIdx === null || dealColDragIdx === targetIdx) { dealColDragIdx = null; return; }
+  const cols  = effectiveDealColumns();
+  const moved = cols.splice(dealColDragIdx, 1)[0];
+  cols.splice(targetIdx, 0, moved);
+  dealColDragIdx = null;
+  dealColumns = cols.map(({ key, visible }) => ({ key, visible }));
+  renderDealColumnSettings();
+}
+function dealColToggle(i, visible) {
+  const cols = effectiveDealColumns();
+  cols[i].visible = visible;
+  dealColumns = cols.map(({ key, visible }) => ({ key, visible }));
+}
+
+async function saveDealColumns() {
+  const toSave = effectiveDealColumns().map(({ key, visible }) => ({ key, visible }));
+  const btn  = document.getElementById('save-deal-cols-btn');
+  const msgEl = document.getElementById('deal-cols-msg');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  msgEl?.classList.add('hidden');
+  const res = await api.patch('/api/auth/preferences', { deal_columns: toSave });
+  if (btn) { btn.disabled = false; btn.textContent = t('btn_save'); }
+  if (res.error) {
+    if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); }
+    return;
+  }
+  dealColumns = toSave;
+  if (currentUser) currentUser.deal_columns = toSave;
+  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  setTimeout(() => msgEl?.classList.add('hidden'), 2500);
+  renderDealsList();
+}
+
 function renderDealsList() {
   const thead = document.getElementById('deals-thead');
   const tbody = document.getElementById('deals-tbody');
   if (!thead || !tbody) return;
 
+  const visibleCols  = effectiveDealColumns().filter(c => c.visible);
   const showPipeline = !currentPipelineId;
+  const span = 1 + (showPipeline ? 1 : 0) + visibleCols.length;
+
   thead.innerHTML = `<tr>
     <th>Title</th>
     ${showPipeline ? '<th>Pipeline</th>' : ''}
-    <th>Stage</th>
-    <th>Contact</th>
-    <th>Value</th>
-    <th>Assignee</th>
-    <th>Date Added</th>
+    ${visibleCols.map(c => `<th>${c.label()}</th>`).join('')}
   </tr>`;
 
   if (!deals.length) {
-    const span = 6 + (showPipeline ? 1 : 0);
     tbody.innerHTML = `<tr><td colspan="${span}" style="text-align:center;color:var(--muted);padding:28px">No deals found.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = deals.map(d => {
-    const dash = '<span class="muted-dash">—</span>';
-    const pName = showPipeline ? (pipelines.find(p => p.id === d.pipeline_id)?.name || '—') : null;
-    const badge = d.stage_name
-      ? `<span class="stage-badge"><span class="stage-badge-dot" style="background:${d.stage_color}"></span>${esc(d.stage_name)}</span>`
-      : dash;
-    const val = d.value != null ? `<span class="deal-value-chip">€ ${Number(d.value).toLocaleString()}</span>` : dash;
+    const dash  = '<span class="muted-dash">—</span>';
+    const cells = visibleCols.map(col => {
+      if (col.key === 'stage') {
+        const badge = d.stage_name
+          ? `<span class="stage-badge"><span class="stage-badge-dot" style="background:${d.stage_color}"></span>${esc(d.stage_name)}</span>`
+          : dash;
+        return `<td>${badge}</td>`;
+      }
+      if (col.key === 'contact')     return `<td>${d.contact_name ? esc(d.contact_name) : dash}</td>`;
+      if (col.key === 'value')       return `<td>${d.value != null ? `<span class="deal-value-chip">€ ${Number(d.value).toLocaleString()}</span>` : dash}</td>`;
+      if (col.key === 'assigned_to') return `<td>${d.assigned_to_name ? esc(d.assigned_to_name) : dash}</td>`;
+      if (col.key === 'created_at')  return `<td>${fmtDate(d.created_at)}</td>`;
+      if (col.key.startsWith('custom:')) {
+        const fk = col.key.slice(7);
+        return `<td>${esc(d.custom_data?.[fk] ?? '') || dash}</td>`;
+      }
+      return `<td>${dash}</td>`;
+    }).join('');
+
     return `<tr class="deal-list-row" onclick="openDealModal(${d.id})">
       <td><strong>${esc(d.title)}</strong></td>
-      ${showPipeline ? `<td>${esc(pName)}</td>` : ''}
-      <td>${badge}</td>
-      <td>${d.contact_name ? esc(d.contact_name) : dash}</td>
-      <td>${val}</td>
-      <td>${d.assigned_to_name ? esc(d.assigned_to_name) : dash}</td>
-      <td>${fmtDate(d.created_at)}</td>
+      ${showPipeline ? `<td>${esc(pipelines.find(p => p.id === d.pipeline_id)?.name || '—')}</td>` : ''}
+      ${cells}
     </tr>`;
   }).join('');
 }
@@ -517,6 +599,10 @@ function renderDealsBoard() {
 
   if (!pipelines.length) {
     board.innerHTML = `<div style="padding:40px;color:var(--muted);font-size:14px">${t('no_pipelines')}</div>`;
+    return;
+  }
+  if (!currentPipelineId) {
+    board.innerHTML = `<div style="padding:40px;color:var(--muted);font-size:14px">Select a pipeline above to view the board, or switch to List view to see all deals.</div>`;
     return;
   }
 
@@ -1125,6 +1211,7 @@ async function loadSettings() {
   dealFields   = await api.get('/api/deal-fields');
   renderPipelinesSettings();
   renderDealFieldsList();
+  renderDealColumnSettings();
   // Restore active tab
   switchSettingsTab(currentSettingsTab);
   if (currentUser?.role === 'owner') {
@@ -1840,9 +1927,20 @@ async function logInlineActivity(contactId) {
 // ══════════════════════════════════════════════════════════
 // DEAL MODAL
 // ══════════════════════════════════════════════════════════
+function renderDealFieldInput(f, value = '') {
+  const id = `dfield-${f.field_key}`;
+  if (f.type === 'dropdown') return `<select id="${id}">
+    <option value="">— Select —</option>
+    ${(f.options||[]).map(o => `<option value="${esc(o)}"${value===o?' selected':''}>${esc(o)}</option>`).join('')}
+  </select>`;
+  const typeMap = { text:'text', email:'email', phone:'tel', number:'number', date:'date', url:'url' };
+  return `<input type="${typeMap[f.type]||'text'}" id="${id}" value="${esc(value)}" />`;
+}
+
 async function openDealModal(id) {
   await Promise.all([ensureContacts(), ensureMembers()]);
   if (!pipelines.length) pipelines = await api.get('/api/pipelines');
+  if (!dealFields.length) dealFields = await api.get('/api/deal-fields');
 
   document.getElementById('deal-form').reset();
   document.getElementById('deal-id').value    = id || '';
@@ -1867,6 +1965,11 @@ async function openDealModal(id) {
   assigneeSel.innerHTML = `<option value="">— Unassigned —</option>` +
     members.map(m => `<option value="${m.id}"${m.id === currentUser?.id ? ' selected' : ''}>${esc(m.name)}</option>`).join('');
 
+  // Render custom deal fields (empty values for new deal)
+  document.getElementById('df-custom-fields').innerHTML = dealFields.map(f =>
+    `<div class="form-group"><label>${esc(f.name)}</label>${renderDealFieldInput(f, '')}</div>`
+  ).join('');
+
   if (id) {
     const d = await api.get(`/api/deals/${id}`);
     document.getElementById('df-title').value = d.title;
@@ -1875,6 +1978,11 @@ async function openDealModal(id) {
     populateDealStages(d.pipeline_id, d.stage_id);
     contactSel.value  = d.contact_id  || '';
     assigneeSel.value = d.assigned_to || '';
+    // Fill custom fields
+    dealFields.forEach(f => {
+      const el = document.getElementById(`dfield-${f.field_key}`);
+      if (el) el.value = d.custom_data?.[f.field_key] ?? '';
+    });
   }
 
   document.getElementById('deal-modal').classList.remove('hidden');
@@ -1904,7 +2012,7 @@ async function saveDeal(e) {
     stage_id:    document.getElementById('df-stage').value    || null,
     value:       document.getElementById('df-value').value    || null,
     assigned_to: document.getElementById('df-assignee').value || null,
-    custom_data: {},
+    custom_data: Object.fromEntries(dealFields.map(f => [f.field_key, document.getElementById(`dfield-${f.field_key}`)?.value || ''])),
   };
   if (id) await api.put(`/api/deals/${id}`, payload);
   else     await api.post('/api/deals', payload);
