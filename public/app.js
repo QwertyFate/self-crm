@@ -1938,37 +1938,109 @@ function renderDealFieldInput(f, value = '') {
 }
 
 // ── Contact Panel (right column of deal modal) ────────────
-function renderContactPanelReadOnly(contact) {
+async function renderContactPanelReadOnly(contact) {
   const panel = document.getElementById('deal-contact-panel');
   if (!panel) return;
 
-  const labelHtml = '<div class="deal-col-label">Contact</div>';
-
   if (!contact) {
-    panel.innerHTML = labelHtml + `<div class="contact-panel-empty">No contact linked.<br>Select one from the dropdown.</div>`;
+    panel.innerHTML = `
+      <div class="contact-panel-top"><div class="deal-col-label">Contact</div></div>
+      <div class="contact-panel-scroll">
+        <div class="contact-panel-empty">No contact linked.<br>Select one from the dropdown.</div>
+      </div>`;
     return;
   }
 
-  const stg = stages.find(s => s.id === contact.stage_id);
-  const rows = [
-    { label: 'Company', value: esc(contact.company || '') },
-    { label: 'Email',   value: contact.email ? `<a href="mailto:${esc(contact.email)}">${esc(contact.email)}</a>` : '' },
-    { label: 'Phone',   value: contact.phone ? `${esc(contact.phone)}${waLink(contact.phone, contact) ? ` <a class="wa-detail-link" href="${waLink(contact.phone,contact)}" target="_blank" rel="noopener">${WA_SVG}</a>` : ''}` : '' },
-    { label: 'Stage',   value: stg ? `<span class="stage-badge"><span class="stage-badge-dot" style="background:${stg.color}"></span>${esc(stg.name)}</span>` : '' },
-    ...fields.map(f => {
-      const v = contact.custom_data?.[f.field_key];
-      return { label: f.name, value: v ? esc(v) : '' };
-    }),
-  ].filter(r => r.value);
+  // Show skeleton while fetching
+  panel.innerHTML = `
+    <div class="contact-panel-top"><div class="deal-col-label">Contact</div></div>
+    <div class="contact-panel-scroll" style="color:var(--muted);font-size:13px;padding:10px 22px">Loading…</div>`;
 
-  panel.innerHTML = `${labelHtml}
-    <div class="contact-panel-header">
-      <div class="contact-panel-name">${esc(contact.name)}</div>
-      <button class="btn btn-sm btn-ghost" onclick="editContactPanel(${contact.id})">Edit</button>
+  // Ensure contact custom fields are loaded (needed for effectiveContactColumns)
+  await ensureFields();
+
+  const full = await api.get(`/api/contacts/${contact.id}`);
+
+  // Mirror Contact Columns settings — exclude _name (shown as header) and stage_id
+  const visibleCols = effectiveContactColumns()
+    .filter(c => c.visible && c.key !== '_name' && c.key !== 'stage_id');
+
+  const dash = '<span style="color:var(--muted)">—</span>';
+
+  const rows = visibleCols.map(col => {
+    let value;
+    if (col.key === 'company') {
+      value = full.company ? esc(full.company) : dash;
+    } else if (col.key === 'email') {
+      value = full.email
+        ? `<a href="mailto:${esc(full.email)}">${esc(full.email)}</a>`
+        : dash;
+    } else if (col.key === 'phone') {
+      value = full.phone
+        ? `${esc(full.phone)}${waLink(full.phone, full) ? ` <a class="wa-detail-link" href="${waLink(full.phone,full)}" target="_blank" rel="noopener">${WA_SVG}</a>` : ''}`
+        : dash;
+    } else if (col.key === 'assigned_to') {
+      value = full.assigned_to_name ? esc(full.assigned_to_name) : dash;
+    } else if (col.key === 'created_at') {
+      value = fmtDate(full.created_at) || dash;
+    } else {
+      // Custom contact field
+      const v = full.custom_data?.[col.key];
+      if (!v) { value = dash; }
+      else {
+        const f = fields.find(f => f.field_key === col.key);
+        if (f?.type === 'url')        value = `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>`;
+        else if (f?.type === 'email') value = `<a href="mailto:${esc(v)}">${esc(v)}</a>`;
+        else                          value = esc(v);
+      }
+    }
+    return { label: col.label(), value };
+  });
+
+  panel.innerHTML = `
+    <div class="contact-panel-top">
+      <div class="deal-col-label">Contact</div>
+      <div class="contact-panel-header">
+        <div class="contact-panel-name">${esc(full.name)}</div>
+        <button class="btn btn-sm btn-ghost" onclick="editContactPanel(${full.id})">Edit</button>
+      </div>
     </div>
-    <div class="contact-panel-rows">
-      ${rows.map(r => `<div class="contact-panel-row"><label>${esc(r.label)}</label><span>${r.value}</span></div>`).join('')}
+    <div class="contact-panel-scroll">
+      <div class="contact-panel-rows">
+        ${rows.map(r => `<div class="contact-panel-row"><label>${esc(r.label)}</label><span>${r.value}</span></div>`).join('')}
+      </div>
+      <div class="contact-panel-section-label" style="margin-top:14px">Activities</div>
+      <div class="mini-acts" id="cpanel-acts">${renderMiniActs(full.activities)}</div>
+    </div>
+    <div class="panel-note-form">
+      <select id="cpanel-act-type">
+        <option value="note">${t('act_note')}</option>
+        <option value="call">${t('act_call')}</option>
+        <option value="email">${t('act_email')}</option>
+        <option value="whatsapp">${t('act_whatsapp')}</option>
+      </select>
+      <input type="text" id="cpanel-act-content" placeholder="${t('detail_log_ph')}"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();logContactPanelNote(${full.id});}" />
+      <button id="cpanel-log-btn" class="btn btn-primary btn-sm"
+        onclick="logContactPanelNote(${full.id})">${t('btn_log')}</button>
     </div>`;
+}
+
+async function logContactPanelNote(contactId) {
+  const contentEl = document.getElementById('cpanel-act-content');
+  const content   = contentEl?.value.trim();
+  if (!content) return;
+  const type = document.getElementById('cpanel-act-type')?.value || 'note';
+  const btn  = document.getElementById('cpanel-log-btn');
+  if (btn) btn.disabled = true;
+  await api.post('/api/activities', { contact_id: contactId, type, content });
+  if (contentEl) contentEl.value = '';
+  if (btn) btn.disabled = false;
+  // Refresh just the activities list
+  const fresh = await api.get(`/api/contacts/${contactId}`);
+  const actsEl = document.getElementById('cpanel-acts');
+  if (actsEl) actsEl.innerHTML = renderMiniActs(fresh.activities);
+  contentEl?.focus();
 }
 
 async function editContactPanel(contactId) {
@@ -1983,21 +2055,26 @@ async function editContactPanel(contactId) {
       <input type="text" id="cpfield-${f.field_key}" value="${esc(contact.custom_data?.[f.field_key] || '')}" />
     </div>`).join('');
 
-  panel.innerHTML = `<div class="deal-col-label">Edit Contact</div>
-    <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="cpanel-name" value="${esc(contact.name)}" /></div>
-    <div class="form-group"><label>Company</label><input type="text" id="cpanel-company" value="${esc(contact.company||'')}" /></div>
-    <div class="form-group"><label>Email</label><input type="email" id="cpanel-email" value="${esc(contact.email||'')}" /></div>
-    <div class="form-group"><label>Phone</label><input type="tel" id="cpanel-phone" value="${esc(contact.phone||'')}" /></div>
-    <div class="form-group"><label>Stage</label>
-      <select id="cpanel-stage">
-        <option value="">— None —</option>
-        ${stages.map(s => `<option value="${s.id}"${contact.stage_id===s.id?' selected':''}>${esc(s.name)}</option>`).join('')}
-      </select>
+  panel.innerHTML = `
+    <div class="contact-panel-top">
+      <div class="deal-col-label">Edit Contact</div>
     </div>
-    ${customInputs}
-    <div class="contact-panel-edit-actions">
-      <button class="btn btn-sm" onclick="cancelContactPanelEdit(${contactId})">Cancel</button>
-      <button class="btn btn-sm btn-primary" onclick="saveContactPanel(${contactId})">Save Contact</button>
+    <div class="contact-panel-scroll">
+      <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="cpanel-name" value="${esc(contact.name)}" /></div>
+      <div class="form-group"><label>Company</label><input type="text" id="cpanel-company" value="${esc(contact.company||'')}" /></div>
+      <div class="form-group"><label>Email</label><input type="email" id="cpanel-email" value="${esc(contact.email||'')}" /></div>
+      <div class="form-group"><label>Phone</label><input type="tel" id="cpanel-phone" value="${esc(contact.phone||'')}" /></div>
+      <div class="form-group"><label>Stage</label>
+        <select id="cpanel-stage">
+          <option value="">— None —</option>
+          ${stages.map(s => `<option value="${s.id}"${contact.stage_id===s.id?' selected':''}>${esc(s.name)}</option>`).join('')}
+        </select>
+      </div>
+      ${customInputs}
+      <div class="contact-panel-edit-actions">
+        <button class="btn btn-sm" onclick="cancelContactPanelEdit(${contactId})">Cancel</button>
+        <button class="btn btn-sm btn-primary" onclick="saveContactPanel(${contactId})">Save Contact</button>
+      </div>
     </div>`;
 }
 
