@@ -64,15 +64,6 @@ router.patch('/contact-columns', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.patch('/whatsapp-template', async (req, res, next) => {
-  try {
-    const { template } = req.body;
-    if (typeof template !== 'string') return res.status(400).json({ error: 'Template must be a string' });
-    await pool.query('UPDATE workspaces SET whatsapp_template=$1 WHERE id=$2', [template, req.workspaceId]);
-    res.json({ success: true });
-  } catch (e) { next(e); }
-});
-
 router.patch('/kanban-fields', async (req, res, next) => {
   try {
     const { fields } = req.body;
