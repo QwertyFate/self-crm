@@ -8,9 +8,15 @@ let stages     = [];
 let fields     = [];
 let activities = [];
 let members    = [];
-let dragContactId = null;
-let dragStageIdx  = null;
-let importData    = null;
+let dragContactId  = null;
+let dragStageIdx   = null;
+let colDragIdx     = null;
+let importData     = null;
+let contactColumns = []; // [{key, visible}] — empty = all visible in default order
+let colWidths      = {}; // {colKey: widthPx} — persisted per workspace in localStorage
+let resizingCol    = null;
+let currentPage    = 1;
+const PAGE_SIZE    = 25;
 let currentLang   = localStorage.getItem('lang') || 'en';
 
 // ── Translations ──────────────────────────────────────────
@@ -29,6 +35,7 @@ const TRANSLATIONS = {
     logged_by:'by',
     set_stages:'Pipeline Stages', set_fields:'Custom Fields', set_kanban:'Kanban Card Fields',
     set_invites:'Invite Codes', set_members:'Team Members', set_language:'Language', set_workspace:'Workspace',
+    set_contact_cols:'Contact Columns', hint_contact_cols:'Drag to reorder. Name is always first.',
     hint_stages:'Drag to reorder. Contacts are unassigned when a stage is deleted.',
     hint_fields:'Extra properties on every contact.',
     hint_kanban:'Choose which fields appear on pipeline cards. Name is always shown.',
@@ -64,6 +71,7 @@ const TRANSLATIONS = {
     logged_by:'von',
     set_stages:'Pipeline-Phasen', set_fields:'Benutzerdefinierte Felder', set_kanban:'Kanban-Kartenfelder',
     set_invites:'Einladungscodes', set_members:'Teammitglieder', set_language:'Sprache', set_workspace:'Arbeitsbereich',
+    set_contact_cols:'Kontaktspalten', hint_contact_cols:'Zum Neuanordnen ziehen. Name steht immer an erster Stelle.',
     hint_stages:'Zum Neuanordnen ziehen. Kontakte werden bei Phasenlöschung nicht zugewiesen.',
     hint_fields:'Zusätzliche Eigenschaften für jeden Kontakt.',
     hint_kanban:'Felder auswählen, die auf Pipeline-Karten erscheinen. Name wird immer angezeigt.',
@@ -152,7 +160,8 @@ async function init() {
   if (data.user && !resetToken) {
     currentUser      = data.user;
     currentWorkspace = data.workspace;
-    kanbanFields     = data.workspace.kanban_fields || ['company', 'email'];
+    kanbanFields     = data.workspace.kanban_fields    || ['company', 'email'];
+    contactColumns   = data.workspace.contact_columns  || [];
     showApp();
   } else {
     showAuth();
@@ -186,6 +195,7 @@ function showApp() {
   document.getElementById('sidebar-workspace').textContent = currentWorkspace?.name || '';
   document.getElementById('sidebar-user').textContent = currentUser?.name || '';
   applyTranslations();
+  loadColWidths();
   loadPipeline();
 }
 
@@ -247,7 +257,8 @@ async function handleLogin(e) {
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
   currentUser      = data.user;
   currentWorkspace = data.workspace;
-  kanbanFields     = data.workspace.kanban_fields || ['company', 'email'];
+  kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
+  contactColumns   = data.workspace.contact_columns || [];
   showApp();
 }
 
@@ -270,7 +281,8 @@ async function handleSignup(e) {
   const me = await api.get('/api/auth/me');
   currentUser      = me.user;
   currentWorkspace = me.workspace;
-  kanbanFields     = me.workspace.kanban_fields || ['company', 'email'];
+  kanbanFields     = me.workspace.kanban_fields   || ['company', 'email'];
+  contactColumns   = me.workspace.contact_columns || [];
   showApp();
 }
 
@@ -457,39 +469,162 @@ async function onDrop(e, stageId) {
 async function loadContacts() {
   await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
   contacts = await api.get('/api/contacts');
+  currentPage = 1;
   renderContactsTable(contacts);
 }
 
+// ── Column width persistence (per-user, stored in DB) ────
+function loadColWidths() {
+  colWidths = { ...(currentUser?.column_widths || {}) };
+}
+function saveColWidths() {
+  if (currentUser) currentUser.column_widths = { ...colWidths };
+  api.patch('/api/auth/preferences', { column_widths: colWidths });
+}
+
+// ── Column resize handlers ────────────────────────────────
+function startColResize(e, colKey, colEl) {
+  e.preventDefault();
+  e.stopPropagation();
+  resizingCol = { colKey, colEl, startX: e.clientX, startW: colWidths[colKey] || parseInt(colEl.style.width) || 100 };
+  document.addEventListener('mousemove', onColResize);
+  document.addEventListener('mouseup', stopColResize);
+  document.body.style.cursor    = 'col-resize';
+  document.body.style.userSelect = 'none';
+}
+function onColResize(e) {
+  if (!resizingCol) return;
+  const newW = Math.max(50, resizingCol.startW + (e.clientX - resizingCol.startX));
+  resizingCol.colEl.style.width = newW + 'px';
+  colWidths[resizingCol.colKey] = Math.round(newW);
+}
+function stopColResize() {
+  if (!resizingCol) return;
+  document.removeEventListener('mousemove', onColResize);
+  document.removeEventListener('mouseup', stopColResize);
+  document.body.style.cursor    = '';
+  document.body.style.userSelect = '';
+  saveColWidths();
+  resizingCol = null;
+}
+
+// Returns ordered, merged column definitions respecting saved config + current fields
+function effectiveContactColumns() {
+  const BUILTIN = [
+    { key: 'company',     label: () => t('col_company'), type: 'text'     },
+    { key: 'email',       label: () => t('col_email'),   type: 'email'    },
+    { key: 'phone',       label: () => t('col_phone'),   type: 'phone'    },
+    { key: 'stage_id',    label: () => t('col_stage'),   type: 'stage'    },
+    { key: 'assigned_to', label: () => t('col_assignee'),type: 'assignee' },
+  ];
+  const ALL = [
+    ...BUILTIN,
+    ...fields.map(f => ({ key: f.field_key, label: () => f.name, type: f.type })),
+  ];
+
+  if (!contactColumns.length) return ALL.map(c => ({ ...c, visible: true }));
+
+  const savedMap = Object.fromEntries(contactColumns.map(c => [c.key, c.visible]));
+  const ordered  = contactColumns
+    .map(({ key }) => { const def = ALL.find(c => c.key === key); return def ? { ...def, visible: savedMap[key] } : null; })
+    .filter(Boolean);
+  // Append any new fields not in saved config
+  ALL.filter(c => !(c.key in savedMap)).forEach(c => ordered.push({ ...c, visible: true }));
+  return ordered;
+}
+
 function renderContactsTable(list) {
+  const table = document.getElementById('contacts-table');
+  if (!table) return;
+  const visibleCols = effectiveContactColumns().filter(c => c.visible);
+  const colKeys     = ['_name', ...visibleCols.map(c => c.key), '_actions'];
+
+  // Remove existing colgroup + reset layout so the browser auto-sizes for measurement
+  const existingCg = table.querySelector('colgroup');
+  if (existingCg) table.removeChild(existingCg);
+  table.style.tableLayout = '';
+
+  // Build thead (no resize handles yet — added via DOM after measurement)
   document.getElementById('contacts-thead').innerHTML = `<tr>
-    <th>${t('col_name')}</th><th>${t('col_company')}</th><th>${t('col_email')}</th><th>${t('col_phone')}</th><th>${t('col_stage')}</th><th>${t('col_assignee')}</th>
-    ${fields.map(f => `<th>${esc(f.name)}</th>`).join('')}<th></th>
+    ${colKeys.map(k => {
+      const col = visibleCols.find(c => c.key === k);
+      const label = k === '_name' ? t('col_name') : k === '_actions' ? '' : col?.label() || '';
+      return `<th data-col-key="${k}">${label}</th>`;
+    }).join('')}
   </tr>`;
 
-  document.getElementById('contacts-body').innerHTML = list.map(c => {
-    const stage = stages.find(s => s.id === c.stage_id);
-    const badge = stage
-      ? `<span class="stage-badge"><span class="stage-badge-dot" style="background:${stage.color}"></span>${esc(stage.name)}</span>`
-      : '<span class="muted-dash">—</span>';
-    const customCells = fields.map(f => {
-      const v = c.custom_data?.[f.field_key] ?? '';
-      return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${f.field_key}','${f.type}')">${esc(v) || '<span class="muted-dash">—</span>'}</td>`;
+  // Paginate
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  if (currentPage > totalPages) currentPage = totalPages;
+  const pageList = list.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Build tbody
+  document.getElementById('contacts-body').innerHTML = pageList.map(c => {
+    const dash  = '<span class="muted-dash">—</span>';
+    const cells = visibleCols.map(col => {
+      if (col.key === 'company')
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'company','text')" title="${esc(c.company||'')}">${esc(c.company||'')||dash}</td>`;
+      if (col.key === 'email')
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'email','email')" title="${esc(c.email||'')}">${esc(c.email||'')||dash}</td>`;
+      if (col.key === 'phone')
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'phone','phone')" title="${esc(c.phone||'')}">${esc(c.phone||'')||dash}</td>`;
+      if (col.key === 'stage_id') {
+        const stage = stages.find(s => s.id === c.stage_id);
+        const badge = stage ? `<span class="stage-badge"><span class="stage-badge-dot" style="background:${stage.color}"></span>${esc(stage.name)}</span>` : dash;
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'stage_id','stage')">${badge}</td>`;
+      }
+      if (col.key === 'assigned_to')
+        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'assigned_to','assignee')" title="${esc(c.assigned_to_name||'')}">${esc(c.assigned_to_name||'')||dash}</td>`;
+      const v = c.custom_data?.[col.key] ?? '';
+      return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${col.key}','${col.type}')" title="${esc(v)}">${esc(v)||dash}</td>`;
     }).join('');
 
     return `<tr>
-      <td><strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong></td>
-      <td class="editable-cell" onclick="startInlineEdit(this,${c.id},'company','text')">${esc(c.company||'') || '<span class="muted-dash">—</span>'}</td>
-      <td class="editable-cell" onclick="startInlineEdit(this,${c.id},'email','email')">${esc(c.email||'') || '<span class="muted-dash">—</span>'}</td>
-      <td class="editable-cell" onclick="startInlineEdit(this,${c.id},'phone','phone')">${esc(c.phone||'') || '<span class="muted-dash">—</span>'}</td>
-      <td class="editable-cell" onclick="startInlineEdit(this,${c.id},'stage_id','stage')">${badge}</td>
-      <td class="editable-cell" onclick="startInlineEdit(this,${c.id},'assigned_to','assignee')">${esc(c.assigned_to_name||'') || '<span class="muted-dash">—</span>'}</td>
-      ${customCells}
-      <td class="row-actions" style="white-space:nowrap">
+      <td title="${esc(c.name)}"><strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong></td>
+      ${cells}
+      <td class="row-actions">
         <button class="btn btn-sm btn-ghost" onclick="openDetail(${c.id})">${t('btn_view')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteContact(${c.id})">${t('btn_delete')}</button>
       </td>
     </tr>`;
   }).join('');
+
+  // Render pagination bar
+  renderPagination(list.length);
+
+  // Measure natural widths for any column not yet in colWidths (forces reflow)
+  let measured = false;
+  if (!colWidths['_actions']) { colWidths['_actions'] = 116; measured = true; }
+  document.querySelectorAll('#contacts-thead th').forEach(th => {
+    const key = th.dataset.colKey;
+    if (key && !colWidths[key]) {
+      colWidths[key] = Math.max(60, Math.round(th.getBoundingClientRect().width));
+      measured = true;
+    }
+  });
+  if (measured) saveColWidths();
+
+  // Build and insert colgroup with stored widths
+  const cg = document.createElement('colgroup');
+  colKeys.forEach(key => {
+    const col = document.createElement('col');
+    col.style.width = (colWidths[key] || 100) + 'px';
+    cg.appendChild(col);
+  });
+  table.insertBefore(cg, table.firstChild);
+  table.style.tableLayout = 'fixed';
+
+  // Add resize handles to th elements (except the last actions column)
+  const ths  = document.querySelectorAll('#contacts-thead th');
+  const cols = cg.children;
+  ths.forEach((th, i) => {
+    if (colKeys[i] === '_actions') return;
+    const handle = document.createElement('div');
+    handle.className = 'col-resize-handle';
+    const colEl = cols[i];
+    handle.addEventListener('mousedown', e => startColResize(e, colKeys[i], colEl));
+    th.appendChild(handle);
+  });
 }
 
 function startInlineEdit(td, contactId, fieldKey, fieldType) {
@@ -585,6 +720,11 @@ async function commitInlineEdit(contactId, fieldKey, fieldType, value) {
   if (document.getElementById('page-pipeline').classList.contains('active')) renderPipeline();
 }
 
+function onContactSearch() {
+  currentPage = 1;
+  filterContacts();
+}
+
 function filterContacts() {
   const q = document.getElementById('contact-search').value.toLowerCase();
   renderContactsTable(contacts.filter(c =>
@@ -592,6 +732,43 @@ function filterContacts() {
     (c.company||'').toLowerCase().includes(q) ||
     (c.email||'').toLowerCase().includes(q)
   ));
+}
+
+function goToPage(page) {
+  currentPage = page;
+  filterContacts();
+}
+
+function renderPagination(total) {
+  const el = document.getElementById('contacts-pagination');
+  if (!el) return;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  const start = (currentPage - 1) * PAGE_SIZE + 1;
+  const end   = Math.min(currentPage * PAGE_SIZE, total);
+
+  const pages = buildPageNumbers(currentPage, totalPages);
+  el.innerHTML = `
+    <span class="pagination-info">Showing ${start}–${end} of ${total}</span>
+    <div class="pagination-controls">
+      <button class="page-btn" onclick="goToPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>
+      ${pages.map(p => p === '…'
+        ? '<span class="page-ellipsis">…</span>'
+        : `<button class="page-btn${p===currentPage?' active':''}" onclick="goToPage(${p})">${p}</button>`
+      ).join('')}
+      <button class="page-btn" onclick="goToPage(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>›</button>
+    </div>`;
+}
+
+function buildPageNumbers(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = [1];
+  if (current > 3) pages.push('…');
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
+  if (current < total - 2) pages.push('…');
+  pages.push(total);
+  return pages;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -628,6 +805,7 @@ async function loadSettings() {
   renderStagesList();
   renderFieldsList();
   renderKanbanFields();
+  renderContactColumnSettings();
   if (currentUser?.role === 'owner') {
     document.getElementById('invites-card').classList.remove('hidden');
     loadInvites();
@@ -785,6 +963,71 @@ async function deleteField(id) {
   await api.del(`/api/fields/${id}`);
   invalidate();
   await loadSettings();
+}
+
+// ── Contact column visibility & order ────────────────────
+function renderContactColumnSettings() {
+  const el = document.getElementById('contact-columns-list');
+  if (!el) return;
+  const cols = effectiveContactColumns();
+  el.innerHTML = cols.map((col, i) => `
+    <li class="settings-row col-cfg-row" draggable="true"
+      ondragstart="colDragStart(event,${i})" ondragover="colDragOver(event)" ondrop="colDrop(event,${i})" ondragleave="colDragLeave(event)">
+      <span class="drag-handle">⠿</span>
+      <span class="row-label">${col.label()}</span>
+      <label class="col-vis-toggle">
+        <input type="checkbox" ${col.visible ? 'checked' : ''} onchange="colToggleVisible(${i},this.checked)" />
+      </label>
+    </li>`).join('');
+}
+
+function colDragStart(e, i) {
+  colDragIdx = i;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.classList.add('dragging');
+}
+function colDragOver(e)  { e.preventDefault(); e.currentTarget.classList.add('col-drag-over'); }
+function colDragLeave(e) { e.currentTarget.classList.remove('col-drag-over'); }
+function colDrop(e, targetIdx) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('col-drag-over');
+  if (colDragIdx === null || colDragIdx === targetIdx) { colDragIdx = null; return; }
+  const cols  = effectiveContactColumns();
+  const moved = cols.splice(colDragIdx, 1)[0];
+  cols.splice(targetIdx, 0, moved);
+  colDragIdx     = null;
+  contactColumns = cols.map(({ key, visible }) => ({ key, visible }));
+  renderContactColumnSettings();
+}
+function colToggleVisible(i, visible) {
+  const cols  = effectiveContactColumns();
+  cols[i].visible = visible;
+  contactColumns  = cols.map(({ key, visible }) => ({ key, visible }));
+}
+
+async function saveContactColumns() {
+  // Snapshot effective columns so we always save a full list, not just []
+  const toSave = effectiveContactColumns().map(({ key, visible }) => ({ key, visible }));
+  const btn    = document.getElementById('save-contact-cols-btn');
+  const msgEl  = document.getElementById('contact-cols-msg');
+
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  msgEl?.classList.add('hidden');
+
+  const res = await api.patch('/api/workspace/contact-columns', { columns: toSave });
+
+  if (btn) { btn.disabled = false; btn.textContent = t('btn_save'); }
+
+  if (res.error) {
+    if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); }
+    return;
+  }
+
+  contactColumns = toSave;
+  currentWorkspace.contact_columns = toSave;
+  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  setTimeout(() => msgEl?.classList.add('hidden'), 2500);
+  filterContacts();
 }
 
 // ── Kanban field visibility ───────────────────────────────
