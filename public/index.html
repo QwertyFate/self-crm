@@ -562,25 +562,42 @@
 
   <!-- Deal Modal -->
   <div id="deal-modal" class="modal-overlay hidden">
-    <div class="modal">
+    <div class="modal modal-deal">
       <div class="modal-header">
         <h2 id="deal-modal-title">Add Deal</h2>
         <button class="close-btn" onclick="closeModal('deal-modal')">&times;</button>
       </div>
-      <form id="deal-form" onsubmit="saveDeal(event)">
-        <input type="hidden" id="deal-id" />
-        <div class="form-group"><label data-i18n="lbl_deal_title">Title <span class="req">*</span></label><input type="text" id="df-title" required /></div>
-        <div class="form-group"><label data-i18n="lbl_contact">Contact</label><select id="df-contact"></select></div>
-        <div class="form-group"><label data-i18n="nav_deals">Pipeline <span class="req">*</span></label><select id="df-pipeline" onchange="onDealPipelineChange()" required></select></div>
-        <div class="form-group"><label data-i18n="lbl_stage">Stage</label><select id="df-stage"></select></div>
-        <div class="form-group"><label data-i18n="lbl_deal_value">Value</label><input type="number" id="df-value" min="0" step="0.01" /></div>
-        <div class="form-group"><label data-i18n="lbl_assignee">Assignee</label><select id="df-assignee"></select></div>
-        <div id="df-custom-fields"></div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('deal-modal')" data-i18n="btn_cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+
+      <div class="deal-modal-columns">
+
+        <!-- ── Left: Deal fields ── -->
+        <div class="deal-modal-col">
+          <div class="deal-col-label">Deal</div>
+          <form id="deal-form" onsubmit="saveDeal(event)">
+            <input type="hidden" id="deal-id" />
+            <div class="form-group"><label data-i18n="lbl_deal_title">Title <span class="req">*</span></label><input type="text" id="df-title" required /></div>
+            <div class="form-group"><label data-i18n="lbl_contact">Contact</label><select id="df-contact" onchange="onDealContactChange()"></select></div>
+            <div class="form-group"><label>Pipeline <span class="req">*</span></label><select id="df-pipeline" onchange="onDealPipelineChange()" required></select></div>
+            <div class="form-group"><label data-i18n="lbl_stage">Stage</label><select id="df-stage"></select></div>
+            <div class="form-group"><label data-i18n="lbl_deal_value">Value</label><input type="number" id="df-value" min="0" step="0.01" /></div>
+            <div class="form-group"><label data-i18n="lbl_assignee">Assignee</label><select id="df-assignee"></select></div>
+            <div id="df-custom-fields"></div>
+          </form>
         </div>
-      </form>
+
+        <!-- ── Right: Contact panel ── -->
+        <div class="deal-modal-col deal-col-contact" id="deal-contact-panel">
+          <div class="deal-col-label">Contact</div>
+          <div class="contact-panel-empty">No contact linked</div>
+        </div>
+
+      </div>
+
+      <!-- Sticky footer -->
+      <div class="modal-actions deal-modal-footer">
+        <button type="button" class="btn" onclick="closeModal('deal-modal')" data-i18n="btn_cancel">Cancel</button>
+        <button type="submit" form="deal-form" class="btn btn-primary" data-i18n="btn_save">Save Deal</button>
+      </div>
     </div>
   </div>
 
