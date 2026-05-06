@@ -184,13 +184,75 @@ const BUILTIN_FIELDS = [
   { key: 'assignee', label: 'Assignee', type: 'text' },
 ];
 
+// ── Loading bar + overlay ─────────────────────────────────
+const loader = (() => {
+  let count = 0;
+  let fillTimer = null;
+  let hideTimer = null;
+  let overlayTimer = null;
+  const bar     = () => document.getElementById('loading-bar');
+  const fill    = () => document.getElementById('loading-bar-fill');
+  const overlay = () => document.getElementById('loading-overlay');
+
+  function start() {
+    count++;
+    clearTimeout(hideTimer);
+    clearTimeout(overlayTimer);
+
+    // ── Progress bar ──
+    const b = bar(), f = fill();
+    if (b && f) {
+      b.classList.add('active');
+      let pct = parseFloat(f.style.width) || 0;
+      if (pct >= 80) pct = 30;
+      f.style.width = pct + '%';
+      clearTimeout(fillTimer);
+      fillTimer = setTimeout(() => { if (fill()) fill().style.width = '70%'; }, 50);
+      fillTimer = setTimeout(() => { if (fill()) fill().style.width = '82%'; }, 400);
+    }
+
+    // ── Center overlay — only after 300ms so quick fetches never flash ──
+    overlayTimer = setTimeout(() => {
+      if (count > 0) overlay()?.classList.remove('hidden');
+    }, 300);
+  }
+
+  function done() {
+    count = Math.max(0, count - 1);
+    if (count > 0) return;
+
+    clearTimeout(overlayTimer);
+    overlay()?.classList.add('hidden');
+
+    const f = fill();
+    if (f) f.style.width = '100%';
+    hideTimer = setTimeout(() => {
+      const b = bar(), f2 = fill();
+      if (b) b.classList.remove('active');
+      setTimeout(() => { if (f2) f2.style.width = '0%'; }, 160);
+    }, 260);
+  }
+
+  return { start, done };
+})();
+
 // ── API ───────────────────────────────────────────────────
+async function apiFetch(url, opts = {}) {
+  loader.start();
+  try {
+    const r = await fetch(url, opts);
+    return await r.json();
+  } finally {
+    loader.done();
+  }
+}
+
 const api = {
-  get:   url      => fetch(url).then(r => r.json()),
-  post:  (url, d) => fetch(url, { method:'POST',   headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) }).then(r => r.json()),
-  put:   (url, d) => fetch(url, { method:'PUT',    headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) }).then(r => r.json()),
-  patch: (url, d) => fetch(url, { method:'PATCH',  headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) }).then(r => r.json()),
-  del:   url      => fetch(url, { method:'DELETE' }).then(r => r.json()),
+  get:   url      => apiFetch(url),
+  post:  (url, d) => apiFetch(url, { method:'POST',   headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) }),
+  put:   (url, d) => apiFetch(url, { method:'PUT',    headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) }),
+  patch: (url, d) => apiFetch(url, { method:'PATCH',  headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) }),
+  del:   url      => apiFetch(url, { method:'DELETE' }),
 };
 
 // ══════════════════════════════════════════════════════════
