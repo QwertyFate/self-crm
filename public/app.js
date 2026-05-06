@@ -35,7 +35,8 @@ let currentLang   = localStorage.getItem('lang') || 'en';
 // ── Translations ──────────────────────────────────────────
 const TRANSLATIONS = {
   en: {
-    nav_deals:'Deals', nav_contacts:'Contacts', nav_activities:'Activities', nav_settings:'Settings',
+    nav_deals:'Deals', nav_contacts:'Contacts', nav_activities:'Activities', nav_settings:'Settings', nav_board:'Board',
+    set_miro:'Miro Board', hint_miro:'Paste the embed URL from Miro → Share → Embed.',
     add_deal:'+ Add Deal', lbl_deal_title:'Title', lbl_deal_value:'Value',
     tab_deals:'Deals', set_pipelines:'Pipelines', hint_pipelines:'Each pipeline has its own stages. Deals belong to one pipeline.',
     set_deal_fields:'Deal Fields', hint_deal_fields:'Extra properties on every deal.',
@@ -80,7 +81,8 @@ const TRANSLATIONS = {
     lang_en:'English', lang_de:'German',
   },
   de: {
-    nav_deals:'Deals', nav_contacts:'Kontakte', nav_activities:'Aktivitäten', nav_settings:'Einstellungen',
+    nav_deals:'Deals', nav_contacts:'Kontakte', nav_activities:'Aktivitäten', nav_settings:'Einstellungen', nav_board:'Board',
+    set_miro:'Miro-Board', hint_miro:'Embed-URL aus Miro → Teilen → Einbetten einfügen.',
     add_deal:'+ Deal hinzufügen', lbl_deal_title:'Titel', lbl_deal_value:'Wert',
     tab_deals:'Deals', set_pipelines:'Pipelines', hint_pipelines:'Jede Pipeline hat eigene Phasen. Deals gehören zu einer Pipeline.',
     set_deal_fields:'Deal-Felder', hint_deal_fields:'Zusätzliche Eigenschaften für jeden Deal.',
@@ -151,6 +153,7 @@ function setLanguage(lang) {
   if (page === 'contacts')   filterContacts();
   if (page === 'activities') loadActivities();
   if (page === 'settings')   loadSettings();
+  if (page === 'board')      loadBoard();
 }
 
 const WA_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="vertical-align:middle"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>`;
@@ -241,6 +244,7 @@ function showApp() {
   document.getElementById('sidebar-user').textContent = currentUser?.name || '';
   applyTranslations();
   loadColWidths();
+  updateBoardNavVisibility();
   loadDeals();
 }
 
@@ -416,6 +420,7 @@ function switchPage(page) {
   if (page === 'contacts')   loadContacts();
   if (page === 'activities') loadActivities();
   if (page === 'settings')   loadSettings();
+  if (page === 'board')      loadBoard();
 }
 
 // ── Shared loaders ────────────────────────────────────────
@@ -1158,6 +1163,70 @@ function buildPageNumbers(current, total) {
 }
 
 // ══════════════════════════════════════════════════════════
+// MIRO BOARD
+// ══════════════════════════════════════════════════════════
+function updateBoardNavVisibility() {
+  const link = document.getElementById('nav-board-link');
+  if (link) link.classList.toggle('hidden', !currentWorkspace?.miro_url);
+}
+
+function getMiroBoardUrl(embedUrl) {
+  // Convert live-embed URL to regular board URL for opening in a new tab
+  if (!embedUrl) return null;
+  return embedUrl.replace('/live-embed/', '/board/');
+}
+
+function reloadMiroIframe() {
+  const iframe = document.getElementById('miro-iframe');
+  if (iframe) { const src = iframe.src; iframe.src = ''; iframe.src = src; }
+}
+
+function loadBoard() {
+  const el  = document.getElementById('board-content');
+  const url = currentWorkspace?.miro_url;
+  if (!el) return;
+  if (!url) {
+    el.innerHTML = `<div class="board-empty">
+      <p>No Miro board linked yet.</p>
+      <p>Go to <strong>Settings → General → Miro Board</strong> and paste your embed URL.</p>
+    </div>`;
+    return;
+  }
+  const boardUrl = getMiroBoardUrl(url);
+  el.innerHTML = `
+    <div class="board-topbar">
+      <span class="board-topbar-hint">
+        ⚠️ Seeing a login page or 403? Google blocks login inside iframes.
+        Open Miro in a new tab, log in, then click Reload.
+      </span>
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <button class="btn btn-sm" onclick="reloadMiroIframe()">🔄 Reload</button>
+        <a class="btn btn-sm btn-primary" href="${esc(boardUrl)}" target="_blank" rel="noopener">
+          Open in Miro ↗
+        </a>
+      </div>
+    </div>
+    <iframe id="miro-iframe" src="${esc(url)}" class="miro-iframe"
+      allow="fullscreen; clipboard-read; clipboard-write"
+      referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+}
+
+async function saveMiroUrl() {
+  const input = document.getElementById('miro-url-input');
+  const msgEl = document.getElementById('miro-url-msg');
+  const url   = input?.value.trim() || null;
+  const res   = await api.patch('/api/workspace/miro-url', { url });
+  if (res.error) {
+    if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); }
+    return;
+  }
+  currentWorkspace.miro_url = url;
+  updateBoardNavVisibility();
+  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  setTimeout(() => msgEl?.classList.add('hidden'), 2500);
+}
+
+// ══════════════════════════════════════════════════════════
 // ACTIVITIES
 // ══════════════════════════════════════════════════════════
 async function loadActivities() {
@@ -1204,8 +1273,10 @@ async function loadSettings() {
   renderFieldsList();
   renderContactColumnSettings();
   // Populate WA template textarea
-  const waEl = document.getElementById('wa-template-input');
+  const waEl    = document.getElementById('wa-template-input');
   if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? 'Hi {{name}}, ';
+  const miroEl  = document.getElementById('miro-url-input');
+  if (miroEl) miroEl.value = currentWorkspace?.miro_url || '';
   // Load deals settings
   pipelines    = await api.get('/api/pipelines');
   dealFields   = await api.get('/api/deal-fields');

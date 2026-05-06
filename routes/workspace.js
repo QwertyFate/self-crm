@@ -64,6 +64,14 @@ router.patch('/contact-columns', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.patch('/miro-url', async (req, res, next) => {
+  try {
+    const { url } = req.body;
+    await pool.query('UPDATE workspaces SET miro_url=$1 WHERE id=$2', [url || null, req.workspaceId]);
+    res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
 router.patch('/whatsapp-template', async (req, res, next) => {
   try {
     const { template } = req.body;
