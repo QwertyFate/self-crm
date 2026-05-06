@@ -42,7 +42,11 @@ router.get('/:id', async (req, res, next) => {
       WHERE d.id = $1 AND d.workspace_id = $2
     `, [req.params.id, req.workspaceId]);
     if (!deal) return res.status(404).json({ error: 'Not found' });
-    res.json(deal);
+    const { rows: objects } = await pool.query(
+      'SELECT o.id, o.name, o.custom_data FROM deal_objects dobj JOIN objects o ON o.id=dobj.object_id WHERE dobj.deal_id=$1',
+      [req.params.id]
+    );
+    res.json({ ...deal, objects });
   } catch (e) { next(e); }
 });
 
@@ -91,6 +95,39 @@ router.delete('/:id', async (req, res, next) => {
       [req.params.id, req.workspaceId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
+// Link / unlink objects from deal side
+router.get('/:id/objects', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT o.* FROM deal_objects dobj JOIN objects o ON o.id=dobj.object_id WHERE dobj.deal_id=$1',
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (e) { next(e); }
+});
+
+router.post('/:id/objects', async (req, res, next) => {
+  try {
+    const { object_id } = req.body;
+    if (!object_id) return res.status(400).json({ error: 'object_id required' });
+    await pool.query(
+      'INSERT INTO deal_objects (deal_id, object_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+      [req.params.id, object_id]
+    );
+    res.status(201).json({ success: true });
+  } catch (e) { next(e); }
+});
+
+router.delete('/:id/objects/:objectId', async (req, res, next) => {
+  try {
+    await pool.query(
+      'DELETE FROM deal_objects WHERE deal_id=$1 AND object_id=$2',
+      [req.params.id, req.params.objectId]
+    );
     res.json({ success: true });
   } catch (e) { next(e); }
 });
