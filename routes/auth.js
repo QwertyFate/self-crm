@@ -10,10 +10,10 @@ router.get('/me', async (req, res, next) => {
     if (!req.session?.userId) return res.json({ user: null });
 
     const { rows: [user] } = await pool.query(
-      'SELECT id, name, email, role, workspace_id, column_widths FROM users WHERE id = $1',
+      'SELECT id, name, email, role, workspace_id, column_widths, deal_columns FROM users WHERE id = $1',
       [req.session.userId]
     );
-    if (user) user.column_widths = user.column_widths || {};
+    if (user) { user.column_widths = user.column_widths || {}; user.deal_columns = user.deal_columns || []; }
     const { rows: [workspace] } = await pool.query(
       'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields FROM workspaces WHERE id = $1',
       [req.session.workspaceId]
@@ -52,7 +52,7 @@ router.post('/login', async (req, res, next) => {
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
     workspace.contact_columns = workspace.contact_columns || [];
-    res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, column_widths: user.column_widths || {} }, workspace });
+    res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, column_widths: user.column_widths || {}, deal_columns: user.deal_columns || [] }, workspace });
   } catch (e) { next(e); }
 });
 
@@ -214,12 +214,14 @@ router.post('/reset-password', async (req, res, next) => {
 router.patch('/preferences', async (req, res, next) => {
   try {
     if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
-    const { column_widths } = req.body;
+    const { column_widths, deal_columns } = req.body;
     if (column_widths && typeof column_widths === 'object' && !Array.isArray(column_widths)) {
-      await pool.query(
-        'UPDATE users SET column_widths=$1 WHERE id=$2',
-        [JSON.stringify(column_widths), req.session.userId]
-      );
+      await pool.query('UPDATE users SET column_widths=$1 WHERE id=$2',
+        [JSON.stringify(column_widths), req.session.userId]);
+    }
+    if (Array.isArray(deal_columns)) {
+      await pool.query('UPDATE users SET deal_columns=$1 WHERE id=$2',
+        [JSON.stringify(deal_columns), req.session.userId]);
     }
     res.json({ success: true });
   } catch (e) { next(e); }

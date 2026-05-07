@@ -359,6 +359,21 @@
                 <ul id="deal-fields-list" class="settings-list"></ul>
               </div>
 
+              <div class="settings-card">
+                <div class="settings-card-header"><h2>Deal List Columns</h2></div>
+                <p class="settings-hint">Choose which columns appear in list view. Drag to reorder. Title is always first.</p>
+                <div class="settings-row col-cfg-row col-cfg-locked">
+                  <span class="drag-handle" style="opacity:.25">⠿</span>
+                  <span class="row-label">Title</span>
+                  <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
+                </div>
+                <ul id="deal-columns-list" class="settings-list" style="margin-top:6px"></ul>
+                <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
+                  <button id="save-deal-cols-btn" class="btn btn-primary btn-sm" onclick="saveDealColumns()" data-i18n="btn_save">Save</button>
+                  <span id="deal-cols-msg" class="workspace-name-msg hidden"></span>
+                </div>
+              </div>
+
             </div>
           </div>
 
