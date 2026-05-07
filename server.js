@@ -26,6 +26,9 @@ app.use('/api/fields',     require('./routes/fields'));
 app.use('/api/activities', require('./routes/activities'));
 app.use('/api/invites',    require('./routes/invites'));
 app.use('/api/workspace',  require('./routes/workspace'));
+app.use('/api/pipelines',  require('./routes/pipelines'));
+app.use('/api/deals',      require('./routes/deals'));
+app.use('/api/deal-fields',require('./routes/deal-fields'));
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 

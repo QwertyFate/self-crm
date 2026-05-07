@@ -68,6 +68,50 @@ const SCHEMA = `
     updated_at   TIMESTAMPTZ DEFAULT NOW()
   );
 
+  CREATE TABLE IF NOT EXISTS pipelines (
+    id           SERIAL PRIMARY KEY,
+    workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name         TEXT NOT NULL,
+    position     INTEGER NOT NULL DEFAULT 0,
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(workspace_id, name)
+  );
+
+  CREATE TABLE IF NOT EXISTS pipeline_stages (
+    id           SERIAL PRIMARY KEY,
+    workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    pipeline_id  INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+    name         TEXT NOT NULL,
+    color        TEXT NOT NULL DEFAULT '#4f6ef7',
+    position     INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(pipeline_id, name)
+  );
+
+  CREATE TABLE IF NOT EXISTS deal_fields (
+    id           SERIAL PRIMARY KEY,
+    workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name         TEXT NOT NULL,
+    field_key    TEXT NOT NULL,
+    type         TEXT NOT NULL DEFAULT 'text',
+    options      JSONB NOT NULL DEFAULT '[]',
+    position     INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(workspace_id, field_key)
+  );
+
+  CREATE TABLE IF NOT EXISTS deals (
+    id           SERIAL PRIMARY KEY,
+    workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    contact_id   INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+    pipeline_id  INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+    stage_id     INTEGER REFERENCES pipeline_stages(id) ON DELETE SET NULL,
+    title        TEXT NOT NULL,
+    value        NUMERIC,
+    custom_data  JSONB NOT NULL DEFAULT '{}',
+    assigned_to  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ DEFAULT NOW()
+  );
+
   CREATE TABLE IF NOT EXISTS activities (
     id           SERIAL PRIMARY KEY,
     workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -117,7 +161,8 @@ async function seedDefaultStages(workspaceId, client) {
 async function initDb() {
   await pool.query(SCHEMA);
   // Safe migrations for new columns on existing databases
-  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS contact_columns JSONB NOT NULL DEFAULT '[]'`);
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS contact_columns   JSONB NOT NULL DEFAULT '[]'`);
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS deal_kanban_fields JSONB NOT NULL DEFAULT '["contact","value"]'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS column_widths JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS whatsapp_template TEXT NOT NULL DEFAULT 'Hi {{name}}, '`);
   // Allow whatsapp as an activity type
@@ -139,4 +184,26 @@ async function initDb() {
   }
 }
 
-module.exports = { pool, initDb, seedDefaultStages };
+const DEFAULT_PIPELINE_STAGES = [
+  ['New',         '#6b7280', 0],
+  ['Contacted',   '#3b82f6', 1],
+  ['Proposal',    '#f59e0b', 2],
+  ['Negotiation', '#8b5cf6', 3],
+  ['Won',         '#22c55e', 4],
+  ['Lost',        '#ef4444', 5],
+];
+
+async function seedDefaultPipeline(workspaceId, client) {
+  const { rows: [p] } = await client.query(
+    'INSERT INTO pipelines (workspace_id, name, position) VALUES ($1,$2,0) RETURNING id',
+    [workspaceId, 'Sales Pipeline']
+  );
+  for (const [name, color, pos] of DEFAULT_PIPELINE_STAGES) {
+    await client.query(
+      'INSERT INTO pipeline_stages (workspace_id, pipeline_id, name, color, position) VALUES ($1,$2,$3,$4,$5)',
+      [workspaceId, p.id, name, color, pos]
+    );
+  }
+}
+
+module.exports = { pool, initDb, seedDefaultStages, seedDefaultPipeline };
