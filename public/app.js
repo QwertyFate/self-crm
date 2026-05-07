@@ -1937,38 +1937,150 @@ function renderDealFieldInput(f, value = '') {
   return `<input type="${typeMap[f.type]||'text'}" id="${id}" value="${esc(value)}" />`;
 }
 
+// ── Contact Panel (right column of deal modal) ────────────
+function renderContactPanelReadOnly(contact) {
+  const panel = document.getElementById('deal-contact-panel');
+  if (!panel) return;
+
+  const labelHtml = '<div class="deal-col-label">Contact</div>';
+
+  if (!contact) {
+    panel.innerHTML = labelHtml + `<div class="contact-panel-empty">No contact linked.<br>Select one from the dropdown.</div>`;
+    return;
+  }
+
+  const stg = stages.find(s => s.id === contact.stage_id);
+  const rows = [
+    { label: 'Company', value: esc(contact.company || '') },
+    { label: 'Email',   value: contact.email ? `<a href="mailto:${esc(contact.email)}">${esc(contact.email)}</a>` : '' },
+    { label: 'Phone',   value: contact.phone ? `${esc(contact.phone)}${waLink(contact.phone, contact) ? ` <a class="wa-detail-link" href="${waLink(contact.phone,contact)}" target="_blank" rel="noopener">${WA_SVG}</a>` : ''}` : '' },
+    { label: 'Stage',   value: stg ? `<span class="stage-badge"><span class="stage-badge-dot" style="background:${stg.color}"></span>${esc(stg.name)}</span>` : '' },
+    ...fields.map(f => {
+      const v = contact.custom_data?.[f.field_key];
+      return { label: f.name, value: v ? esc(v) : '' };
+    }),
+  ].filter(r => r.value);
+
+  panel.innerHTML = `${labelHtml}
+    <div class="contact-panel-header">
+      <div class="contact-panel-name">${esc(contact.name)}</div>
+      <button class="btn btn-sm btn-ghost" onclick="editContactPanel(${contact.id})">Edit</button>
+    </div>
+    <div class="contact-panel-rows">
+      ${rows.map(r => `<div class="contact-panel-row"><label>${esc(r.label)}</label><span>${r.value}</span></div>`).join('')}
+    </div>`;
+}
+
+async function editContactPanel(contactId) {
+  await Promise.all([ensureStages(), ensureFields()]);
+  const contact = contacts.find(c => c.id === contactId) || await api.get(`/api/contacts/${contactId}`);
+  const panel   = document.getElementById('deal-contact-panel');
+  if (!panel) return;
+
+  const customInputs = fields.map(f => `
+    <div class="form-group">
+      <label>${esc(f.name)}</label>
+      <input type="text" id="cpfield-${f.field_key}" value="${esc(contact.custom_data?.[f.field_key] || '')}" />
+    </div>`).join('');
+
+  panel.innerHTML = `<div class="deal-col-label">Edit Contact</div>
+    <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="cpanel-name" value="${esc(contact.name)}" /></div>
+    <div class="form-group"><label>Company</label><input type="text" id="cpanel-company" value="${esc(contact.company||'')}" /></div>
+    <div class="form-group"><label>Email</label><input type="email" id="cpanel-email" value="${esc(contact.email||'')}" /></div>
+    <div class="form-group"><label>Phone</label><input type="tel" id="cpanel-phone" value="${esc(contact.phone||'')}" /></div>
+    <div class="form-group"><label>Stage</label>
+      <select id="cpanel-stage">
+        <option value="">— None —</option>
+        ${stages.map(s => `<option value="${s.id}"${contact.stage_id===s.id?' selected':''}>${esc(s.name)}</option>`).join('')}
+      </select>
+    </div>
+    ${customInputs}
+    <div class="contact-panel-edit-actions">
+      <button class="btn btn-sm" onclick="cancelContactPanelEdit(${contactId})">Cancel</button>
+      <button class="btn btn-sm btn-primary" onclick="saveContactPanel(${contactId})">Save Contact</button>
+    </div>`;
+}
+
+async function saveContactPanel(contactId) {
+  const nameEl = document.getElementById('cpanel-name');
+  if (!nameEl?.value.trim()) { alert('Name is required.'); return; }
+
+  const custom_data = {};
+  fields.forEach(f => {
+    const el = document.getElementById(`cpfield-${f.field_key}`);
+    if (el) custom_data[f.field_key] = el.value;
+  });
+
+  const payload = {
+    name:        nameEl.value.trim(),
+    company:     document.getElementById('cpanel-company')?.value || '',
+    email:       document.getElementById('cpanel-email')?.value   || '',
+    phone:       document.getElementById('cpanel-phone')?.value   || '',
+    stage_id:    document.getElementById('cpanel-stage')?.value   || null,
+    assigned_to: contacts.find(c => c.id === contactId)?.assigned_to || null,
+    custom_data,
+  };
+
+  const btn = document.querySelector('#deal-contact-panel .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  const res = await api.put(`/api/contacts/${contactId}`, payload);
+  if (res.error) { alert(res.error); if (btn) { btn.disabled = false; btn.textContent = 'Save Contact'; } return; }
+
+  // Update in-memory contact
+  const c = contacts.find(c => c.id === contactId);
+  if (c) {
+    Object.assign(c, payload);
+    const stg = stages.find(s => String(s.id) === String(payload.stage_id));
+    c.stage_name  = stg?.name  || null;
+    c.stage_color = stg?.color || null;
+  }
+
+  renderContactPanelReadOnly(c || { id: contactId, ...payload });
+}
+
+function cancelContactPanelEdit(contactId) {
+  const contact = contacts.find(c => c.id === contactId);
+  renderContactPanelReadOnly(contact || null);
+}
+
+function onDealContactChange() {
+  const contactId = parseInt(document.getElementById('df-contact').value) || null;
+  renderContactPanelReadOnly(contacts.find(c => c.id === contactId) || null);
+}
+
 async function openDealModal(id) {
-  await Promise.all([ensureContacts(), ensureMembers()]);
+  await Promise.all([ensureContacts(), ensureMembers(), ensureStages(), ensureFields()]);
   if (!pipelines.length) pipelines = await api.get('/api/pipelines');
   if (!dealFields.length) dealFields = await api.get('/api/deal-fields');
 
   document.getElementById('deal-form').reset();
-  document.getElementById('deal-id').value    = id || '';
+  document.getElementById('deal-id').value = id || '';
   document.getElementById('deal-modal-title').textContent = id ? 'Edit Deal' : 'Add Deal';
 
-  // Populate pipeline dropdown
+  // Pipeline
   const pipelineSel = document.getElementById('df-pipeline');
   pipelineSel.innerHTML = pipelines.map(p =>
-    `<option value="${p.id}" ${currentPipelineId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`
+    `<option value="${p.id}"${currentPipelineId === p.id ? ' selected' : ''}>${esc(p.name)}</option>`
   ).join('');
-
-  // Populate stages based on selected pipeline
   populateDealStages(pipelineSel.value ? parseInt(pipelineSel.value) : null, null);
 
-  // Populate contact dropdown
+  // Contact
   const contactSel = document.getElementById('df-contact');
   contactSel.innerHTML = `<option value="">— No contact —</option>` +
     contacts.map(c => `<option value="${c.id}">${esc(c.name)}${c.company ? ` (${esc(c.company)})` : ''}</option>`).join('');
 
-  // Populate assignee dropdown
+  // Assignee
   const assigneeSel = document.getElementById('df-assignee');
   assigneeSel.innerHTML = `<option value="">— Unassigned —</option>` +
     members.map(m => `<option value="${m.id}"${m.id === currentUser?.id ? ' selected' : ''}>${esc(m.name)}</option>`).join('');
 
-  // Render custom deal fields (empty values for new deal)
+  // Custom deal fields
   document.getElementById('df-custom-fields').innerHTML = dealFields.map(f =>
     `<div class="form-group"><label>${esc(f.name)}</label>${renderDealFieldInput(f, '')}</div>`
   ).join('');
+
+  let linkedContact = null;
 
   if (id) {
     const d = await api.get(`/api/deals/${id}`);
@@ -1978,13 +2090,14 @@ async function openDealModal(id) {
     populateDealStages(d.pipeline_id, d.stage_id);
     contactSel.value  = d.contact_id  || '';
     assigneeSel.value = d.assigned_to || '';
-    // Fill custom fields
     dealFields.forEach(f => {
       const el = document.getElementById(`dfield-${f.field_key}`);
       if (el) el.value = d.custom_data?.[f.field_key] ?? '';
     });
+    if (d.contact_id) linkedContact = contacts.find(c => c.id === d.contact_id) || null;
   }
 
+  renderContactPanelReadOnly(linkedContact);
   document.getElementById('deal-modal').classList.remove('hidden');
 }
 
