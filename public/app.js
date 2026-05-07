@@ -605,7 +605,7 @@ function renderContactsTable(list) {
   const table = document.getElementById('contacts-table');
   if (!table) return;
   const visibleCols = effectiveContactColumns().filter(c => c.visible);
-  const colKeys     = ['_name', ...visibleCols.map(c => c.key), '_actions'];
+  const colKeys     = ['_name', ...visibleCols.map(c => c.key)];
 
   // Remove existing colgroup + reset layout so the browser auto-sizes for measurement
   const existingCg = table.querySelector('colgroup');
@@ -619,8 +619,7 @@ function renderContactsTable(list) {
   document.getElementById('contacts-thead').innerHTML = `<tr>
     ${colKeys.map(k => {
       const col   = visibleCols.find(c => c.key === k);
-      const label = k === '_name' ? t('col_name') : k === '_actions' ? '' : col?.label() || '';
-      if (k === '_actions') return `<th data-col-key="${k}"></th>`;
+      const label = k === '_name' ? t('col_name') : col?.label() || '';
       const isActive = sortKey === k;
       const icon = isActive
         ? `<span class="sort-icon active">${sortDir === 'asc' ? '↑' : '↓'}</span>`
@@ -657,14 +656,13 @@ function renderContactsTable(list) {
       return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${col.key}','${col.type}')" title="${esc(v)}">${esc(v)||dash}</td>`;
     }).join('');
 
+    const waHref = waLink(c.phone, c);
     return `<tr>
-      <td title="${esc(c.name)}"><strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong></td>
-      ${cells}
-      <td class="row-actions">
-        ${waLink(c.phone, c) ? `<a class="btn btn-sm btn-wa" href="${waLink(c.phone, c)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG}</a>` : ''}
-        <button class="btn btn-sm btn-ghost" onclick="openDetail(${c.id})">${t('btn_view')}</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteContact(${c.id})">${t('btn_delete')}</button>
+      <td class="name-cell" title="${esc(c.name)}">
+        ${waHref ? `<a class="btn-wa-inline" href="${waHref}" target="_blank" rel="noopener" title="WhatsApp ${esc(c.name)}">${WA_SVG}</a>` : ''}
+        <strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong>
       </td>
+      ${cells}
     </tr>`;
   }).join('');
 
@@ -673,7 +671,6 @@ function renderContactsTable(list) {
 
   // Measure natural widths for any column not yet in colWidths (forces reflow)
   let measured = false;
-  if (!colWidths['_actions']) { colWidths['_actions'] = 152; measured = true; }
   document.querySelectorAll('#contacts-thead th').forEach(th => {
     const key = th.dataset.colKey;
     if (key && !colWidths[key]) {
@@ -697,7 +694,6 @@ function renderContactsTable(list) {
   const ths  = document.querySelectorAll('#contacts-thead th');
   const cols = cg.children;
   ths.forEach((th, i) => {
-    if (colKeys[i] === '_actions') return;
     const handle = document.createElement('div');
     handle.className = 'col-resize-handle';
     const colEl = cols[i];
@@ -1683,7 +1679,31 @@ function exportContactsCSV() {
 // ══════════════════════════════════════════════════════════
 // CSV IMPORT
 // ══════════════════════════════════════════════════════════
-function parseCSV(text) {
+// Decode file respecting BOM — handles UTF-16 LE/BE and UTF-8 BOM
+async function readFileText(file) {
+  const buf   = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  if (bytes[0] === 0xFF && bytes[1] === 0xFE)
+    return new TextDecoder('utf-16le').decode(buf).replace(/^﻿/, '');
+  if (bytes[0] === 0xFE && bytes[1] === 0xFF)
+    return new TextDecoder('utf-16be').decode(buf).replace(/^﻿/, '');
+  if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF)
+    return new TextDecoder('utf-8').decode(buf.slice(3));
+  return file.text();
+}
+
+// Detect the delimiter used in the first line
+function detectDelimiter(text) {
+  const first = text.split(/\r?\n/).find(l => l.trim()) || '';
+  const tabs   = (first.match(/\t/g)  || []).length;
+  const commas = (first.match(/,/g)   || []).length;
+  const semis  = (first.match(/;/g)   || []).length;
+  if (tabs > commas && tabs > semis) return '\t';
+  if (semis > commas) return ';';
+  return ',';
+}
+
+function parseCSV(text, delimiter = ',') {
   const result = [];
   for (const line of text.split(/\r?\n/)) {
     if (!line.trim()) continue;
@@ -1694,7 +1714,7 @@ function parseCSV(text) {
       if (ch === '"') {
         if (inQ && line[i+1] === '"') { cur += '"'; i++; }
         else inQ = !inQ;
-      } else if (ch === ',' && !inQ) { row.push(cur); cur = ''; }
+      } else if (ch === delimiter && !inQ) { row.push(cur); cur = ''; }
       else cur += ch;
     }
     row.push(cur);
@@ -1708,13 +1728,18 @@ function toFieldKey(str) {
 }
 
 function autoMapHeader(header) {
-  const h = header.toLowerCase().trim();
-  if (['name','full name','contact name','contact'].includes(h)) return 'name';
-  if (['email','e-mail','email address'].includes(h)) return 'email';
-  if (['phone','mobile','telephone','tel','phone number','phone no'].includes(h)) return 'phone';
-  if (['company','organization','org','account','company name'].includes(h)) return 'company';
-  if (['stage','status','pipeline stage','deal stage'].includes(h)) return 'stage';
-  if (['assignee','owner','assigned to','assigned_to'].includes(h)) return 'assignee';
+  const h = header.toLowerCase().trim().replace(/\s+/g, ' ');
+  if (['name','full name','contact name','contact',
+       'vollständiger_name','vollständiger name','full_name','vor- und nachname'].includes(h)) return 'name';
+  if (['email','e-mail','email address','e-mail-adresse','emailadresse',
+       'e_mail','email_address'].includes(h)) return 'email';
+  if (['phone','mobile','telephone','tel','phone number','phone no',
+       'telefonnummer','telefon','handy','mobilnummer','mobile number',
+       'phone_number','telefonnr'].includes(h)) return 'phone';
+  if (['company','organization','org','account','company name',
+       'firma','unternehmen','firmenname'].includes(h)) return 'company';
+  if (['stage','status','pipeline stage','deal stage','phase'].includes(h)) return 'stage';
+  if (['assignee','owner','assigned to','assigned_to','zuständig'].includes(h)) return 'assignee';
   const cf = fields.find(f => f.name.toLowerCase() === h || f.field_key === toFieldKey(h));
   if (cf) return `custom:${cf.field_key}`;
   return 'skip';
@@ -1746,11 +1771,9 @@ function handleImportFile(e) {
 }
 
 async function processImportFile(file) {
-  if (!file.name.endsWith('.csv') && file.type !== 'text/csv') {
-    alert('Please upload a .csv file.'); return;
-  }
-  const text = await file.text();
-  const allRows = parseCSV(text);
+  const text      = await readFileText(file);
+  const delimiter = detectDelimiter(text);
+  const allRows   = parseCSV(text, delimiter);
   if (allRows.length < 2) { alert('CSV must have a header row and at least one data row.'); return; }
 
   await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
@@ -1861,7 +1884,7 @@ async function runImport() {
       if (!val || m.mapTo === 'skip') return;
       if      (m.mapTo === 'name')    c.name    = val;
       else if (m.mapTo === 'email')   c.email   = val;
-      else if (m.mapTo === 'phone')   c.phone   = val;
+      else if (m.mapTo === 'phone')   c.phone   = val.replace(/^p:/i, '').trim();
       else if (m.mapTo === 'company') c.company = val;
       else if (m.mapTo === 'stage') {
         const s = stages.find(s => s.name.toLowerCase() === val.toLowerCase());
