@@ -195,23 +195,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .view-toggle-btn + .view-toggle-btn { border-left: 1px solid var(--border); }
 
 /* ══ DEAL MODAL (two-column) ═════════════════════════════ */
+/* Higher specificity than .modal to beat its max-width:480px */
+#deal-modal .modal-deal,
 .modal-deal {
-  max-width: 900px;
-  max-height: 90vh;
+  width: min(92vw, 1500px) !important;
+  max-width: none !important;
+  max-height: 88vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 .deal-modal-columns {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  flex: 1;
-  overflow: hidden;
-  border-top: 1px solid var(--border);
+  display: grid; grid-template-columns: 2fr 3fr;
+  flex: 1; overflow: hidden; border-top: 1px solid var(--border);
 }
+/* Left column — deal fields, scrollable */
 .deal-modal-col {
-  overflow-y: auto;
-  padding: 18px 22px;
+  overflow-y: auto; padding: 18px 22px;
 }
 .deal-modal-col + .deal-modal-col { border-left: 1px solid var(--border); }
 .deal-col-label {
@@ -219,10 +219,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   letter-spacing: .6px; color: var(--muted); margin-bottom: 12px;
 }
 .deal-modal-footer {
-  border-top: 1px solid var(--border);
-  background: var(--card-bg);
+  border-top: 1px solid var(--border); background: var(--card-bg);
   position: sticky; bottom: 0;
 }
+
+/* Right column — contact panel, flex so note form sticks to bottom */
+.deal-col-contact {
+  overflow: hidden !important; padding: 0 !important;
+  display: flex; flex-direction: column;
+}
+.contact-panel-top { padding: 18px 22px 0; flex-shrink: 0; }
+.contact-panel-scroll { flex: 1; overflow-y: auto; padding: 0 22px 12px; }
 
 /* Contact panel — read-only */
 .contact-panel-header {
@@ -230,7 +237,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   gap: 10px; margin-bottom: 14px;
 }
 .contact-panel-name { font-size: 15px; font-weight: 700; flex: 1; word-break: break-word; }
-.contact-panel-rows { display: flex; flex-direction: column; }
+.contact-panel-rows { display: flex; flex-direction: column; margin-bottom: 18px; }
 .contact-panel-row {
   display: flex; flex-direction: column; gap: 2px;
   padding: 8px 0; border-bottom: 1px solid var(--border);
@@ -238,13 +245,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .contact-panel-row:last-child { border-bottom: none; }
 .contact-panel-row label { font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 600; }
 .contact-panel-row span { font-size: 13px; word-break: break-word; }
-.contact-panel-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 30px 0; line-height: 1.6; }
+.contact-panel-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 30px 0 0; line-height: 1.6; }
+.contact-panel-section-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--muted); margin-bottom: 8px;
+}
+
+/* Inline note form — pinned to bottom of contact panel */
+.panel-note-form {
+  flex-shrink: 0; border-top: 1px solid var(--border);
+  padding: 10px 22px 14px; background: var(--card-bg);
+  display: flex; gap: 6px; align-items: center;
+}
+.panel-note-form select {
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 12px; background: var(--bg); color: var(--text); flex-shrink: 0;
+}
+.panel-note-form input {
+  flex: 1; padding: 5px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius); font-size: 12px;
+  background: var(--bg); color: var(--text);
+}
+.panel-note-form input:focus { outline: none; border-color: var(--primary); }
 
 /* Contact panel — edit mode */
 .contact-panel-edit-actions {
   display: flex; gap: 8px; justify-content: flex-end;
-  padding-top: 14px; margin-top: 6px;
-  border-top: 1px solid var(--border);
+  padding-top: 14px; margin-top: 6px; border-top: 1px solid var(--border);
 }
 
 /* ══ DEALS ═══════════════════════════════════════════════ */
