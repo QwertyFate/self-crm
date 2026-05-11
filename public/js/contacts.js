@@ -1,10 +1,23 @@
 // ── CONTACTS ──────────────────────────────────────────────
 async function loadContacts() {
   await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
-  contacts = await api.get('/api/contacts');
+  contacts = await api.get(`/api/contacts?contact_type=${currentContactType}`);
   currentPage = 1;
+  updateContactsPageHeader();
   renderFilterChips();
   filterContacts();
+}
+
+function updateContactsPageHeader() {
+  const isSupplier = currentContactType === 'supplier';
+  const name = isSupplier ? (currentWorkspace?.supplier_name || 'Suppliers') : 'Contacts';
+  const singular = name.replace(/s$/i, '');
+  const h1  = document.querySelector('#page-contacts .page-header h1');
+  const btn  = document.querySelector('#page-contacts .page-header .btn-primary');
+  const search = document.getElementById('contact-search');
+  if (h1)  h1.textContent = name;
+  if (btn) btn.textContent = `+ Add ${singular}`;
+  if (search) search.placeholder = `Search ${name.toLowerCase()}…`;
 }
 
 // ── Column widths ─────────────────────────────────────────

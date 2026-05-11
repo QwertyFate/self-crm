@@ -1,3 +1,23 @@
+// ── SUPPLIERS NAV ─────────────────────────────────────────
+function updateSuppliersNav() {
+  const name  = currentWorkspace?.supplier_name || 'Suppliers';
+  const label = document.getElementById('nav-suppliers-label');
+  if (label) label.textContent = name;
+}
+
+async function saveSupplierName() {
+  const input = document.getElementById('supplier-name-input'), msgEl = document.getElementById('supplier-name-msg');
+  const name = input?.value.trim(); if (!name) return;
+  const res = await api.patch('/api/workspace/supplier-name', { name });
+  if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
+  currentWorkspace.supplier_name = res.name;
+  updateSuppliersNav();
+  // Refresh header if currently on suppliers view
+  if (currentContactType === 'supplier') updateContactsPageHeader();
+  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  setTimeout(() => msgEl?.classList.add('hidden'), 2500);
+}
+
 // ── OBJECTS ───────────────────────────────────────────────
 function updateObjectsNav() {
   const name  = currentWorkspace?.object_name || 'Listings';

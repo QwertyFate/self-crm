@@ -2,8 +2,12 @@
 async function openContactModal(id) {
   await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
   document.getElementById('contact-form').reset();
-  document.getElementById('contact-id').value = id || '';
-  document.getElementById('contact-modal-title').textContent = id ? t('edit_contact_title') : t('add_contact_title');
+  document.getElementById('contact-id').value   = id || '';
+  document.getElementById('cf-type').value       = currentContactType;
+  const typeName = currentContactType === 'supplier'
+    ? (currentWorkspace?.supplier_name || 'Supplier').replace(/s$/i, '')
+    : 'Contact';
+  document.getElementById('contact-modal-title').textContent = id ? `Edit ${typeName}` : `Add ${typeName}`;
 
   const stageEl = document.getElementById('cf-stage');
   stageEl.innerHTML = '<option value="">— None —</option>' +
@@ -45,12 +49,13 @@ async function saveContact(e) {
   const custom_data = {};
   fields.forEach(f => { const el = document.getElementById(`cfield-${f.field_key}`); if (el) custom_data[f.field_key] = el.value; });
   const payload = {
-    name:        document.getElementById('cf-name').value,
-    company:     document.getElementById('cf-company').value,
-    email:       document.getElementById('cf-email').value,
-    phone:       document.getElementById('cf-phone').value,
-    stage_id:    document.getElementById('cf-stage').value    || null,
-    assigned_to: document.getElementById('cf-assignee').value || null,
+    name:         document.getElementById('cf-name').value,
+    company:      document.getElementById('cf-company').value,
+    email:        document.getElementById('cf-email').value,
+    phone:        document.getElementById('cf-phone').value,
+    stage_id:     document.getElementById('cf-stage').value    || null,
+    assigned_to:  document.getElementById('cf-assignee').value || null,
+    contact_type: document.getElementById('cf-type').value || currentContactType,
     custom_data,
   };
   if (id) await api.put(`/api/contacts/${id}`, payload); else await api.post('/api/contacts', payload);
@@ -323,8 +328,12 @@ async function openDealModal(id) {
   populateDealStages(pipelineSel.value ? parseInt(pipelineSel.value) : null, null);
 
   const contactSel = document.getElementById('df-contact');
+  const allContacts  = await api.get('/api/contacts?contact_type=contact');
+  const allSuppliers = await api.get('/api/contacts?contact_type=supplier');
+  const supplierLabel = currentWorkspace?.supplier_name || 'Suppliers';
   contactSel.innerHTML = `<option value="">— No contact —</option>` +
-    contacts.map(c => `<option value="${c.id}">${esc(c.name)}${c.company ? ` (${esc(c.company)})` : ''}</option>`).join('');
+    (allContacts.length  ? `<optgroup label="Contacts">${allContacts.map(c  => `<option value="${c.id}">${esc(c.name)}${c.company ? ` (${esc(c.company)})` : ''}</option>`).join('')}</optgroup>` : '') +
+    (allSuppliers.length ? `<optgroup label="${esc(supplierLabel)}">${allSuppliers.map(c => `<option value="${c.id}">${esc(c.name)}${c.company ? ` (${esc(c.company)})` : ''}</option>`).join('')}</optgroup>` : '');
 
   const assigneeSel = document.getElementById('df-assignee');
   assigneeSel.innerHTML = `<option value="">— Unassigned —</option>` +

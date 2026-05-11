@@ -7,15 +7,20 @@ router.use(requireAuth);
 
 router.get('/', async (req, res, next) => {
   try {
+    const { contact_id, contact_type } = req.query;
+    const params = [req.workspaceId];
+    let filter = '';
+    if (contact_type) { params.push(contact_type); filter += ` AND c.contact_type = $${params.length}`; }
+    if (contact_id)   { params.push(contact_id);   filter += ` AND c.id = $${params.length}`; }
     const { rows } = await pool.query(`
       SELECT c.*, s.name AS stage_name, s.color AS stage_color,
              u.name AS assigned_to_name, u.email AS assigned_to_email
       FROM contacts c
       LEFT JOIN stages s ON s.id = c.stage_id
       LEFT JOIN users  u ON u.id = c.assigned_to
-      WHERE c.workspace_id = $1
+      WHERE c.workspace_id = $1 ${filter}
       ORDER BY c.created_at DESC
-    `, [req.workspaceId]);
+    `, params);
     res.json(rows);
   } catch (e) { next(e); }
 });
@@ -90,12 +95,13 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { name, email, phone, company, stage_id, assigned_to, custom_data } = req.body;
+    const { name, email, phone, company, stage_id, assigned_to, custom_data, contact_type } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
     const assignee = assigned_to ? Number(assigned_to) : req.userId;
+    const type = contact_type || 'contact';
     const { rows: [row] } = await pool.query(
-      'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-      [req.workspaceId, name, email||null, phone||null, company||null, stage_id||null, assignee, JSON.stringify(custom_data||{})]
+      'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data, contact_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
+      [req.workspaceId, name, email||null, phone||null, company||null, stage_id||null, assignee, JSON.stringify(custom_data||{}), type]
     );
     res.status(201).json({ id: row.id });
   } catch (e) { next(e); }
@@ -103,11 +109,11 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, email, phone, company, stage_id, assigned_to, custom_data } = req.body;
+    const { name, email, phone, company, stage_id, assigned_to, custom_data, contact_type } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
     const result = await pool.query(
-      'UPDATE contacts SET name=$1, email=$2, phone=$3, company=$4, stage_id=$5, assigned_to=$6, custom_data=$7, updated_at=NOW() WHERE id=$8 AND workspace_id=$9',
-      [name, email||null, phone||null, company||null, stage_id||null, assigned_to||null, JSON.stringify(custom_data||{}), req.params.id, req.workspaceId]
+      'UPDATE contacts SET name=$1, email=$2, phone=$3, company=$4, stage_id=$5, assigned_to=$6, custom_data=$7, contact_type=COALESCE($8,contact_type), updated_at=NOW() WHERE id=$9 AND workspace_id=$10',
+      [name, email||null, phone||null, company||null, stage_id||null, assigned_to||null, JSON.stringify(custom_data||{}), contact_type||null, req.params.id, req.workspaceId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });

@@ -206,6 +206,7 @@
       <ul class="sidebar-nav">
         <li><a href="#" data-page="deals" class="active">🤝 <span data-i18n="nav_deals">Deals</span></a></li>
         <li><a href="#" data-page="contacts">👥 <span data-i18n="nav_contacts">Contacts</span></a></li>
+        <li><a href="#" data-page="suppliers" id="nav-suppliers-link">🏢 <span id="nav-suppliers-label">Suppliers</span></a></li>
         <li><a href="#" data-page="activities">📋 <span data-i18n="nav_activities">Activities</span></a></li>
         <li><a href="#" data-page="objects" id="nav-objects-link">📦 <span id="nav-objects-label">Listings</span></a></li>
         <li><a href="#" data-page="board" id="nav-board-link">🗂 <span data-i18n="nav_board">Board</span></a></li>
@@ -351,6 +352,16 @@
                 <div id="workspace-name-msg" class="workspace-name-msg hidden"></div>
               </div>
 
+              <div class="settings-card hidden" id="supplier-name-card">
+                <div class="settings-card-header"><h2>Supplier List Name</h2></div>
+                <p class="settings-hint">What to call the second contact list in the sidebar (e.g. Suppliers, Partners, Team).</p>
+                <div class="workspace-name-row">
+                  <input type="text" id="supplier-name-input" class="workspace-name-input" placeholder="Suppliers" />
+                  <button class="btn btn-primary btn-sm" onclick="saveSupplierName()">Save</button>
+                </div>
+                <div id="supplier-name-msg" class="workspace-name-msg hidden"></div>
+              </div>
+
               <div class="settings-card">
                 <div class="settings-card-header">
                   <h2 data-i18n="set_wa_template">WhatsApp Message Template</h2>
@@ -450,6 +461,7 @@
                 </div>
                 <div id="object-name-msg" class="workspace-name-msg hidden"></div>
               </div>
+
 
               <div class="settings-card">
                 <div class="settings-card-header">
@@ -556,6 +568,7 @@
       </div>
       <form id="contact-form" onsubmit="saveContact(event)">
         <input type="hidden" id="contact-id" />
+        <input type="hidden" id="cf-type" value="contact" />
         <div class="form-group"><label><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="cf-name" required /></div>
         <div class="form-group"><label data-i18n="lbl_company">Company</label><input type="text" id="cf-company" /></div>
         <div class="form-group"><label data-i18n="lbl_email">Email</label><input type="email" id="cf-email" /></div>

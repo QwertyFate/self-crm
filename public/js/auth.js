@@ -54,6 +54,7 @@ function showApp() {
   loadColWidths();
   updateBoardNavVisibility();
   updateObjectsNav();
+  updateSuppliersNav();
   loadDeals();
 }
 
@@ -190,9 +191,12 @@ function switchPage(page) {
   document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelector(`.sidebar-nav a[data-page="${page}"]`)?.classList.add('active');
-  document.getElementById(`page-${page}`).classList.add('active');
+  // Suppliers reuses the contacts page element — no separate page-suppliers div
+  const pageElId = page === 'suppliers' ? 'page-contacts' : `page-${page}`;
+  document.getElementById(pageElId)?.classList.add('active');
   if (page === 'deals')      loadDeals();
-  if (page === 'contacts')   loadContacts();
+  if (page === 'contacts')   { currentContactType = 'contact'; loadContacts(); }
+  if (page === 'suppliers')  { currentContactType = 'supplier'; loadContacts(); }
   if (page === 'activities') loadActivities();
   if (page === 'settings')   loadSettings();
   if (page === 'objects')    loadObjects();
@@ -203,5 +207,5 @@ function switchPage(page) {
 function invalidate() { contacts = []; stages = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }
 async function ensureStages()   { if (!stages.length)   stages   = await api.get('/api/stages'); }
 async function ensureFields()   { if (!fields.length)   fields   = await api.get('/api/fields'); }
-async function ensureContacts() { if (!contacts.length) contacts = await api.get('/api/contacts'); }
+async function ensureContacts() { if (!contacts.length) contacts = await api.get('/api/contacts'); } // loads current type only; deal modal fetches both types directly
 async function ensureMembers()  { if (!members.length)  members  = await api.get('/api/workspace/members'); }
