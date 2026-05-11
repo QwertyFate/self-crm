@@ -15,10 +15,12 @@ router.get('/', async (req, res, next) => {
     const { rows } = await pool.query(`
       SELECT d.*,
              c.name  AS contact_name,  c.email AS contact_email, c.phone AS contact_phone,
+             s.name  AS supplier_name_val,
              ps.name AS stage_name,    ps.color AS stage_color,
              u.name  AS assigned_to_name
       FROM deals d
       LEFT JOIN contacts       c  ON c.id  = d.contact_id
+      LEFT JOIN contacts       s  ON s.id  = d.supplier_id
       LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
       LEFT JOIN users           u  ON u.id  = d.assigned_to
       WHERE d.workspace_id = $1 ${filter}
@@ -33,10 +35,12 @@ router.get('/:id', async (req, res, next) => {
     const { rows: [deal] } = await pool.query(`
       SELECT d.*,
              c.name  AS contact_name,  c.email AS contact_email, c.phone AS contact_phone,
+             s.name  AS supplier_name_val,
              ps.name AS stage_name,    ps.color AS stage_color,
              u.name  AS assigned_to_name
       FROM deals d
       LEFT JOIN contacts       c  ON c.id  = d.contact_id
+      LEFT JOIN contacts       s  ON s.id  = d.supplier_id
       LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
       LEFT JOIN users           u  ON u.id  = d.assigned_to
       WHERE d.id = $1 AND d.workspace_id = $2
@@ -52,13 +56,13 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { contact_id, pipeline_id, stage_id, title, value, assigned_to, custom_data } = req.body;
+    const { contact_id, supplier_id, pipeline_id, stage_id, title, value, assigned_to, custom_data } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
     if (!pipeline_id)   return res.status(400).json({ error: 'Pipeline required' });
     const assignee = assigned_to ? Number(assigned_to) : req.userId;
     const { rows: [row] } = await pool.query(
-      'INSERT INTO deals (workspace_id,contact_id,pipeline_id,stage_id,title,value,assigned_to,custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-      [req.workspaceId, contact_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assignee, JSON.stringify(custom_data||{})]
+      'INSERT INTO deals (workspace_id,contact_id,supplier_id,pipeline_id,stage_id,title,value,assigned_to,custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
+      [req.workspaceId, contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assignee, JSON.stringify(custom_data||{})]
     );
     res.status(201).json({ id: row.id });
   } catch (e) { next(e); }
@@ -66,11 +70,11 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const { contact_id, pipeline_id, stage_id, title, value, assigned_to, custom_data } = req.body;
+    const { contact_id, supplier_id, pipeline_id, stage_id, title, value, assigned_to, custom_data } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
     const result = await pool.query(
-      'UPDATE deals SET contact_id=$1,pipeline_id=$2,stage_id=$3,title=$4,value=$5,assigned_to=$6,custom_data=$7,updated_at=NOW() WHERE id=$8 AND workspace_id=$9',
-      [contact_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assigned_to||null, JSON.stringify(custom_data||{}), req.params.id, req.workspaceId]
+      'UPDATE deals SET contact_id=$1,supplier_id=$2,pipeline_id=$3,stage_id=$4,title=$5,value=$6,assigned_to=$7,custom_data=$8,updated_at=NOW() WHERE id=$9 AND workspace_id=$10',
+      [contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assigned_to||null, JSON.stringify(custom_data||{}), req.params.id, req.workspaceId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });

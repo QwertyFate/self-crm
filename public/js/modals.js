@@ -328,13 +328,19 @@ async function openDealModal(id) {
   ).join('');
   populateDealStages(pipelineSel.value ? parseInt(pipelineSel.value) : null, null);
 
-  const contactSel = document.getElementById('df-contact');
-  const allContacts  = await api.get('/api/contacts?contact_type=contact');
-  const allSuppliers = await api.get('/api/contacts?contact_type=supplier');
+  const contactSel  = document.getElementById('df-contact');
+  const supplierSel = document.getElementById('df-supplier');
+  const [allContacts, allSuppliers] = await Promise.all([
+    api.get('/api/contacts?contact_type=contact'),
+    api.get('/api/contacts?contact_type=supplier'),
+  ]);
   const supplierLabel = currentWorkspace?.supplier_name || 'Suppliers';
+  const supLabelEl = document.getElementById('df-supplier-label');
+  if (supLabelEl) supLabelEl.textContent = supplierLabel;
   contactSel.innerHTML = `<option value="">— No contact —</option>` +
-    (allContacts.length  ? `<optgroup label="Contacts">${allContacts.map(c  => `<option value="${c.id}">${esc(c.name)}${c.company ? ` (${esc(c.company)})` : ''}</option>`).join('')}</optgroup>` : '') +
-    (allSuppliers.length ? `<optgroup label="${esc(supplierLabel)}">${allSuppliers.map(c => `<option value="${c.id}">${esc(c.name)}${c.company ? ` (${esc(c.company)})` : ''}</option>`).join('')}</optgroup>` : '');
+    allContacts.map(c => `<option value="${c.id}">${esc(c.name)}${c.company ? ` (${esc(c.company)})` : ''}</option>`).join('');
+  supplierSel.innerHTML = `<option value="">— No ${esc(supplierLabel.replace(/s$/i,''))} —</option>` +
+    allSuppliers.map(c => `<option value="${c.id}">${esc(c.name)}${c.company ? ` (${esc(c.company)})` : ''}</option>`).join('');
 
   const assigneeSel = document.getElementById('df-assignee');
   assigneeSel.innerHTML = `<option value="">— Unassigned —</option>` +
@@ -353,9 +359,10 @@ async function openDealModal(id) {
     pipelineSel.value = d.pipeline_id || '';
     populateDealStages(d.pipeline_id, d.stage_id);
     contactSel.value  = d.contact_id  || '';
+    supplierSel.value = d.supplier_id || '';
     assigneeSel.value = d.assigned_to || '';
     dealFields.forEach(f => { const el = document.getElementById(`dfield-${f.field_key}`); if (el) el.value = d.custom_data?.[f.field_key] ?? ''; });
-    if (d.contact_id) linkedContact = contacts.find(c => c.id === d.contact_id) || null;
+    if (d.contact_id) linkedContact = allContacts.find(c => c.id === d.contact_id) || null;
     linkedObjects = d.objects || [];
   }
 
@@ -445,6 +452,7 @@ async function saveDeal(e) {
   const payload = {
     title:       document.getElementById('df-title').value,
     contact_id:  document.getElementById('df-contact').value  || null,
+    supplier_id: document.getElementById('df-supplier').value || null,
     pipeline_id: parseInt(document.getElementById('df-pipeline').value),
     stage_id:    document.getElementById('df-stage').value    || null,
     value:       document.getElementById('df-value').value    || null,

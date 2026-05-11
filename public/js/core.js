@@ -320,3 +320,12 @@ document.addEventListener('submit', e => {
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.add('hidden'); });
 });
+
+// ── Global search-dropdown closer ────────────────────────
+// Single persistent handler — closes any open .deal-search-dropdown
+// when the user clicks outside the search wrap or dropdown itself.
+document.addEventListener('mousedown', e => {
+  if (!e.target.closest('.deal-search-wrap') && !e.target.closest('.deal-search-dropdown')) {
+    document.querySelectorAll('.deal-search-dropdown').forEach(dd => dd.classList.add('hidden'));
+  }
+});

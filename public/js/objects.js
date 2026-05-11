@@ -206,19 +206,41 @@ async function deleteObject(id) {
 }
 
 async function openObjectDetail(id) {
-  const obj = await api.get(`/api/objects/${id}`);
+  const [obj, allContacts, allSuppliers] = await Promise.all([
+    api.get(`/api/objects/${id}`),
+    api.get('/api/contacts?contact_type=contact'),
+    api.get('/api/contacts?contact_type=supplier'),
+  ]);
   if (!objectFields.length) objectFields = await api.get('/api/object-fields');
   if (!deals.length) deals = await api.get('/api/deals');
 
   document.getElementById('object-detail-title').textContent = obj.name;
+
+  const supplierLabel = currentWorkspace?.supplier_name || 'Suppliers';
 
   const fieldHtml = objectFields.map(f => {
     const v = obj.custom_data?.[f.field_key];
     return v ? `<div class="detail-item"><label>${esc(f.name)}</label><span>${esc(v)}</span></div>` : '';
   }).join('');
 
-  const linkedDealIds = new Set((obj.deals || []).map(d => d.id));
+  // Linked contacts/suppliers
+  const linkedContactIds = new Set((obj.contacts || []).map(c => c.id));
+  const contactRows = (obj.contacts || []).map(c => `
+    <div class="contact-deal-row" style="cursor:pointer">
+      <div style="flex:1">
+        <div class="contact-deal-title">${esc(c.name)}${c.company ? ` <span style="font-size:11px;color:var(--muted)">${esc(c.company)}</span>` : ''}</div>
+        <div class="contact-deal-meta">
+          <span style="font-size:11px;color:var(--muted)">${c.contact_type === 'supplier' ? esc(supplierLabel.replace(/s$/i,'')) : 'Contact'}</span>
+          ${c.email ? `<span style="font-size:11px;color:var(--muted)">${esc(c.email)}</span>` : ''}
+        </div>
+      </div>
+      <button class="btn btn-sm btn-danger btn-icon" onclick="unlinkContactFromObject(${id},${c.id})">✕</button>
+    </div>`).join('') || '<p style="color:var(--muted);font-size:12px;padding:4px 0">No contacts or suppliers linked.</p>';
 
+  const availablePeople = [...allContacts, ...allSuppliers].filter(c => !linkedContactIds.has(c.id));
+
+  // Linked deals
+  const linkedDealIds = new Set((obj.deals || []).map(d => d.id));
   const dealRows = (obj.deals || []).map(d => `
     <div class="contact-deal-row" style="cursor:pointer" onclick="navigateToDeal(${d.id})">
       <div class="contact-deal-title">${esc(d.title)}</div>
@@ -231,6 +253,20 @@ async function openObjectDetail(id) {
 
   document.getElementById('object-detail-body').innerHTML = `
     <div class="detail-section"><div class="detail-grid">${fieldHtml}</div></div>
+
+    <div class="detail-section">
+      <div class="detail-section-header"><h3>Contacts & ${esc(supplierLabel)}</h3></div>
+      <div class="contact-deals-list" id="obj-detail-contact-rows">${contactRows}</div>
+      <div class="object-panel-add" style="margin-top:10px;align-items:flex-start">
+        <div class="deal-search-wrap">
+          <input type="text" id="obj-contact-search" placeholder="Search contacts or ${esc(supplierLabel.toLowerCase())}…"
+            autocomplete="off" oninput="filterObjectContactSearch(${id})" onfocus="filterObjectContactSearch(${id})" />
+          <div class="deal-search-dropdown hidden" id="obj-contact-dropdown"></div>
+        </div>
+        <button class="btn btn-sm btn-primary" onclick="linkContactToObject(${id})" style="flex-shrink:0">Link</button>
+      </div>
+    </div>
+
     <div class="detail-section">
       <div class="detail-section-header"><h3>Deals</h3></div>
       <div class="contact-deals-list" id="obj-detail-deal-rows">${dealRows}</div>
@@ -243,41 +279,101 @@ async function openObjectDetail(id) {
         <button class="btn btn-sm btn-primary" onclick="linkDealToObject(${id})" style="flex-shrink:0">Link</button>
       </div>
     </div>
+
     <div class="detail-actions">
       <button class="btn btn-danger btn-sm" onclick="deleteObject(${id});closeModal('object-detail-modal')">Delete</button>
       <button class="btn btn-sm" onclick="closeModal('object-detail-modal');openObjectModal(${id})">Edit</button>
     </div>`;
 
-  const input = document.getElementById('obj-deal-search');
-  input._availableDeals = deals.filter(d => !linkedDealIds.has(d.id));
-  input._selectedDealId = null;
+  // Wire up contact search
+  const contactInput = document.getElementById('obj-contact-search');
+  contactInput._availablePeople = availablePeople;
+  contactInput._selectedContactId = null;
 
-  document.addEventListener('mousedown', function closeDD(e) {
-    if (!e.target.closest('#obj-deal-search') && !e.target.closest('#obj-deal-dropdown')) {
-      document.getElementById('obj-deal-dropdown')?.classList.add('hidden');
-      document.removeEventListener('mousedown', closeDD);
-    }
-  });
+  // Wire up deal search
+  const dealInput = document.getElementById('obj-deal-search');
+  dealInput._availableDeals = deals.filter(d => !linkedDealIds.has(d.id));
+  dealInput._selectedDealId = null;
+
+  // Close dropdowns if modal scrolls (fixed dropdowns would drift otherwise)
+  document.querySelector('#object-detail-modal')?.addEventListener('scroll', () => {
+    document.querySelectorAll('.deal-search-dropdown').forEach(dd => dd.classList.add('hidden'));
+  }, { passive: true });
 
   document.getElementById('object-detail-modal').classList.remove('hidden');
 }
 
+// ── Dropdown positioning helper (bypasses modal overflow clipping) ──
+function positionDropdown(input, dropdown) {
+  const rect = input.getBoundingClientRect();
+  dropdown.style.top   = `${rect.bottom + 2}px`;
+  dropdown.style.left  = `${rect.left}px`;
+  dropdown.style.width = `${rect.width}px`;
+}
+
+function filterObjectContactSearch(objectId) {
+  // Close deal dropdown first — only one open at a time
+  document.getElementById('obj-deal-dropdown')?.classList.add('hidden');
+
+  const input = document.getElementById('obj-contact-search'), dropdown = document.getElementById('obj-contact-dropdown');
+  if (!input || !dropdown) return;
+  positionDropdown(input, dropdown);
+
+  const q = input.value.toLowerCase().trim(), available = input._availablePeople || [];
+  const results = q
+    ? available.filter(c => c.name.toLowerCase().includes(q) || (c.company||'').toLowerCase().includes(q) || (c.email||'').toLowerCase().includes(q)).slice(0, 8)
+    : available.slice(0, 5);
+  const supplierLabel = currentWorkspace?.supplier_name || 'Suppliers';
+  dropdown.innerHTML = results.length
+    ? results.map(c => `
+        <div class="deal-search-item" onclick="selectObjectContactItem(${c.id}, ${objectId})">
+          <div class="dsi-title">${esc(c.name)}${c.company ? ` · ${esc(c.company)}` : ''}</div>
+          <div class="dsi-meta">${c.contact_type === 'supplier' ? esc(supplierLabel.replace(/s$/i,'')) : 'Contact'}${c.email ? ` · ${esc(c.email)}` : ''}</div>
+        </div>`).join('')
+    : `<div class="deal-search-item dsi-empty">${q ? 'No matches' : 'No contacts available to link'}</div>`;
+  dropdown.classList.remove('hidden');
+}
+
+function selectObjectContactItem(contactId, objectId) {
+  const input = document.getElementById('obj-contact-search'), dropdown = document.getElementById('obj-contact-dropdown');
+  const person = (input?._availablePeople || []).find(c => c.id === contactId);
+  if (!person || !input) return;
+  input.value = person.name + (person.company ? ` · ${person.company}` : '');
+  input._selectedContactId = contactId;
+  dropdown?.classList.add('hidden');
+}
+
+async function linkContactToObject(objectId) {
+  const input = document.getElementById('obj-contact-search'), contactId = input?._selectedContactId;
+  if (!contactId) return;
+  await api.post(`/api/objects/${objectId}/contacts`, { contact_id: contactId });
+  await openObjectDetail(objectId);
+}
+
+async function unlinkContactFromObject(objectId, contactId) {
+  await api.del(`/api/objects/${objectId}/contacts/${contactId}`);
+  await openObjectDetail(objectId);
+}
+
 function filterDealSearch(objectId) {
+  // Close contact dropdown first — only one open at a time
+  document.getElementById('obj-contact-dropdown')?.classList.add('hidden');
+
   const input = document.getElementById('obj-deal-search'), dropdown = document.getElementById('obj-deal-dropdown');
   if (!input || !dropdown) return;
+  positionDropdown(input, dropdown);
+
   const q = input.value.toLowerCase().trim(), available = input._availableDeals || [];
   const results = q
     ? available.filter(d => d.title.toLowerCase().includes(q) || (d.contact_name || '').toLowerCase().includes(q)).slice(0, 8)
     : available.slice(0, 5);
-  if (!results.length) {
-    dropdown.innerHTML = `<div class="deal-search-item dsi-empty">${q ? 'No matching deals' : 'No deals available to link'}</div>`;
-    dropdown.classList.remove('hidden'); return;
-  }
-  dropdown.innerHTML = results.map(d => `
-    <div class="deal-search-item" data-id="${d.id}" onclick="selectDealSearchItem(${d.id}, ${objectId})">
-      <div class="dsi-title">${esc(d.title)}</div>
-      <div class="dsi-meta">${d.contact_name ? esc(d.contact_name) + (d.stage_name ? ' · ' : '') : ''}${d.stage_name ? esc(d.stage_name) : ''}</div>
-    </div>`).join('');
+  dropdown.innerHTML = results.length
+    ? results.map(d => `
+        <div class="deal-search-item" data-id="${d.id}" onclick="selectDealSearchItem(${d.id}, ${objectId})">
+          <div class="dsi-title">${esc(d.title)}</div>
+          <div class="dsi-meta">${d.contact_name ? esc(d.contact_name) + (d.stage_name ? ' · ' : '') : ''}${d.stage_name ? esc(d.stage_name) : ''}</div>
+        </div>`).join('')
+    : `<div class="deal-search-item dsi-empty">${q ? 'No matching deals' : 'No deals available to link'}</div>`;
   dropdown.classList.remove('hidden');
 }
 
