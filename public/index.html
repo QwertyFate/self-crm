@@ -776,8 +776,11 @@
 
       <!-- Sticky footer -->
       <div class="modal-actions deal-modal-footer">
-        <button type="button" class="btn" onclick="closeModal('deal-modal')" data-i18n="btn_cancel">Cancel</button>
-        <button type="submit" form="deal-form" class="btn btn-primary" data-i18n="btn_save">Save Deal</button>
+        <button type="button" class="btn btn-danger" id="deal-delete-btn" onclick="deleteDealFromModal()" style="display:none">Delete Deal</button>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <button type="button" class="btn" onclick="closeModal('deal-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" form="deal-form" class="btn btn-primary" data-i18n="btn_save">Save Deal</button>
+        </div>
       </div>
     </div>
   </div>

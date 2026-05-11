@@ -184,7 +184,16 @@ const BUILTIN_FIELDS = [
 ];
 
 // ── Helpers ───────────────────────────────────────────────
-function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('hidden');
+  // Reset submit guard and re-enable buttons for any form inside this modal
+  el.querySelectorAll('form').forEach(f => {
+    f._submitting = false;
+    f.querySelectorAll('[type="submit"]').forEach(btn => { btn.disabled = false; });
+  });
+}
 
 function esc(str) {
   if (str == null) return '';
@@ -287,6 +296,25 @@ const api = {
   patch: (url, d) => apiFetch(url, { method:'PATCH',  headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) }),
   del:   url      => apiFetch(url, { method:'DELETE' }),
 };
+
+// ── Duplicate submit guard ────────────────────────────────
+// Runs in capture phase (before the onsubmit handler) so it can cancel duplicates.
+document.addEventListener('submit', e => {
+  const form = e.target;
+  if (form._submitting) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    return;
+  }
+  form._submitting = true;
+  const btn = e.submitter || form.querySelector('[type="submit"]');
+  if (btn) btn.disabled = true;
+  // Safety net: always unlock after 10s in case the handler throws without closing the modal
+  setTimeout(() => {
+    form._submitting = false;
+    if (btn) btn.disabled = false;
+  }, 10000);
+}, true);
 
 // Close modals on backdrop click
 document.querySelectorAll('.modal-overlay').forEach(overlay => {

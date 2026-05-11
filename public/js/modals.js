@@ -320,6 +320,7 @@ async function openDealModal(id) {
   document.getElementById('deal-form').reset();
   document.getElementById('deal-id').value = id || '';
   document.getElementById('deal-modal-title').textContent = id ? 'Edit Deal' : 'Add Deal';
+  document.getElementById('deal-delete-btn').style.display = id ? '' : 'none';
 
   const pipelineSel = document.getElementById('df-pipeline');
   pipelineSel.innerHTML = pipelines.map(p =>
@@ -460,6 +461,16 @@ async function deleteDeal(id) {
   if (!confirm('Delete this deal?')) return;
   await api.del(`/api/deals/${id}`);
   deals = deals.filter(d => d.id !== id);
+  if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
+}
+
+async function deleteDealFromModal() {
+  const id = document.getElementById('deal-id').value;
+  if (!id) return;
+  if (!confirm('Delete this deal?')) return;
+  await api.del(`/api/deals/${id}`);
+  closeModal('deal-modal');
+  deals = deals.filter(d => d.id !== Number(id));
   if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
 }
 
