@@ -9,7 +9,7 @@ function switchSettingsTab(tab) {
 
 async function loadSettings() {
   [stages, fields] = await Promise.all([api.get('/api/stages'), api.get('/api/fields')]);
-  renderStagesList(); renderFieldsList(); renderContactColumnSettings();
+  renderFieldsList(); renderContactColumnSettings();
   const waEl = document.getElementById('wa-template-input');
   if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? 'Hi {{name}}, ';
   const miroEl = document.getElementById('miro-url-input');

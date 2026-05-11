@@ -51,7 +51,7 @@ function effectiveContactColumns() {
     { key: 'company',     label: () => t('col_company'),    type: 'text',     show: true  },
     { key: 'email',       label: () => t('col_email'),      type: 'email',    show: true  },
     { key: 'phone',       label: () => t('col_phone'),      type: 'phone',    show: true  },
-    { key: 'stage_id',    label: () => t('col_stage'),      type: 'stage',    show: true  },
+    { key: 'stage_id',    label: () => t('col_stage'),      type: 'stage',    show: false },
     { key: 'assigned_to', label: () => t('col_assignee'),   type: 'assignee', show: true  },
     { key: 'created_at',  label: () => t('col_created_at'), type: 'date',     show: false },
   ];
