@@ -194,7 +194,7 @@ function switchPage(page) {
   // Suppliers reuses the contacts page element — no separate page-suppliers div
   const pageElId = page === 'suppliers' ? 'page-contacts' : `page-${page}`;
   document.getElementById(pageElId)?.classList.add('active');
-  if (page === 'deals')      loadDeals();
+  if (page === 'deals')      { closeSidePanel(); loadDeals(); }
   if (page === 'contacts')   { currentContactType = 'contact'; loadContacts(); }
   if (page === 'suppliers')  { currentContactType = 'supplier'; loadContacts(); }
   if (page === 'activities') loadActivities();
