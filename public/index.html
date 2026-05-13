@@ -194,6 +194,7 @@
         <li><a href="#" data-page="deals" class="active">🤝 <span data-i18n="nav_deals">Deals</span></a></li>
         <li><a href="#" data-page="contacts">👥 <span data-i18n="nav_contacts">Contacts</span></a></li>
         <li><a href="#" data-page="activities">📋 <span data-i18n="nav_activities">Activities</span></a></li>
+        <li><a href="#" data-page="board" id="nav-board-link">🗂 <span data-i18n="nav_board">Board</span></a></li>
       </ul>
       <ul class="sidebar-nav sidebar-bottom">
         <li><a href="#" data-page="settings">⚙️ <span data-i18n="nav_settings">Settings</span></a></li>
@@ -274,6 +275,11 @@
         <div id="activities-list" class="activities-list"></div>
       </section>
 
+      <!-- ── Board (Miro) ── -->
+      <section id="page-board" class="page page-board">
+        <div id="board-content" class="board-content"></div>
+      </section>
+
       <!-- ── Settings ── -->
       <section id="page-settings" class="page">
         <div class="page-header"><h1 data-i18n="page_settings">Settings</h1></div>
@@ -315,6 +321,16 @@
                   <button id="save-wa-template-btn" class="btn btn-primary btn-sm" onclick="saveWaTemplate()" data-i18n="btn_save">Save</button>
                   <span id="wa-template-msg" class="workspace-name-msg hidden"></span>
                 </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_miro">Miro Board</h2></div>
+                <p class="settings-hint" data-i18n="hint_miro">Paste the embed URL from Miro → Share → Embed. Leave blank to hide the Board tab.</p>
+                <div class="workspace-name-row">
+                  <input type="url" id="miro-url-input" class="workspace-name-input" placeholder="https://miro.com/app/live-embed/..." />
+                  <button class="btn btn-primary btn-sm" onclick="saveMiroUrl()">Save</button>
+                </div>
+                <div id="miro-url-msg" class="workspace-name-msg hidden"></div>
               </div>
 
               <div class="settings-card">
