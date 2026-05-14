@@ -1,10 +1,14 @@
 // ── SETTINGS ──────────────────────────────────────────────
 let currentSettingsTab = 'general';
+let taskFields = [];
+let taskStatusDragIdx = null;
 
 function switchSettingsTab(tab) {
   currentSettingsTab = tab;
   document.querySelectorAll('.settings-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
   document.querySelectorAll('.settings-pane').forEach(pane => pane.classList.toggle('active', pane.id === `settings-pane-${tab}`));
+  // Always re-render task settings when switching to that tab so it's never empty
+  if (tab === 'tasks') loadTaskSettings();
 }
 
 async function loadSettings() {
@@ -26,6 +30,8 @@ async function loadSettings() {
   pipelines  = await api.get('/api/pipelines');
   dealFields = await api.get('/api/deal-fields');
   renderPipelinesSettings(); renderDealFieldsList(); renderDealColumnSettings();
+  // Tasks settings
+  await loadTaskSettings();
   switchSettingsTab(currentSettingsTab);
   if (currentUser?.role === 'owner') {
     document.getElementById('invites-card').classList.remove('hidden');
@@ -389,4 +395,192 @@ async function removeMember(id, name) {
   const res = await api.del(`/api/workspace/members/${id}`);
   if (res.error) { alert(res.error); return; }
   invalidate(); await loadSettings();
+}
+
+// ── TASK SETTINGS ─────────────────────────────────────────
+async function loadTaskSettings() {
+  try {
+    const [me, tf] = await Promise.all([
+      api.get('/api/auth/me'),
+      api.get('/api/task-fields'),
+    ]);
+    // Refresh task_statuses from the server so it's always current
+    if (me?.workspace?.task_statuses) {
+      currentWorkspace.task_statuses = me.workspace.task_statuses;
+    }
+    taskFields = Array.isArray(tf) ? tf : [];
+  } catch (e) {
+    taskFields = [];
+  }
+  renderTaskStatusesList();
+  renderTaskFieldsList();
+}
+
+function getTaskStatuses() {
+  const saved = currentWorkspace?.task_statuses;
+  if (Array.isArray(saved) && saved.length) return saved;
+  return [
+    { key: 'todo',        label: 'Todo',        color: '#94a3b8' },
+    { key: 'in_progress', label: 'In Progress', color: '#3b82f6' },
+    { key: 'in_review',   label: 'In Review',   color: '#f59e0b' },
+    { key: 'done',        label: 'Done',        color: '#22c55e' },
+  ];
+}
+
+function renderTaskStatusesList() {
+  const el = document.getElementById('task-statuses-list');
+  if (!el) return;
+  const statuses = getTaskStatuses();
+  el.innerHTML = statuses.map((s, i) => `
+    <li class="settings-row col-cfg-row" draggable="true"
+      ondragstart="taskStatusDragStart(event,${i})"
+      ondragover="taskStatusDragOver(event)"
+      ondrop="taskStatusDrop(event,${i})"
+      ondragleave="colDragLeave(event)">
+      <span class="drag-handle">⠿</span>
+      <span class="row-dot" style="background:${s.color}"></span>
+      <span class="row-label">${esc(s.label)}</span>
+      <div class="row-actions">
+        <button class="btn btn-sm btn-ghost btn-icon" onclick="openTaskStatusModal('${s.key}')">✏️</button>
+        ${statuses.length > 1 ? `<button class="btn btn-sm btn-danger btn-icon" onclick="deleteTaskStatus('${s.key}')">✕</button>` : ''}
+      </div>
+    </li>`).join('');
+}
+
+function taskStatusDragStart(e, i) { taskStatusDragIdx = i; e.dataTransfer.effectAllowed = 'move'; }
+function taskStatusDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('col-drag-over'); }
+function taskStatusDrop(e, targetIdx) {
+  e.preventDefault(); e.currentTarget.classList.remove('col-drag-over');
+  if (taskStatusDragIdx === null || taskStatusDragIdx === targetIdx) { taskStatusDragIdx = null; return; }
+  const statuses = getTaskStatuses();
+  const moved = statuses.splice(taskStatusDragIdx, 1)[0];
+  statuses.splice(targetIdx, 0, moved);
+  taskStatusDragIdx = null;
+  if (currentWorkspace) currentWorkspace.task_statuses = statuses;
+  renderTaskStatusesList();
+}
+
+function openTaskStatusModal(key) {
+  document.getElementById('task-status-form').reset();
+  const statuses = getTaskStatuses();
+  const s = key ? statuses.find(s => s.key === key) : null;
+  document.getElementById('task-status-modal-title').textContent = s ? 'Edit Status' : 'Add Status';
+  document.getElementById('ts-key-hidden').value = key || '';
+  document.getElementById('ts-label').value = s?.label || '';
+  document.getElementById('ts-color').value = s?.color || '#94a3b8';
+  document.getElementById('task-status-modal').classList.remove('hidden');
+}
+
+function saveTaskStatus(e) {
+  e.preventDefault();
+  const key   = document.getElementById('ts-key-hidden').value;
+  const label = document.getElementById('ts-label').value.trim();
+  const color = document.getElementById('ts-color').value;
+  if (!label) return;
+
+  const statuses = getTaskStatuses();
+  if (key) {
+    const s = statuses.find(s => s.key === key);
+    if (s) { s.label = label; s.color = color; }
+  } else {
+    const newKey = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    statuses.push({ key: newKey, label, color });
+  }
+  if (currentWorkspace) currentWorkspace.task_statuses = statuses;
+  closeModal('task-status-modal');
+  renderTaskStatusesList();
+  // Auto-save
+  saveTaskStatuses();
+}
+
+function deleteTaskStatus(key) {
+  if (!confirm('Delete this status? Tasks with this status will keep it but it won\'t appear in the kanban.')) return;
+  const statuses = getTaskStatuses().filter(s => s.key !== key);
+  if (currentWorkspace) currentWorkspace.task_statuses = statuses;
+  renderTaskStatusesList();
+  saveTaskStatuses();
+}
+
+async function saveTaskStatuses() {
+  const statuses = getTaskStatuses();
+  const msgEl = document.getElementById('task-statuses-msg');
+  const res = await api.patch('/api/workspace/task-statuses', { statuses });
+  if (res.error) {
+    if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); }
+    return;
+  }
+  if (currentWorkspace) currentWorkspace.task_statuses = res.statuses;
+  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  setTimeout(() => msgEl?.classList.add('hidden'), 2500);
+  // Refresh kanban if on tasks page
+  if (document.getElementById('page-tasks')?.classList.contains('active')) renderTasksCurrent();
+}
+
+// ── Task Custom Fields ─────────────────────────────────────
+function renderTaskFieldsList() {
+  const el = document.getElementById('task-fields-list');
+  if (!el) return;
+  if (!taskFields.length) { el.innerHTML = '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No fields yet.</li>'; return; }
+  el.innerHTML = taskFields.map(f => `
+    <li class="settings-row">
+      <span class="row-label">${esc(f.name)}</span>
+      <span class="row-sub">${f.type}</span>
+      <div class="row-actions">
+        <button class="btn btn-sm btn-ghost btn-icon" onclick="openTaskFieldModal(${f.id})">✏️</button>
+        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteTaskField(${f.id})">✕</button>
+      </div>
+    </li>`).join('');
+}
+
+function openTaskFieldModal(id) {
+  document.getElementById('task-field-form').reset();
+  document.getElementById('tff-id').value = id || '';
+  document.getElementById('tff-options-group').classList.add('hidden');
+  document.getElementById('task-field-modal-title').textContent = id ? 'Edit Task Field' : 'Add Task Field';
+  if (id) {
+    const f = taskFields.find(f => f.id === id);
+    document.getElementById('tff-name').value    = f.name;
+    document.getElementById('tff-key').value     = f.field_key;
+    document.getElementById('tff-type').value    = f.type;
+    document.getElementById('tff-options').value = (f.options||[]).join('\n');
+    if (f.type === 'dropdown') document.getElementById('tff-options-group').classList.remove('hidden');
+  }
+  document.getElementById('task-field-modal').classList.remove('hidden');
+}
+
+function autoTaskFieldKey() {
+  if (document.getElementById('tff-id').value) return;
+  document.getElementById('tff-key').value = document.getElementById('tff-name').value
+    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+function toggleTaskFieldOptions() {
+  document.getElementById('tff-options-group').classList.toggle('hidden',
+    document.getElementById('tff-type').value !== 'dropdown');
+}
+
+async function saveTaskField(e) {
+  e.preventDefault();
+  const id   = document.getElementById('tff-id').value;
+  const type = document.getElementById('tff-type').value;
+  const payload = {
+    name:      document.getElementById('tff-name').value,
+    field_key: document.getElementById('tff-key').value,
+    type,
+    options: type === 'dropdown'
+      ? document.getElementById('tff-options').value.split('\n').map(s => s.trim()).filter(Boolean)
+      : [],
+  };
+  const res = id ? await api.put(`/api/task-fields/${id}`, payload) : await api.post('/api/task-fields', payload);
+  if (res.error) { alert(res.error); return; }
+  closeModal('task-field-modal');
+  taskFields = await api.get('/api/task-fields');
+  renderTaskFieldsList();
+}
+
+async function deleteTaskField(id) {
+  if (!confirm('Delete this field?')) return;
+  await api.del(`/api/task-fields/${id}`);
+  taskFields = taskFields.filter(f => f.id !== id);
+  renderTaskFieldsList();
 }

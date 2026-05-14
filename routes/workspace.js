@@ -74,6 +74,17 @@ router.patch('/supplier-name', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.patch('/task-statuses', async (req, res, next) => {
+  try {
+    const { statuses } = req.body;
+    if (!Array.isArray(statuses) || !statuses.length)
+      return res.status(400).json({ error: 'statuses must be a non-empty array' });
+    await pool.query('UPDATE workspaces SET task_statuses=$1 WHERE id=$2',
+      [JSON.stringify(statuses), req.workspaceId]);
+    res.json({ success: true, statuses });
+  } catch (e) { next(e); }
+});
+
 router.patch('/object-name', async (req, res, next) => {
   try {
     if (req.userRole !== 'owner') return res.status(403).json({ error: 'Owner only' });
