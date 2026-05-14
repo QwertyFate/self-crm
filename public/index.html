@@ -194,6 +194,7 @@
         <li><a href="#" data-page="deals" class="active">🤝 <span data-i18n="nav_deals">Deals</span></a></li>
         <li><a href="#" data-page="contacts">👥 <span data-i18n="nav_contacts">Contacts</span></a></li>
         <li><a href="#" data-page="activities">📋 <span data-i18n="nav_activities">Activities</span></a></li>
+        <li><a href="#" data-page="objects" id="nav-objects-link">📦 <span id="nav-objects-label">Listings</span></a></li>
         <li><a href="#" data-page="board" id="nav-board-link">🗂 <span data-i18n="nav_board">Board</span></a></li>
       </ul>
       <ul class="sidebar-nav sidebar-bottom">
@@ -275,6 +276,35 @@
         <div id="activities-list" class="activities-list"></div>
       </section>
 
+      <!-- ── Objects ── -->
+      <section id="page-objects" class="page">
+        <div class="page-header">
+          <h1 id="objects-page-title">Listings</h1>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div class="view-toggle">
+              <button class="view-toggle-btn active" id="obj-view-table" onclick="setObjectView('table')" title="Table view">
+                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="1" width="14" height="2.5" rx="1.25"/><rect x="0" y="5.75" width="14" height="2.5" rx="1.25"/><rect x="0" y="10.5" width="14" height="2.5" rx="1.25"/></svg>
+              </button>
+              <button class="view-toggle-btn" id="obj-view-card" onclick="setObjectView('card')" title="Card view">
+                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="0" width="6" height="6" rx="1"/><rect x="8" y="0" width="6" height="6" rx="1"/><rect x="0" y="8" width="6" height="6" rx="1"/><rect x="8" y="8" width="6" height="6" rx="1"/></svg>
+              </button>
+            </div>
+            <button class="btn btn-primary" id="add-object-btn" onclick="openObjectModal()">+ Add</button>
+          </div>
+        </div>
+        <div class="toolbar">
+          <input type="text" id="object-search" placeholder="Search…" oninput="filterObjects()" />
+        </div>
+        <div class="table-wrap" id="objects-table-wrap">
+          <table class="table" id="objects-table">
+            <thead id="objects-thead"></thead>
+            <tbody id="objects-tbody"></tbody>
+          </table>
+        </div>
+        <div id="objects-card-grid" class="objects-card-grid hidden"></div>
+        <div id="objects-pagination" class="pagination-bar"></div>
+      </section>
+
       <!-- ── Board (Miro) ── -->
       <section id="page-board" class="page page-board">
         <div id="board-content" class="board-content"></div>
@@ -287,6 +317,7 @@
         <nav class="settings-tabs">
           <button class="settings-tab active" data-tab="general"  onclick="switchSettingsTab('general')"  data-i18n="tab_general">General</button>
           <button class="settings-tab"         data-tab="deals"    onclick="switchSettingsTab('deals')"    data-i18n="tab_deals">Deals</button>
+          <button class="settings-tab"         data-tab="objects"  onclick="switchSettingsTab('objects')"  id="settings-tab-objects">Objects</button>
           <button class="settings-tab"         data-tab="contacts" onclick="switchSettingsTab('contacts')" data-i18n="tab_contacts">Contacts</button>
           <button class="settings-tab"         data-tab="team"     onclick="switchSettingsTab('team')"     data-i18n="tab_team">Team</button>
         </nav>
@@ -387,6 +418,47 @@
                 <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
                   <button id="save-deal-cols-btn" class="btn btn-primary btn-sm" onclick="saveDealColumns()" data-i18n="btn_save">Save</button>
                   <span id="deal-cols-msg" class="workspace-name-msg hidden"></span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── Objects ── -->
+          <div id="settings-pane-objects" class="settings-pane">
+            <div class="settings-grid">
+
+              <div class="settings-card hidden" id="object-name-card">
+                <div class="settings-card-header"><h2>Object Type Name</h2></div>
+                <p class="settings-hint">The name shown in the sidebar and throughout the app (e.g. Properties, Products, Listings).</p>
+                <div class="workspace-name-row">
+                  <input type="text" id="object-name-input" class="workspace-name-input" placeholder="Listings" />
+                  <button class="btn btn-primary btn-sm" onclick="saveObjectTypeName()">Save</button>
+                </div>
+                <div id="object-name-msg" class="workspace-name-msg hidden"></div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header">
+                  <h2>Fields</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openObjectFieldModal()">+ Add</button>
+                </div>
+                <p class="settings-hint">Custom properties on every item in this list.</p>
+                <ul id="object-fields-list" class="settings-list"></ul>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2>Columns</h2></div>
+                <p class="settings-hint">Drag to reorder. Name is always first.</p>
+                <div class="settings-row col-cfg-row col-cfg-locked">
+                  <span class="drag-handle" style="opacity:.25">⠿</span>
+                  <span class="row-label">Name</span>
+                  <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
+                </div>
+                <ul id="object-columns-list" class="settings-list" style="margin-top:6px"></ul>
+                <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
+                  <button id="save-obj-cols-btn" class="btn btn-primary btn-sm" onclick="saveObjectColumns()">Save</button>
+                  <span id="obj-cols-msg" class="workspace-name-msg hidden"></span>
                 </div>
               </div>
 
@@ -576,9 +648,70 @@
     </div>
   </div>
 
+  <!-- Object Modal (create/edit) -->
+  <div id="object-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm" style="max-width:460px">
+      <div class="modal-header">
+        <h2 id="object-modal-title">Add</h2>
+        <button class="close-btn" onclick="closeModal('object-modal')">&times;</button>
+      </div>
+      <form id="object-form" onsubmit="saveObject(event)">
+        <input type="hidden" id="object-id" />
+        <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="obj-name" required /></div>
+        <div id="obj-custom-fields"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('object-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Object Detail Modal -->
+  <div id="object-detail-modal" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+      <div class="modal-header">
+        <h2 id="object-detail-title"></h2>
+        <button class="close-btn" onclick="closeModal('object-detail-modal')">&times;</button>
+      </div>
+      <div id="object-detail-body"></div>
+    </div>
+  </div>
+
+  <!-- Object Field Modal -->
+  <div id="object-field-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2 id="object-field-modal-title">Add Field</h2>
+        <button class="close-btn" onclick="closeModal('object-field-modal')">&times;</button>
+      </div>
+      <form id="object-field-form" onsubmit="saveObjectField(event)">
+        <input type="hidden" id="objf-id" />
+        <div class="form-group"><label>Label <span class="req">*</span></label><input type="text" id="objf-name" required oninput="autoObjectFieldKey()" /></div>
+        <div class="form-group"><label data-i18n="lbl_key">Key</label><input type="text" id="objf-key" readonly style="opacity:.55" /></div>
+        <div class="form-group"><label data-i18n="lbl_type">Type</label>
+          <select id="objf-type" onchange="toggleObjectFieldOptions()">
+            <option value="text">Text</option><option value="number">Number</option>
+            <option value="dropdown">Dropdown</option><option value="date">Date</option>
+            <option value="url">URL</option><option value="email">Email</option>
+            <option value="phone">Phone</option>
+          </select>
+        </div>
+        <div class="form-group hidden" id="objf-options-group">
+          <label data-i18n="lbl_options">Options (one per line)</label>
+          <textarea id="objf-options" rows="4" placeholder="Option A&#10;Option B"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeModal('object-field-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Deal Modal -->
   <div id="deal-modal" class="modal-overlay hidden">
-    <div class="modal modal-deal" style="width:min(92vw,1500px);max-width:none;max-height:88vh">
+    <div class="modal modal-deal" style="width:min(96vw,1800px);max-width:none;max-height:88vh">
       <div class="modal-header">
         <h2 id="deal-modal-title">Add Deal</h2>
         <button class="close-btn" onclick="closeModal('deal-modal')">&times;</button>
@@ -601,10 +734,16 @@
           </form>
         </div>
 
-        <!-- ── Right: Contact panel ── -->
+        <!-- ── Middle: Contact panel ── -->
         <div class="deal-modal-col deal-col-contact" id="deal-contact-panel">
           <div class="deal-col-label">Contact</div>
           <div class="contact-panel-empty">No contact linked</div>
+        </div>
+
+        <!-- ── Right: Object/Listings panel ── -->
+        <div class="deal-modal-col deal-col-object" id="deal-object-panel">
+          <div class="object-panel-top"><div class="deal-col-label" id="deal-object-panel-label">Objects</div></div>
+          <div class="object-panel-scroll" id="deal-object-panel-body"></div>
         </div>
 
       </div>
