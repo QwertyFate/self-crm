@@ -49,7 +49,11 @@ function showApp() {
   document.getElementById('app').classList.remove('hidden');
   window.history.replaceState({}, '', window.location.pathname);
   document.getElementById('sidebar-workspace').textContent = currentWorkspace?.name || '';
+  const settingsLabel = document.getElementById('settings-workspace-label');
+  if (settingsLabel) settingsLabel.textContent = currentWorkspace?.name || '';
   document.getElementById('sidebar-user').textContent = currentUser?.name || '';
+  const av = document.getElementById('sidebar-user-avatar');
+  if (av) av.textContent = (currentUser?.name || '?')[0].toUpperCase();
   applyTranslations();
   loadColWidths();
   updateBoardNavVisibility();

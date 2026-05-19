@@ -203,28 +203,50 @@
         <img src="/images/logo.png" alt="Logo" class="sidebar-logo" />
         <div class="workspace-name" id="sidebar-workspace"></div>
       </div>
-      <ul class="sidebar-nav">
-        <li><a href="#" data-page="deals" class="active">🤝 <span data-i18n="nav_deals">Deals</span></a></li>
-        <li><a href="#" data-page="contacts">👥 <span data-i18n="nav_contacts">Contacts</span></a></li>
-        <li><a href="#" data-page="suppliers" id="nav-suppliers-link">🏢 <span id="nav-suppliers-label">Suppliers</span></a></li>
-        <li><a href="#" data-page="activities">📋 <span data-i18n="nav_activities">Activities</span></a></li>
-        <li><a href="#" data-page="objects" id="nav-objects-link">📦 <span id="nav-objects-label">Listings</span></a></li>
-        <li><a href="#" data-page="tasks">✅ <span>Tasks</span></a></li>
-        <li><a href="#" data-page="board" id="nav-board-link">🗂 <span data-i18n="nav_board">Board</span></a></li>
-      </ul>
-      <ul class="sidebar-nav sidebar-bottom">
-        <li><a href="#" data-page="settings">⚙️ <span data-i18n="nav_settings">Settings</span></a></li>
-        <li>
-          <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-toggle-btn">
-            <div class="toggle-track" id="dark-toggle-track">
-              <div class="toggle-thumb"></div>
-            </div>
-            <span id="dark-toggle-label" data-i18n="dark_mode">Dark mode</span>
-          </button>
-        </li>
-        <li><a href="#" onclick="logout(event)" class="logout-link">🚪 <span data-i18n="logout">Log out</span></a></li>
-      </ul>
-      <div class="sidebar-user" id="sidebar-user"></div>
+
+      <!-- Main nav — grows to push footer down -->
+      <div class="sidebar-main">
+        <div class="sidebar-section-label">Workspace</div>
+        <ul class="sidebar-nav">
+          <li><a href="#" data-page="deals" class="active"><span data-i18n="nav_deals">Deals</span></a></li>
+          <li><a href="#" data-page="contacts"><span data-i18n="nav_contacts">Contacts</span></a></li>
+          <li><a href="#" data-page="suppliers" id="nav-suppliers-link"><span id="nav-suppliers-label">Suppliers</span></a></li>
+          <li><a href="#" data-page="tasks"><span>Tasks</span></a></li>
+        </ul>
+
+        <div class="sidebar-section-label">Tools</div>
+        <ul class="sidebar-nav">
+          <li><a href="#" data-page="activities"><span data-i18n="nav_activities">Activities</span></a></li>
+          <li><a href="#" data-page="objects" id="nav-objects-link"><span id="nav-objects-label">Listings</span></a></li>
+          <li><a href="#" data-page="board" id="nav-board-link"><span data-i18n="nav_board">Board</span></a></li>
+        </ul>
+      </div>
+
+      <!-- Footer — sticks to bottom -->
+      <div class="sidebar-footer">
+        <ul class="sidebar-nav">
+          <li><a href="#" data-page="settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="flex-shrink:0">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span data-i18n="nav_settings">Settings</span>
+          </a></li>
+          <li>
+            <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-toggle-btn">
+              <div class="toggle-track" id="dark-toggle-track">
+                <div class="toggle-thumb"></div>
+              </div>
+              <span id="dark-toggle-label" data-i18n="dark_mode">Dark mode</span>
+            </button>
+          </li>
+        </ul>
+        <div class="sidebar-user-row">
+          <div class="sidebar-user-avatar" id="sidebar-user-avatar"></div>
+          <div class="sidebar-user" id="sidebar-user"></div>
+          <a href="#" onclick="logout(event)" class="sidebar-logout-btn" title="Log out">↪</a>
+        </div>
+      </div>
     </nav>
 
     <main class="content">
@@ -400,7 +422,20 @@
 
       <!-- ── Settings ── -->
       <section id="page-settings" class="page">
-        <div class="page-header"><h1 data-i18n="page_settings">Settings</h1></div>
+        <div class="settings-page-header">
+          <div class="settings-page-brand">
+            <div class="settings-page-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </div>
+            <div>
+              <h1 class="settings-page-title" data-i18n="page_settings">Settings</h1>
+              <p class="settings-page-sub" id="settings-workspace-label"></p>
+            </div>
+          </div>
+        </div>
 
         <nav class="settings-tabs">
           <button class="settings-tab active" data-tab="general"  onclick="switchSettingsTab('general')"  data-i18n="tab_general">General</button>
