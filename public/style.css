@@ -199,7 +199,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 .content { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .page { display: none; flex-direction: column; height: 100%; overflow: hidden; padding: 24px; gap: 16px; }
-#page-tasks { overflow-x: auto; overflow-y: hidden; }
+#page-tasks { overflow: hidden; padding: 0 !important; }
 .page.active { display: flex; }
 .page-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
 .page-header h1 { font-size: 20px; font-weight: 600; }
@@ -275,6 +275,91 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .card-actions { display: flex; gap: 4px; margin-top: 8px; justify-content: flex-end; }
 
 /* ══ TASKS ═══════════════════════════════════════════════ */
+
+/* Page layout: sidebar + main */
+.page-tasks-layout {
+  flex-direction: row !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+.tasks-sidebar {
+  width: 220px; flex-shrink: 0;
+  background: var(--card-bg); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow-y: auto;
+}
+.tasks-sidebar-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 14px 10px; flex-shrink: 0;
+}
+.tasks-sidebar-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+.tasks-project-nav { display: flex; flex-direction: column; padding: 0 6px 12px; gap: 2px; }
+
+/* Project item */
+.tasks-proj-item { border-radius: var(--radius); overflow: hidden; }
+.tasks-proj-header {
+  display: flex; align-items: center; gap: 6px; padding: 7px 8px;
+  cursor: pointer; border-radius: var(--radius); font-size: 13px; font-weight: 600;
+  transition: background .12s;
+}
+.tasks-proj-header:hover { background: var(--bg); }
+.tasks-proj-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.tasks-proj-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tasks-proj-chevron { font-size: 10px; color: var(--muted); transition: transform .15s; }
+.tasks-proj-chevron.open { transform: rotate(90deg); }
+.tasks-proj-actions { opacity: 0; display: flex; gap: 2px; }
+.tasks-proj-header:hover .tasks-proj-actions { opacity: 1; }
+.tasks-proj-actions button { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 12px; padding: 2px 4px; border-radius: 3px; }
+.tasks-proj-actions button:hover { color: var(--text); background: var(--border); }
+
+/* Lists under a project */
+.tasks-proj-lists { display: flex; flex-direction: column; gap: 1px; padding: 2px 0 4px 20px; }
+.tasks-list-item {
+  display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+  border-radius: var(--radius); cursor: pointer; font-size: 12.5px;
+  color: var(--muted); transition: background .12s;
+}
+.tasks-list-item:hover { background: var(--bg); color: var(--text); }
+.tasks-list-item.active { background: color-mix(in srgb, var(--primary) 12%, var(--bg)); color: var(--primary); font-weight: 600; }
+.tasks-list-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tasks-list-actions { opacity: 0; display: flex; gap: 2px; }
+.tasks-list-item:hover .tasks-list-actions { opacity: 1; }
+.tasks-list-actions button { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 11px; padding: 1px 3px; }
+.tasks-add-list-btn {
+  display: flex; align-items: center; gap: 4px; padding: 4px 8px;
+  font-size: 12px; color: var(--muted); cursor: pointer; border-radius: var(--radius);
+  background: none; border: none; width: 100%; text-align: left;
+}
+.tasks-add-list-btn:hover { color: var(--primary); background: var(--bg); }
+
+/* Main content area */
+.tasks-main {
+  flex: 1; min-width: 0; display: flex; flex-direction: column;
+  overflow: hidden; padding: 24px; gap: 16px;
+}
+
+/* Breadcrumb */
+.tasks-breadcrumb { font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+
+/* Empty state */
+.tasks-empty-state {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px;
+  color: var(--muted); text-align: center; line-height: 1.7;
+}
+
+/* Subtask indentation in kanban */
+.task-card.subtask-card {
+  margin-left: 16px; border-left: 3px solid var(--border);
+  background: var(--bg); font-size: 12px; padding: 7px 10px;
+}
+.task-card.subtask-card .task-card-title { font-size: 12px; }
+.task-subtask-toggle {
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  font-size: 10px; padding: 0 2px; line-height: 1; transition: transform .15s;
+}
+.task-subtask-toggle.open { transform: rotate(90deg); }
+
 .tasks-list-view { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 
 .task-row {

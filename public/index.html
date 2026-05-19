@@ -333,40 +333,64 @@
       </section>
 
       <!-- ── Tasks ── -->
-      <section id="page-tasks" class="page">
-        <div class="page-header">
-          <h1>Tasks</h1>
-          <div style="display:flex;gap:8px;align-items:center">
-            <div class="view-toggle">
-              <button class="view-toggle-btn active" id="task-view-list" onclick="setTaskView('list')" title="List view">
-                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="1" width="14" height="2.5" rx="1.25"/><rect x="0" y="5.75" width="14" height="2.5" rx="1.25"/><rect x="0" y="10.5" width="14" height="2.5" rx="1.25"/></svg>
-              </button>
-              <button class="view-toggle-btn" id="task-view-kanban" onclick="setTaskView('kanban')" title="Kanban view">
-                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="0" width="6" height="14" rx="1"/><rect x="8" y="0" width="6" height="14" rx="1"/></svg>
-              </button>
+      <section id="page-tasks" class="page page-tasks-layout">
+
+        <!-- ── Left: Project / List sidebar ── -->
+        <div class="tasks-sidebar">
+          <div class="tasks-sidebar-header">
+            <span class="tasks-sidebar-title">Projects</span>
+            <button class="btn btn-sm btn-primary" onclick="openProjectModal()" title="New project">+</button>
+          </div>
+          <div id="tasks-project-nav" class="tasks-project-nav"></div>
+        </div>
+
+        <!-- ── Right: Main content ── -->
+        <div class="tasks-main" id="tasks-main">
+          <!-- Empty state when no project selected -->
+          <div id="tasks-empty-state" class="tasks-empty-state">
+            <p>Select a project and list from the sidebar,<br>or create a new project to get started.</p>
+            <button class="btn btn-primary" onclick="openProjectModal()">+ New Project</button>
+          </div>
+
+          <!-- Active list content (hidden until list selected) -->
+          <div id="tasks-content" class="hidden" style="display:flex;flex-direction:column;height:100%;gap:16px">
+            <div class="page-header">
+              <div>
+                <div class="tasks-breadcrumb" id="tasks-breadcrumb"></div>
+                <h1 id="tasks-main-title" style="margin:0">Tasks</h1>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <div class="view-toggle">
+                  <button class="view-toggle-btn active" id="task-view-list" onclick="setTaskView('list')" title="List view">
+                    <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="1" width="14" height="2.5" rx="1.25"/><rect x="0" y="5.75" width="14" height="2.5" rx="1.25"/><rect x="0" y="10.5" width="14" height="2.5" rx="1.25"/></svg>
+                  </button>
+                  <button class="view-toggle-btn" id="task-view-kanban" onclick="setTaskView('kanban')" title="Kanban view">
+                    <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="0" width="6" height="14" rx="1"/><rect x="8" y="0" width="6" height="14" rx="1"/></svg>
+                  </button>
+                </div>
+                <button class="btn btn-primary" onclick="openTaskModal()">+ Add Task</button>
+              </div>
             </div>
-            <button class="btn btn-primary" onclick="openTaskModal()">+ Add Task</button>
+            <div class="toolbar">
+              <input type="text" id="task-search" placeholder="Search tasks…" oninput="filterTasks()" />
+              <div class="toolbar-actions">
+                <select id="task-filter-priority" onchange="filterTasks()" class="btn btn-sm" style="font-size:13px">
+                  <option value="">All priorities</option>
+                  <option value="urgent">Urgent</option>
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+                <select id="task-filter-assignee" onchange="filterTasks()" class="btn btn-sm" style="font-size:13px">
+                  <option value="">All assignees</option>
+                </select>
+              </div>
+            </div>
+            <div id="tasks-list-view" class="tasks-list-view"></div>
+            <div id="tasks-kanban-view" class="tasks-kanban hidden"></div>
           </div>
         </div>
-        <div class="toolbar">
-          <input type="text" id="task-search" placeholder="Search tasks…" oninput="filterTasks()" />
-          <div class="toolbar-actions">
-            <select id="task-filter-priority" onchange="filterTasks()" class="btn btn-sm" style="font-size:13px">
-              <option value="">All priorities</option>
-              <option value="urgent">Urgent</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-            <select id="task-filter-assignee" onchange="filterTasks()" class="btn btn-sm" style="font-size:13px">
-              <option value="">All assignees</option>
-            </select>
-          </div>
-        </div>
-        <!-- List view -->
-        <div id="tasks-list-view" class="tasks-list-view"></div>
-        <!-- Kanban view -->
-        <div id="tasks-kanban-view" class="tasks-kanban hidden"></div>
+
       </section>
 
       <!-- ── Board (Miro) ── -->
@@ -859,7 +883,7 @@
 
   <!-- Task Modal -->
   <div id="task-modal" class="modal-overlay hidden">
-    <div class="modal" style="width:min(92vw,700px);max-width:none">
+    <div class="modal" style="width:min(92vw,1100px);max-width:none;max-height:88vh;overflow-y:auto">
       <div class="modal-header">
         <h2 id="task-modal-title">Add Task</h2>
         <button class="close-btn" onclick="closeModal('task-modal')">&times;</button>
@@ -867,7 +891,7 @@
       <form id="task-form" onsubmit="saveTask(event)">
         <input type="hidden" id="task-id" />
         <input type="hidden" id="task-parent-id" />
-        <div class="modal-body" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px">
+        <div class="modal-body" style="display:grid;grid-template-columns:1.2fr 1fr;gap:24px;padding:24px">
           <div style="display:flex;flex-direction:column;gap:12px">
             <div class="form-group" style="grid-column:1/-1">
               <label>Title <span class="req">*</span></label>
@@ -903,6 +927,7 @@
               <label>Due Date</label>
               <input type="date" id="task-due-date" />
             </div>
+            <div id="task-custom-fields"></div>
           </div>
           <!-- Subtasks column (only when editing) -->
           <div id="task-subtasks-col" style="display:flex;flex-direction:column;gap:10px">
@@ -975,6 +1000,43 @@
           <button type="submit" class="btn btn-primary">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Project Modal -->
+  <div id="project-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2 id="project-modal-title">New Project</h2>
+        <button class="close-btn" onclick="closeModal('project-modal')">&times;</button>
+      </div>
+      <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+        <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="project-name-input" /></div>
+        <div class="form-group"><label>Color</label><input type="color" id="project-color-input" value="#3b82f6" /></div>
+        <div class="modal-actions">
+          <button class="btn" onclick="closeModal('project-modal')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveProject()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- New List Modal -->
+  <div id="list-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2 id="list-modal-title">New List</h2>
+        <button class="close-btn" onclick="closeModal('list-modal')">&times;</button>
+      </div>
+      <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+        <input type="hidden" id="list-project-id" />
+        <input type="hidden" id="list-edit-id" />
+        <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="list-name-input" /></div>
+        <div class="modal-actions">
+          <button class="btn" onclick="closeModal('list-modal')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveList()">Save</button>
+        </div>
+      </div>
     </div>
   </div>
 

@@ -5,9 +5,14 @@ const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
 
-// All top-level tasks (parent_id IS NULL) with subtask counts
+// Tasks — optionally filtered by list_id. Returns parents + subtasks together.
 router.get('/', async (req, res, next) => {
   try {
+    const { list_id } = req.query;
+    const params = [req.workspaceId];
+    let filter = '';
+    if (list_id) { params.push(list_id); filter = ` AND t.list_id = $${params.length}`; }
+
     const { rows } = await pool.query(`
       SELECT t.*,
              u.name  AS assigned_to_name,
@@ -17,9 +22,9 @@ router.get('/', async (req, res, next) => {
       FROM tasks t
       LEFT JOIN users u  ON u.id = t.assigned_to
       LEFT JOIN users cu ON cu.id = t.created_by
-      WHERE t.workspace_id = $1 AND t.parent_id IS NULL
-      ORDER BY t.created_at DESC
-    `, [req.workspaceId]);
+      WHERE t.workspace_id = $1 ${filter}
+      ORDER BY t.parent_id NULLS FIRST, t.created_at ASC
+    `, params);
     res.json(rows);
   } catch (e) { next(e); }
 });
@@ -49,13 +54,14 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { title, description, status, priority, assigned_to, due_date, parent_id } = req.body;
+    const { title, description, status, priority, assigned_to, due_date, parent_id, project_id, list_id } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
     const { rows: [row] } = await pool.query(
-      `INSERT INTO tasks (workspace_id, parent_id, title, description, status, priority, assigned_to, due_date, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-      [req.workspaceId, parent_id||null, title.trim(), description||null,
-       status||'todo', priority||'medium', assigned_to||null, due_date||null, req.userId]
+      `INSERT INTO tasks (workspace_id, parent_id, project_id, list_id, title, description, status, priority, assigned_to, due_date, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+      [req.workspaceId, parent_id||null, project_id||null, list_id||null,
+       title.trim(), description||null, status||'todo', priority||'medium',
+       assigned_to||null, due_date||null, req.userId]
     );
     res.status(201).json({ id: row.id });
   } catch (e) { next(e); }
