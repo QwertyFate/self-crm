@@ -964,16 +964,40 @@
             </div>
             <div id="task-custom-fields"></div>
           </div>
-          <!-- Subtasks column (only when editing) -->
-          <div id="task-subtasks-col" style="display:flex;flex-direction:column;gap:10px">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Subtasks</div>
-            <div id="task-subtasks-list"></div>
-            <div class="form-group" style="flex-direction:row;gap:6px;margin-top:4px">
-              <input type="text" id="new-subtask-input" placeholder="Add subtask…"
-                style="flex:1;width:auto"
-                onkeydown="if(event.key==='Enter'){event.preventDefault();addSubtask();}" />
-              <button type="button" class="btn btn-sm btn-primary" style="flex-shrink:0" onclick="addSubtask()">Add</button>
+          <!-- Right column: subtasks + attachments (only when editing) -->
+          <div id="task-subtasks-col" style="display:flex;flex-direction:column;gap:18px">
+
+            <!-- Subtasks -->
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Subtasks</div>
+              <div id="task-subtasks-list"></div>
+              <div class="form-group" style="flex-direction:row;gap:6px;margin-top:4px">
+                <input type="text" id="new-subtask-input" placeholder="Add subtask…"
+                  style="flex:1;width:auto"
+                  onkeydown="if(event.key==='Enter'){event.preventDefault();addSubtask();}" />
+                <button type="button" class="btn btn-sm btn-primary" style="flex-shrink:0" onclick="addSubtask()">Add</button>
+              </div>
             </div>
+
+            <!-- Attachments -->
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)">Attachments</div>
+              <div id="task-attachments-list"></div>
+              <!-- Drop zone -->
+              <div class="task-drop-zone" id="task-drop-zone"
+                ondragover="taskAttachDragOver(event)" ondragleave="taskAttachDragLeave(event)"
+                ondrop="taskAttachDrop(event)" onclick="document.getElementById('task-file-input').click()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="22" height="22"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Drop files here or <strong>click to browse</strong></span>
+                <span class="task-drop-hint">PDF, DOCX, XLSX, images · max 10 MB</span>
+              </div>
+              <input type="file" id="task-file-input" style="display:none" multiple
+                onchange="taskAttachFileChange(event)" />
+              <div id="task-attach-error" class="task-attach-error hidden"></div>
+              <!-- Viewer -->
+              <div id="task-file-viewer" class="task-file-viewer hidden"></div>
+            </div>
+
           </div>
         </div>
         <div class="modal-actions">
