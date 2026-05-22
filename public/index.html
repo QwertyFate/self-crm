@@ -255,30 +255,42 @@
       </section>
 
       <!-- ── Contacts ── -->
-      <section id="page-contacts" class="page">
-        <div class="page-header">
-          <h1 data-i18n="page_contacts">Contacts</h1>
-          <button class="btn btn-primary" onclick="openContactModal()" data-i18n="add_contact">+ Add Contact</button>
-        </div>
-        <div class="toolbar">
-          <input type="text" id="contact-search" data-i18n-ph="search_ph" placeholder="Search contacts…" oninput="onContactSearch()" />
-          <div class="toolbar-actions">
-            <button class="btn btn-sm filter-toggle-btn" id="filter-toggle-btn" onclick="toggleFilterPanel()">
-              ⊕ Filter <span id="filter-badge" class="filter-badge hidden">0</span>
-            </button>
-            <button class="btn btn-sm" onclick="openImportModal()" data-i18n="import_csv">⬆ Import CSV</button>
-            <button class="btn btn-sm" onclick="exportContactsCSV()" data-i18n="export_csv">⬇ Export CSV</button>
+      <section id="page-contacts" class="page page-contacts-layout">
+        <!-- ── Left: table ── -->
+        <div class="contacts-main" id="contacts-main">
+          <div class="page-header">
+            <h1 data-i18n="page_contacts">Contacts</h1>
+            <button class="btn btn-primary" onclick="openContactModal()" data-i18n="add_contact">+ Add Contact</button>
           </div>
+          <div class="toolbar">
+            <input type="text" id="contact-search" data-i18n-ph="search_ph" placeholder="Search contacts…" oninput="onContactSearch()" />
+            <div class="toolbar-actions">
+              <button class="btn btn-sm filter-toggle-btn" id="filter-toggle-btn" onclick="toggleFilterPanel()">
+                ⊕ Filter <span id="filter-badge" class="filter-badge hidden">0</span>
+              </button>
+              <button class="btn btn-sm" onclick="openImportModal()" data-i18n="import_csv">⬆ Import CSV</button>
+              <button class="btn btn-sm" onclick="exportContactsCSV()" data-i18n="export_csv">⬇ Export CSV</button>
+            </div>
+          </div>
+          <div id="filter-panel" class="filter-panel hidden"></div>
+          <div id="filter-chips" class="filter-chips hidden"></div>
+          <div class="table-wrap">
+            <table class="table" id="contacts-table">
+              <thead id="contacts-thead"></thead>
+              <tbody id="contacts-body"></tbody>
+            </table>
+          </div>
+          <div id="contacts-pagination" class="pagination-bar"></div>
         </div>
-        <div id="filter-panel" class="filter-panel hidden"></div>
-        <div id="filter-chips" class="filter-chips hidden"></div>
-        <div class="table-wrap">
-          <table class="table" id="contacts-table">
-            <thead id="contacts-thead"></thead>
-            <tbody id="contacts-body"></tbody>
-          </table>
+
+        <!-- ── Right: slide-in detail panel ── -->
+        <div id="contact-side-panel" class="contact-side-panel hidden">
+          <div class="side-panel-header">
+            <span class="side-panel-name" id="side-panel-name"></span>
+            <button class="close-btn" onclick="closeSidePanel()">×</button>
+          </div>
+          <div id="side-panel-body" class="side-panel-body"></div>
         </div>
-        <div id="contacts-pagination" class="pagination-bar"></div>
       </section>
 
       <!-- ── Activities ── -->

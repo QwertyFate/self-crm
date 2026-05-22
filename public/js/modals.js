@@ -66,17 +66,21 @@ async function saveContact(e) {
 
 async function deleteContact(id) {
   if (!confirm('Delete this contact and all their activities?')) return;
-  await api.del(`/api/contacts/${id}`); closeModal('detail-modal'); invalidate();
+  await api.del(`/api/contacts/${id}`);
+  closeSidePanel();
+  closeModal('detail-modal');
+  invalidate();
   const page = document.querySelector('.page.active')?.id.replace('page-', '');
   if (page === 'deals') loadDeals(); else loadContacts();
 }
 
-// ── CONTACT DETAIL ────────────────────────────────────────
-async function openDetail(id) {
-  await Promise.all([ensureFields()]);
-  const [c, contactDeals] = await Promise.all([api.get(`/api/contacts/${id}`), api.get(`/api/deals?contact_id=${id}`)]);
-  document.getElementById('detail-title').textContent = c.name;
+function closeSidePanel() {
+  document.getElementById('contact-side-panel')?.classList.add('hidden');
+  document.querySelectorAll('#contacts-body tr.side-panel-active').forEach(r => r.classList.remove('side-panel-active'));
+}
 
+// ── CONTACT DETAIL ────────────────────────────────────────
+function buildDetailHTML(c, contactDeals, id) {
   const infoFields = [
     ['Company',  c.company],
     ['Email',    c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : null],
@@ -90,7 +94,7 @@ async function openDetail(id) {
     }),
   ].filter(([, v]) => v);
 
-  document.getElementById('detail-body').innerHTML = `
+  return `
     <div class="detail-section">
       <div class="detail-grid">
         ${infoFields.map(([label, val]) => `<div class="detail-item"><label>${esc(label)}</label><span>${val}</span></div>`).join('')}
@@ -99,7 +103,7 @@ async function openDetail(id) {
     <div class="detail-section">
       <div class="detail-section-header">
         <h3>Deals</h3>
-        <button class="btn btn-sm btn-primary" onclick="closeModal('detail-modal');openDealModalForContact(${id})">+ Add Deal</button>
+        <button class="btn btn-sm btn-primary" onclick="closeSidePanel();closeModal('detail-modal');openDealModalForContact(${id})">+ Add Deal</button>
       </div>
       <div class="contact-deals-list" id="contact-deals-list">${renderContactDeals(contactDeals)}</div>
     </div>
@@ -117,16 +121,41 @@ async function openDetail(id) {
     </div>
     <div class="detail-actions">
       <button class="btn btn-danger btn-sm" onclick="deleteContact(${id})">${t('btn_delete')}</button>
-      <button class="btn btn-sm" onclick="closeModal('detail-modal');openContactModal(${id})">${t('btn_edit')}</button>
+      <button class="btn btn-sm" onclick="closeSidePanel();closeModal('detail-modal');openContactModal(${id})">${t('btn_edit')}</button>
     </div>`;
-  document.getElementById('detail-modal').classList.remove('hidden');
+}
+
+async function openDetail(id) {
+  await ensureFields();
+  const [c, contactDeals] = await Promise.all([
+    api.get(`/api/contacts/${id}`),
+    api.get(`/api/deals?contact_id=${id}`),
+  ]);
+
+  const activePage = document.querySelector('.sidebar-nav a.active')?.dataset.page;
+  const usePanel   = activePage === 'contacts' || activePage === 'suppliers';
+
+  if (usePanel) {
+    // Highlight the clicked row
+    document.querySelectorAll('#contacts-body tr').forEach(r => r.classList.remove('side-panel-active'));
+    document.querySelector(`#contacts-body tr td strong[onclick="openDetail(${id})"]`)
+      ?.closest('tr')?.classList.add('side-panel-active');
+
+    document.getElementById('side-panel-name').textContent = c.name;
+    document.getElementById('side-panel-body').innerHTML   = buildDetailHTML(c, contactDeals, id);
+    document.getElementById('contact-side-panel').classList.remove('hidden');
+  } else {
+    document.getElementById('detail-title').textContent = c.name;
+    document.getElementById('detail-body').innerHTML    = buildDetailHTML(c, contactDeals, id);
+    document.getElementById('detail-modal').classList.remove('hidden');
+  }
 }
 
 function renderContactDeals(deals) {
   if (!deals?.length) return `<p style="color:var(--muted);font-size:12px;padding:4px 0">No deals yet.</p>`;
   return deals.map(d => {
     const fmtVal = d.value != null ? `€ ${Number(d.value).toLocaleString()}` : null;
-    return `<div class="contact-deal-row" onclick="closeModal('detail-modal');openDealModal(${d.id})">
+    return `<div class="contact-deal-row" onclick="closeSidePanel();closeModal('detail-modal');openDealModal(${d.id})">
       <div class="contact-deal-title">${esc(d.title)}</div>
       <div class="contact-deal-meta">
         ${d.stage_name ? `<span class="contact-deal-stage" style="border-color:${d.stage_color||'var(--border)'}">
