@@ -169,6 +169,8 @@ async function initDb() {
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS miro_url TEXT`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_name    TEXT NOT NULL DEFAULT 'Listings'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_columns JSONB NOT NULL DEFAULT '[]'`);
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS supplier_name  TEXT NOT NULL DEFAULT 'Suppliers'`);
+  await pool.query(`ALTER TABLE contacts   ADD COLUMN IF NOT EXISTS contact_type   TEXT NOT NULL DEFAULT 'contact'`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS objects (
       id           SERIAL PRIMARY KEY,

@@ -20,6 +20,8 @@ async function loadSettings() {
   if (currentUser?.role === 'owner') {
     const nameCard = document.getElementById('object-name-card');
     if (nameCard) { nameCard.classList.remove('hidden'); document.getElementById('object-name-input').value = currentWorkspace?.object_name || 'Listings'; }
+    const supCard = document.getElementById('supplier-name-card');
+    if (supCard) { supCard.classList.remove('hidden'); document.getElementById('supplier-name-input').value = currentWorkspace?.supplier_name || 'Suppliers'; }
   }
   pipelines  = await api.get('/api/pipelines');
   dealFields = await api.get('/api/deal-fields');
