@@ -37,7 +37,14 @@ router.get('/:id', async (req, res, next) => {
       ORDER BY d.created_at DESC
     `, [req.params.id, req.workspaceId]);
 
-    res.json({ ...obj, deals });
+    const { rows: linkedContacts } = await pool.query(
+      `SELECT c.id, c.name, c.email, c.phone, c.company, c.contact_type
+       FROM object_contacts oc JOIN contacts c ON c.id = oc.contact_id
+       WHERE oc.object_id = $1 AND c.workspace_id = $2
+       ORDER BY oc.created_at`,
+      [req.params.id, req.workspaceId]
+    );
+    res.json({ ...obj, deals, contacts: linkedContacts });
   } catch (e) { next(e); }
 });
 
@@ -100,6 +107,42 @@ router.delete('/:id/deals/:dealId', async (req, res, next) => {
     await pool.query(
       'DELETE FROM deal_objects WHERE deal_id=$1 AND object_id=$2',
       [req.params.dealId, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
+// ── Contact/Supplier linking ───────────────────────────────
+router.get('/:id/contacts', async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.id, c.name, c.email, c.phone, c.company, c.contact_type
+       FROM object_contacts oc JOIN contacts c ON c.id = oc.contact_id
+       WHERE oc.object_id = $1 AND c.workspace_id = $2
+       ORDER BY oc.created_at`,
+      [req.params.id, req.workspaceId]
+    );
+    res.json(rows);
+  } catch (e) { next(e); }
+});
+
+router.post('/:id/contacts', async (req, res, next) => {
+  try {
+    const { contact_id } = req.body;
+    if (!contact_id) return res.status(400).json({ error: 'contact_id required' });
+    await pool.query(
+      'INSERT INTO object_contacts (object_id, contact_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+      [req.params.id, contact_id]
+    );
+    res.status(201).json({ success: true });
+  } catch (e) { next(e); }
+});
+
+router.delete('/:id/contacts/:contactId', async (req, res, next) => {
+  try {
+    await pool.query(
+      'DELETE FROM object_contacts WHERE object_id=$1 AND contact_id=$2',
+      [req.params.id, req.params.contactId]
     );
     res.json({ success: true });
   } catch (e) { next(e); }

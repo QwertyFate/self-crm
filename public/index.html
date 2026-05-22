@@ -752,6 +752,7 @@
             <input type="hidden" id="deal-id" />
             <div class="form-group"><label data-i18n="lbl_deal_title">Title <span class="req">*</span></label><input type="text" id="df-title" required /></div>
             <div class="form-group"><label data-i18n="lbl_contact">Contact</label><select id="df-contact" onchange="onDealContactChange()"></select></div>
+            <div class="form-group"><label id="df-supplier-label">Supplier</label><select id="df-supplier"></select></div>
             <div class="form-group"><label>Pipeline <span class="req">*</span></label><select id="df-pipeline" onchange="onDealPipelineChange()" required></select></div>
             <div class="form-group"><label data-i18n="lbl_stage">Stage</label><select id="df-stage"></select></div>
             <div class="form-group"><label data-i18n="lbl_deal_value">Value</label><input type="number" id="df-value" min="0" step="0.01" /></div>
@@ -776,8 +777,11 @@
 
       <!-- Sticky footer -->
       <div class="modal-actions deal-modal-footer">
-        <button type="button" class="btn" onclick="closeModal('deal-modal')" data-i18n="btn_cancel">Cancel</button>
-        <button type="submit" form="deal-form" class="btn btn-primary" data-i18n="btn_save">Save Deal</button>
+        <button type="button" class="btn btn-danger" id="deal-delete-btn" onclick="deleteDealFromModal()" style="display:none">Delete Deal</button>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <button type="button" class="btn" onclick="closeModal('deal-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" form="deal-form" class="btn btn-primary" data-i18n="btn_save">Save Deal</button>
+        </div>
       </div>
     </div>
   </div>
