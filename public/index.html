@@ -227,6 +227,16 @@
       <!-- Footer — sticks to bottom -->
       <div class="sidebar-footer">
         <ul class="sidebar-nav">
+          <!-- Bell notification button -->
+          <li>
+            <button class="notif-bell-btn" onclick="toggleNotifPanel()" id="notif-bell-btn">
+              <div style="position:relative;display:inline-flex">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                <span class="notif-badge hidden" id="notif-badge">0</span>
+              </div>
+              <span>Notifications</span>
+            </button>
+          </li>
           <li><a href="#" data-page="settings">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="flex-shrink:0">
               <circle cx="12" cy="12" r="3"/>
@@ -250,6 +260,19 @@
         </div>
       </div>
     </nav>
+
+    <!-- Notification panel -->
+    <div id="notif-panel" class="notif-panel hidden">
+      <div class="notif-panel-header">
+        <span class="notif-panel-title">Notifications</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-sm btn-ghost" onclick="markAllNotifRead()" style="font-size:11px">Mark all read</button>
+          <button class="btn btn-sm btn-ghost" onclick="clearReadNotifs()" style="font-size:11px">Clear</button>
+          <button class="close-btn" onclick="toggleNotifPanel()" style="font-size:18px">&times;</button>
+        </div>
+      </div>
+      <div id="notif-list" class="notif-list"></div>
+    </div>
 
     <main class="content">
 
@@ -472,6 +495,20 @@
                   <button class="btn btn-primary btn-sm" onclick="saveSupplierName()">Save</button>
                 </div>
                 <div id="supplier-name-msg" class="workspace-name-msg hidden"></div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2>Notification Preferences</h2></div>
+                <p class="settings-hint">Choose which activity types send you notifications.</p>
+                <div class="notif-pref-list" id="notif-pref-list">
+                  <label class="notif-pref-row"><input type="checkbox" data-pref="contacts" checked /><span>Contacts &amp; Suppliers</span></label>
+                  <label class="notif-pref-row"><input type="checkbox" data-pref="deals" checked /><span>Deals</span></label>
+                  <label class="notif-pref-row"><input type="checkbox" data-pref="tasks" checked /><span>Tasks</span></label>
+                  <label class="notif-pref-row"><input type="checkbox" data-pref="objects" checked /><span>Listings / Objects</span></label>
+                  <label class="notif-pref-row"><input type="checkbox" data-pref="activities" checked /><span>Activities</span></label>
+                </div>
+                <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveNotifPrefs()">Save Preferences</button>
+                <span id="notif-pref-msg" class="workspace-name-msg hidden"></span>
               </div>
 
               <div class="settings-card">

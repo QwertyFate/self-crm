@@ -32,6 +32,7 @@ async function loadSettings() {
   renderPipelinesSettings(); renderDealFieldsList(); renderDealColumnSettings();
   // Tasks settings
   await loadTaskSettings();
+  loadNotifPrefs();
   switchSettingsTab(currentSettingsTab);
   if (currentUser?.role === 'owner') {
     document.getElementById('invites-card').classList.remove('hidden');

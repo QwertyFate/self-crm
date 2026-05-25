@@ -170,6 +170,24 @@ async function initDb() {
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_name    TEXT NOT NULL DEFAULT 'Listings'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_columns JSONB NOT NULL DEFAULT '[]'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS supplier_name   TEXT NOT NULL DEFAULT 'Suppliers'`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_data JSONB NOT NULL DEFAULT '{}'`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs JSONB NOT NULL DEFAULT '{"contacts":true,"deals":true,"tasks":true,"objects":true,"activities":true}'`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id      INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      actor_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      type         TEXT NOT NULL,
+      category     TEXT NOT NULL DEFAULT 'general',
+      title        TEXT NOT NULL,
+      body         TEXT,
+      entity_type  TEXT,
+      entity_id    INTEGER,
+      read         BOOLEAN NOT NULL DEFAULT false,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS task_statuses  JSONB NOT NULL DEFAULT '[{"key":"todo","label":"Todo","color":"#94a3b8"},{"key":"in_progress","label":"In Progress","color":"#3b82f6"},{"key":"in_review","label":"In Review","color":"#f59e0b"},{"key":"done","label":"Done","color":"#22c55e"}]'`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_fields (

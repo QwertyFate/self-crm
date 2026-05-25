@@ -2,6 +2,7 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const { notify }  = require('../notifications');
 
 router.use(requireAuth);
 
@@ -64,6 +65,12 @@ router.post('/', async (req, res, next) => {
       'INSERT INTO deals (workspace_id,contact_id,supplier_id,pipeline_id,stage_id,title,value,assigned_to,custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
       [req.workspaceId, contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assignee, JSON.stringify(custom_data||{})]
     );
+    notify(req.workspaceId, req.userId, {
+      type: 'deal_created', category: 'deals',
+      title: `New deal: ${title.trim()}`,
+      body: value ? `Value: € ${Number(value).toLocaleString()}` : null,
+      entityType: 'deal', entityId: row.id,
+    });
     res.status(201).json({ id: row.id });
   } catch (e) { next(e); }
 });
@@ -77,6 +84,11 @@ router.put('/:id', async (req, res, next) => {
       [contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assigned_to||null, JSON.stringify(custom_data||{}), req.params.id, req.workspaceId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    notify(req.workspaceId, req.userId, {
+      type: 'deal_updated', category: 'deals',
+      title: `Deal updated: ${title.trim()}`,
+      entityType: 'deal', entityId: Number(req.params.id),
+    });
     res.json({ success: true });
   } catch (e) { next(e); }
 });
@@ -88,6 +100,12 @@ router.patch('/:id/stage', async (req, res, next) => {
       [req.body.stage_id||null, req.params.id, req.workspaceId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    const { rows: [deal] } = await pool.query('SELECT title FROM deals WHERE id=$1', [req.params.id]);
+    if (deal) notify(req.workspaceId, req.userId, {
+      type: 'deal_stage_changed', category: 'deals',
+      title: `Deal stage changed: ${deal.title}`,
+      entityType: 'deal', entityId: Number(req.params.id),
+    });
     res.json({ success: true });
   } catch (e) { next(e); }
 });
