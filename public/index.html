@@ -454,35 +454,49 @@
           <button class="btn btn-sm" onclick="openAnalyticsConfig()">Configure Metrics</button>
         </div>
 
-        <!-- Stat cards -->
-        <div class="analytics-cards" id="analytics-cards"></div>
-
-        <!-- Win / Loss bar -->
-        <div class="analytics-section" id="analytics-winloss-section" style="display:none">
-          <div class="analytics-section-title">Deal Outcomes</div>
-          <div class="analytics-winloss">
-            <div class="analytics-winloss-bar" id="analytics-winloss-bar"></div>
-            <div class="analytics-winloss-legend" id="analytics-winloss-legend"></div>
+        <div id="analytics-main-sections" style="padding-left:24px;margin-left:-24px">
+          <!-- Stat cards -->
+          <div class="analytics-draggable-section" id="analytics-sec-stats" data-section-id="stats">
+            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
+            <div class="analytics-cards" id="analytics-cards"></div>
           </div>
-        </div>
 
-        <!-- By pipeline -->
-        <div class="analytics-section" id="analytics-pipeline-section">
-          <div class="analytics-section-title">Deals by Pipeline</div>
-          <div id="analytics-by-pipeline"></div>
-        </div>
-
-        <!-- Trend charts -->
-        <div class="analytics-section">
-          <div class="analytics-trend-header">
-            <div class="analytics-section-title" style="margin:0">Trends</div>
-            <div class="analytics-period-switcher">
-              <button class="period-btn active" data-period="week"  onclick="switchTrendPeriod('week')">Week</button>
-              <button class="period-btn"        data-period="month" onclick="switchTrendPeriod('month')">Month</button>
-              <button class="period-btn"        data-period="year"  onclick="switchTrendPeriod('year')">Year</button>
+          <!-- Win / Loss bar -->
+          <div class="analytics-draggable-section" id="analytics-sec-winloss" data-section-id="winloss">
+            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
+            <div class="analytics-section" id="analytics-winloss-section">
+              <div class="analytics-section-title">Deal Outcomes</div>
+              <div class="analytics-winloss">
+                <div class="analytics-winloss-bar" id="analytics-winloss-bar"></div>
+                <div class="analytics-winloss-legend" id="analytics-winloss-legend"></div>
+              </div>
             </div>
           </div>
-          <div class="analytics-trend-grid" id="analytics-trend-grid"></div>
+
+          <!-- By pipeline -->
+          <div class="analytics-draggable-section" id="analytics-sec-pipeline" data-section-id="pipeline">
+            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
+            <div class="analytics-section">
+              <div class="analytics-section-title">Deals by Pipeline</div>
+              <div id="analytics-by-pipeline"></div>
+            </div>
+          </div>
+
+          <!-- Trend charts -->
+          <div class="analytics-draggable-section" id="analytics-sec-trends" data-section-id="trends">
+            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
+            <div class="analytics-section">
+              <div class="analytics-trend-header">
+                <div class="analytics-section-title" style="margin:0">Trends</div>
+                <div class="analytics-period-switcher">
+                  <button class="period-btn active" data-period="week"  onclick="switchTrendPeriod('week')">Week</button>
+                  <button class="period-btn"        data-period="month" onclick="switchTrendPeriod('month')">Month</button>
+                  <button class="period-btn"        data-period="year"  onclick="switchTrendPeriod('year')">Year</button>
+                </div>
+              </div>
+              <div class="analytics-trend-grid" id="analytics-trend-grid"></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -494,10 +508,12 @@
             <button class="close-btn" onclick="closeAnalyticsConfig()">&times;</button>
           </div>
           <div class="modal-body">
-            <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
-              Select which pipeline stages count as <strong>Won</strong> or <strong>Lost</strong>. Deals in any other stage are counted as <strong>Open</strong>.
-            </p>
             <div class="analytics-config-group">
+              <div class="analytics-config-label">Visible Metric Cards</div>
+              <p style="color:var(--muted);font-size:12px;margin:0 0 8px">Toggle which cards appear in the overview row.</p>
+              <div id="analytics-card-visibility" class="analytics-stage-chips"></div>
+            </div>
+            <div class="analytics-config-group" style="margin-top:20px">
               <div class="analytics-config-label">Deal Value Field</div>
               <p style="color:var(--muted);font-size:12px;margin:0 0 8px">Which field holds the deal price? Only numeric/currency fields appear here.</p>
               <select id="analytics-value-field" class="form-control" style="width:100%"></select>

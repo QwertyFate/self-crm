@@ -172,6 +172,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS supplier_name   TEXT NOT NULL DEFAULT 'Suppliers'`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_data JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs JSONB NOT NULL DEFAULT '{"contacts":true,"deals":true,"tasks":true,"objects":true,"activities":true}'`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS analytics_layout JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notifications (
       id           SERIAL PRIMARY KEY,
