@@ -2,6 +2,7 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const { notify }  = require('../notifications');
 
 router.use(requireAuth);
 
@@ -63,6 +64,15 @@ router.post('/', async (req, res, next) => {
        title.trim(), description||null, status||'todo', priority||'medium',
        assigned_to||null, due_date||null, req.userId]
     );
+    // Only notify for parent tasks (not subtasks)
+    if (!parent_id) {
+      notify(req.workspaceId, req.userId, {
+        type: 'task_created', category: 'tasks',
+        title: `New task: ${title.trim()}`,
+        body: assigned_to ? `Assigned` : null,
+        entityType: 'task', entityId: row.id,
+      });
+    }
     res.status(201).json({ id: row.id });
   } catch (e) { next(e); }
 });

@@ -2,6 +2,7 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const { notify }  = require('../notifications');
 
 router.use(requireAuth);
 
@@ -103,6 +104,12 @@ router.post('/', async (req, res, next) => {
       'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data, contact_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
       [req.workspaceId, name, email||null, phone||null, company||null, stage_id||null, assignee, JSON.stringify(custom_data||{}), type]
     );
+    notify(req.workspaceId, req.userId, {
+      type: 'contact_created', category: 'contacts',
+      title: `New ${type} added: ${name}`,
+      body: company ? `Company: ${company}` : null,
+      entityType: 'contact', entityId: row.id,
+    });
     res.status(201).json({ id: row.id });
   } catch (e) { next(e); }
 });

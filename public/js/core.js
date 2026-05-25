@@ -284,15 +284,21 @@ async function apiFetch(url, opts = {}) {
   try {
     const r = await fetch(url, opts);
     const text = await r.text();
-    try {
-      return JSON.parse(text);
-    } catch {
-      // Server returned non-JSON (e.g. 404 HTML page)
-      return { error: `Server error (${r.status})` };
-    }
+    try { return JSON.parse(text); }
+    catch { return { error: `Server error (${r.status})` }; }
   } finally {
     loader.done();
   }
+}
+
+// Silent fetch — no loading bar, no overlay. For background polling.
+async function apiFetchSilent(url, opts = {}) {
+  try {
+    const r = await fetch(url, opts);
+    const text = await r.text();
+    try { return JSON.parse(text); }
+    catch { return { error: `Server error (${r.status})` }; }
+  } catch { return { error: 'Network error' }; }
 }
 
 const api = {
