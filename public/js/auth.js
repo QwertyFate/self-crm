@@ -62,6 +62,7 @@ function showApp() {
   loadNotifPrefs();
   startNotifPolling();
   loadDeals();
+  setTimeout(maybeStartGuide, 800);
 }
 
 function showAuthView(view) {

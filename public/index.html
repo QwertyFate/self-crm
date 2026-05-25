@@ -1332,7 +1332,31 @@
   <script src="js/modals.js"></script>
   <script src="js/tasks.js"></script>
   <script src="js/notifications.js"></script>
+  <!-- ── Help button ── -->
+  <button id="guide-help-btn" class="guide-help-fab" onclick="startGuide()" title="Help / Tour">?</button>
+
+  <!-- ── Guide / Tour overlay ── -->
+  <div id="guide-overlay" class="hidden" style="position:fixed;inset:0;z-index:99997;pointer-events:none">
+    <div id="guide-spotlight" class="guide-spotlight" style="display:none"></div>
+    <div id="guide-tooltip" class="guide-tooltip guide-tooltip-center" style="pointer-events:auto">
+      <div class="guide-tooltip-header">
+        <span class="guide-step-counter" id="guide-step-counter">1 of 13</span>
+        <button class="guide-skip-btn" onclick="endGuide()">Skip tour</button>
+      </div>
+      <h3 id="guide-title" class="guide-tooltip-title"></h3>
+      <p  id="guide-body"  class="guide-tooltip-body"></p>
+      <div class="guide-tooltip-footer">
+        <div id="guide-dots" class="guide-dots"></div>
+        <div class="guide-nav-btns">
+          <button id="guide-prev-btn" class="btn btn-sm" onclick="guidePrev()">← Back</button>
+          <button id="guide-next-btn" class="btn btn-sm btn-primary" onclick="guideNext()">Next →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="js/analytics.js"></script>
+  <script src="js/guide.js"></script>
   <script src="js/admin-import.js"></script>
 </body>
 </html>
