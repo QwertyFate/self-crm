@@ -114,6 +114,7 @@ app.use('/api/tasks',         require('./routes/tasks'));
 app.use('/api/task-fields',   require('./routes/task-fields'));
 app.use('/api/task-projects',   require('./routes/task-projects'));
 app.use('/api/notifications',   require('./routes/notifications'));
+app.use('/api/analytics',       require('./routes/analytics'));
 app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations',  require('./routes/integrations'));

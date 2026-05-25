@@ -445,6 +445,81 @@
         <div id="board-content" class="board-content"></div>
       </section>
 
+      <!-- ── Analytics ── -->
+      <section id="page-analytics" class="page">
+        <div class="analytics-header">
+          <div>
+            <h1 class="analytics-title">Analytics</h1>
+            <p class="analytics-sub" id="analytics-period"></p>
+          </div>
+          <button class="btn btn-sm" onclick="openAnalyticsConfig()">Configure Metrics</button>
+        </div>
+
+        <!-- Stat cards -->
+        <div class="analytics-cards" id="analytics-cards"></div>
+
+        <!-- Win / Loss bar -->
+        <div class="analytics-section" id="analytics-winloss-section" style="display:none">
+          <div class="analytics-section-title">Deal Outcomes</div>
+          <div class="analytics-winloss">
+            <div class="analytics-winloss-bar" id="analytics-winloss-bar"></div>
+            <div class="analytics-winloss-legend" id="analytics-winloss-legend"></div>
+          </div>
+        </div>
+
+        <!-- By pipeline -->
+        <div class="analytics-section" id="analytics-pipeline-section">
+          <div class="analytics-section-title">Deals by Pipeline</div>
+          <div id="analytics-by-pipeline"></div>
+        </div>
+
+        <!-- Trend charts -->
+        <div class="analytics-section">
+          <div class="analytics-trend-header">
+            <div class="analytics-section-title" style="margin:0">Trends</div>
+            <div class="analytics-period-switcher">
+              <button class="period-btn active" data-period="week"  onclick="switchTrendPeriod('week')">Week</button>
+              <button class="period-btn"        data-period="month" onclick="switchTrendPeriod('month')">Month</button>
+              <button class="period-btn"        data-period="year"  onclick="switchTrendPeriod('year')">Year</button>
+            </div>
+          </div>
+          <div class="analytics-trend-grid" id="analytics-trend-grid"></div>
+        </div>
+      </section>
+
+      <!-- Analytics config modal -->
+      <div id="analytics-config-modal" class="modal-overlay hidden">
+        <div class="modal" style="max-width:720px">
+          <div class="modal-header">
+            <h2>Configure Metrics</h2>
+            <button class="close-btn" onclick="closeAnalyticsConfig()">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p style="color:var(--muted);font-size:13px;margin-bottom:16px">
+              Select which pipeline stages count as <strong>Won</strong> or <strong>Lost</strong>. Deals in any other stage are counted as <strong>Open</strong>.
+            </p>
+            <div class="analytics-config-group">
+              <div class="analytics-config-label">Deal Value Field</div>
+              <p style="color:var(--muted);font-size:12px;margin:0 0 8px">Which field holds the deal price? Only numeric/currency fields appear here.</p>
+              <select id="analytics-value-field" class="form-control" style="width:100%"></select>
+            </div>
+            <div class="analytics-config-group" style="margin-top:20px">
+              <div class="analytics-config-label" style="color:#22c55e">Won Stages</div>
+              <div id="analytics-won-stages"></div>
+            </div>
+            <div class="analytics-config-group" style="margin-top:16px">
+              <div class="analytics-config-label" style="color:#ef4444">Lost Stages</div>
+              <div id="analytics-lost-stages"></div>
+            </div>
+            <div id="analytics-config-msg" class="workspace-name-msg hidden"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn" onclick="closeAnalyticsConfig()">Cancel</button>
+            <button class="btn btn-primary" onclick="saveAnalyticsConfig()">Save</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Settings ── -->
       <section id="page-settings" class="page">
         <div class="settings-page-header">
@@ -1299,8 +1374,6 @@
   <script src="js/tasks.js"></script>
   <script src="js/notifications.js"></script>
   <script src="js/analytics.js"></script>
-  <script src="js/integrations.js"></script>
-  <script src="js/guide.js"></script>
   <script src="js/admin-import.js"></script>
 </body>
 </html>
