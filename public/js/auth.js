@@ -59,6 +59,8 @@ function showApp() {
   updateBoardNavVisibility();
   updateObjectsNav();
   updateSuppliersNav();
+  loadNotifPrefs();
+  startNotifPolling();
   loadDeals();
 }
 

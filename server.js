@@ -76,7 +76,8 @@ app.use('/api/objects',      require('./routes/objects'));
 app.use('/api/object-fields',require('./routes/object-fields'));
 app.use('/api/tasks',         require('./routes/tasks'));
 app.use('/api/task-fields',   require('./routes/task-fields'));
-app.use('/api/task-projects', require('./routes/task-projects'));
+app.use('/api/task-projects',   require('./routes/task-projects'));
+app.use('/api/notifications',   require('./routes/notifications'));
 app.use('/api/tasks',         require('./routes/task-attachments'));
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
