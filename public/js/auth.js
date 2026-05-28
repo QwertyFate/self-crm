@@ -205,7 +205,9 @@ function switchPage(page) {
   if (page === 'settings')   loadSettings();
   if (page === 'objects')    loadObjects();
   if (page === 'tasks')      loadTasks();
-  if (page === 'board')      loadBoard();
+  if (page === 'board')        loadBoard();
+  if (page === 'analytics')    loadAnalytics();
+  if (page === 'integrations') loadIntegrations();
 }
 
 // ── Shared loaders ────────────────────────────────────────
