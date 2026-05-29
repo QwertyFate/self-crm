@@ -33,6 +33,25 @@ const passwordLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Per-IP: 120 webhook calls per 15 min (enough for any legitimate Make/Zapier flow)
+const webhookIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  message: { error: 'Too many webhook requests from this IP. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Per-key: 120 calls per minute per workspace webhook (industry standard range: 100-300/min)
+const webhookKeyLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  message: { error: 'Webhook rate limit exceeded. Maximum 120 requests per minute per key.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.params.key || 'unknown', // rate limit per webhook key
+});
+
 app.use(express.json());
 app.use(session({
   store: new pgSession({ pool, createTableIfMissing: true }),
@@ -78,6 +97,8 @@ app.use('/api/tasks',         require('./routes/tasks'));
 app.use('/api/task-fields',   require('./routes/task-fields'));
 app.use('/api/task-projects', require('./routes/task-projects'));
 app.use('/api/tasks',         require('./routes/task-attachments'));
+app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
+app.use('/api/integrations',  require('./routes/integrations'));
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 

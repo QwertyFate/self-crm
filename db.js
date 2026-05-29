@@ -293,6 +293,35 @@ async function initDb() {
     )
   `);
 
+  // One webhook config per workspace
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_webhook (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+      webhook_key  TEXT NOT NULL UNIQUE,
+      field_map    JSONB NOT NULL DEFAULT '{"name":"full_name","email":"email","phone":"phone_number","company":"company"}',
+      create_deal  BOOLEAN NOT NULL DEFAULT false,
+      pipeline_id  INTEGER REFERENCES pipelines(id) ON DELETE SET NULL,
+      stage_id     INTEGER REFERENCES pipeline_stages(id) ON DELETE SET NULL,
+      active       BOOLEAN NOT NULL DEFAULT true,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS webhook_logs (
+      id             SERIAL PRIMARY KEY,
+      workspace_id   INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      status         TEXT NOT NULL DEFAULT 'success',
+      payload        JSONB,
+      contact_id     INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+      deal_id        INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+      error          TEXT,
+      created_at     TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS captured JSONB NOT NULL DEFAULT '{}'`);
+
   // Allow whatsapp as an activity type
   await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);
   await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp'))`);
