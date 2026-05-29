@@ -479,6 +479,7 @@ async function openTaskModal(id) {
 
     subCol.style.display = '';
     renderSubtasksList(t.subtasks || [], id);
+    loadTaskAttachments(id);
   } else {
     currentTaskId = null;
     document.getElementById('task-status').value = statuses[0]?.key || 'todo';
@@ -584,4 +585,145 @@ async function deleteTaskFromModal() {
   closeModal('task-modal');
   tasks = tasks.filter(t => t.id !== Number(id) && t.parent_id !== Number(id));
   renderTasksCurrent();
+}
+
+// ── TASK ATTACHMENTS ──────────────────────────────────────
+const VIEWABLE_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/msword', 'application/vnd.ms-excel', 'application/vnd.ms-powerpoint',
+  'text/plain', 'text/csv',
+];
+const IMAGE_TYPES = ['image/png','image/jpeg','image/gif','image/webp','image/svg+xml'];
+
+function fileIcon(type) {
+  if (IMAGE_TYPES.includes(type))      return '🖼';
+  if (type === 'application/pdf')      return '📄';
+  if (type.includes('word'))           return '📝';
+  if (type.includes('sheet') || type.includes('excel')) return '📊';
+  if (type.includes('presentation') || type.includes('powerpoint')) return '📑';
+  if (type.includes('text'))           return '📃';
+  return '📎';
+}
+
+function fmtSize(bytes) {
+  if (bytes < 1024)       return bytes + ' B';
+  if (bytes < 1048576)    return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+async function loadTaskAttachments(taskId) {
+  const listEl  = document.getElementById('task-attachments-list');
+  const viewEl  = document.getElementById('task-file-viewer');
+  const errEl   = document.getElementById('task-attach-error');
+  if (!listEl) return;
+  errEl?.classList.add('hidden');
+  viewEl?.classList.add('hidden');
+
+  try {
+    const attachments = await api.get(`/api/tasks/${taskId}/attachments`);
+    renderAttachmentList(attachments, taskId);
+  } catch {
+    if (listEl) listEl.innerHTML = '';
+  }
+}
+
+function renderAttachmentList(attachments, taskId) {
+  const el = document.getElementById('task-attachments-list');
+  if (!el) return;
+  if (!attachments.length) { el.innerHTML = ''; return; }
+  el.innerHTML = attachments.map(a => `
+    <div class="task-attach-item" id="attach-${a.id}">
+      <span class="task-attach-icon">${fileIcon(a.file_type)}</span>
+      <span class="task-attach-name" title="${esc(a.file_name)}">${esc(a.file_name)}</span>
+      <span class="task-attach-size">${fmtSize(a.file_size)}</span>
+      <div class="task-attach-actions">
+        ${(VIEWABLE_TYPES.includes(a.file_type) || IMAGE_TYPES.includes(a.file_type))
+          ? `<button type="button" class="btn btn-sm btn-ghost" onclick="viewAttachment('${esc(a.file_url)}','${esc(a.file_type)}','${esc(a.file_name)}')">View</button>`
+          : ''}
+        <a href="${esc(a.file_url)}" download="${esc(a.file_name)}" class="btn btn-sm btn-ghost" target="_blank">↓</a>
+        <button type="button" class="btn btn-sm btn-danger btn-icon" onclick="deleteAttachment(${taskId},${a.id})">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+function viewAttachment(url, type, name) {
+  const viewEl = document.getElementById('task-file-viewer');
+  if (!viewEl) return;
+
+  let content;
+  if (IMAGE_TYPES.includes(type)) {
+    content = `<img src="${esc(url)}" alt="${esc(name)}" />`;
+  } else {
+    const encoded = encodeURIComponent(url);
+    content = `<iframe src="https://docs.google.com/viewer?url=${encoded}&embedded=true" loading="lazy"></iframe>`;
+  }
+
+  viewEl.innerHTML = `
+    <div class="task-viewer-bar">
+      <span>${esc(name)}</span>
+      <button type="button" class="btn btn-sm btn-ghost" onclick="document.getElementById('task-file-viewer').classList.add('hidden')">✕ Close</button>
+    </div>
+    ${content}`;
+  viewEl.classList.remove('hidden');
+  viewEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function deleteAttachment(taskId, attachmentId) {
+  if (!confirm('Delete this attachment?')) return;
+  const res = await api.del(`/api/tasks/${taskId}/attachments/${attachmentId}`);
+  if (res.error) { alert(res.error); return; }
+  document.getElementById(`attach-${attachmentId}`)?.remove();
+}
+
+// Drag-and-drop
+function taskAttachDragOver(e) { e.preventDefault(); document.getElementById('task-drop-zone')?.classList.add('drag-over'); }
+function taskAttachDragLeave(e) { document.getElementById('task-drop-zone')?.classList.remove('drag-over'); }
+function taskAttachDrop(e) {
+  e.preventDefault();
+  document.getElementById('task-drop-zone')?.classList.remove('drag-over');
+  const files = Array.from(e.dataTransfer.files);
+  if (files.length) uploadAttachments(files);
+}
+function taskAttachFileChange(e) {
+  const files = Array.from(e.target.files);
+  if (files.length) uploadAttachments(files);
+  e.target.value = ''; // reset so same file can be re-selected
+}
+
+async function uploadAttachments(files) {
+  const taskId = document.getElementById('task-id').value;
+  if (!taskId) { alert('Save the task first before adding attachments.'); return; }
+
+  const errEl  = document.getElementById('task-attach-error');
+  const dropEl = document.getElementById('task-drop-zone');
+  errEl?.classList.add('hidden');
+
+  const MAX = 10 * 1024 * 1024;
+  const oversized = files.filter(f => f.size > MAX);
+  if (oversized.length) {
+    if (errEl) { errEl.textContent = `File too large: ${oversized.map(f=>f.name).join(', ')} (max 10 MB)`; errEl.classList.remove('hidden'); }
+    return;
+  }
+
+  if (dropEl) { dropEl.style.opacity = '.5'; dropEl.style.pointerEvents = 'none'; }
+
+  const uploaded = [];
+  for (const file of files) {
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/attachments`, { method: 'POST', body: form });
+      const json = await res.json();
+      if (json.error) { if (errEl) { errEl.textContent = json.error; errEl.classList.remove('hidden'); } }
+      else uploaded.push(json);
+    } catch {
+      if (errEl) { errEl.textContent = 'Upload failed. Check your Supabase Storage configuration.'; errEl.classList.remove('hidden'); }
+    }
+  }
+
+  if (dropEl) { dropEl.style.opacity = ''; dropEl.style.pointerEvents = ''; }
+  if (uploaded.length) await loadTaskAttachments(taskId);
 }
