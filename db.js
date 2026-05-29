@@ -170,7 +170,6 @@ async function initDb() {
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_name    TEXT NOT NULL DEFAULT 'Listings'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_columns JSONB NOT NULL DEFAULT '[]'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS supplier_name   TEXT NOT NULL DEFAULT 'Suppliers'`);
-  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_data JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS task_statuses  JSONB NOT NULL DEFAULT '[{"key":"todo","label":"Todo","color":"#94a3b8"},{"key":"in_progress","label":"In Progress","color":"#3b82f6"},{"key":"in_review","label":"In Review","color":"#f59e0b"},{"key":"done","label":"Done","color":"#22c55e"}]'`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_fields (
@@ -187,14 +186,6 @@ async function initDb() {
   await pool.query(`ALTER TABLE contacts   ADD COLUMN IF NOT EXISTS contact_type   TEXT NOT NULL DEFAULT 'contact'`);
   await pool.query(`ALTER TABLE deals      ADD COLUMN IF NOT EXISTS supplier_id    INTEGER REFERENCES contacts(id) ON DELETE SET NULL`);
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS object_contacts (
-      object_id  INTEGER NOT NULL REFERENCES objects(id)  ON DELETE CASCADE,
-      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      PRIMARY KEY (object_id, contact_id)
-    )
-  `);
-  await pool.query(`
     CREATE TABLE IF NOT EXISTS objects (
       id           SERIAL PRIMARY KEY,
       workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -202,6 +193,14 @@ async function initDb() {
       custom_data  JSONB NOT NULL DEFAULT '{}',
       created_at   TIMESTAMPTZ DEFAULT NOW(),
       updated_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS object_contacts (
+      object_id  INTEGER NOT NULL REFERENCES objects(id)  ON DELETE CASCADE,
+      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (object_id, contact_id)
     )
   `);
   await pool.query(`
@@ -241,6 +240,7 @@ async function initDb() {
       updated_at   TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_data JSONB NOT NULL DEFAULT '{}'`);
 
   // Task projects, lists, and per-project statuses
   await pool.query(`
