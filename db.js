@@ -241,6 +241,42 @@ async function initDb() {
     )
   `);
 
+  // Task projects, lists, and per-project statuses
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS task_projects (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      color        TEXT NOT NULL DEFAULT '#3b82f6',
+      position     INTEGER NOT NULL DEFAULT 0,
+      created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS task_lists (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      project_id   INTEGER NOT NULL REFERENCES task_projects(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      position     INTEGER NOT NULL DEFAULT 0,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS task_project_statuses (
+      id         SERIAL PRIMARY KEY,
+      project_id INTEGER NOT NULL REFERENCES task_projects(id) ON DELETE CASCADE,
+      key        TEXT NOT NULL,
+      label      TEXT NOT NULL,
+      color      TEXT NOT NULL DEFAULT '#94a3b8',
+      position   INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(project_id, key)
+    )
+  `);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES task_projects(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS list_id    INTEGER REFERENCES task_lists(id)    ON DELETE SET NULL`);
+
   // Allow whatsapp as an activity type
   await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);
   await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp'))`);
