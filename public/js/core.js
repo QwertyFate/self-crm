@@ -283,7 +283,13 @@ async function apiFetch(url, opts = {}) {
   loader.start();
   try {
     const r = await fetch(url, opts);
-    return await r.json();
+    const text = await r.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      // Server returned non-JSON (e.g. 404 HTML page)
+      return { error: `Server error (${r.status})` };
+    }
   } finally {
     loader.done();
   }

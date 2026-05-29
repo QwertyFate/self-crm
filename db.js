@@ -169,7 +169,20 @@ async function initDb() {
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS miro_url TEXT`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_name    TEXT NOT NULL DEFAULT 'Listings'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_columns JSONB NOT NULL DEFAULT '[]'`);
-  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS supplier_name  TEXT NOT NULL DEFAULT 'Suppliers'`);
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS supplier_name   TEXT NOT NULL DEFAULT 'Suppliers'`);
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS task_statuses  JSONB NOT NULL DEFAULT '[{"key":"todo","label":"Todo","color":"#94a3b8"},{"key":"in_progress","label":"In Progress","color":"#3b82f6"},{"key":"in_review","label":"In Review","color":"#f59e0b"},{"key":"done","label":"Done","color":"#22c55e"}]'`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS task_fields (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      field_key    TEXT NOT NULL,
+      type         TEXT NOT NULL DEFAULT 'text',
+      options      JSONB NOT NULL DEFAULT '[]',
+      position     INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(workspace_id, field_key)
+    )
+  `);
   await pool.query(`ALTER TABLE contacts   ADD COLUMN IF NOT EXISTS contact_type   TEXT NOT NULL DEFAULT 'contact'`);
   await pool.query(`ALTER TABLE deals      ADD COLUMN IF NOT EXISTS supplier_id    INTEGER REFERENCES contacts(id) ON DELETE SET NULL`);
   await pool.query(`
@@ -210,6 +223,24 @@ async function initDb() {
       PRIMARY KEY (deal_id, object_id)
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tasks (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      parent_id    INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+      title        TEXT NOT NULL,
+      description  TEXT,
+      status       TEXT NOT NULL DEFAULT 'todo',
+      priority     TEXT NOT NULL DEFAULT 'medium',
+      assigned_to  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      due_date     DATE,
+      created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      custom_data  JSONB NOT NULL DEFAULT '{}',
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   // Allow whatsapp as an activity type
   await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);
   await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp'))`);

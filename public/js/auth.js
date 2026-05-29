@@ -200,6 +200,7 @@ function switchPage(page) {
   if (page === 'activities') loadActivities();
   if (page === 'settings')   loadSettings();
   if (page === 'objects')    loadObjects();
+  if (page === 'tasks')      loadTasks();
   if (page === 'board')      loadBoard();
 }
 
