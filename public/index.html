@@ -227,6 +227,13 @@
       <!-- Footer — sticks to bottom -->
       <div class="sidebar-footer">
         <ul class="sidebar-nav">
+          <!-- Help / Tour button -->
+          <li>
+            <button class="notif-bell-btn" onclick="startGuide()" title="Help / Tour">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span>Help</span>
+            </button>
+          </li>
           <!-- Bell notification button -->
           <li>
             <button class="notif-bell-btn" onclick="toggleNotifPanel()" id="notif-bell-btn">
@@ -1389,9 +1396,6 @@
   <script src="js/modals.js"></script>
   <script src="js/tasks.js"></script>
   <script src="js/notifications.js"></script>
-  <!-- ── Help button ── -->
-  <button id="guide-help-btn" class="guide-help-fab" onclick="startGuide()" title="Help / Tour">?</button>
-
   <!-- ── Guide / Tour overlay ── -->
   <div id="guide-overlay" class="hidden" style="position:fixed;inset:0;z-index:99997;pointer-events:none">
     <div id="guide-spotlight" class="guide-spotlight" style="display:none"></div>
@@ -1413,6 +1417,7 @@
   </div>
 
   <script src="js/analytics.js"></script>
+  <script src="js/integrations.js"></script>
   <script src="js/guide.js"></script>
   <script src="js/admin-import.js"></script>
 </body>

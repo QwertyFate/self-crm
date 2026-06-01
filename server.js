@@ -9,6 +9,8 @@ const { pool, initDb } = require('./db');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+app.set('trust proxy', 1); // Trust Cloudflare / first proxy for accurate IP detection
+
 const isProd = process.env.NODE_ENV === 'production';
 app.use(helmet({
   contentSecurityPolicy: isProd ? {
