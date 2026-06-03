@@ -186,6 +186,30 @@
           </div>
         </div>
 
+        <!-- ── View: Workspace Picker ── -->
+        <div id="auth-view-workspace-picker" class="hidden">
+          <p class="auth-view-title">Choose a workspace</p>
+          <p class="auth-view-sub">You belong to multiple workspaces. Which one would you like to open?</p>
+          <div id="workspace-picker-list" class="workspace-picker-list"></div>
+          <div id="workspace-picker-error" class="auth-error hidden"></div>
+        </div>
+
+        <!-- ── View: Join Workspace ── -->
+        <div id="auth-view-join-workspace" class="hidden">
+          <p class="auth-view-title">Join a workspace</p>
+          <form class="auth-form" onsubmit="handleJoinWorkspace(event)">
+            <div class="auth-field">
+              <label>Workspace invite code</label>
+              <input type="text" id="join-ws-code" placeholder="Paste invite code here" autocomplete="off" />
+            </div>
+            <div id="join-ws-error" class="auth-error hidden"></div>
+            <button type="submit" class="btn btn-primary auth-submit">Join workspace</button>
+          </form>
+          <div class="auth-link-row">
+            <a href="#" onclick="closeJoinWorkspace(event)">← Back</a>
+          </div>
+        </div>
+
         <div class="admin-link-row">
           <a href="/?admin" class="admin-link">⚙ Admin</a>
         </div>
@@ -201,7 +225,10 @@
     <nav class="sidebar">
       <div class="sidebar-top">
         <img src="/images/logo.png" alt="Logo" class="sidebar-logo" />
-        <div class="workspace-name" id="sidebar-workspace"></div>
+        <button class="ws-switcher" id="ws-switcher" onclick="switchPage('workspaces')">
+          <div class="workspace-name" id="sidebar-workspace"></div>
+          <svg class="ws-switcher-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M4 6l4 4 4-4"/></svg>
+        </button>
       </div>
 
       <!-- Main nav — grows to push footer down -->
@@ -877,10 +904,98 @@
         </div>
       </section>
 
+      <!-- ── Workspaces page ── -->
+      <section id="page-workspaces" class="page" style="overflow-y:auto">
+        <div class="page-header" style="flex-shrink:0">
+          <h1>Workspaces</h1>
+          <p style="color:var(--muted);font-size:13px;margin:4px 0 0">Switch between your workspaces or create a new one.</p>
+        </div>
+        <div id="workspaces-grid" class="ws-page-grid"></div>
+      </section>
+
     </main>
   </div>
 
   <!-- ══════════════════════════════════════ MODALS ══════════════════════════════════════ -->
+
+  <!-- Join Workspace Modal -->
+  <div id="join-workspace-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Join a Workspace</h2>
+        <button class="close-btn" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')">&times;</button>
+      </div>
+      <form onsubmit="handleJoinWorkspace(event)">
+        <div class="form-group">
+          <label>Workspace Invite Code <span class="req">*</span></label>
+          <input type="text" id="join-ws-code" placeholder="Paste invite code here" autocomplete="off" required />
+        </div>
+        <div id="join-ws-error" class="auth-error hidden" style="margin:0 22px 10px"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Join Workspace</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Workspace Choice Modal -->
+  <div id="add-workspace-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Add a Workspace</h2>
+        <button class="close-btn" onclick="document.getElementById('add-workspace-modal').classList.add('hidden')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="add-ws-choices">
+          <button class="add-ws-choice" onclick="pickAddWorkspace('join')">
+            <div class="add-ws-choice-icon" style="background:color-mix(in srgb,#3b82f6 12%,transparent);color:#3b82f6">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            </div>
+            <div>
+              <div class="add-ws-choice-title">Join a workspace</div>
+              <div class="add-ws-choice-sub">Enter an invite code from a workspace owner</div>
+            </div>
+          </button>
+          <button class="add-ws-choice" onclick="pickAddWorkspace('create')">
+            <div class="add-ws-choice-icon" style="background:color-mix(in srgb,#10b981 12%,transparent);color:#10b981">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            </div>
+            <div>
+              <div class="add-ws-choice-title">Create a workspace</div>
+              <div class="add-ws-choice-sub">Start fresh with a platform invite code</div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Workspace Modal -->
+  <div id="create-workspace-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Create New Workspace</h2>
+        <button class="close-btn" onclick="closeCreateWorkspaceModal()">&times;</button>
+      </div>
+      <form onsubmit="handleCreateWorkspace(event)">
+        <div class="form-group">
+          <label>Workspace Name <span class="req">*</span></label>
+          <input type="text" id="cw-name" placeholder="e.g. Acme Sales" required />
+        </div>
+        <div class="form-group">
+          <label>Platform Invite Code <span class="req">*</span></label>
+          <input type="text" id="cw-code" placeholder="Paste platform code here" autocomplete="off" />
+          <span style="font-size:11px;color:var(--muted)">Get a code from the admin panel (yoursite.com/?admin)</span>
+        </div>
+        <div id="cw-error" class="auth-error hidden" style="margin:0 22px 10px"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn" onclick="closeCreateWorkspaceModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Workspace</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <!-- Contact Modal -->
   <div id="contact-modal" class="modal-overlay hidden">

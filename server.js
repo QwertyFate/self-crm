@@ -120,6 +120,7 @@ app.use('/api/analytics',       require('./routes/analytics'));
 app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations',  require('./routes/integrations'));
+app.use('/api/chat',          require('./routes/chat'));
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
