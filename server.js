@@ -2,11 +2,29 @@ const express    = require('express');
 const session    = require('express-session');
 const pgSession  = require('connect-pg-simple')(session);
 const path       = require('path');
+const helmet     = require('helmet');
 const { rateLimit } = require('express-rate-limit');
 const { pool, initDb } = require('./db');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+
+const isProd = process.env.NODE_ENV === 'production';
+app.use(helmet({
+  contentSecurityPolicy: isProd ? {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'", "'unsafe-inline'", "https://challenges.cloudflare.com", "https://static.cloudflareinsights.com"],
+      styleSrc:    ["'self'", "'unsafe-inline'"],
+      imgSrc:      ["'self'", "data:", "blob:", "https:"],
+      frameSrc:    ["https://docs.google.com"],
+      connectSrc:  ["'self'", "https://*.supabase.co", "https://cloudflareinsights.com"],
+      fontSrc:     ["'self'", "data:"],
+      objectSrc:   ["'none'"],
+    },
+  } : false,
+  crossOriginEmbedderPolicy: false,
+}));
 
 // ── Rate limiters ─────────────────────────────────────────
 const loginLimiter = rateLimit({
@@ -64,11 +82,10 @@ app.use(session({
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
   setHeaders(res, filePath) {
-    if (filePath.endsWith('.html')) {
-      // Never cache HTML — always serve fresh so new elements are available
+    if (filePath.endsWith('.html') || filePath.endsWith('.css') || filePath.endsWith('.js')) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     } else {
-      // Cache JS/CSS/images for 1 hour (Cloudflare also caches these at the edge)
+      // Cache images/fonts for 1 hour
       res.setHeader('Cache-Control', 'public, max-age=3600');
     }
   },
@@ -95,7 +112,9 @@ app.use('/api/objects',      require('./routes/objects'));
 app.use('/api/object-fields',require('./routes/object-fields'));
 app.use('/api/tasks',         require('./routes/tasks'));
 app.use('/api/task-fields',   require('./routes/task-fields'));
-app.use('/api/task-projects', require('./routes/task-projects'));
+app.use('/api/task-projects',   require('./routes/task-projects'));
+app.use('/api/notifications',   require('./routes/notifications'));
+app.use('/api/analytics',       require('./routes/analytics'));
 app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations',  require('./routes/integrations'));
