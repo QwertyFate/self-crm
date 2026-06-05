@@ -1991,3 +1991,229 @@ body {
   box-shadow: 0 4px 12px rgba(0,0,0,.2);
   display: none;
 }
+
+/* ── Trend card controls ─────────────────────────────────── */
+.trend-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.trend-drag-handle {
+  font-size: 16px;
+  color: var(--muted);
+  cursor: grab;
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+}
+.trend-drag-handle:active { cursor: grabbing; }
+.trend-card-title { flex: 1; }
+.trend-view-btns {
+  display: flex;
+  gap: 2px;
+  background: var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+.trend-view-btn {
+  background: none;
+  border: none;
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--muted);
+  line-height: 1;
+  transition: background .1s, color .1s;
+}
+.trend-view-btn:hover { color: var(--text); }
+.trend-view-btn.active { background: var(--card-bg); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+
+/* Drag states */
+.trend-card[draggable] { cursor: default; transition: opacity .15s, box-shadow .15s; }
+.trend-card.dragging   { opacity: .4; }
+.trend-card.drag-over  { box-shadow: 0 0 0 2px var(--primary); }
+
+/* Detail view */
+.trend-detail-list { display: flex; flex-direction: column; gap: 5px; padding-top: 4px; max-height: 210px; overflow-y: auto; }
+.trend-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.trend-detail-label {
+  width: 36px;
+  color: var(--muted);
+  flex-shrink: 0;
+  text-align: right;
+}
+.trend-detail-track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.trend-detail-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .3s ease;
+}
+.trend-detail-val {
+  width: 48px;
+  text-align: right;
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ── Draggable sections ──────────────────────────────────── */
+#analytics-main-sections { display: flex; flex-direction: column; gap: 0; }
+.analytics-draggable-section {
+  position: relative;
+  transition: opacity .15s;
+}
+.analytics-draggable-section.dragging { opacity: .35; }
+.analytics-draggable-section.drag-over { outline: 2px dashed var(--primary); outline-offset: 4px; border-radius: 10px; }
+.section-drag-handle {
+  position: absolute;
+  left: -22px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  color: var(--border);
+  cursor: grab;
+  user-select: none;
+  opacity: 0;
+  transition: opacity .15s;
+  line-height: 1;
+}
+.analytics-draggable-section:hover .section-drag-handle { opacity: 1; color: var(--muted); }
+.section-drag-handle:active { cursor: grabbing; }
+
+/* Stat card drag handle */
+.analytics-card { position: relative; }
+.analytics-card-drag {
+  position: absolute;
+  top: 8px; right: 8px;
+  font-size: 14px;
+  color: var(--border);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity .15s;
+  user-select: none;
+  line-height: 1;
+}
+.analytics-card:hover .analytics-card-drag { opacity: 1; color: var(--muted); }
+.analytics-card.dragging  { opacity: .4; }
+.analytics-card.drag-over { box-shadow: 0 0 0 2px var(--primary); }
+
+/* ── Guide / Tour ────────────────────────────────────────── */
+.guide-spotlight {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.58);
+  z-index: 99998;
+  pointer-events: none;
+  transition: left .3s ease, top .3s ease, width .3s ease, height .3s ease;
+}
+
+.guide-tooltip {
+  position: fixed;
+  width: 320px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 16px 48px rgba(0,0,0,.35);
+  z-index: 99999;
+  pointer-events: auto;
+  transition: left .3s ease, top .3s ease;
+}
+.guide-tooltip-center {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: 380px;
+}
+
+.guide-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.guide-step-counter {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--primary);
+}
+.guide-skip-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+}
+.guide-skip-btn:hover { color: var(--text); }
+
+.guide-tooltip-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 8px;
+}
+.guide-tooltip-body {
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 0 0 16px;
+}
+.guide-tooltip-body strong { color: var(--text); }
+
+.guide-tooltip-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.guide-dots { display: flex; gap: 5px; }
+.guide-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background .2s;
+}
+.guide-dot.active { background: var(--primary); width: 18px; border-radius: 3px; }
+.guide-nav-btns { display: flex; gap: 6px; }
+
+/* ── Guide help FAB ──────────────────────────────────────── */
+.guide-help-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 9000;
+  box-shadow: 0 4px 14px rgba(0,0,0,.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .15s, box-shadow .15s;
+  line-height: 1;
+}
+.guide-help-fab:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(0,0,0,.3);
+}

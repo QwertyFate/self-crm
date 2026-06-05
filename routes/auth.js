@@ -10,7 +10,7 @@ router.get('/me', async (req, res, next) => {
     if (!req.session?.userId) return res.json({ user: null });
 
     const { rows: [user] } = await pool.query(
-      'SELECT id, name, email, role, workspace_id, column_widths, deal_columns FROM users WHERE id = $1',
+      'SELECT id, name, email, role, workspace_id, column_widths, deal_columns, analytics_layout FROM users WHERE id = $1',
       [req.session.userId]
     );
     if (user) { user.column_widths = user.column_widths || {}; user.deal_columns = user.deal_columns || []; }

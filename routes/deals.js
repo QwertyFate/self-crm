@@ -8,7 +8,8 @@ router.use(requireAuth);
 
 router.get('/', async (req, res, next) => {
   try {
-    const { pipeline_id, contact_id } = req.query;
+    const pipeline_id = parseInt(req.query.pipeline_id) || null;
+    const contact_id  = parseInt(req.query.contact_id)  || null;
     const params = [req.workspaceId];
     let filter = '';
     if (pipeline_id) { params.push(pipeline_id); filter += ` AND d.pipeline_id = $${params.length}`; }

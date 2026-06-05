@@ -113,6 +113,12 @@ router.get('/summary', async (req, res, next) => {
       `SELECT field_key, name, type FROM deal_fields WHERE workspace_id=$1 ORDER BY position`, [wid]
     );
 
+    // Per-user layout preferences
+    const { rows: [usr] } = await pool.query(
+      'SELECT analytics_layout FROM users WHERE id=$1', [req.userId]
+    );
+    const layout = usr?.analytics_layout || {};
+
     res.json({
       total_contacts: parseInt(total_contacts),
       new_contacts:   parseInt(new_contacts),
@@ -130,7 +136,25 @@ router.get('/summary', async (req, res, next) => {
       all_stages,
       deal_fields,
       config,
+      layout,
     });
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/analytics/layout  — per-user layout prefs
+router.patch('/layout', async (req, res, next) => {
+  try {
+    const { stat_card_order, hidden_stat_cards, section_order, trend_config } = req.body;
+    const patch = {};
+    if (stat_card_order  !== undefined) patch.stat_card_order  = stat_card_order;
+    if (hidden_stat_cards !== undefined) patch.hidden_stat_cards = hidden_stat_cards;
+    if (section_order    !== undefined) patch.section_order    = section_order;
+    if (trend_config     !== undefined) patch.trend_config     = trend_config;
+    await pool.query(
+      `UPDATE users SET analytics_layout = analytics_layout || $1::jsonb WHERE id=$2`,
+      [JSON.stringify(patch), req.userId]
+    );
+    res.json({ success: true });
   } catch (err) { next(err); }
 });
 
@@ -199,9 +223,7 @@ router.patch('/config', async (req, res, next) => {
   try {
     const { won_stage_ids = [], lost_stage_ids = [], value_field = null } = req.body;
     await pool.query(
-      `UPDATE workspaces
-       SET analytics_config = analytics_config || $1::jsonb
-       WHERE id=$2`,
+      `UPDATE workspaces SET analytics_config = analytics_config || $1::jsonb WHERE id=$2`,
       [JSON.stringify({ won_stage_ids, lost_stage_ids, value_field }), req.workspaceId]
     );
     res.json({ success: true });
