@@ -248,6 +248,10 @@
           <li><a href="#" data-page="board" id="nav-board-link"><span data-i18n="nav_board">Board</span></a></li>
           <li><a href="#" data-page="analytics"><span>Analytics</span></a></li>
           <li><a href="#" data-page="integrations"><span>Integrations</span></a></li>
+          <li><a href="#" data-page="chat" id="nav-chat-link" style="position:relative">
+            <span>Team Chat</span>
+            <span class="chat-badge hidden" id="chat-badge">0</span>
+          </a></li>
         </ul>
       </div>
 
@@ -913,6 +917,22 @@
         <div id="workspaces-grid" class="ws-page-grid"></div>
       </section>
 
+      <!-- ── Team Chat ── -->
+      <section id="page-chat" class="page page-chat-layout">
+        <div class="chat-header">
+          <h1 class="chat-title">Team Chat</h1>
+          <span class="chat-subtitle" id="chat-member-count"></span>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-loading">Loading messages…</div>
+        </div>
+        <div class="chat-composer">
+          <input type="text" id="chat-input" class="chat-input" placeholder="Message your team…" maxlength="2000"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}" />
+          <button class="btn btn-primary chat-send-btn" onclick="sendChatMessage()">Send</button>
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -1533,6 +1553,7 @@
 
   <script src="js/analytics.js"></script>
   <script src="js/integrations.js"></script>
+  <script src="js/chat.js"></script>
   <script src="js/guide.js"></script>
   <script src="js/admin-import.js"></script>
 </body>

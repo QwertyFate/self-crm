@@ -377,6 +377,24 @@ async function initDb() {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+      content      TEXT NOT NULL,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_reads (
+      user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      last_read_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, workspace_id)
+    )
+  `);
+
   // Allow whatsapp as an activity type
   await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);
   await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp'))`);
