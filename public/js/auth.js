@@ -400,7 +400,7 @@ function switchPage(page) {
   if (page === 'analytics')    loadAnalytics();
   if (page === 'integrations') loadIntegrations();
   if (page === 'workspaces')   loadWorkspacesPage();
-  if (page === 'chat')         { loadChat(); } else { stopChatPolling?.(); }
+  if (page === 'chat')         loadChatPage();
 }
 
 // ── Shared loaders ────────────────────────────────────────

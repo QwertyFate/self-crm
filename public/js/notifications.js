@@ -137,7 +137,6 @@ async function saveNotifPrefs() {
 // ── Polling — check every 30 seconds ─────────────────────
 function startNotifPolling() {
   loadNotifications(false);
-  pollChatUnread();
-  notifPollTimer = setInterval(() => { loadNotifications(false); pollChatUnread(); }, 30000);
+  notifPollTimer = setInterval(() => { loadNotifications(false); }, 30000);
 }
 function stopNotifPolling() { clearInterval(notifPollTimer); }

@@ -170,7 +170,6 @@ async function initDb() {
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_name    TEXT NOT NULL DEFAULT 'Listings'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_columns JSONB NOT NULL DEFAULT '[]'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS supplier_name   TEXT NOT NULL DEFAULT 'Suppliers'`);
-  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_data JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs JSONB NOT NULL DEFAULT '{"contacts":true,"deals":true,"tasks":true,"objects":true,"activities":true}'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS analytics_layout JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`
@@ -260,7 +259,6 @@ async function initDb() {
       updated_at   TIMESTAMPTZ DEFAULT NOW()
     )
   `);
-  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_data JSONB NOT NULL DEFAULT '{}'`);
 
   // Task projects, lists, and per-project statuses
   await pool.query(`

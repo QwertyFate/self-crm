@@ -243,15 +243,12 @@
 
         <div class="sidebar-section-label">Tools</div>
         <ul class="sidebar-nav">
+          <li><a href="#" data-page="chat"><span>Team Chat</span></a></li>
           <li><a href="#" data-page="activities"><span data-i18n="nav_activities">Activities</span></a></li>
           <li><a href="#" data-page="objects" id="nav-objects-link"><span id="nav-objects-label">Listings</span></a></li>
           <li><a href="#" data-page="board" id="nav-board-link"><span data-i18n="nav_board">Board</span></a></li>
           <li><a href="#" data-page="analytics"><span>Analytics</span></a></li>
           <li><a href="#" data-page="integrations"><span>Integrations</span></a></li>
-          <li><a href="#" data-page="chat" id="nav-chat-link" style="position:relative">
-            <span>Team Chat</span>
-            <span class="chat-badge hidden" id="chat-badge">0</span>
-          </a></li>
         </ul>
       </div>
 
@@ -376,6 +373,24 @@
             <button class="close-btn" onclick="closeSidePanel()">×</button>
           </div>
           <div id="side-panel-body" class="side-panel-body"></div>
+        </div>
+      </section>
+
+      <!-- ── Team Chat ── -->
+      <section id="page-chat" class="page">
+        <div class="chat-page-header">
+          <h1>Team Chat</h1>
+          <div id="chat-page-online-bar" class="chat-page-online-bar"></div>
+        </div>
+        <div id="chat-page-messages" class="chat-page-messages">
+          <div class="chat-loading">Loading messages…</div>
+        </div>
+        <div class="chat-composer">
+          <input type="text" id="chat-page-input" class="chat-input" placeholder="Message your team…" maxlength="2000"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessageFromPage()}" />
+          <button class="chat-send-btn" onclick="sendChatMessageFromPage()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
         </div>
       </section>
 
@@ -917,24 +932,9 @@
         <div id="workspaces-grid" class="ws-page-grid"></div>
       </section>
 
-      <!-- ── Team Chat ── -->
-      <section id="page-chat" class="page page-chat-layout">
-        <div class="chat-header">
-          <h1 class="chat-title">Team Chat</h1>
-          <span class="chat-subtitle" id="chat-member-count"></span>
-        </div>
-        <div class="chat-messages" id="chat-messages">
-          <div class="chat-loading">Loading messages…</div>
-        </div>
-        <div class="chat-composer">
-          <input type="text" id="chat-input" class="chat-input" placeholder="Message your team…" maxlength="2000"
-            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage()}" />
-          <button class="btn btn-primary chat-send-btn" onclick="sendChatMessage()">Send</button>
-        </div>
-      </section>
-
     </main>
   </div>
+
 
   <!-- ══════════════════════════════════════ MODALS ══════════════════════════════════════ -->
 
@@ -1553,6 +1553,7 @@
 
   <script src="js/analytics.js"></script>
   <script src="js/integrations.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
   <script src="js/chat.js"></script>
   <script src="js/guide.js"></script>
   <script src="js/admin-import.js"></script>

@@ -1,9 +1,11 @@
 // ── TEAM CHAT ─────────────────────────────────────────────
-let chatPollTimer    = null;
 let chatOpen         = false;
+let chatPageOpen     = false;
 let chatOldestId     = null;
 let chatNewestId     = null;
 let chatLoadingMore  = false;
+let socket           = null;
+let onlineUsers      = [];
 
 function chatAvatar(name) {
   return (name || '?')[0].toUpperCase();
@@ -39,6 +41,8 @@ function dayLabel(dateStr) {
 
 function renderMessages(messages, prepend = false) {
   const el       = document.getElementById('chat-messages');
+  if (!el) return;
+
   const myId     = currentUser?.id;
   const prevScroll = el.scrollHeight - el.scrollTop;
 
@@ -85,121 +89,23 @@ function renderMessages(messages, prepend = false) {
   }
 }
 
-async function loadChat() {
-  chatOpen    = true;
-  chatOldestId = null;
-  chatNewestId = null;
-
-  const el = document.getElementById('chat-messages');
-  el.innerHTML = '<div class="chat-loading">Loading messages…</div>';
-
-  const data = await api.get('/api/chat/messages');
-  if (!data || data.error) { el.innerHTML = '<div class="chat-loading">Could not load messages.</div>'; return; }
-
-  el.innerHTML = '';
-  if (!data.messages.length) {
-    el.innerHTML = '<div class="chat-empty">No messages yet. Say hello to your team!</div>';
-  } else {
-    renderMessages(data.messages);
-    chatOldestId = data.messages[0].id;
-    chatNewestId = data.messages[data.messages.length - 1].id;
-    scrollChatBottom();
-  }
-
-  // Mark as read
-  api.patch('/api/chat/read', {});
-  updateChatBadge(0);
-
-  // Load older messages on scroll to top
-  el.onscroll = () => {
-    if (el.scrollTop < 60 && !chatLoadingMore && chatOldestId) loadOlderMessages();
-  };
-
-  startChatPolling();
-
-  // Member count
-  const members = await api.get('/api/workspace/members');
-  if (members && !members.error) {
-    document.getElementById('chat-member-count').textContent = `${members.length} member${members.length !== 1 ? 's' : ''}`;
-  }
-}
 
 async function loadOlderMessages() {
   chatLoadingMore = true;
   const data = await apiFetchSilent(`/api/chat/messages?before=${chatOldestId}`);
   if (data?.messages?.length) {
-    renderMessages(data.messages, true);
+    renderMessagesToPage(data.messages, true);
     chatOldestId = data.messages[0].id;
   }
   chatLoadingMore = false;
 }
 
-async function pollNewMessages() {
-  if (!chatOpen || !chatNewestId) return;
-  const data = await apiFetchSilent('/api/chat/messages');
-  if (!data?.messages?.length) return;
-
-  const newMsgs = data.messages.filter(m => m.id > chatNewestId);
-  if (!newMsgs.length) return;
-
-  const el       = document.getElementById('chat-messages');
-  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-
-  el.querySelector('.chat-empty')?.remove();
-  renderMessages(newMsgs);
-  chatNewestId = newMsgs[newMsgs.length - 1].id;
-
-  if (atBottom) scrollChatBottom();
-
-  // Mark as read since chat is open
-  api.patch('/api/chat/read', {});
-  updateChatBadge(0);
-}
-
-function startChatPolling() {
-  stopChatPolling();
-  chatPollTimer = setInterval(pollNewMessages, 5000);
-}
-
-function stopChatPolling() {
-  clearInterval(chatPollTimer);
-  chatPollTimer = null;
-  chatOpen = false;
-}
 
 function scrollChatBottom() {
   const el = document.getElementById('chat-messages');
   if (el) el.scrollTop = el.scrollHeight;
 }
 
-async function sendChatMessage() {
-  const input   = document.getElementById('chat-input');
-  const content = input.value.trim();
-  if (!content) return;
-
-  input.value    = '';
-  input.disabled = true;
-
-  const res = await api.post('/api/chat/messages', { content });
-  input.disabled = false;
-  input.focus();
-
-  if (res.error) { input.value = content; return; }
-
-  // Optimistically render own message
-  const myMsg = {
-    id:         res.id,
-    user_id:    currentUser.id,
-    user_name:  currentUser.name,
-    content,
-    created_at: res.created_at || new Date().toISOString(),
-  };
-  const el = document.getElementById('chat-messages');
-  el.querySelector('.chat-empty')?.remove();
-  renderMessages([myMsg]);
-  chatNewestId = res.id;
-  scrollChatBottom();
-}
 
 // ── Unread badge (polled silently alongside notifications) ─
 function updateChatBadge(count) {
@@ -209,8 +115,214 @@ function updateChatBadge(count) {
   badge.classList.toggle('hidden', count === 0);
 }
 
-async function pollChatUnread() {
-  if (chatOpen) return; // no badge needed when chat is open
-  const data = await apiFetchSilent('/api/chat/unread');
-  if (data && !data.error) updateChatBadge(data.unread);
+
+// ── Socket.io connection ──────────────────────────────────
+function initChatSocket() {
+  console.log('initChatSocket called');
+  if (socket) {
+    console.log('Socket already initialized');
+    return;
+  }
+
+  console.log('Creating new socket.io connection...');
+  socket = io();
+  console.log('Socket created:', socket);
+
+  socket.on('connect', () => {
+    console.log('Chat socket connected with id:', socket.id);
+  });
+
+  socket.on('connect_error', (error) => {
+    console.error('Chat socket connection error:', error);
+  });
+
+  socket.on('online_users', (users) => {
+    onlineUsers = users;
+    renderPageOnlineUsers();
+  });
+
+  socket.on('new_message', (msg) => {
+    console.log('Received message:', msg);
+
+    // Update page chat
+    const pageEl = document.getElementById('chat-page-messages');
+    if (pageEl && chatPageOpen) {
+      pageEl.querySelector('.chat-empty')?.remove();
+      renderMessagesToPage([msg]);
+
+      if (!chatNewestId || msg.id > chatNewestId) {
+        chatNewestId = msg.id;
+      }
+
+      // Always scroll to bottom for new messages
+      setTimeout(() => scrollChatPageBottom(), 50);
+
+      api.patch('/api/chat/read', {});
+      updateChatBadge(0);
+    }
+
+    // Update badge if chat not open
+    if (!chatPageOpen) {
+      apiFetchSilent('/api/chat/unread').then(data => {
+        if (data && !data.error) updateChatBadge(data.unread);
+      });
+    }
+  });
+}
+
+function renderOnlineUsers() {
+  const bar = document.getElementById('chat-online-bar');
+  if (!bar) return;
+
+  if (!onlineUsers.length) {
+    bar.innerHTML = '<span style="color:var(--muted);font-size:12px">No one online</span>';
+    return;
+  }
+
+  let html = '<span style="color:var(--muted);font-size:12px">Online: </span>';
+  onlineUsers.forEach(user => {
+    html += `<div class="chat-online-item"><div class="chat-online-dot"></div>${esc(user.name)}</div>`;
+  });
+  bar.innerHTML = html;
+}
+
+function renderPageOnlineUsers() {
+  const bar = document.getElementById('chat-page-online-bar');
+  if (!bar) return;
+
+  if (!onlineUsers.length) {
+    bar.innerHTML = '<span style="color:var(--muted);font-size:12px">No one online</span>';
+    return;
+  }
+
+  let html = '<span style="color:var(--muted);font-size:12px">Online: </span>';
+  onlineUsers.forEach(user => {
+    html += `<div class="chat-online-item"><div class="chat-online-dot"></div>${esc(user.name)}</div>`;
+  });
+  bar.innerHTML = html;
+}
+
+
+async function loadChatPage() {
+  console.log('loadChatPage called');
+  chatPageOpen = true;
+  chatOldestId = null;
+  chatNewestId = null;
+
+  if (!socket) {
+    console.log('Socket not initialized, initializing...');
+    initChatSocket();
+  }
+
+  const el = document.getElementById('chat-page-messages');
+  if (!el) {
+    console.error('chat-page-messages element not found');
+    return;
+  }
+
+  el.innerHTML = '<div class="chat-loading">Loading messages…</div>';
+
+  try {
+    console.log('Fetching chat messages...');
+    const data = await api.get('/api/chat/messages');
+    console.log('Chat messages response:', data);
+
+    if (!data || data.error) {
+      console.error('Chat messages error:', data?.error);
+      el.innerHTML = '<div class="chat-loading">Could not load messages.</div>';
+      return;
+    }
+
+    el.innerHTML = '';
+    if (!data.messages || !data.messages.length) {
+      console.log('No messages found');
+      el.innerHTML = '<div class="chat-empty">No messages yet. Say hello to your team!</div>';
+    } else {
+      console.log('Rendering', data.messages.length, 'messages');
+      renderMessagesToPage(data.messages);
+      chatOldestId = data.messages[0].id;
+      chatNewestId = data.messages[data.messages.length - 1].id;
+      scrollChatPageBottom();
+    }
+
+    api.patch('/api/chat/read', {});
+    updateChatBadge(0);
+
+    const pageEl = document.getElementById('chat-page-messages');
+    if (pageEl) {
+      pageEl.onscroll = () => {
+        if (pageEl.scrollTop < 60 && !chatLoadingMore && chatOldestId) loadOlderMessages();
+      };
+    }
+    console.log('loadChatPage completed');
+  } catch (err) {
+    console.error('Error in loadChatPage:', err);
+    el.innerHTML = '<div class="chat-loading">Error: ' + err.message + '</div>';
+  }
+}
+
+function renderMessagesToPage(messages, prepend = false) {
+  const el = document.getElementById('chat-page-messages');
+  if (!el) return;
+
+  const myId = currentUser?.id;
+  const prevScroll = el.scrollHeight - el.scrollTop;
+
+  let html = '';
+  let lastDate = null;
+  let lastUser = null;
+
+  messages.forEach((msg) => {
+    const isMe = msg.user_id === myId;
+    const msgDate = msg.created_at;
+
+    if (!lastDate || !isSameDay(lastDate, msgDate)) {
+      html += `<div class="chat-day-sep"><span>${dayLabel(msgDate)}</span></div>`;
+      lastUser = null;
+    }
+    lastDate = msgDate;
+
+    const grouped = lastUser === msg.user_id;
+    lastUser = msg.user_id;
+
+    html += `
+      <div class="chat-msg${isMe ? ' me' : ''}${grouped ? ' grouped' : ''}" data-id="${msg.id}">
+        ${!isMe && !grouped ? `<div class="chat-avatar">${chatAvatar(msg.user_name)}</div>` : ''}
+        ${!isMe && grouped ? `<div class="chat-avatar-spacer"></div>` : ''}
+        <div class="chat-bubble-wrap">
+          ${!grouped ? `<div class="chat-meta">${isMe ? 'You' : esc(msg.user_name)} <span class="chat-time">${chatTimeLabel(msg.created_at)}</span></div>` : ''}
+          <div class="chat-bubble">${esc(msg.content)}</div>
+        </div>
+      </div>`;
+  });
+
+  if (prepend) {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    el.insertBefore(tempDiv, el.firstChild);
+    el.scrollTop = el.scrollHeight - prevScroll;
+  } else {
+    el.querySelector('.chat-loading')?.remove();
+    el.innerHTML += html;
+  }
+}
+
+function scrollChatPageBottom() {
+  const el = document.getElementById('chat-page-messages');
+  if (el) el.scrollTop = el.scrollHeight;
+}
+
+function sendChatMessageFromPage() {
+  const input = document.getElementById('chat-page-input');
+  const content = input.value.trim();
+  if (!content) return;
+
+  if (!socket?.connected) {
+    console.error('Socket not connected');
+    return;
+  }
+
+  console.log('Sending message:', content);
+  input.value = '';
+  socket.emit('chat_message', content);
 }
