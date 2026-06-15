@@ -16,7 +16,19 @@
       "Bash(pkill -f \"node.*server.js\")",
       "Bash(npm start *)",
       "Bash(curl -s http://localhost:3000)",
-      "Bash(grep -n \"^\\\\`;\" /Users/justincapuli/Documents/projects/new_projects/crm/db.js)"
+      "Bash(grep -n \"^\\\\`;\" /Users/justincapuli/Documents/projects/new_projects/crm/db.js)",
+      "Bash(curl http://localhost:3000)",
+      "Bash(pkill -f \"npm start\")",
+      "Bash(kill 41242 41226 41680)",
+      "Bash(npm run *)",
+      "Bash(curl -X DELETE http://localhost:3000/api/workspace -H \"Content-Type: application/json\")",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git reset *)",
+      "Bash(git commit -m ' *)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
     ]
   }
 }
