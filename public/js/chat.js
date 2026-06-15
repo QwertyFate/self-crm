@@ -220,8 +220,6 @@ async function loadChatPage() {
     return;
   }
 
-  el.innerHTML = '<div class="chat-loading">Loading messages…</div>';
-
   try {
     console.log('Fetching chat messages...');
     const data = await api.get('/api/chat/messages');
@@ -229,16 +227,16 @@ async function loadChatPage() {
 
     if (!data || data.error) {
       console.error('Chat messages error:', data?.error);
-      el.innerHTML = '<div class="chat-loading">Could not load messages.</div>';
+      el.innerHTML = '<div class="chat-empty">Could not load messages.</div>';
       return;
     }
 
-    el.innerHTML = '';
     if (!data.messages || !data.messages.length) {
       console.log('No messages found');
       el.innerHTML = '<div class="chat-empty">No messages yet. Say hello to your team!</div>';
     } else {
       console.log('Rendering', data.messages.length, 'messages');
+      el.innerHTML = '';
       renderMessagesToPage(data.messages);
       chatOldestId = data.messages[0].id;
       chatNewestId = data.messages[data.messages.length - 1].id;
@@ -257,7 +255,7 @@ async function loadChatPage() {
     console.log('loadChatPage completed');
   } catch (err) {
     console.error('Error in loadChatPage:', err);
-    el.innerHTML = '<div class="chat-loading">Error: ' + err.message + '</div>';
+    el.innerHTML = '<div class="chat-empty">Error loading messages.</div>';
   }
 }
 
@@ -272,21 +270,34 @@ function renderMessagesToPage(messages, prepend = false) {
   let lastDate = null;
   let lastUser = null;
 
+  // When appending new messages, check the last rendered date
+  if (!prepend && el.innerHTML) {
+    const lastMsg = el.querySelectorAll('.chat-msg:not(.chat-day-sep)');
+    if (lastMsg.length > 0) {
+      const lastMsgEl = lastMsg[lastMsg.length - 1];
+      const prevDaySep = lastMsgEl.previousElementSibling;
+      if (prevDaySep && prevDaySep.classList.contains('chat-day-sep')) {
+        lastDate = new Date(lastMsgEl.getAttribute('data-created') || new Date());
+      }
+    }
+  }
+
   messages.forEach((msg) => {
     const isMe = msg.user_id === myId;
     const msgDate = msg.created_at;
 
+    // Only add day separator if it's a new day
     if (!lastDate || !isSameDay(lastDate, msgDate)) {
       html += `<div class="chat-day-sep"><span>${dayLabel(msgDate)}</span></div>`;
       lastUser = null;
+      lastDate = msgDate;
     }
-    lastDate = msgDate;
 
     const grouped = lastUser === msg.user_id;
     lastUser = msg.user_id;
 
     html += `
-      <div class="chat-msg${isMe ? ' me' : ''}${grouped ? ' grouped' : ''}" data-id="${msg.id}">
+      <div class="chat-msg${isMe ? ' me' : ''}${grouped ? ' grouped' : ''}" data-id="${msg.id}" data-created="${msg.created_at}">
         ${!isMe && !grouped ? `<div class="chat-avatar">${chatAvatar(msg.user_name)}</div>` : ''}
         ${!isMe && grouped ? `<div class="chat-avatar-spacer"></div>` : ''}
         <div class="chat-bubble-wrap">
@@ -297,12 +308,13 @@ function renderMessagesToPage(messages, prepend = false) {
   });
 
   if (prepend) {
+    // Loading older messages - insert silently
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
     el.insertBefore(tempDiv, el.firstChild);
     el.scrollTop = el.scrollHeight - prevScroll;
   } else {
-    el.querySelector('.chat-loading')?.remove();
+    // Initial load or new messages
     el.innerHTML += html;
   }
 }

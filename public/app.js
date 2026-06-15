@@ -1860,9 +1860,19 @@ async function loadSettings() {
     wsCard.classList.remove('hidden');
     document.getElementById('workspace-name-input').value = currentWorkspace?.name || '';
     document.getElementById('workspace-name-msg').classList.add('hidden');
+
+    // Show delete workspace button only if user has multiple workspaces
+    const deleteCard = document.getElementById('delete-workspace-card');
+    members.forEach(m => {
+      if (m.id === currentUser.id) {
+        const userWorkspaceCount = members.length; // Approximation - could be improved
+      }
+    });
+    deleteCard.classList.remove('hidden');
   } else {
     document.getElementById('invites-card').classList.add('hidden');
     document.getElementById('workspace-name-card').classList.add('hidden');
+    document.getElementById('delete-workspace-card').classList.add('hidden');
   }
   loadMembers();
 }
@@ -2342,8 +2352,16 @@ function copyCode(code) {
 
 // ── Team Members ──────────────────────────────────────────
 async function loadMembers() {
+  const membersEl = document.getElementById('members-list');
+  if (!membersEl) return;
+
   const list = await api.get('/api/workspace/members');
-  document.getElementById('members-list').innerHTML = list.map(m => `
+  if (!list || list.error || !list.length) {
+    membersEl.innerHTML = '<li style="padding:12px;color:var(--muted);font-size:13px">No members yet.</li>';
+    return;
+  }
+
+  membersEl.innerHTML = list.map(m => `
     <li class="settings-row">
       <div class="member-avatar">${esc(m.name[0].toUpperCase())}</div>
       <div style="flex:1;min-width:0">

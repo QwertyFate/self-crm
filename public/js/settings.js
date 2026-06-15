@@ -41,9 +41,21 @@ async function loadSettings() {
     wsCard.classList.remove('hidden');
     document.getElementById('workspace-name-input').value = currentWorkspace?.name || '';
     document.getElementById('workspace-name-msg').classList.add('hidden');
+
+    // Check if user has multiple workspaces
+    const meRes = await api.get('/api/auth/me');
+    const workspaceCount = meRes?.workspaces?.length || 1;
+    const deleteCard = document.getElementById('delete-workspace-card');
+    if (deleteCard && workspaceCount > 1) {
+      deleteCard.classList.remove('hidden');
+    } else if (deleteCard) {
+      deleteCard.classList.add('hidden');
+    }
   } else {
     document.getElementById('invites-card').classList.add('hidden');
     document.getElementById('workspace-name-card').classList.add('hidden');
+    const deleteCard = document.getElementById('delete-workspace-card');
+    if (deleteCard) deleteCard.classList.add('hidden');
   }
   loadMembers();
 }
@@ -396,6 +408,17 @@ async function removeMember(id, name) {
   const res = await api.del(`/api/workspace/members/${id}`);
   if (res.error) { alert(res.error); return; }
   invalidate(); await loadSettings();
+}
+
+async function deleteWorkspace() {
+  if (!confirm('Are you sure you want to delete this workspace? This action cannot be undone. All data will be permanently deleted.')) return;
+  if (!confirm('This will delete all contacts, deals, tasks, and messages. Confirm deletion?')) return;
+
+  const res = await api.del('/api/workspace');
+  if (res.error) { alert(res.error); return; }
+
+  // Redirect to workspace selection or home
+  window.location.href = '/';
 }
 
 // ── TASK SETTINGS ─────────────────────────────────────────

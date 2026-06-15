@@ -24,9 +24,17 @@ router.get('/me', async (req, res, next) => {
       return res.json({ user: null });
     }
 
+    // Get all workspaces user belongs to
+    const { rows: workspaces } = await pool.query(
+      `SELECT w.id, w.name FROM user_workspaces uw
+       JOIN workspaces w ON w.id = uw.workspace_id
+       WHERE uw.user_id = $1 ORDER BY uw.joined_at ASC`,
+      [req.session.userId]
+    );
+
     workspace.kanban_fields    = workspace.kanban_fields    || ['company', 'email'];
     workspace.contact_columns  = workspace.contact_columns  || [];
-    res.json({ user, workspace });
+    res.json({ user, workspace, workspaces });
   } catch (e) { next(e); }
 });
 
@@ -355,6 +363,20 @@ router.post('/create-workspace', async (req, res, next) => {
         [workspace_name.trim()]
       );
       await seedDefaultPipeline(ws.id, client);
+
+      // Get the current user's info to add them to the new workspace
+      const { rows: [currentUser] } = await client.query(
+        'SELECT id, name, email, password_hash FROM users WHERE id=$1',
+        [req.session.userId]
+      );
+
+      // Insert user into the new workspace's users table
+      await client.query(
+        'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5)',
+        [ws.id, currentUser.name, currentUser.email, currentUser.password_hash, 'owner']
+      );
+
+      // Also add to user_workspaces for backwards compatibility
       await client.query(
         'INSERT INTO user_workspaces (user_id, workspace_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
         [req.session.userId, ws.id, 'owner']

@@ -2508,12 +2508,12 @@ body {
   flex-direction: column;
   gap: 2px;
 }
-.chat-loading, .chat-empty {
+.chat-empty {
   text-align: center;
   color: var(--muted);
   font-size: 13px;
   margin: auto;
-  padding: 40px 0;
+  padding: 40px 20px;
 }
 
 /* Day separator */

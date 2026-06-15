@@ -631,6 +631,13 @@
                 <div id="workspace-name-msg" class="workspace-name-msg hidden"></div>
               </div>
 
+              <div class="settings-card hidden" id="delete-workspace-card">
+                <div class="settings-card-header"><h2>Delete Workspace</h2></div>
+                <p class="settings-hint" style="color:#ef4444">This action cannot be undone. All data in this workspace will be permanently deleted.</p>
+                <button class="btn btn-danger btn-sm" onclick="deleteWorkspace()" style="margin-top:12px">Delete This Workspace</button>
+                <div id="delete-workspace-msg" class="workspace-name-msg hidden"></div>
+              </div>
+
               <div class="settings-card hidden" id="supplier-name-card">
                 <div class="settings-card-header"><h2>Supplier List Name</h2></div>
                 <p class="settings-hint">What to call the second contact list in the sidebar (e.g. Suppliers, Partners, Team).</p>
