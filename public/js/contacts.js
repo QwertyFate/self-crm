@@ -275,12 +275,29 @@ function filterContacts() {
   );
   for (const [key, values] of Object.entries(activeFilters)) {
     if (!values?.length) continue;
-    filtered = filtered.filter(c => {
-      const cv = key === 'stage_id'    ? (c.stage_id    == null ? '' : String(c.stage_id))
-               : key === 'assigned_to' ? (c.assigned_to == null ? '' : String(c.assigned_to))
-               : String(c.custom_data?.[key] ?? '');
-      return values.includes(cv);
-    });
+
+    // Handle keyword filters
+    if (key.startsWith('keyword:')) {
+      const col = key.substring(8);
+      filtered = filtered.filter(c => {
+        let fieldValue;
+        if (col.startsWith('custom:')) {
+          fieldValue = c.custom_data?.[col.substring(7)];
+        } else {
+          fieldValue = c[col];
+        }
+        const strValue = String(fieldValue || '').toLowerCase();
+        return values.some(keyword => strValue.includes(keyword.toLowerCase()));
+      });
+    } else {
+      // Handle regular filters (dropdown/select)
+      filtered = filtered.filter(c => {
+        const cv = key === 'stage_id'    ? (c.stage_id    == null ? '' : String(c.stage_id))
+                 : key === 'assigned_to' ? (c.assigned_to == null ? '' : String(c.assigned_to))
+                 : String(c.custom_data?.[key] ?? '');
+        return values.includes(cv);
+      });
+    }
   }
   renderContactsTable(filtered);
 }
@@ -325,6 +342,31 @@ function toggleFilter(key, value) {
   renderFilterPanel(); renderFilterChips(); currentPage = 1; filterContacts();
 }
 
+function addKeywordFilter() {
+  const colEl = document.getElementById('keyword-filter-col');
+  const valEl = document.getElementById('keyword-filter-val');
+  const col = colEl?.value?.trim();
+  const keyword = valEl?.value?.trim();
+  if (!col || !keyword) return;
+
+  const key = `keyword:${col}`;
+  if (!activeFilters[key]) activeFilters[key] = [];
+  if (!activeFilters[key].includes(keyword)) {
+    activeFilters[key].push(keyword);
+  }
+  valEl.value = '';
+  renderFilterPanel(); renderFilterChips(); currentPage = 1; filterContacts();
+}
+
+function removeFilterChip(key, value) {
+  if (activeFilters[key]) {
+    const idx = activeFilters[key].indexOf(value);
+    if (idx >= 0) activeFilters[key].splice(idx, 1);
+    if (!activeFilters[key].length) delete activeFilters[key];
+  }
+  renderFilterPanel(); renderFilterChips(); currentPage = 1; filterContacts();
+}
+
 function clearAllFilters() {
   activeFilters = {}; renderFilterPanel(); renderFilterChips(); currentPage = 1; filterContacts();
 }
@@ -338,6 +380,34 @@ function renderFilterPanel() {
     return `<button class="filter-opt${on ? ' active' : ''}" style="${style}" onclick="toggleFilter('${key}','${value}')">${label}</button>`;
   };
   const sections = [];
+
+  // Keyword filter section
+  const keywordFilterCol = document.getElementById('keyword-filter-col')?.value || 'name';
+  const keywordFilterVal = document.getElementById('keyword-filter-val')?.value || '';
+  const filterableColumns = [
+    { key: 'name', label: 'Name' },
+    { key: 'email', label: 'Email' },
+    { key: 'company', label: 'Company' },
+    { key: 'phone', label: 'Phone' },
+    ...fields.map(f => ({ key: `custom:${f.field_key}`, label: f.name }))
+  ];
+  const colOpts = filterableColumns.map(col =>
+    `<option value="${col.key}" ${keywordFilterCol === col.key ? 'selected' : ''}>${esc(col.label)}</option>`
+  ).join('');
+  sections.push(`
+    <div class="filter-section">
+      <div class="filter-section-label">Search by Keywords</div>
+      <div style="display:flex;gap:8px;padding:0 12px 12px">
+        <select id="keyword-filter-col" class="form-control" style="flex:0.6" onchange="renderFilterPanel()">
+          ${colOpts}
+        </select>
+        <input type="text" id="keyword-filter-val" class="form-control" style="flex:1" placeholder="Enter keywords..."
+          onkeydown="if(event.key==='Enter') addKeywordFilter()">
+        <button class="btn btn-sm btn-primary" onclick="addKeywordFilter()">Add</button>
+      </div>
+    </div>
+  `);
+
   if (stages.length) {
     const opts = [mkOpt('stage_id', '', t('detail_unassigned')),
       ...stages.map(s => mkOpt('stage_id', String(s.id), esc(s.name),
@@ -369,12 +439,33 @@ function renderFilterChips() {
   for (const [key, values] of Object.entries(activeFilters)) {
     if (!values?.length) continue;
     values.forEach(v => {
-      let prefix, label;
-      if (key === 'stage_id') { prefix = t('col_stage'); label = v === '' ? t('detail_unassigned') : esc(stages.find(s => String(s.id) === v)?.name || v); }
-      else if (key === 'assigned_to') { prefix = t('col_assignee'); label = v === '' ? t('detail_unassigned') : esc(members.find(m => String(m.id) === v)?.name || v); }
-      else { const f = fields.find(f => f.field_key === key); prefix = esc(f?.name || key); label = esc(v); }
+      let prefix, label, removeKey = key;
+
+      if (key.startsWith('keyword:')) {
+        const col = key.substring(8);
+        const colName = col.startsWith('custom:')
+          ? fields.find(f => f.field_key === col.substring(7))?.name
+          : col === 'name' ? 'Name'
+            : col === 'email' ? 'Email'
+            : col === 'company' ? 'Company'
+            : col === 'phone' ? 'Phone'
+            : col;
+        prefix = colName;
+        label = `"${esc(v)}"`;
+      } else if (key === 'stage_id') {
+        prefix = t('col_stage');
+        label = v === '' ? t('detail_unassigned') : esc(stages.find(s => String(s.id) === v)?.name || v);
+      } else if (key === 'assigned_to') {
+        prefix = t('col_assignee');
+        label = v === '' ? t('detail_unassigned') : esc(members.find(m => String(m.id) === v)?.name || v);
+      } else {
+        const f = fields.find(f => f.field_key === key);
+        prefix = esc(f?.name || key);
+        label = esc(v);
+      }
+
       chips.push(`<span class="filter-chip"><span class="filter-chip-label">${prefix}:</span> ${label}
-        <button class="filter-chip-remove" onclick="toggleFilter('${key}','${v.replace(/'/g, '&apos;')}')">✕</button>
+        <button class="filter-chip-remove" onclick="removeFilterChip('${removeKey}','${v.replace(/'/g, '&apos;')}')">✕</button>
       </span>`);
     });
   }
