@@ -18,10 +18,11 @@ const SCHEMA = `
     id            SERIAL PRIMARY KEY,
     workspace_id  INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     name          TEXT NOT NULL,
-    email         TEXT NOT NULL UNIQUE,
+    email         TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','member')),
-    created_at    TIMESTAMPTZ DEFAULT NOW()
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(workspace_id, email)
   );
 
   CREATE TABLE IF NOT EXISTS invite_codes (
