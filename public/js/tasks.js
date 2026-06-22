@@ -155,12 +155,21 @@ function openProjectModal(id) {
 async function saveProject() {
   const name  = document.getElementById('project-name-input').value.trim();
   const color = document.getElementById('project-color-input').value;
+  const errorEl = document.getElementById('project-error');
+
   if (!name) return;
-  if (editingProjectId) {
-    await api.put(`/api/task-projects/${editingProjectId}`, { name, color });
-  } else {
-    await api.post('/api/task-projects', { name, color });
+
+  const res = editingProjectId
+    ? await api.put(`/api/task-projects/${editingProjectId}`, { name, color })
+    : await api.post('/api/task-projects', { name, color });
+
+  if (res.error) {
+    errorEl.textContent = res.error;
+    errorEl.style.display = 'block';
+    return;
   }
+
+  errorEl.style.display = 'none';
   closeModal('project-modal');
   taskProjects = await api.get('/api/task-projects');
   // Refresh currentProject if it was updated

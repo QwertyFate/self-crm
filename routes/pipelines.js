@@ -2,6 +2,7 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const { reorderItems } = require('../middleware/reorder');
 
 router.use(requireAuth);
 
@@ -14,17 +15,15 @@ const DEFAULT_STAGES = [
 
 router.get('/', async (req, res, next) => {
   try {
-    const { rows: pipelines } = await pool.query(
-      'SELECT * FROM pipelines WHERE workspace_id=$1 ORDER BY position ASC, id ASC',
-      [req.workspaceId]
-    );
-    for (const p of pipelines) {
-      const { rows } = await pool.query(
-        'SELECT * FROM pipeline_stages WHERE pipeline_id=$1 ORDER BY position ASC, id ASC',
-        [p.id]
-      );
-      p.stages = rows;
-    }
+    const { rows: pipelines } = await pool.query(`
+      SELECT p.*,
+        COALESCE(json_agg(json_build_object('id', s.id, 'workspace_id', s.workspace_id, 'pipeline_id', s.pipeline_id, 'name', s.name, 'color', s.color, 'position', s.position) ORDER BY s.position ASC, s.id ASC), '[]'::json) as stages
+      FROM pipelines p
+      LEFT JOIN pipeline_stages s ON s.pipeline_id = p.id
+      WHERE p.workspace_id=$1
+      GROUP BY p.id
+      ORDER BY p.position ASC, p.id ASC
+    `, [req.workspaceId]);
     res.json(pipelines);
   } catch (e) { next(e); }
 });
@@ -128,19 +127,8 @@ router.patch('/:id/stages/reorder', async (req, res, next) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      for (let i = 0; i < ids.length; i++) {
-        await client.query(
-          'UPDATE pipeline_stages SET position=$1 WHERE id=$2 AND pipeline_id=$3 AND workspace_id=$4',
-          [i, ids[i], req.params.id, req.workspaceId]
-        );
-      }
-      await client.query('COMMIT');
-      res.json({ success: true });
-    } catch (e) { await client.query('ROLLBACK'); throw e; }
-    finally { client.release(); }
+    const result = await reorderItems('pipeline_stages', 'id', ids, 'pipeline_id=$3 AND workspace_id=$4', [req.params.id, req.workspaceId]);
+    res.json(result);
   } catch (e) { next(e); }
 });
 

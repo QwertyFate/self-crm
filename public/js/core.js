@@ -239,12 +239,14 @@ function toggleDarkMode() {
 
 // ── Loading bar + overlay ─────────────────────────────────
 const loader = (() => {
-  let count = 0, fillTimer = null, hideTimer = null, overlayTimer = null;
+  let count = 0, fillTimer = null, hideTimer = null, overlayTimer = null, startTime = null;
   const bar     = () => document.getElementById('loading-bar');
   const fill    = () => document.getElementById('loading-bar-fill');
   const overlay = () => document.getElementById('loading-overlay');
+  const MIN_DISPLAY_TIME = 500; // Minimum time to show loading bar
 
   function start() {
+    if (count === 0) startTime = Date.now();
     count++;
     clearTimeout(hideTimer);
     clearTimeout(overlayTimer);
@@ -268,11 +270,15 @@ const loader = (() => {
     overlay()?.classList.add('hidden');
     const f = fill();
     if (f) f.style.width = '100%';
+
+    const elapsed = Date.now() - startTime;
+    const delay = Math.max(0, MIN_DISPLAY_TIME - elapsed);
+
     hideTimer = setTimeout(() => {
       const b = bar(), f2 = fill();
       if (b) b.classList.remove('active');
       setTimeout(() => { if (f2) f2.style.width = '0%'; }, 160);
-    }, 260);
+    }, 260 + delay);
   }
 
   return { start, done };

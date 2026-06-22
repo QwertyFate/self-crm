@@ -2,6 +2,7 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const { reorderItems } = require('../middleware/reorder');
 
 router.use(requireAuth);
 
@@ -54,23 +55,8 @@ router.patch('/reorder', async (req, res, next) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids)) return res.status(400).json({ error: 'ids must be an array' });
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      for (let i = 0; i < ids.length; i++) {
-        await client.query(
-          'UPDATE stages SET position=$1 WHERE id=$2 AND workspace_id=$3',
-          [i, ids[i], req.workspaceId]
-        );
-      }
-      await client.query('COMMIT');
-      res.json({ success: true });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
+    const result = await reorderItems('stages', 'id', ids, 'workspace_id=$3', [req.workspaceId]);
+    res.json(result);
   } catch (e) { next(e); }
 });
 
