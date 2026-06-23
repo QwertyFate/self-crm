@@ -204,6 +204,11 @@ function renderPageOnlineUsers() {
 
 
 async function loadChatPage() {
+  // Team chat is coming soon - just return
+  return;
+}
+
+async function _loadChatPageDisabled() {
   console.log('loadChatPage called');
   chatPageOpen = true;
   chatOldestId = null;
