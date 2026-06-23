@@ -10,7 +10,25 @@
       "Bash(curl -s http://localhost:3000/api/task-fields -H \"Cookie: $\\(curl -s -c /tmp/crm_cookies.txt -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{}' && cat /tmp/crm_cookies.txt)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/api/task-fields)",
       "Bash(npm install *)",
-      "Bash(node --check /Users/justincapuli/Documents/projects/new_projects/crm/routes/integrations.js)"
+      "Bash(node --check /Users/justincapuli/Documents/projects/new_projects/crm/routes/integrations.js)",
+      "Bash(node --check /Users/justincapuli/Documents/projects/new_projects/crm/routes/chat.js)",
+      "Bash(grep -E \"\\\\.\\(css|js\\)$\")",
+      "Bash(pkill -f \"node.*server.js\")",
+      "Bash(npm start *)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(grep -n \"^\\\\`;\" /Users/justincapuli/Documents/projects/new_projects/crm/db.js)",
+      "Bash(curl http://localhost:3000)",
+      "Bash(pkill -f \"npm start\")",
+      "Bash(kill 41242 41226 41680)",
+      "Bash(npm run *)",
+      "Bash(curl -X DELETE http://localhost:3000/api/workspace -H \"Content-Type: application/json\")",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git reset *)",
+      "Bash(git commit -m ' *)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
     ]
   }
 }

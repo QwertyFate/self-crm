@@ -342,14 +342,31 @@ function onDealContactChange() {
 }
 
 async function openDealModal(id) {
-  await Promise.all([ensureContacts(), ensureMembers(), ensureStages(), ensureFields()]);
-  if (!pipelines.length) pipelines = await api.get('/api/pipelines');
-  if (!dealFields.length) dealFields = await api.get('/api/deal-fields');
-
   document.getElementById('deal-form').reset();
   document.getElementById('deal-id').value = id || '';
   document.getElementById('deal-modal-title').textContent = id ? 'Edit Deal' : 'Add Deal';
   document.getElementById('deal-delete-btn').style.display = id ? '' : 'none';
+
+  // Batch all API calls together
+  const [, , , , pipelinesRes, dealFieldsRes, allContacts, allSuppliers, dealDataRes, objectsRes, objectFieldsRes] = await Promise.all([
+    ensureContacts(),
+    ensureMembers(),
+    ensureStages(),
+    ensureFields(),
+    pipelines.length ? null : api.get('/api/pipelines'),
+    dealFields.length ? null : api.get('/api/deal-fields'),
+    api.get('/api/contacts?contact_type=contact'),
+    api.get('/api/contacts?contact_type=supplier'),
+    id ? api.get(`/api/deals/${id}`) : null,
+    objects.length ? null : api.get('/api/objects'),
+    objectFields.length ? null : api.get('/api/object-fields'),
+  ]);
+
+  if (pipelinesRes) pipelines = pipelinesRes;
+  if (dealFieldsRes) dealFields = dealFieldsRes;
+  if (objectsRes) objects = objectsRes;
+  if (objectFieldsRes) objectFields = objectFieldsRes;
+  const dealData = dealDataRes;
 
   const pipelineSel = document.getElementById('df-pipeline');
   pipelineSel.innerHTML = pipelines.map(p =>
@@ -359,10 +376,6 @@ async function openDealModal(id) {
 
   const contactSel  = document.getElementById('df-contact');
   const supplierSel = document.getElementById('df-supplier');
-  const [allContacts, allSuppliers] = await Promise.all([
-    api.get('/api/contacts?contact_type=contact'),
-    api.get('/api/contacts?contact_type=supplier'),
-  ]);
   const supplierLabel = currentWorkspace?.supplier_name || 'Suppliers';
   const supLabelEl = document.getElementById('df-supplier-label');
   if (supLabelEl) supLabelEl.textContent = supplierLabel;
@@ -381,8 +394,8 @@ async function openDealModal(id) {
 
   let linkedContact = null, linkedObjects = [];
 
-  if (id) {
-    const d = await api.get(`/api/deals/${id}`);
+  if (dealData) {
+    const d = dealData;
     document.getElementById('df-title').value = d.title;
     document.getElementById('df-value').value = d.value != null ? d.value : '';
     pipelineSel.value = d.pipeline_id || '';
@@ -395,7 +408,6 @@ async function openDealModal(id) {
     linkedObjects = d.objects || [];
   }
 
-  if (!objects.length) objects = await api.get('/api/objects');
   renderContactPanelReadOnly(linkedContact);
   await renderObjectPanel(id, linkedObjects);
   document.getElementById('deal-modal').classList.remove('hidden');

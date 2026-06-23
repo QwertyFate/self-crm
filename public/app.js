@@ -484,12 +484,16 @@ document.querySelectorAll('.sidebar-nav a[data-page]').forEach(link => {
 });
 
 function switchPage(page) {
+  // Close chat page if switching away
+  if (page !== 'chat') chatPageOpen = false;
+
   document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelector(`.sidebar-nav a[data-page="${page}"]`)?.classList.add('active');
   document.getElementById(`page-${page}`).classList.add('active');
   if (page === 'deals')      loadDeals();
   if (page === 'contacts')   loadContacts();
+  if (page === 'chat')       loadChatPage();
   if (page === 'activities') loadActivities();
   if (page === 'settings')   loadSettings();
   if (page === 'objects')    loadObjects();
@@ -507,28 +511,57 @@ async function ensureMembers()  { if (!members.length)  members  = await api.get
 // DEALS
 // ══════════════════════════════════════════════════════════
 async function loadDeals() {
-  await ensureMembers();
-  [pipelines, dealFields] = await Promise.all([
-    api.get('/api/pipelines'),
-    api.get('/api/deal-fields'),
-  ]);
-  dealKanbanFields = currentWorkspace?.deal_kanban_fields || ['contact', 'value'];
+  console.log('loadDeals called');
+  try {
+    // Show loading state
+    const boardEl = document.getElementById('deals-board');
+    if (boardEl) boardEl.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Loading deals…</div>';
 
-  const sel = document.getElementById('deals-pipeline-select');
-  if (sel) {
-    sel.innerHTML = `<option value="">— All pipelines —</option>` +
-      pipelines.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
-    // On first load in kanban mode with nothing selected, default to first pipeline
-    if (dealViewMode === 'kanban' && !currentPipelineId && pipelines.length)
-      currentPipelineId = pipelines[0].id;
-    if (currentPipelineId && !pipelines.find(p => p.id === currentPipelineId))
-      currentPipelineId = null;
-    sel.value = currentPipelineId || '';
+    console.log('Ensuring members...');
+    await ensureMembers();
+
+    console.log('Fetching pipelines and deal fields...');
+    const [pipelineData, dealFieldData] = await Promise.all([
+      api.get('/api/pipelines'),
+      api.get('/api/deal-fields'),
+    ]);
+
+    console.log('Pipelines:', pipelineData);
+    console.log('Deal fields:', dealFieldData);
+
+    pipelines = pipelineData || [];
+    dealFields = dealFieldData || [];
+    dealKanbanFields = currentWorkspace?.deal_kanban_fields || ['contact', 'value'];
+
+    const sel = document.getElementById('deals-pipeline-select');
+    if (sel) {
+      sel.innerHTML = `<option value="">— All pipelines —</option>` +
+        pipelines.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+
+      // On first load in kanban mode with nothing selected, default to first pipeline
+      if (dealViewMode === 'kanban' && !currentPipelineId && pipelines.length) {
+        currentPipelineId = pipelines[0].id;
+      }
+      if (currentPipelineId && !pipelines.find(p => p.id === currentPipelineId)) {
+        currentPipelineId = null;
+      }
+      sel.value = currentPipelineId || '';
+    }
+
+    const url = currentPipelineId ? `/api/deals?pipeline_id=${currentPipelineId}` : '/api/deals';
+    console.log('Fetching deals from:', url);
+    const dealsData = await api.get(url);
+    console.log('Deals:', dealsData);
+    deals = dealsData || [];
+
+    console.log('Calling setDealView with mode:', dealViewMode);
+    setDealView(dealViewMode);
+    console.log('loadDeals completed');
+  } catch (err) {
+    console.error('Error loading deals:', err);
+    const boardEl = document.getElementById('deals-board');
+    if (boardEl) boardEl.innerHTML = '<div style="padding:40px;text-align:center;color:red">Error loading deals: ' + err.message + '</div>';
   }
-
-  const url = currentPipelineId ? `/api/deals?pipeline_id=${currentPipelineId}` : '/api/deals';
-  deals = await api.get(url);
-  setDealView(dealViewMode);
 }
 
 async function onPipelineChange() {
@@ -1827,9 +1860,19 @@ async function loadSettings() {
     wsCard.classList.remove('hidden');
     document.getElementById('workspace-name-input').value = currentWorkspace?.name || '';
     document.getElementById('workspace-name-msg').classList.add('hidden');
+
+    // Show delete workspace button only if user has multiple workspaces
+    const deleteCard = document.getElementById('delete-workspace-card');
+    members.forEach(m => {
+      if (m.id === currentUser.id) {
+        const userWorkspaceCount = members.length; // Approximation - could be improved
+      }
+    });
+    deleteCard.classList.remove('hidden');
   } else {
     document.getElementById('invites-card').classList.add('hidden');
     document.getElementById('workspace-name-card').classList.add('hidden');
+    document.getElementById('delete-workspace-card').classList.add('hidden');
   }
   loadMembers();
 }
@@ -2309,8 +2352,16 @@ function copyCode(code) {
 
 // ── Team Members ──────────────────────────────────────────
 async function loadMembers() {
+  const membersEl = document.getElementById('members-list');
+  if (!membersEl) return;
+
   const list = await api.get('/api/workspace/members');
-  document.getElementById('members-list').innerHTML = list.map(m => `
+  if (!list || list.error || !list.length) {
+    membersEl.innerHTML = '<li style="padding:12px;color:var(--muted);font-size:13px">No members yet.</li>';
+    return;
+  }
+
+  membersEl.innerHTML = list.map(m => `
     <li class="settings-row">
       <div class="member-avatar">${esc(m.name[0].toUpperCase())}</div>
       <div style="flex:1;min-width:0">

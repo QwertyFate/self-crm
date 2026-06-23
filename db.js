@@ -18,10 +18,11 @@ const SCHEMA = `
     id            SERIAL PRIMARY KEY,
     workspace_id  INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     name          TEXT NOT NULL,
-    email         TEXT NOT NULL UNIQUE,
+    email         TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     role          TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','member')),
-    created_at    TIMESTAMPTZ DEFAULT NOW()
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(workspace_id, email)
   );
 
   CREATE TABLE IF NOT EXISTS invite_codes (
@@ -170,7 +171,6 @@ async function initDb() {
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_name    TEXT NOT NULL DEFAULT 'Listings'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS object_columns JSONB NOT NULL DEFAULT '[]'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS supplier_name   TEXT NOT NULL DEFAULT 'Suppliers'`);
-  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_data JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs JSONB NOT NULL DEFAULT '{"contacts":true,"deals":true,"tasks":true,"objects":true,"activities":true}'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS analytics_layout JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`
@@ -260,7 +260,6 @@ async function initDb() {
       updated_at   TIMESTAMPTZ DEFAULT NOW()
     )
   `);
-  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS custom_data JSONB NOT NULL DEFAULT '{}'`);
 
   // Task projects, lists, and per-project statuses
   await pool.query(`
@@ -341,6 +340,41 @@ async function initDb() {
   `);
 
   await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS captured JSONB NOT NULL DEFAULT '{}'`);
+
+  // Multi-workspace membership table
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_workspaces (
+      user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      role         TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','member')),
+      joined_at    TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, workspace_id)
+    )
+  `);
+  await pool.query(`
+    INSERT INTO user_workspaces (user_id, workspace_id, role)
+    SELECT id, workspace_id, role FROM users
+    ON CONFLICT DO NOTHING
+  `);
+
+  // Team chat
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+      content      TEXT NOT NULL,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS chat_reads (
+      user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      last_read_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (user_id, workspace_id)
+    )
+  `);
 
   // Allow whatsapp as an activity type
   await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);

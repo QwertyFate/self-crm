@@ -55,6 +55,46 @@ router.patch('/name', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.delete('/', async (req, res, next) => {
+  try {
+    if (req.userRole !== 'owner') return res.status(403).json({ error: 'Owner only' });
+
+    // Check if user has other workspaces
+    const { rows: userWorkspaces } = await pool.query(
+      'SELECT COUNT(*) as count FROM user_workspaces WHERE user_id=$1',
+      [req.userId]
+    );
+    if (parseInt(userWorkspaces[0].count) <= 1) {
+      return res.status(400).json({ error: 'Cannot delete your only workspace' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Delete all related data
+      await client.query('DELETE FROM chat_messages WHERE workspace_id=$1', [req.workspaceId]);
+      await client.query('DELETE FROM notifications WHERE workspace_id=$1', [req.workspaceId]);
+      await client.query('DELETE FROM activities WHERE workspace_id=$1', [req.workspaceId]);
+      await client.query('DELETE FROM contacts WHERE workspace_id=$1', [req.workspaceId]);
+      await client.query('DELETE FROM custom_fields WHERE workspace_id=$1', [req.workspaceId]);
+      await client.query('DELETE FROM stages WHERE workspace_id=$1', [req.workspaceId]);
+      await client.query('DELETE FROM pipelines WHERE workspace_id=$1', [req.workspaceId]);
+      await client.query('DELETE FROM deals WHERE workspace_id=$1', [req.workspaceId]);
+      await client.query('DELETE FROM tasks WHERE workspace_id=$1', [req.workspaceId]);
+      await client.query('DELETE FROM objects WHERE workspace_id=$1', [req.workspaceId]);
+      await client.query('DELETE FROM user_workspaces WHERE workspace_id=$1', [req.workspaceId]);
+      await client.query('DELETE FROM workspaces WHERE id=$1', [req.workspaceId]);
+      await client.query('COMMIT');
+      res.json({ success: true });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (e) { next(e); }
+});
+
 router.patch('/contact-columns', async (req, res, next) => {
   try {
     const { columns } = req.body;
