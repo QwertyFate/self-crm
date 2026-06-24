@@ -1,5 +1,9 @@
 // ── CONTACTS ──────────────────────────────────────────────
+let selectedContactIds = new Set();
+let selectionModeOn = false;
+
 async function loadContacts() {
+  selectedContactIds.clear();
   await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
   contacts = await api.get(`/api/contacts?contact_type=${currentContactType}`);
   currentPage = 1;
@@ -114,6 +118,7 @@ function renderContactsTable(list) {
   const sorted = sortContacts(list);
 
   document.getElementById('contacts-thead').innerHTML = `<tr>
+    ${selectionModeOn ? `<th style="width:40px;text-align:center"><input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this.checked)" /></th>` : ''}
     ${colKeys.map(k => {
       const col   = visibleCols.find(c => c.key === k);
       const label = k === '_name' ? t('col_name') : col?.label() || '';
@@ -153,6 +158,7 @@ function renderContactsTable(list) {
 
     const waHref = waLink(c.phone, c);
     return `<tr>
+      ${selectionModeOn ? `<td style="text-align:center"><input type="checkbox" class="contact-checkbox" data-contact-id="${c.id}" onchange="toggleContactSelection(${c.id}, this.checked)" /></td>` : ''}
       <td class="name-cell" title="${esc(c.name)}">
         ${waHref ? `<a class="btn-wa-inline" href="${waHref}" target="_blank" rel="noopener" title="WhatsApp ${esc(c.name)}">${WA_SVG}</a>` : ''}
         <strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong>
@@ -172,6 +178,11 @@ function renderContactsTable(list) {
   if (measured) saveColWidths();
 
   const cg = document.createElement('colgroup');
+  if (selectionModeOn) {
+    const col = document.createElement('col');
+    col.style.width = '40px';
+    cg.appendChild(col);
+  }
   colKeys.forEach(key => { const col = document.createElement('col'); col.style.width = (colWidths[key] || 100) + 'px'; cg.appendChild(col); });
   table.insertBefore(cg, table.firstChild);
   table.style.tableLayout = 'fixed';
@@ -267,6 +278,11 @@ async function commitInlineEdit(contactId, fieldKey, fieldType, value) {
 function onContactSearch() { currentPage = 1; filterContacts(); }
 
 function filterContacts() {
+  selectedContactIds.clear();
+  const selectAllCb = document.getElementById('select-all-checkbox');
+  if (selectAllCb) selectAllCb.checked = false;
+  updateBulkDeleteButton();
+
   const q = document.getElementById('contact-search').value.toLowerCase();
   let filtered = contacts.filter(c =>
     c.name.toLowerCase().includes(q) ||
@@ -474,4 +490,96 @@ function renderFilterChips() {
   const count = Object.values(activeFilters).reduce((n, v) => n + v.length, 0);
   const badge = document.getElementById('filter-badge');
   if (badge) { badge.textContent = count; badge.classList.toggle('hidden', count === 0); }
+}
+
+// ── SELECTION MODE ─────────────────────────────────────────
+function toggleSelectMode() {
+  selectionModeOn = !selectionModeOn;
+  const btn = document.getElementById('select-mode-btn');
+
+  if (selectionModeOn) {
+    if (btn) btn.classList.add('active');
+  } else {
+    if (btn) btn.classList.remove('active');
+    selectedContactIds.clear();
+    updateBulkDeleteButton();
+    const selectAllCb = document.getElementById('select-all-checkbox');
+    if (selectAllCb) selectAllCb.checked = false;
+  }
+
+  filterContacts();
+}
+
+// ── BULK DELETE ────────────────────────────────────────────
+function toggleContactSelection(contactId, isChecked) {
+  if (isChecked) {
+    selectedContactIds.add(contactId);
+  } else {
+    selectedContactIds.delete(contactId);
+    const selectAllCb = document.getElementById('select-all-checkbox');
+    if (selectAllCb) selectAllCb.checked = false;
+  }
+  updateBulkDeleteButton();
+}
+
+function toggleSelectAll(isChecked) {
+  selectedContactIds.clear();
+  if (isChecked) {
+    // Select all filtered/visible contacts (all pages)
+    const sorted = sortContacts(contacts);
+    sorted.forEach(c => selectedContactIds.add(c.id));
+  }
+  // Update all visible checkboxes on current page
+  document.querySelectorAll('.contact-checkbox').forEach(cb => {
+    cb.checked = isChecked;
+  });
+  const selectAllCb = document.getElementById('select-all-checkbox');
+  if (selectAllCb) selectAllCb.checked = isChecked;
+  updateBulkDeleteButton();
+}
+
+function updateBulkDeleteButton() {
+  const section = document.getElementById('bulk-delete-section');
+  const countEl = document.getElementById('bulk-delete-count');
+  if (!section || !countEl) return;
+  if (selectedContactIds.size > 0) {
+    section.classList.remove('hidden');
+    countEl.textContent = `${selectedContactIds.size} selected`;
+  } else {
+    section.classList.add('hidden');
+  }
+}
+
+function openBulkDeleteModal() {
+  const msgEl = document.getElementById('bulk-delete-message');
+  const inputEl = document.getElementById('bulk-delete-confirm-input');
+  const modalEl = document.getElementById('bulk-delete-modal');
+  if (!msgEl || !inputEl || !modalEl) return;
+  msgEl.textContent = `You are about to delete ${selectedContactIds.size} contact${selectedContactIds.size === 1 ? '' : 's'}. This action cannot be undone.`;
+  inputEl.value = '';
+  modalEl.classList.remove('hidden');
+}
+
+async function confirmBulkDelete() {
+  const inputEl = document.getElementById('bulk-delete-confirm-input');
+  const entered = inputEl.value.trim();
+  const required = String(selectedContactIds.size);
+
+  if (entered !== required) {
+    alert(`Please enter the correct number (${required}) to confirm deletion.`);
+    return;
+  }
+
+  const contactIds = Array.from(selectedContactIds);
+  const res = await api.post('/api/contacts/bulk/delete', { contactIds });
+  if (res.error) {
+    alert('Error deleting contacts: ' + res.error);
+    return;
+  }
+
+  closeModal('bulk-delete-modal');
+  selectedContactIds.clear();
+  updateBulkDeleteButton();
+  invalidate();
+  await loadContacts();
 }

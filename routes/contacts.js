@@ -149,4 +149,19 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.post('/bulk/delete', async (req, res, next) => {
+  try {
+    const { contactIds } = req.body;
+    if (!Array.isArray(contactIds) || contactIds.length === 0) {
+      return res.status(400).json({ error: 'contactIds array required' });
+    }
+    const placeholders = contactIds.map((_, i) => `$${i + 2}`).join(',');
+    const result = await pool.query(
+      `DELETE FROM contacts WHERE id IN (${placeholders}) AND workspace_id=$1`,
+      [req.workspaceId, ...contactIds]
+    );
+    res.json({ deleted: result.rowCount });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

@@ -1180,6 +1180,7 @@ body {
 
 /* ══ CONTACT FILTERS ═════════════════════════════════════ */
 .filter-toggle-btn.active { background: color-mix(in srgb, var(--primary) 12%, var(--card-bg)); border-color: var(--primary); color: var(--primary); }
+#select-mode-btn.active { background: color-mix(in srgb, var(--primary) 12%, var(--card-bg)); border-color: var(--primary); color: var(--primary); }
 .filter-badge {
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--primary); color: #fff;

@@ -348,6 +348,11 @@
           <div class="toolbar">
             <input type="text" id="contact-search" data-i18n-ph="search_ph" placeholder="Search contacts…" oninput="onContactSearch()" />
             <div class="toolbar-actions">
+              <button class="btn btn-sm" id="select-mode-btn" onclick="toggleSelectMode()">☑ Select</button>
+              <div id="bulk-delete-section" class="hidden" style="display:flex;flex-direction:row;align-items:center;gap:8px;margin-right:8px">
+                <span id="bulk-delete-count" style="font-size:13px;color:var(--muted)"></span>
+                <button class="btn btn-sm btn-danger" onclick="openBulkDeleteModal()" title="Delete selected">🗑 Delete</button>
+              </div>
               <button class="btn btn-sm filter-toggle-btn" id="filter-toggle-btn" onclick="toggleFilterPanel()">
                 ⊕ Filter <span id="filter-badge" class="filter-badge hidden">0</span>
               </button>
@@ -1014,6 +1019,25 @@
           <button type="submit" class="btn btn-primary">Create Workspace</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Bulk Delete Confirmation Modal -->
+  <div id="bulk-delete-modal" class="modal-overlay hidden">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Confirm Delete</h2>
+        <button class="close-btn" onclick="closeModal('bulk-delete-modal')">&times;</button>
+      </div>
+      <div style="padding:20px;background:var(--card-bg)">
+        <p id="bulk-delete-message" style="margin-bottom:16px;color:var(--text)"></p>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">To confirm, type the number of contacts you want to delete:</p>
+        <input type="text" id="bulk-delete-confirm-input" placeholder="e.g., 5" style="width:100%;padding:8px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:14px;margin-bottom:16px" />
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn" onclick="closeModal('bulk-delete-modal')">Cancel</button>
+          <button class="btn btn-danger" onclick="confirmBulkDelete()">Delete</button>
+        </div>
+      </div>
     </div>
   </div>
 
