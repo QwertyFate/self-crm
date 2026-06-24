@@ -25,7 +25,8 @@
       "Bash(git checkout *)",
       "Bash(git add *)",
       "Bash(git reset *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(node -c /Users/justincapuli/Documents/projects/new_projects/crm/routes/contacts.js)"
     ],
     "additionalDirectories": [
       "/tmp"

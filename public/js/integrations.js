@@ -27,9 +27,9 @@ const INTG_PLATFORMS = [
       <rect x="27" y="2"  width="9" height="36" rx="4.5" transform="rotate(-15 31.5 20)" fill="url(#make-g)"/>
     </svg>`,
     steps: [
-      'Create a new Scenario in Make.com.',
-      'Add a trigger — e.g. <strong>Facebook Lead Ads → Watch leads</strong> or any source.',
-      'Add module: <strong>HTTP → Make a request</strong>. Method: <code>POST</code>, paste your Webhook URL.',
+      'Create a new Scenario in Make.com. Add a trigger — e.g. <strong>Facebook Lead Ads → Watch leads</strong> or <strong>New lead</strong>, or any other lead source.',
+      'Add module: <strong>HTTP → Make a request</strong>. Authentication: <strong>No authentication</strong>. Method: <code>POST</code>.',
+      'Paste your Webhook URL (copy from the field at the top).',
       'Body type: <code>Raw</code> · Content-Type: <code>application/json</code>.',
       'Paste the JSON body below into the Body field.',
       'For each value shown as <code>{{1.field_name}}</code> — click that value in Make and select the matching field from your trigger module (module 1). The <code>1</code> is the module number; the part after the dot is the field name from your trigger output.',
@@ -53,9 +53,9 @@ const INTG_PLATFORMS = [
       </g>
     </svg>`,
     steps: [
-      'Create a new Zap. Trigger: e.g. <strong>Facebook Lead Ads → New Lead</strong>.',
-      'Add Action: <strong>Webhooks by Zapier → POST</strong>.',
-      'Paste your Webhook URL. Payload Type: <code>JSON</code>.',
+      'Create a new Zap. Trigger: e.g. <strong>Facebook Lead Ads → New Lead</strong>, or any lead source.',
+      'Add Action: <strong>Webhooks by Zapier → POST</strong>. Authentication: <strong>No authentication</strong>.',
+      'Paste your Webhook URL (copy from the field at the top). Payload Type: <code>JSON</code>.',
       'In the <strong>Data</strong> section, add one row per field. The key on the left is fixed (e.g. <code>full_name</code>). For the value on the right, click the field and use Zapier\'s field picker to select the matching data from your trigger step.',
       'Test and publish.',
     ],
@@ -85,8 +85,9 @@ const INTG_PLATFORMS = [
       <line x1="24" y1="29" x2="27" y2="31" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
     </svg>`,
     steps: [
-      'Add your trigger node, then an <strong>HTTP Request</strong> node.',
-      'Method: <code>POST</code>, paste your Webhook URL.',
+      'Add your trigger node (e.g. a lead source), then an <strong>HTTP Request</strong> node.',
+      'Method: <code>POST</code>. Authentication: <strong>No authentication</strong>.',
+      'Paste your Webhook URL (copy from the field at the top).',
       'Body Content Type: <code>JSON</code>.',
       'Paste the JSON below. Each value like <code>{{ $json.field_name }}</code> is an n8n expression — it reads the field named <code>field_name</code> from your trigger node\'s output.',
       'To find the correct field name: run your trigger once, click the output of the trigger node, and check the JSON keys shown there. Use those exact key names inside <code>{{ $json.KEY_HERE }}</code>.',
@@ -101,7 +102,8 @@ const INTG_PLATFORMS = [
     color: '#64748b',
     logo: `<svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
     steps: [
-      'Send a <code>POST</code> request to your Webhook URL.',
+      'Send a <code>POST</code> request to your Webhook URL below (copy it from the field at the top).',
+      'Authentication: <strong>No authentication</strong> required.',
       'Set <code>Content-Type: application/json</code>.',
       'Send the JSON body below. The keys are fixed — replace the example values with real data from your source.',
       'A successful response returns <code>{"success": true, "contact_id": 42}</code>.',
@@ -179,12 +181,20 @@ function showIntgGuide(id) {
     ? `<div class="intg-json-note">${platform.jsonNote}</div>`
     : '';
 
+  const webhookUrl = document.getElementById('intg-url').value;
   document.getElementById('intg-guide-panel').innerHTML = `
     <div class="intg-guide-header">
       <div class="intg-guide-logo-sm">${platform.logo}</div>
       <div>
         <div class="intg-guide-title-text">${platform.name}</div>
         <div class="intg-guide-subtitle">Setup Guide</div>
+      </div>
+    </div>
+    <div style="margin:16px 0;padding:12px;background:var(--bg-secondary);border-radius:4px;border-left:3px solid var(--primary)">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Webhook URL</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <code style="flex:1;word-break:break-all;font-size:12px">${webhookUrl}</code>
+        <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${webhookUrl}');alert('Copied to clipboard!')">Copy</button>
       </div>
     </div>
     <ol class="intg-guide-steps">${steps}</ol>
