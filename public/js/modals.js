@@ -109,15 +109,25 @@ function buildDetailHTML(c, contactDeals, id) {
     </div>
     <div class="detail-section">
       <h3>${t('detail_activities')}</h3>
-      <div class="mini-acts" id="detail-acts">${renderMiniActs(c.activities)}</div>
+      <div class="mini-acts" id="detail-acts" data-contact-id="${id}">${renderMiniActs(c.activities)}</div>
     </div>
     <div class="inline-log">
-      <select id="inline-type">
+      <select id="inline-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;background:var(--input-bg);color:var(--text)">
         <option value="note">${t('act_note')}</option><option value="call">${t('act_call')}</option>
         <option value="email">${t('act_email')}</option><option value="whatsapp">${t('act_whatsapp')}</option>
       </select>
-      <input type="text" id="inline-content" placeholder="${t('detail_log_ph')}" />
-      <button class="btn btn-primary btn-sm" onclick="logInlineActivity(${id})">${t('btn_log')}</button>
+      <div class="note-editor-toolbar" style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
+        <button type="button" class="fmt-btn" onclick="formatInlineNote('bold')" title="Bold"><strong>B</strong></button>
+        <button type="button" class="fmt-btn" onclick="formatInlineNote('italic')" title="Italic"><em>I</em></button>
+        <button type="button" class="fmt-btn" onclick="formatInlineNote('underline')" title="Underline"><u>U</u></button>
+        <div style="width:1px;background:var(--border)"></div>
+        <button type="button" class="fmt-btn" onclick="formatInlineNote('insertUnorderedList')" title="List">• List</button>
+        <button type="button" class="fmt-btn" onclick="formatInlineNote('createLink')" title="Link">🔗 Link</button>
+        <button type="button" class="fmt-btn" onclick="formatInlineNote('removeFormat')" title="Clear">✕ Clear</button>
+      </div>
+      <div id="inline-content" class="note-editor" contenteditable="true" placeholder="${t('detail_log_ph')}"
+        onkeydown="if(event.key==='Enter' && event.ctrlKey){event.preventDefault();logInlineActivity(${id});}"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="logInlineActivity(${id})">${t('btn_log')} (Ctrl+Enter)</button>
     </div>
     <div class="detail-actions">
       <button class="btn btn-danger btn-sm" onclick="deleteContact(${id})">${t('btn_delete')}</button>
@@ -174,13 +184,28 @@ async function openDealModalForContact(contactId) {
   if (sel) sel.value = contactId;
 }
 
+function truncateActivityPreview(html, maxChars = 120, maxLines = 3) {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  let text = div.innerText;
+
+  const lines = text.split('\n').slice(0, maxLines).join('\n');
+  if (lines.length > maxChars) {
+    return esc(lines.substring(0, maxChars)) + '...';
+  }
+  if (text.split('\n').length > maxLines) {
+    return esc(lines) + '...';
+  }
+  return esc(lines);
+}
+
 function renderMiniActs(acts) {
   if (!acts?.length) return `<p style="color:var(--muted);font-size:12px">${t('no_activities')}</p>`;
   return acts.map(a => `
-    <div class="mini-act">
+    <div class="mini-act" onclick="editActivity(${a.id})" style="cursor:pointer;transition:all 0.2s" onmouseover="this.style.background='var(--primary-light)'" onmouseout="this.style.background='var(--bg)'">
       <span class="mini-act-type">${t('act_' + a.type)}</span>
-      <div>
-        <div>${esc(a.content)}</div>
+      <div style="flex:1">
+        <div class="mini-act-content" style="white-space:pre-wrap;overflow:hidden">${truncateActivityPreview(a.content)}</div>
         <div class="mini-act-date">${fmtDate(a.created_at)}${a.logged_by_name ? ` · ${t('logged_by')} ${esc(a.logged_by_name)}` : ''}</div>
       </div>
     </div>`).join('');
@@ -195,12 +220,171 @@ async function moveContactStage(contactId, stageId, el) {
   if (document.getElementById('page-deals').classList.contains('active')) renderDealsBoard();
 }
 
+function formatInlineNote(cmd) {
+  document.execCommand(cmd, false, null);
+  document.getElementById('inline-content')?.focus();
+}
+
 async function logInlineActivity(contactId) {
-  const content = document.getElementById('inline-content').value.trim(); if (!content) return;
+  const contentEl = document.getElementById('inline-content');
+  if (!contentEl) return;
+  const content = contentEl.innerHTML.trim();
+  if (!content || content === '<br>') return;
   await api.post('/api/activities', { contact_id: contactId, type: document.getElementById('inline-type').value, content });
-  document.getElementById('inline-content').value = '';
+  contentEl.innerHTML = '';
   const c = await api.get(`/api/contacts/${contactId}`);
   document.getElementById('detail-acts').innerHTML = renderMiniActs(c.activities);
+}
+
+async function editActivity(activityId) {
+  // Fetch the activity
+  const activity = await api.get(`/api/activities/${activityId}`);
+  if (!activity) {
+    alert('Activity not found');
+    return;
+  }
+
+  // Store the contact ID for later use
+  const detailActs = document.getElementById('detail-acts');
+  const contactId = detailActs?.dataset.contactId;
+  window.currentEditActivityContactId = contactId;
+  window.currentEditActivityId = activityId;
+
+  const panel = document.getElementById('side-panel-body');
+  if (!panel) return;
+
+  panel.innerHTML = `
+    <div style="padding:0;display:flex;flex-direction:column;height:100%">
+      <div style="padding:16px;border-bottom:1px solid var(--border);flex-shrink:0">
+        <div style="font-weight:600;font-size:14px">Edit Activity</div>
+      </div>
+      <div style="overflow-y:auto;flex:1;padding:16px">
+        <div class="form-group">
+          <label>Type</label>
+          <select id="act-type-edit" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text)">
+            <option value="note" ${activity.type === 'note' ? 'selected' : ''}>Note</option>
+            <option value="call" ${activity.type === 'call' ? 'selected' : ''}>Call</option>
+            <option value="email" ${activity.type === 'email' ? 'selected' : ''}>Email</option>
+            <option value="whatsapp" ${activity.type === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Content</label>
+          <div class="note-editor-toolbar" style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('bold')" title="Bold"><strong>B</strong></button>
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('italic')" title="Italic"><em>I</em></button>
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('underline')" title="Underline"><u>U</u></button>
+            <div style="width:1px;background:var(--border)"></div>
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('insertUnorderedList')" title="List">• List</button>
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('createLink')" title="Link">🔗 Link</button>
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('removeFormat')" title="Clear">✕ Clear</button>
+          </div>
+          <div id="act-content-edit" class="note-editor" contenteditable="true">${activity.content}</div>
+        </div>
+        <div style="color:var(--muted);font-size:12px;margin-top:12px">
+          Logged by ${esc(activity.logged_by_name || 'Unknown')} on ${fmtDate(activity.created_at)}
+        </div>
+      </div>
+      <div style="padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0">
+        <button class="btn btn-secondary btn-sm" onclick="confirmDiscardEdit()">Cancel</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDeleteActivity()">Delete</button>
+        <button class="btn btn-primary btn-sm" onclick="saveActivityEdit()">Save</button>
+      </div>
+    </div>`;
+}
+
+function formatActivityNote(cmd) {
+  document.execCommand(cmd, false, null);
+  document.getElementById('act-content-edit')?.focus();
+}
+
+
+function confirmDiscardEdit() {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'discard-modal';
+  modal.innerHTML = `
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Discard Changes?</h2>
+        <button class="close-btn" onclick="document.getElementById('discard-modal')?.remove()">&times;</button>
+      </div>
+      <div style="padding:20px;background:var(--card-bg)">
+        <p style="margin-bottom:20px;color:var(--text)">Do you want to discard your changes and go back?</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-secondary" onclick="document.getElementById('discard-modal')?.remove()">Keep Editing</button>
+          <button class="btn btn-danger" onclick="discardAndGoBack(); document.getElementById('discard-modal')?.remove()">Discard</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function discardAndGoBack() {
+  const contactId = window.currentEditActivityContactId;
+  if (contactId) {
+    openDetail(contactId);
+  }
+}
+
+async function confirmDeleteActivity() {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h2>Delete Activity?</h2>
+        <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+      </div>
+      <div style="padding:20px;background:var(--card-bg)">
+        <p style="margin-bottom:20px;color:var(--text)">This action cannot be undone.</p>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+          <button class="btn btn-danger" onclick="deleteActivityConfirmed()">Delete</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function deleteActivityConfirmed() {
+  const modal = document.querySelector('.modal-overlay');
+  if (modal) modal.remove();
+  const activityId = window.currentEditActivityId;
+  const contactId = window.currentEditActivityContactId;
+  if (activityId) {
+    await api.delete(`/api/activities/${activityId}`);
+    if (contactId) {
+      openDetail(contactId);
+    }
+  }
+}
+
+async function saveActivityEdit() {
+  const contentEl = document.getElementById('act-content-edit');
+  const typeEl = document.getElementById('act-type-edit');
+  if (!contentEl || !typeEl) return;
+
+  const content = contentEl.innerHTML.trim();
+  if (!content || content === '<br>') {
+    alert('Please enter some content');
+    return;
+  }
+
+  const type = typeEl.value;
+  const activityId = window.currentEditActivityId;
+  const contactId = window.currentEditActivityContactId;
+
+  const result = await api.patch(`/api/activities/${activityId}`, { type, content });
+
+  if (result.error) {
+    alert('Error saving activity: ' + result.error);
+    return;
+  }
+
+  if (contactId) {
+    openDetail(contactId);
+  }
 }
 
 // ── DEAL MODAL ────────────────────────────────────────────
@@ -261,23 +445,40 @@ async function renderContactPanelReadOnly(contact) {
       <div class="mini-acts" id="cpanel-acts">${renderMiniActs(full.activities)}</div>
     </div>
     <div class="panel-note-form">
-      <select id="cpanel-act-type">
+      <select id="cpanel-act-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;background:var(--input-bg);color:var(--text)">
         <option value="note">${t('act_note')}</option><option value="call">${t('act_call')}</option>
         <option value="email">${t('act_email')}</option><option value="whatsapp">${t('act_whatsapp')}</option>
       </select>
-      <input type="text" id="cpanel-act-content" placeholder="${t('detail_log_ph')}"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();logContactPanelNote(${full.id});}" />
-      <button id="cpanel-log-btn" class="btn btn-primary btn-sm" onclick="logContactPanelNote(${full.id})">${t('btn_log')}</button>
+      <div class="note-editor-toolbar" id="cpanel-toolbar" style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
+        <button type="button" class="fmt-btn" onclick="formatContactNote('bold')" title="Bold"><strong>B</strong></button>
+        <button type="button" class="fmt-btn" onclick="formatContactNote('italic')" title="Italic"><em>I</em></button>
+        <button type="button" class="fmt-btn" onclick="formatContactNote('underline')" title="Underline"><u>U</u></button>
+        <div style="width:1px;background:var(--border)"></div>
+        <button type="button" class="fmt-btn" onclick="formatContactNote('insertUnorderedList')" title="List">• List</button>
+        <button type="button" class="fmt-btn" onclick="formatContactNote('createLink')" title="Link">🔗 Link</button>
+        <button type="button" class="fmt-btn" onclick="formatContactNote('removeFormat')" title="Clear">✕ Clear</button>
+      </div>
+      <div id="cpanel-act-content" class="note-editor" contenteditable="true" placeholder="${t('detail_log_ph')}"
+        onkeydown="if(event.key==='Enter' && event.ctrlKey){event.preventDefault();logContactPanelNote(${full.id});}"></div>
+      <button id="cpanel-log-btn" class="btn btn-primary" style="width:100%;margin-top:8px" onclick="logContactPanelNote(${full.id})">${t('btn_log')} (Ctrl+Enter)</button>
     </div>`;
 }
 
+function formatContactNote(cmd) {
+  document.execCommand(cmd, false, null);
+  document.getElementById('cpanel-act-content')?.focus();
+}
+
 async function logContactPanelNote(contactId) {
-  const contentEl = document.getElementById('cpanel-act-content'), content = contentEl?.value.trim();
-  if (!content) return;
+  const contentEl = document.getElementById('cpanel-act-content');
+  if (!contentEl) return;
+  const content = contentEl.innerHTML.trim();
+  if (!content || content === '<br>') return;
   const type = document.getElementById('cpanel-act-type')?.value || 'note';
   const btn = document.getElementById('cpanel-log-btn'); if (btn) btn.disabled = true;
   await api.post('/api/activities', { contact_id: contactId, type, content });
-  if (contentEl) contentEl.value = ''; if (btn) btn.disabled = false;
+  if (contentEl) contentEl.innerHTML = '';
+  if (btn) btn.disabled = false;
   const fresh = await api.get(`/api/contacts/${contactId}`);
   const actsEl = document.getElementById('cpanel-acts'); if (actsEl) actsEl.innerHTML = renderMiniActs(fresh.activities);
   contentEl?.focus();

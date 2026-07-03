@@ -33,6 +33,34 @@ router.post('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.get('/:id', async (req, res, next) => {
+  try {
+    const { rows: [row] } = await pool.query(`
+      SELECT a.*, u.name AS logged_by_name, u.email AS logged_by_email
+      FROM activities a
+      LEFT JOIN users u ON u.id = a.created_by
+      WHERE a.id = $1 AND a.workspace_id = $2
+    `, [req.params.id, req.workspaceId]);
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json(row);
+  } catch (e) { next(e); }
+});
+
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const { type, content } = req.body;
+    if (!content) return res.status(400).json({ error: 'Content required' });
+    if (type && !['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+
+    const result = await pool.query(
+      'UPDATE activities SET type=$1, content=$2 WHERE id=$3 AND workspace_id=$4 RETURNING id',
+      [type, content, req.params.id, req.workspaceId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Activity not found' });
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (e) { next(e); }
+});
+
 router.delete('/:id', async (req, res, next) => {
   try {
     const result = await pool.query(
