@@ -1522,6 +1522,13 @@
       <!-- Step 2: Map columns -->
       <div id="import-step-map" class="hidden">
         <p class="import-info-text" id="import-info-text"></p>
+
+        <!-- Split name option -->
+        <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:16px;display:flex;gap:8px;align-items:center">
+          <input type="checkbox" id="import-split-name" onchange="updateImportNameOptions()" />
+          <label for="import-split-name" style="cursor:pointer;margin:0">Combine First Name + Last Name into Contact Name</label>
+        </div>
+
         <div class="import-map-header-row">
           <span>CSV column &amp; sample</span>
           <span></span>

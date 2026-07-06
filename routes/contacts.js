@@ -51,10 +51,31 @@ router.post('/import', async (req, res, next) => {
       let count = 0;
       for (const row of rows) {
         if (!row.name?.trim()) continue;
+
+        // Check if contact with same email already exists in this workspace
+        if (row.email) {
+          const { rows: [existing] } = await client.query(
+            'SELECT id FROM contacts WHERE workspace_id=$1 AND email=$2',
+            [req.workspaceId, row.email.toLowerCase().trim()]
+          );
+
+          if (existing) {
+            // Update existing contact
+            await client.query(
+              'UPDATE contacts SET name=$1, phone=$2, company=$3, stage_id=$4, assigned_to=$5, custom_data=$6, updated_at=NOW() WHERE id=$7 AND workspace_id=$8',
+              [row.name.trim(), row.phone||null, row.company||null, row.stage_id||null,
+               row.assigned_to||req.userId, JSON.stringify(row.custom_data||{}), existing.id, req.workspaceId]
+            );
+            count++;
+            continue;
+          }
+        }
+
+        // Create new contact if no email or email doesn't exist
         await client.query(
           'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-          [req.workspaceId, row.name.trim(), row.email||null, row.phone||null,
-           row.company||null, row.stage_id||null, req.userId, JSON.stringify(row.custom_data||{})]
+          [req.workspaceId, row.name.trim(), row.email ? row.email.toLowerCase().trim() : null,
+           row.phone||null, row.company||null, row.stage_id||null, req.userId, JSON.stringify(row.custom_data||{})]
         );
         count++;
       }
@@ -100,9 +121,20 @@ router.post('/', async (req, res, next) => {
     if (!name) return res.status(400).json({ error: 'Name is required' });
     const assignee = assigned_to ? Number(assigned_to) : req.userId;
     const type = contact_type || 'contact';
+
+    // Check if contact with same email already exists in this workspace
+    if (email) {
+      const normalizedEmail = email.toLowerCase().trim();
+      const { rows: [existing] } = await pool.query(
+        'SELECT id FROM contacts WHERE workspace_id=$1 AND email=$2',
+        [req.workspaceId, normalizedEmail]
+      );
+      if (existing) return res.status(409).json({ error: 'Contact with this email already exists in this workspace' });
+    }
+
     const { rows: [row] } = await pool.query(
       'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data, contact_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
-      [req.workspaceId, name, email||null, phone||null, company||null, stage_id||null, assignee, JSON.stringify(custom_data||{}), type]
+      [req.workspaceId, name, email ? email.toLowerCase().trim() : null, phone||null, company||null, stage_id||null, assignee, JSON.stringify(custom_data||{}), type]
     );
     notify(req.workspaceId, req.userId, {
       type: 'contact_created', category: 'contacts',

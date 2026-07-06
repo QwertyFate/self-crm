@@ -164,12 +164,41 @@ router.post('/receive/:key', async (req, res) => {
       _skipped: Object.keys(skipped).length ? skipped : undefined,
     };
 
-    // Create contact with custom fields
-    const { rows: [contact] } = await pool.query(
-      `INSERT INTO contacts (workspace_id, name, email, phone, company, contact_type, custom_data)
-       VALUES ($1,$2,$3,$4,$5,'contact',$6) RETURNING id, name`,
-      [wid, name || email, email, phone, company, JSON.stringify(customData)]
-    );
+    // Check if contact with same email already exists in this workspace
+    let contact;
+    if (email) {
+      const normalizedEmail = email.toLowerCase().trim();
+      const { rows: [existing] } = await pool.query(
+        `SELECT id, name FROM contacts WHERE workspace_id=$1 AND email=$2`,
+        [wid, normalizedEmail]
+      );
+
+      if (existing) {
+        // Update existing contact
+        const { rows: [updated] } = await pool.query(
+          `UPDATE contacts SET name=$1, phone=$2, company=$3, custom_data=$4, updated_at=NOW()
+           WHERE id=$5 AND workspace_id=$6 RETURNING id, name`,
+          [name || existing.name, phone, company, JSON.stringify(customData), existing.id, wid]
+        );
+        contact = updated;
+      } else {
+        // Create new contact
+        const { rows: [newContact] } = await pool.query(
+          `INSERT INTO contacts (workspace_id, name, email, phone, company, contact_type, custom_data)
+           VALUES ($1,$2,$3,$4,$5,'contact',$6) RETURNING id, name`,
+          [wid, name || email, normalizedEmail, phone, company, JSON.stringify(customData)]
+        );
+        contact = newContact;
+      }
+    } else {
+      // Create new contact if no email
+      const { rows: [newContact] } = await pool.query(
+        `INSERT INTO contacts (workspace_id, name, email, phone, company, contact_type, custom_data)
+         VALUES ($1,$2,$3,$4,$5,'contact',$6) RETURNING id, name`,
+        [wid, name || email, null, phone, company, JSON.stringify(customData)]
+      );
+      contact = newContact;
+    }
 
     let dealId = null;
     if (wh.create_deal && wh.pipeline_id) {

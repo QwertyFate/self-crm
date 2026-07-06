@@ -128,10 +128,17 @@ async function processImportFile(file) {
   renderImportMapping(); showImportStep('map');
 }
 
+function updateImportNameOptions() {
+  if (importData) renderImportMapping();
+}
+
 function renderImportMapping() {
   const { headers, sampleRow, mappings, rows } = importData;
   document.getElementById('import-info-text').textContent = `${rows.length} row${rows.length !== 1 ? 's' : ''} detected — match each column to a CRM field.`;
-  const builtins = [{ val:'name', label:'Name *' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'stage', label:'Stage' }, { val:'assignee', label:'Assignee' }];
+  const splitName = document.getElementById('import-split-name').checked;
+  const builtins = splitName
+    ? [{ val:'first_name', label:'First Name' }, { val:'last_name', label:'Last Name' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'stage', label:'Stage' }, { val:'assignee', label:'Assignee' }]
+    : [{ val:'name', label:'Name *' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'stage', label:'Stage' }, { val:'assignee', label:'Assignee' }];
   const buildOptions = cur => {
     let o = `<option value="skip"${cur==='skip'?' selected':''}>— Don't import —</option>
       <optgroup label="Contact fields">${builtins.map(b => `<option value="${b.val}"${cur===b.val?' selected':''}>${b.label}</option>`).join('')}</optgroup>`;
@@ -161,7 +168,20 @@ function importBack() { showImportStep('upload'); document.getElementById('impor
 
 async function runImport() {
   const { headers, rows, mappings } = importData;
-  if (!mappings.some(m => m.mapTo === 'name')) { alert('Please map a column to "Name" before importing.'); return; }
+  const splitName = document.getElementById('import-split-name').checked;
+
+  if (splitName) {
+    if (!mappings.some(m => m.mapTo === 'first_name' || m.mapTo === 'last_name')) {
+      alert('Please map at least "First Name" or "Last Name" when splitting names.');
+      return;
+    }
+  } else {
+    if (!mappings.some(m => m.mapTo === 'name')) {
+      alert('Please map a column to "Name" before importing.');
+      return;
+    }
+  }
+
   const newFields = [], newKeyByCol = {};
   mappings.forEach((m, i) => {
     if (m.mapTo !== 'new') return;
@@ -169,11 +189,14 @@ async function runImport() {
     if (!fields.find(f => f.field_key === key) && !newFields.find(f => f.field_key === key)) newFields.push({ name: label, field_key: key });
     newKeyByCol[i] = toFieldKey((m.newFieldName || headers[i]).trim()) || `col_${i}`;
   });
+
   const contactsList = rows.map(row => {
-    const c = { custom_data: {} };
+    const c = { custom_data: {}, first_name: '', last_name: '' };
     mappings.forEach((m, i) => {
       const val = (row[i] || '').trim(); if (!val || m.mapTo === 'skip') return;
       if      (m.mapTo === 'name')    c.name    = val;
+      else if (m.mapTo === 'first_name') c.first_name = val;
+      else if (m.mapTo === 'last_name')  c.last_name = val;
       else if (m.mapTo === 'email')   c.email   = val;
       else if (m.mapTo === 'phone')   c.phone   = val.replace(/^p:/i, '').trim();
       else if (m.mapTo === 'company') c.company = val;
@@ -182,6 +205,14 @@ async function runImport() {
       else if (m.mapTo.startsWith('custom:')) c.custom_data[m.mapTo.slice(7)] = val;
       else if (m.mapTo === 'new' && newKeyByCol[i]) c.custom_data[newKeyByCol[i]] = val;
     });
+
+    // Combine first_name and last_name into name if split name is enabled
+    if (splitName) {
+      c.name = [c.first_name, c.last_name].filter(Boolean).join(' ') || c.name;
+      delete c.first_name;
+      delete c.last_name;
+    }
+
     return c;
   }).filter(c => c.name);
 
