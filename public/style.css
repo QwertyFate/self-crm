@@ -2875,3 +2875,13 @@ body {
   flex-direction: column;
   gap: 8px;
 }
+
+/* ── Select option styling ── */
+select option {
+  background: var(--card-bg);
+  color: var(--text);
+}
+select option:checked {
+  background: var(--primary);
+  color: white;
+}

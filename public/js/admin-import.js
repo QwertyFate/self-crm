@@ -108,10 +108,56 @@ function autoMapHeader(header) {
   return 'skip';
 }
 
-function openImportModal() {
+async function openImportModal() {
+  await ensureMembers();
   importData = null; showImportStep('upload');
   const fi = document.getElementById('import-file-input'); if (fi) fi.value = '';
   document.getElementById('import-modal').classList.remove('hidden');
+  loadImportPipelines();
+  loadImportAssignees();
+}
+
+function toggleImportDealOptions() {
+  const opts = document.getElementById('import-deal-options');
+  opts.style.display = document.getElementById('import-create-deals').checked ? 'block' : 'none';
+  if (document.getElementById('import-create-deals').checked) loadImportPipelines();
+}
+
+function loadImportPipelines() {
+  const sel = document.getElementById('import-pipeline');
+  if (!pipelines?.length) {
+    sel.innerHTML = '<option value="">— No pipelines available —</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Select a pipeline —</option>' +
+    pipelines.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  sel.onchange = updateImportStages;
+}
+
+function loadImportAssignees() {
+  const sel = document.getElementById('import-assignee');
+  if (!members?.length) {
+    sel.innerHTML = '<option value="">— Use default or unassigned —</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Use default or unassigned —</option>' +
+    members.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
+}
+
+function updateImportStages() {
+  const pipelineId = parseInt(document.getElementById('import-pipeline').value) || null;
+  const sel = document.getElementById('import-stage');
+  if (!pipelineId) {
+    sel.innerHTML = '<option value="">— Auto (first stage) —</option>';
+    return;
+  }
+  const pipeline = pipelines.find(p => p.id === pipelineId);
+  if (!pipeline || !pipeline.stages?.length) {
+    sel.innerHTML = '<option value="">— Auto (first stage) —</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Auto (first stage) —</option>' +
+    pipeline.stages.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
 }
 function showImportStep(step) {
   ['upload','map','done'].forEach(s => document.getElementById(`import-step-${s}`).classList.toggle('hidden', s !== step));
@@ -218,9 +264,37 @@ async function runImport() {
 
   const btn = document.getElementById('import-run-btn');
   btn.disabled = true; btn.textContent = 'Importing…';
-  const res = await api.post('/api/contacts/import', { contacts: contactsList, newFields });
+
+  const createDeals = document.getElementById('import-create-deals').checked;
+  const createDealsForNew = document.getElementById('import-deals-new').checked;
+  const createDealsForUpdated = document.getElementById('import-deals-updated').checked;
+  const pipelineId = createDeals ? parseInt(document.getElementById('import-pipeline').value) || null : null;
+  const stageId = createDeals ? parseInt(document.getElementById('import-stage').value) || null : null;
+
+  // Get assignee: prefer manually selected one, then fall back to integration default
+  let assigneeId = parseInt(document.getElementById('import-assignee').value) || null;
+  if (!assigneeId) {
+    const intgSettings = await api.get('/api/integrations/settings');
+    if (intgSettings?.webhook?.default_assignee_id) {
+      assigneeId = intgSettings.webhook.default_assignee_id;
+    }
+  }
+
+  const res = await api.post('/api/contacts/import', {
+    contacts: contactsList,
+    newFields,
+    createDeals: createDeals && pipelineId,
+    createDealsForNew: createDeals && createDealsForNew && pipelineId,
+    createDealsForUpdated: createDeals && createDealsForUpdated && pipelineId,
+    pipelineId,
+    stageId,
+    defaultAssigneeId: assigneeId
+  });
   btn.disabled = false; btn.textContent = 'Import contacts';
-  document.getElementById('import-done-text').textContent = `Successfully imported ${res.imported} contact${res.imported !== 1 ? 's' : ''}.`;
+  const dealsCreated = res.deals_created || 0;
+  let message = `Successfully imported ${res.imported} contact${res.imported !== 1 ? 's' : ''}.`;
+  if (dealsCreated > 0) message += ` Created ${dealsCreated} deal${dealsCreated !== 1 ? 's' : ''}.`;
+  document.getElementById('import-done-text').textContent = message;
   showImportStep('done'); invalidate();
 }
 

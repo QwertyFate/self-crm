@@ -898,12 +898,21 @@
             <div id="intg-field-map" class="intg-field-map"></div>
             <div class="intg-section-title" style="margin-top:20px">Auto-create Deal</div>
             <div class="intg-row" style="margin-bottom:12px">
-              <label class="intg-toggle-label"><input type="checkbox" id="intg-create-deal" onchange="toggleIntgDeal()"> Create a deal for every incoming lead</label>
+              <label class="intg-toggle-label"><input type="checkbox" id="intg-create-deal" onchange="toggleIntgDeal(); saveIntegration(true)"> Create a deal for every incoming lead</label>
             </div>
             <div id="intg-deal-options" class="hidden">
-              <div class="intg-row"><label class="intg-label">Pipeline</label><select id="intg-pipeline" class="form-control" onchange="loadIntgStages()"></select></div>
-              <div class="intg-row" style="margin-top:8px"><label class="intg-label">Stage</label><select id="intg-stage" class="form-control"></select></div>
+              <div class="intg-row"><label class="intg-label">Pipeline</label><select id="intg-pipeline" class="form-control" onchange="loadIntgStages(); saveIntegration(true)"></select></div>
+              <div class="intg-row" style="margin-top:8px"><label class="intg-label">Stage</label><select id="intg-stage" class="form-control" onchange="saveIntegration(true)"></select></div>
             </div>
+
+            <!-- Default Assignee -->
+            <div class="intg-row" style="margin-top:16px">
+              <label class="intg-label">Default Assignee (for all incoming contacts)</label>
+              <select id="intg-assignee" class="form-control" onchange="saveIntegration(true)">
+                <option value="">— Not set (assigned to self) —</option>
+              </select>
+            </div>
+
             <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
               <button class="btn btn-primary btn-sm" onclick="saveIntegration()">Save</button>
               <span id="intg-msg" class="workspace-name-msg hidden"></span>
@@ -1524,9 +1533,49 @@
         <p class="import-info-text" id="import-info-text"></p>
 
         <!-- Split name option -->
-        <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:16px;display:flex;gap:8px;align-items:center">
+        <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:12px;display:flex;gap:8px;align-items:center">
           <input type="checkbox" id="import-split-name" onchange="updateImportNameOptions()" />
           <label for="import-split-name" style="cursor:pointer;margin:0">Combine First Name + Last Name into Contact Name</label>
+        </div>
+
+        <!-- Auto deal creation option -->
+        <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:16px">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <input type="checkbox" id="import-create-deals" onchange="toggleImportDealOptions()" />
+            <label for="import-create-deals" style="cursor:pointer;margin:0">Create deals during import</label>
+          </div>
+          <div id="import-deal-options" style="display:none;margin-top:8px;padding-left:24px">
+            <div style="margin-bottom:12px;padding:8px;background:var(--card-bg);border-radius:4px">
+              <div style="display:flex;gap:8px;margin-bottom:8px">
+                <input type="checkbox" id="import-deals-new" checked />
+                <label for="import-deals-new" style="cursor:pointer;margin:0;font-size:13px">For new contacts</label>
+              </div>
+              <div style="display:flex;gap:8px">
+                <input type="checkbox" id="import-deals-updated" />
+                <label for="import-deals-updated" style="cursor:pointer;margin:0;font-size:13px">For updated contacts (optional)</label>
+              </div>
+            </div>
+            <div style="margin-bottom:8px">
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Pipeline</label>
+              <select id="import-pipeline" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--text)">
+                <option value="">— Select a pipeline —</option>
+              </select>
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Starting Stage (optional)</label>
+              <select id="import-stage" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--text)">
+                <option value="">— Auto (first stage) —</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Assignee selection -->
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Assignee (optional)</label>
+          <select id="import-assignee" style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--text)">
+            <option value="">— Use default or unassigned —</option>
+          </select>
         </div>
 
         <div class="import-map-header-row">
