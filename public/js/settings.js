@@ -13,7 +13,7 @@ function switchSettingsTab(tab) {
 
 async function loadSettings() {
   [stages, fields] = await Promise.all([api.get('/api/stages'), api.get('/api/fields')]);
-  renderFieldsList(); renderContactColumnSettings();
+  renderFieldsList(); renderContactColumnSettings(); renderContactStagesList();
   const waEl = document.getElementById('wa-template-input');
   if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? 'Hi {{name}}, ';
   const miroEl = document.getElementById('miro-url-input');
@@ -266,6 +266,23 @@ async function saveStage(e) {
 async function deleteStage(id) {
   if (!confirm('Delete this stage? Contacts will become unassigned.')) return;
   await api.del(`/api/stages/${id}`); invalidate(); await loadSettings();
+}
+
+function renderContactStagesList() {
+  const el = document.getElementById('contact-stages-list');
+  if (!el) return;
+  if (!stages.length) { el.innerHTML = '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No stages yet</li>'; return; }
+  el.innerHTML = stages.map((s, i) => `
+    <li class="settings-row" draggable="true" data-id="${s.id}"
+      ondragstart="stageDragStart(event,${i})" ondragover="stageDragOver(event)" ondrop="stageDrop(event,${i})">
+      <span class="drag-handle">⠿</span>
+      <span class="row-dot" style="background:${s.color}"></span>
+      <span class="row-label">${esc(s.name)}</span>
+      <div class="row-actions">
+        <button class="btn btn-sm btn-ghost btn-icon" onclick="openStageModal(${s.id})">✏️</button>
+        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteStage(${s.id})">✕</button>
+      </div>
+    </li>`).join('');
 }
 
 // ── Contact custom fields ─────────────────────────────────

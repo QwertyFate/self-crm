@@ -81,10 +81,14 @@ function closeSidePanel() {
 
 // ── CONTACT DETAIL ────────────────────────────────────────
 function buildDetailHTML(c, contactDeals, id) {
+  const stageOptions = stages.map(s => `<option value="${s.id}" ${c.stage_id === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
+  const stageField = `<select style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--text)" onchange="updateContactStage(${id}, this.value)"><option value="">— None —</option>${stageOptions}</select>`;
+
   const infoFields = [
     ['Company',  c.company],
     ['Email',    c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : null],
     ['Phone',    c.phone ? `${esc(c.phone)}${waLink(c.phone, c) ? ` <a class="wa-detail-link" href="${waLink(c.phone, c)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG} WhatsApp</a>` : ''}` : null],
+    ['Stage',    stageField],
     ['Assignee', c.assigned_to_name],
     ...fields.map(f => {
       const val = c.custom_data?.[f.field_key]; if (!val) return [f.name, null];
@@ -103,7 +107,10 @@ function buildDetailHTML(c, contactDeals, id) {
     <div class="detail-section">
       <div class="detail-section-header">
         <h3>Deals</h3>
-        <button class="btn btn-sm btn-primary" onclick="closeSidePanel();closeModal('detail-modal');openDealModalForContact(${id})">+ Add Deal</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-primary" onclick="openAddToKanbanModal(${id})">+ Add to Kanban</button>
+          <button class="btn btn-sm btn-primary" onclick="closeSidePanel();closeModal('detail-modal');openDealModalForContact(${id})">+ Add Deal</button>
+        </div>
       </div>
       <div class="contact-deals-list" id="contact-deals-list">${renderContactDeals(contactDeals)}</div>
     </div>
@@ -159,6 +166,47 @@ async function openDetail(id) {
     document.getElementById('detail-body').innerHTML    = buildDetailHTML(c, contactDeals, id);
     document.getElementById('detail-modal').classList.remove('hidden');
   }
+}
+
+async function updateContactStage(contactId, stageId) {
+  await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: stageId || null });
+  invalidate();
+}
+
+function openAddToKanbanModal(contactId) {
+  const stageSelect = document.getElementById('add-to-kanban-stage');
+  stageSelect.innerHTML = '<option value="">— Select a stage —</option>' +
+    (stages || []).map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+
+  // Store the contact ID for use in the submit handler
+  document.getElementById('add-to-kanban-form').dataset.contactId = contactId;
+  document.getElementById('add-to-kanban-modal').classList.remove('hidden');
+}
+
+async function confirmAddToKanban(e) {
+  e.preventDefault();
+  const contactId = parseInt(document.getElementById('add-to-kanban-form').dataset.contactId);
+  const stageId = parseInt(document.getElementById('add-to-kanban-stage').value);
+
+  if (!stageId) {
+    alert('Please select a stage');
+    return;
+  }
+
+  await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: stageId });
+  closeModal('add-to-kanban-modal');
+  closeSidePanel();
+  closeModal('detail-modal');
+
+  // Update local contacts array
+  const contact = contacts.find(c => c.id === contactId);
+  if (contact) {
+    contact.stage_id = stageId;
+  }
+
+  // Reload contacts and switch to kanban view
+  await loadContacts();
+  setContactViewMode('kanban');
 }
 
 function renderContactDeals(deals) {

@@ -379,8 +379,13 @@ async function initDb() {
   `);
 
   // Allow whatsapp as an activity type
-  await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);
-  await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp'))`);
+  try {
+    await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);
+    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp'))`);
+  } catch (e) {
+    // Constraint may already exist, that's fine
+    if (e.code !== '42710') throw e;
+  }
 
   // Print a first-run platform invite code if the database is empty
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
