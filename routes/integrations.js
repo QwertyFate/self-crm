@@ -44,23 +44,31 @@ router.get('/settings', async (req, res, next) => {
       `SELECT field_key, name, type FROM custom_fields WHERE workspace_id=$1 ORDER BY position`, [wid]
     );
 
-    res.json({ webhook: wh, pipelines, stages, contact_fields, base_url: process.env.APP_URL || null });
+    // Fetch workspace members for assignee dropdown
+    const { rows: members } = await pool.query(
+      `SELECT DISTINCT u.id, u.name FROM users u
+       JOIN user_workspaces uw ON uw.user_id = u.id
+       WHERE uw.workspace_id=$1 ORDER BY u.name`, [wid]
+    );
+
+    res.json({ webhook: wh, pipelines, stages, contact_fields, members, base_url: process.env.APP_URL || null });
   } catch (err) { next(err); }
 });
 
 // PATCH /api/integrations/settings — update config
 router.patch('/settings', async (req, res, next) => {
   try {
-    const { field_map, create_deal, pipeline_id, stage_id, active } = req.body;
+    const { field_map, create_deal, pipeline_id, stage_id, default_assignee_id, active } = req.body;
     await pool.query(
       `UPDATE workspace_webhook
-       SET field_map=$1, create_deal=$2, pipeline_id=$3, stage_id=$4, active=$5
-       WHERE workspace_id=$6`,
+       SET field_map=$1, create_deal=$2, pipeline_id=$3, stage_id=$4, default_assignee_id=$5, active=$6
+       WHERE workspace_id=$7`,
       [
         JSON.stringify(field_map || {}),
         create_deal === true,
         pipeline_id || null,
         stage_id    || null,
+        default_assignee_id || null,
         active !== false,
         req.workspaceId,
       ]
@@ -164,12 +172,43 @@ router.post('/receive/:key', async (req, res) => {
       _skipped: Object.keys(skipped).length ? skipped : undefined,
     };
 
-    // Create contact with custom fields
-    const { rows: [contact] } = await pool.query(
-      `INSERT INTO contacts (workspace_id, name, email, phone, company, contact_type, custom_data)
-       VALUES ($1,$2,$3,$4,$5,'contact',$6) RETURNING id, name`,
-      [wid, name || email, email, phone, company, JSON.stringify(customData)]
-    );
+    // Check if contact with same email already exists in this workspace
+    let contact;
+    const defaultAssigneeId = wh.default_assignee_id || null;
+
+    if (email) {
+      const normalizedEmail = email.toLowerCase().trim();
+      const { rows: [existing] } = await pool.query(
+        `SELECT id, name FROM contacts WHERE workspace_id=$1 AND email=$2`,
+        [wid, normalizedEmail]
+      );
+
+      if (existing) {
+        // Update existing contact
+        const { rows: [updated] } = await pool.query(
+          `UPDATE contacts SET name=$1, phone=$2, company=$3, custom_data=$4, updated_at=NOW()
+           WHERE id=$5 AND workspace_id=$6 RETURNING id, name`,
+          [name || existing.name, phone, company, JSON.stringify(customData), existing.id, wid]
+        );
+        contact = updated;
+      } else {
+        // Create new contact with default assignee
+        const { rows: [newContact] } = await pool.query(
+          `INSERT INTO contacts (workspace_id, name, email, phone, company, contact_type, custom_data, assigned_to)
+           VALUES ($1,$2,$3,$4,$5,'contact',$6,$7) RETURNING id, name`,
+          [wid, name || email, normalizedEmail, phone, company, JSON.stringify(customData), defaultAssigneeId]
+        );
+        contact = newContact;
+      }
+    } else {
+      // Create new contact if no email (with default assignee)
+      const { rows: [newContact] } = await pool.query(
+        `INSERT INTO contacts (workspace_id, name, email, phone, company, contact_type, custom_data, assigned_to)
+         VALUES ($1,$2,$3,$4,$5,'contact',$6,$7) RETURNING id, name`,
+        [wid, name || email, null, phone, company, JSON.stringify(customData), defaultAssigneeId]
+      );
+      contact = newContact;
+    }
 
     let dealId = null;
     if (wh.create_deal && wh.pipeline_id) {

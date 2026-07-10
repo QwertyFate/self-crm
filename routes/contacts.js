@@ -28,7 +28,7 @@ router.get('/', async (req, res, next) => {
 
 router.post('/import', async (req, res, next) => {
   try {
-    const { contacts: rows, newFields } = req.body;
+    const { contacts: rows, newFields, createDealsForNew, createDealsForUpdated, pipelineId, stageId, defaultAssigneeId } = req.body;
     if (!Array.isArray(rows)) return res.status(400).json({ error: 'contacts must be an array' });
 
     const client = await pool.connect();
@@ -49,18 +49,78 @@ router.post('/import', async (req, res, next) => {
       }
 
       let count = 0;
+      let dealsCreated = 0;
+
+      // Get first stage if deal creation is enabled but no stage specified
+      let defaultStageId = stageId;
+      if ((createDealsForNew || createDealsForUpdated) && pipelineId && !stageId) {
+        const { rows: [firstStage] } = await client.query(
+          'SELECT id FROM pipeline_stages WHERE pipeline_id=$1 ORDER BY position ASC LIMIT 1',
+          [pipelineId]
+        );
+        defaultStageId = firstStage?.id || null;
+      }
+
       for (const row of rows) {
         if (!row.name?.trim()) continue;
-        await client.query(
-          'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-          [req.workspaceId, row.name.trim(), row.email||null, row.phone||null,
-           row.company||null, row.stage_id||null, req.userId, JSON.stringify(row.custom_data||{})]
-        );
-        count++;
+
+        // Check if contact with same email already exists in this workspace
+        let contactId;
+        let isNew = true;
+        if (row.email) {
+          const { rows: [existing] } = await client.query(
+            'SELECT id FROM contacts WHERE workspace_id=$1 AND email=$2',
+            [req.workspaceId, row.email.toLowerCase().trim()]
+          );
+
+          if (existing) {
+            // Update existing contact
+            await client.query(
+              'UPDATE contacts SET name=$1, phone=$2, company=$3, stage_id=$4, assigned_to=$5, custom_data=$6, updated_at=NOW() WHERE id=$7 AND workspace_id=$8',
+              [row.name.trim(), row.phone||null, row.company||null, row.stage_id||null,
+               row.assigned_to||req.userId, JSON.stringify(row.custom_data||{}), existing.id, req.workspaceId]
+            );
+            contactId = existing.id;
+            isNew = false;
+            count++;
+          } else {
+            // Create new contact if no email or email doesn't exist (use default assignee if provided)
+            const assignedTo = defaultAssigneeId || req.userId;
+            const { rows: [newContact] } = await client.query(
+              'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+              [req.workspaceId, row.name.trim(), row.email.toLowerCase().trim(),
+               row.phone||null, row.company||null, row.stage_id||null, assignedTo, JSON.stringify(row.custom_data||{})]
+            );
+            contactId = newContact.id;
+            isNew = true;
+            count++;
+          }
+        } else {
+          // Create new contact if no email (use default assignee if provided)
+          const assignedTo = defaultAssigneeId || req.userId;
+          const { rows: [newContact] } = await client.query(
+            'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+            [req.workspaceId, row.name.trim(), null,
+             row.phone||null, row.company||null, row.stage_id||null, assignedTo, JSON.stringify(row.custom_data||{})]
+          );
+          contactId = newContact.id;
+          isNew = true;
+          count++;
+        }
+
+        // Create deal if enabled
+        const shouldCreateDeal = (isNew && createDealsForNew) || (!isNew && createDealsForUpdated);
+        if (shouldCreateDeal && pipelineId && contactId) {
+          await client.query(
+            'INSERT INTO deals (workspace_id, contact_id, pipeline_id, stage_id, title) VALUES ($1,$2,$3,$4,$5)',
+            [req.workspaceId, contactId, pipelineId, defaultStageId || null, `Deal: ${row.name.trim()}`]
+          );
+          dealsCreated++;
+        }
       }
 
       await client.query('COMMIT');
-      res.status(201).json({ imported: count });
+      res.status(201).json({ imported: count, deals_created: dealsCreated });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
@@ -100,9 +160,20 @@ router.post('/', async (req, res, next) => {
     if (!name) return res.status(400).json({ error: 'Name is required' });
     const assignee = assigned_to ? Number(assigned_to) : req.userId;
     const type = contact_type || 'contact';
+
+    // Check if contact with same email already exists in this workspace
+    if (email) {
+      const normalizedEmail = email.toLowerCase().trim();
+      const { rows: [existing] } = await pool.query(
+        'SELECT id FROM contacts WHERE workspace_id=$1 AND email=$2',
+        [req.workspaceId, normalizedEmail]
+      );
+      if (existing) return res.status(409).json({ error: 'Contact with this email already exists in this workspace' });
+    }
+
     const { rows: [row] } = await pool.query(
       'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data, contact_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
-      [req.workspaceId, name, email||null, phone||null, company||null, stage_id||null, assignee, JSON.stringify(custom_data||{}), type]
+      [req.workspaceId, name, email ? email.toLowerCase().trim() : null, phone||null, company||null, stage_id||null, assignee, JSON.stringify(custom_data||{}), type]
     );
     notify(req.workspaceId, req.userId, {
       type: 'contact_created', category: 'contacts',

@@ -322,6 +322,7 @@ async function initDb() {
       create_deal  BOOLEAN NOT NULL DEFAULT false,
       pipeline_id  INTEGER REFERENCES pipelines(id) ON DELETE SET NULL,
       stage_id     INTEGER REFERENCES pipeline_stages(id) ON DELETE SET NULL,
+      default_assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
       active       BOOLEAN NOT NULL DEFAULT true,
       created_at   TIMESTAMPTZ DEFAULT NOW()
     )
@@ -340,6 +341,7 @@ async function initDb() {
   `);
 
   await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS captured JSONB NOT NULL DEFAULT '{}'`);
+  await pool.query(`ALTER TABLE workspace_webhook ADD COLUMN IF NOT EXISTS default_assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
 
   // Multi-workspace membership table
   await pool.query(`

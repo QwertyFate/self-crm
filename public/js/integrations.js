@@ -209,6 +209,7 @@ function showIntgGuide(id) {
 }
 
 async function loadIntegrations() {
+  await ensureMembers();
   const data = await api.get('/api/integrations/settings');
   if (!data || data.error) return;
   intgData = data;
@@ -243,6 +244,13 @@ async function loadIntegrations() {
   stageEl.innerHTML = `<option value="">— No stage —</option>` +
     filteredStages.map(s =>
       `<option value="${s.id}" ${webhook.stage_id == s.id ? 'selected' : ''}>${esc(s.name)}</option>`
+    ).join('');
+
+  // Default assignee dropdown
+  const assigneeEl = document.getElementById('intg-assignee');
+  assigneeEl.innerHTML = `<option value="">— Not set (assigned to self) —</option>` +
+    members.map(m =>
+      `<option value="${m.id}" ${webhook.default_assignee_id == m.id ? 'selected' : ''}>${esc(m.name)}</option>`
     ).join('');
 
   renderIntgPlatforms();
@@ -399,6 +407,7 @@ async function saveIntegration(silent = false) {
     create_deal: document.getElementById('intg-create-deal').checked,
     pipeline_id: document.getElementById('intg-pipeline').value  || null,
     stage_id:    document.getElementById('intg-stage').value     || null,
+    default_assignee_id: document.getElementById('intg-assignee').value || null,
     active:      document.getElementById('intg-active').checked,
   });
 

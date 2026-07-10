@@ -108,10 +108,56 @@ function autoMapHeader(header) {
   return 'skip';
 }
 
-function openImportModal() {
+async function openImportModal() {
+  await ensureMembers();
   importData = null; showImportStep('upload');
   const fi = document.getElementById('import-file-input'); if (fi) fi.value = '';
   document.getElementById('import-modal').classList.remove('hidden');
+  loadImportPipelines();
+  loadImportAssignees();
+}
+
+function toggleImportDealOptions() {
+  const opts = document.getElementById('import-deal-options');
+  opts.style.display = document.getElementById('import-create-deals').checked ? 'block' : 'none';
+  if (document.getElementById('import-create-deals').checked) loadImportPipelines();
+}
+
+function loadImportPipelines() {
+  const sel = document.getElementById('import-pipeline');
+  if (!pipelines?.length) {
+    sel.innerHTML = '<option value="">— No pipelines available —</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Select a pipeline —</option>' +
+    pipelines.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  sel.onchange = updateImportStages;
+}
+
+function loadImportAssignees() {
+  const sel = document.getElementById('import-assignee');
+  if (!members?.length) {
+    sel.innerHTML = '<option value="">— Use default or unassigned —</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Use default or unassigned —</option>' +
+    members.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
+}
+
+function updateImportStages() {
+  const pipelineId = parseInt(document.getElementById('import-pipeline').value) || null;
+  const sel = document.getElementById('import-stage');
+  if (!pipelineId) {
+    sel.innerHTML = '<option value="">— Auto (first stage) —</option>';
+    return;
+  }
+  const pipeline = pipelines.find(p => p.id === pipelineId);
+  if (!pipeline || !pipeline.stages?.length) {
+    sel.innerHTML = '<option value="">— Auto (first stage) —</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Auto (first stage) —</option>' +
+    pipeline.stages.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
 }
 function showImportStep(step) {
   ['upload','map','done'].forEach(s => document.getElementById(`import-step-${s}`).classList.toggle('hidden', s !== step));
@@ -128,10 +174,17 @@ async function processImportFile(file) {
   renderImportMapping(); showImportStep('map');
 }
 
+function updateImportNameOptions() {
+  if (importData) renderImportMapping();
+}
+
 function renderImportMapping() {
   const { headers, sampleRow, mappings, rows } = importData;
   document.getElementById('import-info-text').textContent = `${rows.length} row${rows.length !== 1 ? 's' : ''} detected — match each column to a CRM field.`;
-  const builtins = [{ val:'name', label:'Name *' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'stage', label:'Stage' }, { val:'assignee', label:'Assignee' }];
+  const splitName = document.getElementById('import-split-name').checked;
+  const builtins = splitName
+    ? [{ val:'first_name', label:'First Name' }, { val:'last_name', label:'Last Name' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'stage', label:'Stage' }, { val:'assignee', label:'Assignee' }]
+    : [{ val:'name', label:'Name *' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'stage', label:'Stage' }, { val:'assignee', label:'Assignee' }];
   const buildOptions = cur => {
     let o = `<option value="skip"${cur==='skip'?' selected':''}>— Don't import —</option>
       <optgroup label="Contact fields">${builtins.map(b => `<option value="${b.val}"${cur===b.val?' selected':''}>${b.label}</option>`).join('')}</optgroup>`;
@@ -161,7 +214,20 @@ function importBack() { showImportStep('upload'); document.getElementById('impor
 
 async function runImport() {
   const { headers, rows, mappings } = importData;
-  if (!mappings.some(m => m.mapTo === 'name')) { alert('Please map a column to "Name" before importing.'); return; }
+  const splitName = document.getElementById('import-split-name').checked;
+
+  if (splitName) {
+    if (!mappings.some(m => m.mapTo === 'first_name' || m.mapTo === 'last_name')) {
+      alert('Please map at least "First Name" or "Last Name" when splitting names.');
+      return;
+    }
+  } else {
+    if (!mappings.some(m => m.mapTo === 'name')) {
+      alert('Please map a column to "Name" before importing.');
+      return;
+    }
+  }
+
   const newFields = [], newKeyByCol = {};
   mappings.forEach((m, i) => {
     if (m.mapTo !== 'new') return;
@@ -169,11 +235,14 @@ async function runImport() {
     if (!fields.find(f => f.field_key === key) && !newFields.find(f => f.field_key === key)) newFields.push({ name: label, field_key: key });
     newKeyByCol[i] = toFieldKey((m.newFieldName || headers[i]).trim()) || `col_${i}`;
   });
+
   const contactsList = rows.map(row => {
-    const c = { custom_data: {} };
+    const c = { custom_data: {}, first_name: '', last_name: '' };
     mappings.forEach((m, i) => {
       const val = (row[i] || '').trim(); if (!val || m.mapTo === 'skip') return;
       if      (m.mapTo === 'name')    c.name    = val;
+      else if (m.mapTo === 'first_name') c.first_name = val;
+      else if (m.mapTo === 'last_name')  c.last_name = val;
       else if (m.mapTo === 'email')   c.email   = val;
       else if (m.mapTo === 'phone')   c.phone   = val.replace(/^p:/i, '').trim();
       else if (m.mapTo === 'company') c.company = val;
@@ -182,14 +251,50 @@ async function runImport() {
       else if (m.mapTo.startsWith('custom:')) c.custom_data[m.mapTo.slice(7)] = val;
       else if (m.mapTo === 'new' && newKeyByCol[i]) c.custom_data[newKeyByCol[i]] = val;
     });
+
+    // Combine first_name and last_name into name if split name is enabled
+    if (splitName) {
+      c.name = [c.first_name, c.last_name].filter(Boolean).join(' ') || c.name;
+      delete c.first_name;
+      delete c.last_name;
+    }
+
     return c;
   }).filter(c => c.name);
 
   const btn = document.getElementById('import-run-btn');
   btn.disabled = true; btn.textContent = 'Importing…';
-  const res = await api.post('/api/contacts/import', { contacts: contactsList, newFields });
+
+  const createDeals = document.getElementById('import-create-deals').checked;
+  const createDealsForNew = document.getElementById('import-deals-new').checked;
+  const createDealsForUpdated = document.getElementById('import-deals-updated').checked;
+  const pipelineId = createDeals ? parseInt(document.getElementById('import-pipeline').value) || null : null;
+  const stageId = createDeals ? parseInt(document.getElementById('import-stage').value) || null : null;
+
+  // Get assignee: prefer manually selected one, then fall back to integration default
+  let assigneeId = parseInt(document.getElementById('import-assignee').value) || null;
+  if (!assigneeId) {
+    const intgSettings = await api.get('/api/integrations/settings');
+    if (intgSettings?.webhook?.default_assignee_id) {
+      assigneeId = intgSettings.webhook.default_assignee_id;
+    }
+  }
+
+  const res = await api.post('/api/contacts/import', {
+    contacts: contactsList,
+    newFields,
+    createDeals: createDeals && pipelineId,
+    createDealsForNew: createDeals && createDealsForNew && pipelineId,
+    createDealsForUpdated: createDeals && createDealsForUpdated && pipelineId,
+    pipelineId,
+    stageId,
+    defaultAssigneeId: assigneeId
+  });
   btn.disabled = false; btn.textContent = 'Import contacts';
-  document.getElementById('import-done-text').textContent = `Successfully imported ${res.imported} contact${res.imported !== 1 ? 's' : ''}.`;
+  const dealsCreated = res.deals_created || 0;
+  let message = `Successfully imported ${res.imported} contact${res.imported !== 1 ? 's' : ''}.`;
+  if (dealsCreated > 0) message += ` Created ${dealsCreated} deal${dealsCreated !== 1 ? 's' : ''}.`;
+  document.getElementById('import-done-text').textContent = message;
   showImportStep('done'); invalidate();
 }
 
