@@ -441,20 +441,34 @@ router.post('/join-workspace', async (req, res, next) => {
     if (!invite)     return res.status(400).json({ error: 'Invalid invite code' });
     if (invite.used) return res.status(400).json({ error: 'Invite code already used' });
 
+    // Get current user's info from original workspace
+    const { rows: [currentUser] } = await pool.query(
+      'SELECT email, name FROM users WHERE id=$1',
+      [req.session.userId]
+    );
+    if (!currentUser) return res.status(401).json({ error: 'User not found' });
+
     // Check if already a member
     const { rows: [existing] } = await pool.query(
-      'SELECT 1 FROM user_workspaces WHERE user_id=$1 AND workspace_id=$2',
-      [req.session.userId, invite.workspace_id]
+      'SELECT 1 FROM users WHERE email=$1 AND workspace_id=$2',
+      [currentUser.email, invite.workspace_id]
     );
     if (existing) return res.status(400).json({ error: 'You are already a member of this workspace' });
 
+    // Create new user row in the new workspace
+    const { rows: [newUser] } = await pool.query(
+      'INSERT INTO users (workspace_id, email, name, password_hash, role) SELECT $1, $2, $3, password_hash, $4 FROM users WHERE id=$5 RETURNING id',
+      [invite.workspace_id, currentUser.email, currentUser.name, 'member', req.session.userId]
+    );
+
     await pool.query(
       'INSERT INTO user_workspaces (user_id, workspace_id, role) VALUES ($1,$2,$3)',
-      [req.session.userId, invite.workspace_id, 'member']
+      [newUser.id, invite.workspace_id, 'member']
     );
     await pool.query('UPDATE invite_codes SET used=1, used_by=$1 WHERE id=$2', [req.session.userId, invite.id]);
 
     req.session.workspaceId = invite.workspace_id;
+    req.session.userId      = newUser.id;
     req.session.userRole    = 'member';
 
     const { rows: [workspace] } = await pool.query(

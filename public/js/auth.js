@@ -296,7 +296,8 @@ async function handleJoinWorkspace(e) {
   e.preventDefault();
   const errEl = document.getElementById('join-ws-error');
   errEl.classList.add('hidden');
-  const code = document.getElementById('join-ws-code').value.trim();
+  const codeInput = document.querySelector('#join-workspace-modal input[id="join-ws-code"]');
+  const code = (codeInput?.value || '').trim();
   if (!code) { errEl.textContent = 'Invite code required'; errEl.classList.remove('hidden'); return; }
 
   const data = await api.post('/api/auth/join-workspace', { invite_code: code });
@@ -309,6 +310,7 @@ async function handleJoinWorkspace(e) {
   objectColumns    = data.workspace.object_columns  || [];
   document.getElementById('sidebar-workspace').textContent = data.workspace.name || '';
   invalidate();
+  loadWorkspacesPage();
   switchPage('workspaces');
 }
 
