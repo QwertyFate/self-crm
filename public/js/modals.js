@@ -59,9 +59,15 @@ async function saveContact(e) {
     custom_data,
   };
   if (id) await api.put(`/api/contacts/${id}`, payload); else await api.post('/api/contacts', payload);
-  closeModal('contact-modal'); invalidate();
+  closeModal('contact-modal');
+  invalidate();
   const page = document.querySelector('.page.active')?.id.replace('page-', '');
-  if (page === 'deals') loadDeals(); else loadContacts();
+  if (page === 'deals') {
+    await loadDeals();
+  } else {
+    await loadContacts();
+    renderContactsKanban();
+  }
 }
 
 async function deleteContact(id) {
