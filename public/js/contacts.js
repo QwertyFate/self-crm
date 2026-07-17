@@ -1,7 +1,7 @@
 // ── CONTACTS ──────────────────────────────────────────────
 let selectedContactIds = new Set();
 let selectionModeOn = false;
-let contactViewMode = 'list';
+let contactViewMode = 'kanban';
 let filteredContacts = [];
 
 async function loadContacts() {
@@ -641,7 +641,7 @@ async function confirmAddContactToKanban(e) {
   await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: stageId });
   closeModal('kanban-add-contact-modal');
   invalidate();
-  renderContactsKanban();
+  await loadContacts();
 }
 
 function setContactViewMode(mode) {
@@ -654,7 +654,10 @@ function setContactViewMode(mode) {
   document.getElementById('contact-view-kanban-btn')?.classList.toggle('active', mode === 'kanban');
   document.getElementById('contact-view-list-btn')?.classList.toggle('active', mode === 'list');
 
+  // Toggle add buttons based on view mode
   document.getElementById('kanban-add-btn')?.classList.toggle('hidden', mode === 'list');
+  document.getElementById('list-add-btn')?.classList.toggle('hidden', mode === 'kanban');
+  document.getElementById('kanban-add-stage-btn')?.classList.toggle('hidden', mode === 'list' || !stages.length);
   document.getElementById('select-mode-btn')?.classList.toggle('hidden', mode === 'kanban');
 
   if (mode === 'kanban') {
@@ -672,7 +675,12 @@ function renderContactsKanban() {
 
   const stageList = stages || [];
   if (!stageList.length) {
-    board.innerHTML = '<div style="padding:40px;color:var(--muted);font-size:14px">No stages available</div>';
+    board.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:center;width:100%;min-height:300px;flex-direction:column;gap:20px">
+        <div style="color:var(--muted);font-size:14px">No stages available</div>
+        <button class="btn btn-primary" onclick="openKanbanStageModal()">+ Add Stage</button>
+      </div>
+    `;
     return;
   }
 
@@ -698,7 +706,8 @@ function contactCard(c) {
   return `
     <div class="contact-card" draggable="true" data-id="${c.id}"
       ondragstart="contactDragStart(event,${c.id})" ondragend="contactDragEnd(event)"
-      onclick="openDetail(${c.id})">
+      onclick="openDetail(${c.id})" style="position:relative">
+      <button class="card-remove-btn" onclick="removeContactFromKanban(event,${c.id})" title="Remove from kanban">×</button>
       <div class="card-name">${esc(c.name)}</div>
       ${c.company ? `<div class="card-field">${esc(c.company)}</div>` : ''}
       ${c.assigned_to_name ? `<div class="card-field">→ ${esc(c.assigned_to_name)}</div>` : ''}
@@ -742,4 +751,26 @@ async function contactDrop(e, stageId) {
   renderContactsKanban();
   await api.patch(`/api/contacts/${draggedContactId}/stage`, { stage_id: stageId });
   draggedContactId = null;
+}
+
+async function removeContactFromKanban(e, contactId) {
+  e.stopPropagation();
+  const contact = contacts.find(c => c.id === contactId);
+  if (!contact) return;
+
+  contact.stage_id = null;
+  contact.stage_name = null;
+  contact.stage_color = null;
+
+  renderContactsKanban();
+  await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: null });
+}
+
+function openKanbanStageModal() {
+  document.getElementById('stage-form').reset();
+  document.getElementById('stage-id').value = '';
+  document.getElementById('stage-color').value = '#4f6ef7';
+  document.getElementById('stage-modal-title').textContent = 'Add Stage';
+  document.getElementById('stage-modal').classList.remove('hidden');
+  document.getElementById('stage-name').focus();
 }
