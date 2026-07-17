@@ -1,6 +1,8 @@
 // ── CONTACTS ──────────────────────────────────────────────
 let selectedContactIds = new Set();
 let selectionModeOn = false;
+let contactViewMode = 'list';
+let filteredContacts = [];
 
 async function loadContacts() {
   selectedContactIds.clear();
@@ -9,7 +11,7 @@ async function loadContacts() {
   currentPage = 1;
   updateContactsPageHeader();
   renderFilterChips();
-  filterContacts();
+  setContactViewMode(contactViewMode);
 }
 
 function updateContactsPageHeader() {
@@ -315,7 +317,12 @@ function filterContacts() {
       });
     }
   }
-  renderContactsTable(filtered);
+  filteredContacts = filtered;
+  if (contactViewMode === 'kanban') {
+    renderContactsKanban();
+  } else {
+    renderContactsTable(filtered);
+  }
 }
 
 // ── Pagination ────────────────────────────────────────────
@@ -582,4 +589,157 @@ async function confirmBulkDelete() {
   updateBulkDeleteButton();
   invalidate();
   await loadContacts();
+}
+
+// ── Kanban view ────────────────────────────────
+let kanbanAllContacts = [];
+
+async function openKanbanAddContactModal() {
+  // Get all contacts (including those without a stage)
+  kanbanAllContacts = await api.get(`/api/contacts?contact_type=${currentContactType}`);
+
+  // Populate contact dropdown
+  const contactSel = document.getElementById('kanban-contact-select');
+  contactSel.innerHTML = kanbanAllContacts.map(c =>
+    `<option value="${c.id}">${esc(c.name)}${c.company ? ` - ${esc(c.company)}` : ''}</option>`
+  ).join('');
+
+  // Populate stage dropdown
+  const stageSel = document.getElementById('kanban-stage-select');
+  stageSel.innerHTML = stages.map(s =>
+    `<option value="${s.id}">${esc(s.name)}</option>`
+  ).join('');
+
+  document.getElementById('kanban-contact-search').value = '';
+  document.getElementById('kanban-add-contact-modal').classList.remove('hidden');
+}
+
+function filterKanbanContacts() {
+  const query = document.getElementById('kanban-contact-search').value.toLowerCase();
+  const filtered = kanbanAllContacts.filter(c =>
+    c.name.toLowerCase().includes(query) ||
+    (c.company || '').toLowerCase().includes(query) ||
+    (c.email || '').toLowerCase().includes(query)
+  );
+
+  const sel = document.getElementById('kanban-contact-select');
+  sel.innerHTML = filtered.map(c =>
+    `<option value="${c.id}">${esc(c.name)}${c.company ? ` - ${esc(c.company)}` : ''}</option>`
+  ).join('');
+}
+
+async function confirmAddContactToKanban(e) {
+  e.preventDefault();
+  const contactId = parseInt(document.getElementById('kanban-contact-select').value);
+  const stageId = parseInt(document.getElementById('kanban-stage-select').value);
+
+  if (!contactId || !stageId) {
+    alert('Please select a contact and stage');
+    return;
+  }
+
+  await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: stageId });
+  closeModal('kanban-add-contact-modal');
+  invalidate();
+  renderContactsKanban();
+}
+
+function setContactViewMode(mode) {
+  contactViewMode = mode;
+  document.getElementById('contacts-kanban-board')?.classList.toggle('hidden', mode === 'list');
+  document.getElementById('contacts-table-wrap')?.classList.toggle('hidden', mode === 'kanban');
+  document.getElementById('contacts-pagination')?.classList.toggle('hidden', mode === 'kanban');
+
+  // Update toggle button active class
+  document.getElementById('contact-view-kanban-btn')?.classList.toggle('active', mode === 'kanban');
+  document.getElementById('contact-view-list-btn')?.classList.toggle('active', mode === 'list');
+
+  document.getElementById('kanban-add-btn')?.classList.toggle('hidden', mode === 'list');
+  document.getElementById('select-mode-btn')?.classList.toggle('hidden', mode === 'kanban');
+
+  if (mode === 'kanban') {
+    renderContactsKanban();
+  } else {
+    filterContacts();
+  }
+}
+
+let draggedContactId = null;
+
+function renderContactsKanban() {
+  const board = document.getElementById('contacts-kanban-board');
+  if (!board) return;
+
+  const stageList = stages || [];
+  if (!stageList.length) {
+    board.innerHTML = '<div style="padding:40px;color:var(--muted);font-size:14px">No stages available</div>';
+    return;
+  }
+
+  board.innerHTML = stageList.map(stage => {
+    const contactsToUse = filteredContacts.length ? filteredContacts : contacts;
+    const stageContacts = contactsToUse.filter(c => c.stage_id === stage.id);
+    return `
+      <div class="pipeline-col">
+        <div class="col-header">
+          <span class="col-dot" style="background:${stage.color}"></span>
+          <span class="col-name">${esc(stage.name)}</span>
+          <span class="col-count">${stageContacts.length}</span>
+        </div>
+        <div class="col-cards" ondragover="contactDragOver(event)" ondragleave="contactDragLeave(event)" ondrop="contactDrop(event,${stage.id})">
+          ${stageContacts.length ? stageContacts.map(c => contactCard(c)).join('') : `<div class="col-empty">No contacts</div>`}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function contactCard(c) {
+  return `
+    <div class="contact-card" draggable="true" data-id="${c.id}"
+      ondragstart="contactDragStart(event,${c.id})" ondragend="contactDragEnd(event)"
+      onclick="openDetail(${c.id})">
+      <div class="card-name">${esc(c.name)}</div>
+      ${c.company ? `<div class="card-field">${esc(c.company)}</div>` : ''}
+      ${c.assigned_to_name ? `<div class="card-field">→ ${esc(c.assigned_to_name)}</div>` : ''}
+    </div>
+  `;
+}
+
+function contactDragStart(e, id) {
+  draggedContactId = id;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => e.target.closest('[draggable]').classList.add('dragging'), 0);
+}
+
+function contactDragEnd(e) {
+  e.target.closest('[draggable]').classList.remove('dragging');
+}
+
+function contactDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+
+function contactDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+async function contactDrop(e, stageId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+
+  if (!draggedContactId) return;
+
+  const contact = contacts.find(c => c.id === draggedContactId);
+  if (!contact || contact.stage_id === stageId) return;
+
+  contact.stage_id = stageId;
+  const stage = stages.find(s => s.id === stageId);
+  contact.stage_name = stage?.name || null;
+  contact.stage_color = stage?.color || null;
+
+  renderContactsKanban();
+  await api.patch(`/api/contacts/${draggedContactId}/stage`, { stage_id: stageId });
+  draggedContactId = null;
 }

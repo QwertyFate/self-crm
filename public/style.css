@@ -2885,3 +2885,11 @@ select option:checked {
   background: var(--primary);
   color: white;
 }
+
+/* ── View mode button active state ── */
+#contact-view-list.active,
+#contact-view-kanban.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
