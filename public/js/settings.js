@@ -261,7 +261,14 @@ async function saveStage(e) {
   const payload = { name: document.getElementById('stage-name').value, color: document.getElementById('stage-color').value };
   const res = id ? await api.put(`/api/stages/${id}`, payload) : await api.post('/api/stages', payload);
   if (res.error) { alert(res.error); return; }
-  closeModal('stage-modal'); invalidate(); await loadSettings();
+  closeModal('stage-modal');
+  invalidate();
+  const contactsPage = document.getElementById('page-contacts');
+  if (contactsPage && !contactsPage.classList.contains('hidden')) {
+    await loadContacts();
+  } else {
+    await loadSettings();
+  }
 }
 async function deleteStage(id) {
   if (!confirm('Delete this stage? Contacts will become unassigned.')) return;
