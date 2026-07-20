@@ -44,6 +44,12 @@ function effectiveObjectColumns() {
 }
 
 async function loadObjects() {
+  // Clear UI immediately to prevent showing stale data
+  const objTable = document.getElementById('objects-table-wrap');
+  const objGrid = document.getElementById('objects-card-grid');
+  if (objTable) objTable.innerHTML = '';
+  if (objGrid) objGrid.innerHTML = '';
+
   objectFields  = await api.get('/api/object-fields');
   objectColumns = currentWorkspace?.object_columns || [];
   objects       = await api.get('/api/objects');
@@ -500,6 +506,8 @@ function reloadMiroIframe() { const f = document.getElementById('miro-iframe'); 
 function loadBoard() {
   const el = document.getElementById('board-content'), url = currentWorkspace?.miro_url;
   if (!el) return;
+  // Clear UI immediately to prevent showing stale data
+  el.innerHTML = '';
   if (!url) { el.innerHTML = `<div class="board-empty"><p>No Miro board linked yet.</p><p>Go to <strong>Settings → General → Miro Board</strong> and paste your embed URL.</p></div>`; return; }
   const boardUrl = getMiroBoardUrl(url);
   el.innerHTML = `
@@ -524,8 +532,10 @@ async function saveMiroUrl() {
 
 // ── Activities ────────────────────────────────────────────
 async function loadActivities() {
-  activities = await api.get('/api/activities');
   const el = document.getElementById('activities-list');
+  if (el) el.innerHTML = '';
+
+  activities = await api.get('/api/activities');
   if (!activities.length) { el.innerHTML = `<p style="color:var(--muted);padding:8px">${t('no_activities')}</p>`; return; }
   el.innerHTML = activities.map(a => `
     <div class="activity-item">

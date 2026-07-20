@@ -1,11 +1,17 @@
 // ── CONTACTS ──────────────────────────────────────────────
 let selectedContactIds = new Set();
 let selectionModeOn = false;
-let contactViewMode = 'kanban';
+let contactViewMode = 'list';
 let filteredContacts = [];
 
 async function loadContacts() {
   selectedContactIds.clear();
+  // Clear UI immediately to prevent showing stale data
+  const contactsBody = document.getElementById('contacts-body');
+  const kanbanBoard = document.getElementById('contacts-kanban-board');
+  if (contactsBody) contactsBody.innerHTML = '';
+  if (kanbanBoard) kanbanBoard.innerHTML = '';
+
   await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
   contacts = await api.get(`/api/contacts?contact_type=${currentContactType}`);
   currentPage = 1;

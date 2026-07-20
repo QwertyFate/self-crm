@@ -210,7 +210,7 @@ async function loadWorkspacesPage() {
 }
 
 async function switchWorkspace(workspaceId) {
-  if (workspaceId === currentWorkspace?.id) { switchPage('deals'); return; }
+  if (workspaceId === currentWorkspace?.id) { await switchPage('deals'); return; }
   const data = await api.post('/api/auth/switch-workspace', { workspace_id: workspaceId });
   if (data.error) { alert(data.error); return; }
   currentWorkspace = data.workspace;
@@ -221,7 +221,7 @@ async function switchWorkspace(workspaceId) {
   const settingsLabel = document.getElementById('settings-workspace-label');
   if (settingsLabel) settingsLabel.textContent = data.workspace.name || '';
   invalidate();
-  switchPage('deals');
+  await switchPage('deals');
 }
 
 function openAddWorkspaceChoice() {
@@ -384,25 +384,25 @@ document.querySelectorAll('.sidebar-nav a[data-page]').forEach(link => {
   link.addEventListener('click', e => { e.preventDefault(); switchPage(link.dataset.page); });
 });
 
-function switchPage(page) {
+async function switchPage(page) {
   document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelector(`.sidebar-nav a[data-page="${page}"]`)?.classList.add('active');
   // Suppliers reuses the contacts page element — no separate page-suppliers div
   const pageElId = page === 'suppliers' ? 'page-contacts' : `page-${page}`;
   document.getElementById(pageElId)?.classList.add('active');
-  if (page === 'deals')      { closeSidePanel(); loadDeals(); }
-  if (page === 'contacts')   { currentContactType = 'contact'; loadContacts(); }
-  if (page === 'suppliers')  { currentContactType = 'supplier'; loadContacts(); }
-  if (page === 'activities') loadActivities();
-  if (page === 'settings')   loadSettings();
-  if (page === 'objects')    loadObjects();
-  if (page === 'tasks')      loadTasks();
-  if (page === 'board')        loadBoard();
-  if (page === 'analytics')    loadAnalytics();
-  if (page === 'integrations') loadIntegrations();
-  if (page === 'workspaces')   loadWorkspacesPage();
-  if (page === 'chat')         loadChatPage();
+  if (page === 'deals')      { closeSidePanel(); await loadDeals(); }
+  if (page === 'contacts')   { currentContactType = 'contact'; await loadContacts(); }
+  if (page === 'suppliers')  { currentContactType = 'supplier'; await loadContacts(); }
+  if (page === 'activities') await loadActivities();
+  if (page === 'settings')   await loadSettings();
+  if (page === 'objects')    await loadObjects();
+  if (page === 'tasks')      await loadTasks();
+  if (page === 'board')        await loadBoard();
+  if (page === 'analytics')    await loadAnalytics();
+  if (page === 'integrations') await loadIntegrations();
+  if (page === 'workspaces')   await loadWorkspacesPage();
+  if (page === 'chat')         await loadChatPage();
 }
 
 // ── Shared loaders ────────────────────────────────────────

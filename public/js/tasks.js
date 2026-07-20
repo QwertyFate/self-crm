@@ -24,6 +24,12 @@ function getActiveTaskStatuses() {
 
 // ── Load ──────────────────────────────────────────────────
 async function loadTasks() {
+  // Clear UI immediately to prevent showing stale data
+  const taskNav = document.getElementById('tasks-project-nav');
+  const taskContent = document.getElementById('tasks-content');
+  if (taskNav) taskNav.innerHTML = '';
+  if (taskContent) taskContent.innerHTML = '';
+
   await ensureMembers();
   taskProjects = await api.get('/api/task-projects');
   renderProjectNav();

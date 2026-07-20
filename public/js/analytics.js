@@ -29,6 +29,10 @@ function fmtCurrency(n) {
 }
 
 async function loadAnalytics() {
+  // Clear UI immediately to prevent showing stale data
+  const mainSections = document.getElementById('analytics-main-sections');
+  if (mainSections) mainSections.innerHTML = '';
+
   const data = await api.get('/api/analytics/summary');
   if (!data || data.error) return;
   analyticsData = data;

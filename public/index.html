@@ -345,15 +345,15 @@
             <h1 data-i18n="page_contacts">Contacts</h1>
             <div style="display:flex;gap:8px;align-items:center">
               <div class="view-toggle">
-                <button class="view-toggle-btn active" id="contact-view-kanban-btn" onclick="setContactViewMode('kanban')" title="Kanban view">
+                <button class="view-toggle-btn" id="contact-view-kanban-btn" onclick="setContactViewMode('kanban')" title="Kanban view">
                   <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="0" width="6" height="6" rx="1"/><rect x="8" y="0" width="6" height="6" rx="1"/><rect x="0" y="8" width="6" height="6" rx="1"/><rect x="8" y="8" width="6" height="6" rx="1"/></svg>
                 </button>
-                <button class="view-toggle-btn" id="contact-view-list-btn" onclick="setContactViewMode('list')" title="List view">
+                <button class="view-toggle-btn active" id="contact-view-list-btn" onclick="setContactViewMode('list')" title="List view">
                   <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="1" width="14" height="2.5" rx="1.25"/><rect x="0" y="5.75" width="14" height="2.5" rx="1.25"/><rect x="0" y="10.5" width="14" height="2.5" rx="1.25"/></svg>
                 </button>
               </div>
-              <button class="btn btn-primary btn-sm" id="kanban-add-btn" onclick="openKanbanAddContactModal()" title="Add to Kanban">+ Add to Kanban</button>
-              <button class="btn btn-primary hidden" id="list-add-btn" onclick="openContactModal()" data-i18n="add_contact">+ Add Contact</button>
+              <button class="btn btn-primary btn-sm hidden" id="kanban-add-btn" onclick="openKanbanAddContactModal()" title="Add to Kanban">+ Add to Kanban</button>
+              <button class="btn btn-primary" id="list-add-btn" onclick="openContactModal()" data-i18n="add_contact">+ Add Contact</button>
             </div>
           </div>
           <div class="toolbar">

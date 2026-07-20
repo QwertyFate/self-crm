@@ -209,6 +209,10 @@ function showIntgGuide(id) {
 }
 
 async function loadIntegrations() {
+  // Clear UI immediately to prevent showing stale data
+  const intgFieldMap = document.getElementById('intg-field-map');
+  if (intgFieldMap) intgFieldMap.innerHTML = '';
+
   await ensureMembers();
   const data = await api.get('/api/integrations/settings');
   if (!data || data.error) return;
