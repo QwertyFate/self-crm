@@ -2676,20 +2676,6 @@ async function renderContactPanelReadOnly(contact) {
       <div class="contact-panel-rows">
         ${rows.map(r => `<div class="contact-panel-row"><label>${esc(r.label)}</label><span>${r.value}</span></div>`).join('')}
       </div>
-      <div class="contact-panel-section-label" style="margin-top:14px">Activities</div>
-      <div class="mini-acts" id="cpanel-acts">${renderMiniActs(full.activities)}</div>
-    </div>
-    <div class="panel-note-form">
-      <select id="cpanel-act-type">
-        <option value="note">${t('act_note')}</option>
-        <option value="call">${t('act_call')}</option>
-        <option value="email">${t('act_email')}</option>
-        <option value="whatsapp">${t('act_whatsapp')}</option>
-      </select>
-      <input type="text" id="cpanel-act-content" placeholder="${t('detail_log_ph')}"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();logContactPanelNote(${full.id});}" />
-      <button id="cpanel-log-btn" class="btn btn-primary btn-sm"
-        onclick="logContactPanelNote(${full.id})">${t('btn_log')}</button>
     </div>`;
 }
 
@@ -2825,7 +2811,6 @@ async function openDealModal(id) {
   ).join('');
 
   let linkedContact = null;
-  let linkedObjects = [];
 
   if (id) {
     const d = await api.get(`/api/deals/${id}`);
@@ -2839,102 +2824,59 @@ async function openDealModal(id) {
       const el = document.getElementById(`dfield-${f.field_key}`);
       if (el) el.value = d.custom_data?.[f.field_key] ?? '';
     });
-    if (d.contact_id) linkedContact = contacts.find(c => c.id === d.contact_id) || null;
-    linkedObjects = d.objects || [];
+    if (d.contact_id) {
+      linkedContact = contacts.find(c => c.id === d.contact_id) || null;
+      document.getElementById('deal-activity-deal-id').value = d.contact_id;
+      await renderDealActivities(d.contact_id);
+    } else {
+      document.getElementById('deal-activities-list').innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px;text-align:center;">No contact linked.</div>`;
+      document.getElementById('deal-activity-deal-id').value = '';
+    }
+  } else {
+    document.getElementById('deal-activity-deal-id').value = '';
   }
 
-  // Ensure objects list is loaded for the picker
-  if (!objects.length) objects = await api.get('/api/objects');
-
   renderContactPanelReadOnly(linkedContact);
-  await renderObjectPanel(id, linkedObjects);
   document.getElementById('deal-modal').classList.remove('hidden');
 }
 
-async function renderObjectPanel(dealId, linkedObjects) {
-  const label = document.getElementById('deal-object-panel-label');
-  const body  = document.getElementById('deal-object-panel-body');
-  if (!label || !body) return;
+async function renderDealActivities(contactId) {
+  const container = document.getElementById('deal-activities-list');
+  if (!container) return;
 
-  const objName = currentWorkspace?.object_name || 'Objects';
-  label.textContent = objName;
+  try {
+    const allActivities = await api.get('/api/activities');
+    const contactActivities = allActivities.filter(a => a.contact_id === parseInt(contactId));
 
-  if (!dealId) {
-    body.innerHTML = `<div class="object-panel-empty">Save the deal first to link ${esc(objName.toLowerCase())}.</div>`;
-    return;
+    if (contactActivities && contactActivities.length > 0) {
+      container.innerHTML = renderMiniActs(contactActivities);
+    } else {
+      container.innerHTML = `<p style="color:var(--muted);font-size:12px">No activities yet.</p>`;
+    }
+  } catch (e) {
+    container.innerHTML = `<p style="color:var(--danger);font-size:13px">Error loading activities.</p>`;
   }
-
-  // Ensure object fields are loaded for rendering details
-  if (!objectFields.length) objectFields = await api.get('/api/object-fields');
-
-  const dash = `<span style="color:var(--muted)">—</span>`;
-
-  const linkedIds = new Set(linkedObjects.map(o => o.id));
-  const available = objects.filter(o => !linkedIds.has(o.id));
-
-  const cards = linkedObjects.length
-    ? linkedObjects.map(o => {
-        const customData = o.custom_data || {};
-        const fieldRows = objectFields.map(f => {
-          const raw = customData[f.field_key];
-          let val;
-          if (raw === undefined || raw === null || raw === '') {
-            val = dash;
-          } else if (f.type === 'date') {
-            val = esc(fmtDate(raw));
-          } else if (f.type === 'checkbox') {
-            val = raw === true || raw === 'true' || raw === '1' ? '✓ Yes' : '✗ No';
-          } else if (f.type === 'select' && Array.isArray(f.options)) {
-            const opt = f.options.find(op => op === raw || (typeof op === 'object' && op.value === raw));
-            val = esc(typeof opt === 'object' ? opt.label : (opt || raw));
-          } else {
-            val = esc(String(raw));
-          }
-          return `<div class="object-panel-field-row">
-            <label>${esc(f.name)}</label>
-            <span>${val}</span>
-          </div>`;
-        }).join('');
-
-        return `
-          <div class="object-panel-card" id="opcard-${o.id}">
-            <div class="object-panel-card-header">
-              <div class="object-panel-card-name">${esc(o.name)}</div>
-              <button class="object-panel-unlink" title="Unlink" onclick="unlinkObjectFromDeal(${dealId},${o.id})">×</button>
-            </div>
-            ${fieldRows ? `<div class="object-panel-card-fields">${fieldRows}</div>` : ''}
-          </div>`;
-      }).join('')
-    : `<div class="object-panel-empty">No ${esc(objName.toLowerCase())} linked yet.</div>`;
-
-  const pickerOptions = available.map(o =>
-    `<option value="${o.id}">${esc(o.name)}</option>`
-  ).join('');
-
-  body.innerHTML = `
-    <div id="object-panel-cards">${cards}</div>
-    <div class="object-panel-add">
-      <select id="object-panel-select"><option value="">— Add ${esc(objName)} —</option>${pickerOptions}</select>
-      <button class="btn btn-sm btn-primary" onclick="linkObjectInDeal(${dealId})">Add</button>
-    </div>`;
 }
 
-async function linkObjectInDeal(dealId) {
-  const sel = document.getElementById('object-panel-select');
-  const objectId = parseInt(sel?.value);
-  if (!objectId) return;
-  await api.post(`/api/deals/${dealId}/objects`, { object_id: objectId });
-  // Refresh master objects list so the picker stays consistent
-  objects = await api.get('/api/objects');
-  const linked = await api.get(`/api/deals/${dealId}/objects`);
-  await renderObjectPanel(dealId, linked);
+function formatDealNote(cmd) {
+  document.execCommand(cmd, false, null);
+  document.getElementById('deal-activity-content')?.focus();
 }
 
-async function unlinkObjectFromDeal(dealId, objectId) {
-  await api.del(`/api/deals/${dealId}/objects/${objectId}`);
-  objects = await api.get('/api/objects');
-  const linked = await api.get(`/api/deals/${dealId}/objects`);
-  await renderObjectPanel(dealId, linked);
+async function saveDealActivity() {
+  const contactId = document.getElementById('deal-activity-deal-id').value;
+  const contentEl = document.getElementById('deal-activity-content');
+  if (!contentEl) return;
+  const content = contentEl.innerHTML.trim();
+  if (!content || content === '<br>') return;
+  const type = document.getElementById('deal-activity-type')?.value || 'note';
+  const btn = document.getElementById('deal-log-btn');
+  if (btn) btn.disabled = true;
+  await api.post('/api/activities', { contact_id: parseInt(contactId), type, content });
+  if (contentEl) contentEl.innerHTML = '';
+  if (btn) btn.disabled = false;
+  await renderDealActivities(contactId);
+  contentEl?.focus();
 }
 
 function populateDealStages(pipelineId, selectedStageId) {
