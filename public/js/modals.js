@@ -298,14 +298,23 @@ async function editActivity(activityId) {
     return;
   }
 
-  // Store the contact ID for later use
-  const detailActs = document.getElementById('detail-acts');
-  const contactId = detailActs?.dataset.contactId;
+  // Store the contact ID for later use (check both contact tab and deal view)
+  let contactId = document.getElementById('detail-acts')?.dataset.contactId;
+  if (!contactId) contactId = document.getElementById('deal-activities-list')?.dataset.contactId;
   window.currentEditActivityContactId = contactId;
   window.currentEditActivityId = activityId;
 
-  const panel = document.getElementById('side-panel-body');
-  if (!panel) return;
+  // Check if we're in deal view or contact view
+  const dealModal = document.getElementById('deal-modal');
+  const isInDealView = dealModal && !dealModal.classList.contains('hidden');
+
+  if (isInDealView) {
+    // Show modal dialog for deal view
+    showActivityEditModal(activity);
+  } else {
+    // Use side panel for contact view
+    const panel = document.getElementById('side-panel-body');
+    if (!panel) return;
 
   panel.innerHTML = `
     <div style="padding:0;display:flex;flex-direction:column;height:100%">
@@ -345,6 +354,58 @@ async function editActivity(activityId) {
         <button class="btn btn-primary btn-sm" onclick="saveActivityEdit()">Save</button>
       </div>
     </div>`;
+  }
+}
+
+function showActivityEditModal(activity) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'activity-edit-modal';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:600px">
+      <div class="modal-header">
+        <h2>Edit Activity</h2>
+        <button class="close-btn" onclick="document.getElementById('activity-edit-modal')?.remove()">&times;</button>
+      </div>
+      <div style="padding:20px;background:var(--card-bg);max-height:70vh;overflow-y:auto">
+        <div class="form-group">
+          <label>Type</label>
+          <select id="act-type-edit" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text)">
+            <option value="note" ${activity.type === 'note' ? 'selected' : ''}>Note</option>
+            <option value="call" ${activity.type === 'call' ? 'selected' : ''}>Call</option>
+            <option value="email" ${activity.type === 'email' ? 'selected' : ''}>Email</option>
+            <option value="whatsapp" ${activity.type === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Content</label>
+          <div class="note-editor-toolbar" style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('bold')" title="Bold"><strong>B</strong></button>
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('italic')" title="Italic"><em>I</em></button>
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('underline')" title="Underline"><u>U</u></button>
+            <div style="width:1px;background:var(--border)"></div>
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('insertUnorderedList')" title="List">• List</button>
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('createLink')" title="Link">🔗 Link</button>
+            <button type="button" class="fmt-btn" onclick="formatActivityNote('removeFormat')" title="Clear">✕ Clear</button>
+          </div>
+          <div id="act-content-edit" class="note-editor" contenteditable="true" style="min-height:200px;padding:12px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text)">${activity.content}</div>
+        </div>
+        <div style="color:var(--muted);font-size:12px;margin-top:12px">
+          Logged by ${esc(activity.logged_by_name || 'Unknown')} on ${fmtDate(activity.created_at)}
+        </div>
+      </div>
+      <div style="padding:12px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--card-bg)">
+        <button class="btn btn-secondary btn-sm" onclick="closeActivityEditModal()">Cancel</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDeleteActivity()">Delete</button>
+        <button class="btn btn-primary btn-sm" onclick="saveActivityEdit()">Save</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('act-content-edit')?.focus();
+}
+
+function closeActivityEditModal() {
+  document.getElementById('activity-edit-modal')?.remove();
 }
 
 function formatActivityNote(cmd) {
@@ -354,6 +415,13 @@ function formatActivityNote(cmd) {
 
 
 function confirmDiscardEdit() {
+  // If in deal view, just close the modal without confirmation
+  const dealModal = document.getElementById('deal-modal');
+  if (dealModal && !dealModal.classList.contains('hidden')) {
+    closeActivityEditModal();
+    return;
+  }
+
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'discard-modal';
@@ -374,9 +442,14 @@ function confirmDiscardEdit() {
   document.body.appendChild(modal);
 }
 
-function discardAndGoBack() {
+async function discardAndGoBack() {
   const contactId = window.currentEditActivityContactId;
-  if (contactId) {
+  if (!contactId) return;
+  const dealModal = document.getElementById('deal-modal');
+  if (dealModal && !dealModal.classList.contains('hidden')) {
+    await loadDealActivities(contactId);
+    closeSidePanel();
+  } else {
     openDetail(contactId);
   }
 }
@@ -409,7 +482,13 @@ async function deleteActivityConfirmed() {
   if (activityId) {
     await api.delete(`/api/activities/${activityId}`);
     if (contactId) {
-      openDetail(contactId);
+      const dealModal = document.getElementById('deal-modal');
+      if (dealModal && !dealModal.classList.contains('hidden')) {
+        await loadDealActivities(contactId);
+        closeSidePanel();
+      } else {
+        openDetail(contactId);
+      }
     }
   }
 }
@@ -437,7 +516,13 @@ async function saveActivityEdit() {
   }
 
   if (contactId) {
-    openDetail(contactId);
+    const dealModal = document.getElementById('deal-modal');
+    if (dealModal && !dealModal.classList.contains('hidden')) {
+      await loadDealActivities(contactId);
+      closeSidePanel();
+    } else {
+      openDetail(contactId);
+    }
   }
 }
 
@@ -495,26 +580,6 @@ async function renderContactPanelReadOnly(contact) {
       <div class="contact-panel-rows">
         ${rows.map(r => `<div class="contact-panel-row"><label>${esc(r.label)}</label><span>${r.value}</span></div>`).join('')}
       </div>
-      <div class="contact-panel-section-label" style="margin-top:14px">Activities</div>
-      <div class="mini-acts" id="cpanel-acts">${renderMiniActs(full.activities)}</div>
-    </div>
-    <div class="panel-note-form">
-      <select id="cpanel-act-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;background:var(--input-bg);color:var(--text)">
-        <option value="note">${t('act_note')}</option><option value="call">${t('act_call')}</option>
-        <option value="email">${t('act_email')}</option><option value="whatsapp">${t('act_whatsapp')}</option>
-      </select>
-      <div class="note-editor-toolbar" id="cpanel-toolbar" style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
-        <button type="button" class="fmt-btn" onclick="formatContactNote('bold')" title="Bold"><strong>B</strong></button>
-        <button type="button" class="fmt-btn" onclick="formatContactNote('italic')" title="Italic"><em>I</em></button>
-        <button type="button" class="fmt-btn" onclick="formatContactNote('underline')" title="Underline"><u>U</u></button>
-        <div style="width:1px;background:var(--border)"></div>
-        <button type="button" class="fmt-btn" onclick="formatContactNote('insertUnorderedList')" title="List">• List</button>
-        <button type="button" class="fmt-btn" onclick="formatContactNote('createLink')" title="Link">🔗 Link</button>
-        <button type="button" class="fmt-btn" onclick="formatContactNote('removeFormat')" title="Clear">✕ Clear</button>
-      </div>
-      <div id="cpanel-act-content" class="note-editor" contenteditable="true" placeholder="${t('detail_log_ph')}"
-        onkeydown="if(event.key==='Enter' && event.ctrlKey){event.preventDefault();logContactPanelNote(${full.id});}"></div>
-      <button id="cpanel-log-btn" class="btn btn-primary" style="width:100%;margin-top:8px" onclick="logContactPanelNote(${full.id})">${t('btn_log')} (Ctrl+Enter)</button>
     </div>`;
 }
 
@@ -535,6 +600,40 @@ async function logContactPanelNote(contactId) {
   if (btn) btn.disabled = false;
   const fresh = await api.get(`/api/contacts/${contactId}`);
   const actsEl = document.getElementById('cpanel-acts'); if (actsEl) actsEl.innerHTML = renderMiniActs(fresh.activities);
+  contentEl?.focus();
+}
+
+async function loadDealActivities(contactId) {
+  const container = document.getElementById('deal-activities-list');
+  if (!container) return;
+  container.dataset.contactId = contactId;
+  try {
+    const c = await api.get(`/api/contacts/${contactId}`);
+    container.innerHTML = c.activities && c.activities.length > 0
+      ? renderMiniActs(c.activities)
+      : `<p style="color:var(--muted);font-size:12px">No activities yet.</p>`;
+  } catch (e) {
+    console.error('Error loading activities:', e);
+    container.innerHTML = `<p style="color:var(--danger);font-size:13px">Error loading activities.</p>`;
+  }
+}
+
+async function formatDealNote(cmd) {
+  document.execCommand(cmd, false, null);
+  document.getElementById('deal-activity-content')?.focus();
+}
+
+async function saveDealActivity() {
+  const contactId = document.getElementById('deal-activity-deal-id').value;
+  if (!contactId) { console.error('No contactId in deal-activity-deal-id'); return; }
+  const contentEl = document.getElementById('deal-activity-content');
+  if (!contentEl) { console.error('deal-activity-content not found'); return; }
+  const content = contentEl.innerHTML.trim();
+  if (!content || content === '<br>') return;
+  const type = document.getElementById('deal-activity-type')?.value || 'note';
+  await api.post('/api/activities', { contact_id: parseInt(contactId), type, content });
+  contentEl.innerHTML = '';
+  await loadDealActivities(parseInt(contactId));
   contentEl?.focus();
 }
 
@@ -659,8 +758,18 @@ async function openDealModal(id) {
     supplierSel.value = d.supplier_id || '';
     assigneeSel.value = d.assigned_to || '';
     dealFields.forEach(f => { const el = document.getElementById(`dfield-${f.field_key}`); if (el) el.value = d.custom_data?.[f.field_key] ?? ''; });
-    if (d.contact_id) linkedContact = allContacts.find(c => c.id === d.contact_id) || null;
+    if (d.contact_id) {
+      linkedContact = allContacts.find(c => c.id === d.contact_id) || null;
+      document.getElementById('deal-activity-deal-id').value = d.contact_id;
+      await loadDealActivities(d.contact_id);
+    } else {
+      document.getElementById('deal-activity-deal-id').value = '';
+      document.getElementById('deal-activities-list').innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px;text-align:center;">No contact linked.</div>`;
+    }
     linkedObjects = d.objects || [];
+  } else {
+    document.getElementById('deal-activity-deal-id').value = '';
+    document.getElementById('deal-activities-list').innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px;text-align:center;">Save the deal and link a contact to view activities.</div>`;
   }
 
   renderContactPanelReadOnly(linkedContact);
