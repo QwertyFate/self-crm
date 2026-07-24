@@ -845,8 +845,18 @@ function effectiveContactColumns() {
   if (!contactColumns.length) return ALL.map(c => ({ ...c, visible: c.show }));
 
   const savedMap = Object.fromEntries(contactColumns.map(c => [c.key, c.visible]));
+  const labelMap = Object.fromEntries(contactColumns.map(c => [c.key, c.label]));
   const ordered  = contactColumns
-    .map(({ key }) => { const def = ALL.find(c => c.key === key); return def ? { ...def, visible: savedMap[key] } : null; })
+    .map(({ key }) => {
+      const def = ALL.find(c => c.key === key);
+      if (!def) return null;
+      const customLabel = labelMap[key];
+      return {
+        ...def,
+        label: customLabel ? () => customLabel : def.label,
+        visible: savedMap[key]
+      };
+    })
     .filter(Boolean);
   // Append any new fields not in saved config, using their default show value
   ALL.filter(c => !(c.key in savedMap)).forEach(c => ordered.push({ ...c, visible: c.show }));
@@ -2992,6 +3002,41 @@ async function saveActivity(e) {
 
 // ── Helpers ───────────────────────────────────────────────
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+async function handleCreateWorkspace(e) {
+  e.preventDefault();
+  const name = document.getElementById('cw-name').value;
+  const code = document.getElementById('cw-code').value;
+  const errorEl = document.getElementById('cw-error');
+  errorEl.classList.add('hidden');
+
+  try {
+    const res = await api.post('/api/workspace', {
+      name: name.trim(),
+      platform_invite_code: code.trim()
+    });
+    if (res.success) {
+      closeCreateWorkspaceModal();
+      // Reload to get new workspace in list
+      window.location.reload();
+    }
+  } catch (e) {
+    errorEl.textContent = e.message || 'Failed to create workspace';
+    errorEl.classList.remove('hidden');
+  }
+}
+
+function closeCreateWorkspaceModal() {
+  document.getElementById('create-workspace-modal').classList.add('hidden');
+  document.getElementById('cw-name').value = '';
+  document.getElementById('cw-code').value = '';
+  document.getElementById('cw-error').classList.add('hidden');
+}
+
+function openCreateWorkspaceModal() {
+  document.getElementById('create-workspace-modal').classList.remove('hidden');
+  document.getElementById('cw-name').focus();
+}
 
 function esc(str) {
   if (str == null) return '';

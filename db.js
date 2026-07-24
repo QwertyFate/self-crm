@@ -139,6 +139,13 @@ const SCHEMA = `
     used_by_workspace_id INTEGER REFERENCES workspaces(id) ON DELETE SET NULL,
     created_at           TIMESTAMPTZ DEFAULT NOW()
   );
+
+  CREATE TABLE IF NOT EXISTS platform_settings (
+    id                SERIAL PRIMARY KEY,
+    key               TEXT NOT NULL UNIQUE,
+    value             JSONB NOT NULL,
+    updated_at        TIMESTAMPTZ DEFAULT NOW()
+  );
 `;
 
 const DEFAULT_STAGES = [
@@ -150,11 +157,24 @@ const DEFAULT_STAGES = [
   ['Lost',        '#ef4444', 5],
 ];
 
+async function getAdminDefaultStages(client) {
+  try {
+    const { rows: [saved] } = await client.query('SELECT value FROM platform_settings WHERE key=$1', ['default_stages']);
+    if (saved && saved.value?.contactStages) {
+      return saved.value.contactStages;
+    }
+  } catch (e) {
+    // If query fails or platform_settings doesn't exist, fall back to defaults
+  }
+  return DEFAULT_STAGES.map(([name, color, pos]) => ({ name, color, position: pos }));
+}
+
 async function seedDefaultStages(workspaceId, client) {
-  for (const [name, color, pos] of DEFAULT_STAGES) {
+  const stages = await getAdminDefaultStages(client);
+  for (const stage of stages) {
     await client.query(
       'INSERT INTO stages (workspace_id, name, color, position) VALUES ($1,$2,$3,$4)',
-      [workspaceId, name, color, pos]
+      [workspaceId, stage.name, stage.color, stage.position || 0]
     );
   }
 }
@@ -411,15 +431,41 @@ const DEFAULT_PIPELINE_STAGES = [
   ['Lost',        '#ef4444', 5],
 ];
 
+async function getAdminDefaultPipelineStages(client) {
+  try {
+    const { rows: [saved] } = await client.query('SELECT value FROM platform_settings WHERE key=$1', ['default_stages']);
+    if (saved && saved.value?.dealStages) {
+      return saved.value.dealStages;
+    }
+  } catch (e) {
+    // If query fails or platform_settings doesn't exist, fall back to defaults
+  }
+  return DEFAULT_PIPELINE_STAGES.map(([name, color, pos]) => ({ name, color, position: pos }));
+}
+
+async function getAdminPipelineName(client) {
+  try {
+    const { rows: [saved] } = await client.query('SELECT value FROM platform_settings WHERE key=$1', ['default_stages']);
+    if (saved && saved.value?.pipelineName) {
+      return saved.value.pipelineName;
+    }
+  } catch (e) {
+    // Fall back to default name
+  }
+  return 'Sales Pipeline';
+}
+
 async function seedDefaultPipeline(workspaceId, client) {
+  const pipelineName = await getAdminPipelineName(client);
   const { rows: [p] } = await client.query(
     'INSERT INTO pipelines (workspace_id, name, position) VALUES ($1,$2,0) RETURNING id',
-    [workspaceId, 'Sales Pipeline']
+    [workspaceId, pipelineName]
   );
-  for (const [name, color, pos] of DEFAULT_PIPELINE_STAGES) {
+  const stages = await getAdminDefaultPipelineStages(client);
+  for (const stage of stages) {
     await client.query(
       'INSERT INTO pipeline_stages (workspace_id, pipeline_id, name, color, position) VALUES ($1,$2,$3,$4,$5)',
-      [workspaceId, p.id, name, color, pos]
+      [workspaceId, p.id, stage.name, stage.color, stage.position || 0]
     );
   }
 }

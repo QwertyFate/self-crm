@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Console</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg-secondary, #f5f5f5); }
+    .admin-container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .admin-header { margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+    .admin-header h1 { font-size: 28px; margin: 0; }
+    .logout-btn { padding: 8px 16px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .logout-btn:hover { background: #dc2626; }
+    .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px; }
+    .stat-card { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .stat-label { font-size: 12px; color: #6b7280; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
+    .stat-value { font-size: 32px; font-weight: 700; color: #1f2937; }
+    .section { background: white; padding: 20px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .section h2 { margin-top: 0; font-size: 18px; color: #1f2937; }
+    .stage-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+    .stage-item { background: #f9fafb; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb; display: flex; align-items: center; gap: 12px; }
+    .stage-color { width: 24px; height: 24px; border-radius: 4px; border: 1px solid #d1d5db; }
+    .stage-name { flex: 1; font-weight: 500; font-size: 14px; }
+    .btn { padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    .input-group { margin-bottom: 16px; }
+    .input-group label { display: block; font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 6px; text-transform: uppercase; }
+    .input-group input { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px; }
+    .input-group select { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 14px; background: white; cursor: pointer; }
+    .message { padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; font-size: 14px; }
+    .message.success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .message.error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .loading { text-align: center; padding: 20px; color: #6b7280; }
+    .btn:not(.btn-primary):not(.btn-danger) { background: #f3f4f6; color: #374151; }
+  </style>
+</head>
+<body>
+  <div class="admin-container">
+    <div class="admin-header">
+      <div>
+        <h1>Admin Console</h1>
+        <p style="color: #6b7280; margin: 4px 0 0 0;">Manage platform-wide settings</p>
+      </div>
+      <button class="logout-btn" onclick="adminLogout()">Logout</button>
+    </div>
+
+    <div id="login-form" class="section" style="max-width: 400px;">
+      <h2>Admin Login</h2>
+      <div class="input-group">
+        <label>Admin Secret</label>
+        <input type="password" id="admin-secret" placeholder="Enter admin secret" />
+      </div>
+      <button class="btn btn-primary" onclick="adminLogin()">Login</button>
+      <div id="login-error"></div>
+    </div>
+
+    <div id="admin-dashboard" style="display: none;">
+      <!-- Stats -->
+      <div class="admin-grid" id="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Workspaces</div>
+          <div class="stat-value" id="stat-workspaces">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Users</div>
+          <div class="stat-value" id="stat-users">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Contacts</div>
+          <div class="stat-value" id="stat-contacts">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Deals</div>
+          <div class="stat-value" id="stat-deals">-</div>
+        </div>
+      </div>
+
+      <!-- Default Contact Columns -->
+      <div class="section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <h2 style="margin: 0 0 4px 0;">Default Contact Columns</h2>
+            <p style="color: #6b7280; font-size: 14px; margin: 0;">Configure which columns appear by default and add custom fields</p>
+          </div>
+          <button class="btn btn-primary" onclick="toggleEditMode('contact')">Edit</button>
+        </div>
+
+        <div id="contact-columns-view" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;"></div>
+
+        <div id="contact-columns-edit" style="display: none;">
+          <div style="margin-bottom: 24px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 14px; color: #6b7280;">Builtin Columns</h3>
+            <div id="contact-builtin-form" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px;"></div>
+          </div>
+
+          <div style="margin-bottom: 24px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
+            <h3 style="margin: 0 0 12px 0; font-size: 14px; color: #6b7280;">Custom Fields (created in new workspaces)</h3>
+            <div id="contact-custom-fields" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-bottom: 12px;"></div>
+            <button class="btn" onclick="addCustomField()" style="background: #f3f4f6; color: #374151; border: 1px solid #d1d5db;">+ Add Custom Field</button>
+          </div>
+
+          <div style="margin-top: 16px; display: flex; gap: 8px;">
+            <button class="btn btn-primary" onclick="saveDefaults('contact')">Save</button>
+            <button class="btn" onclick="toggleEditMode('contact')">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Default Pipelines -->
+      <div class="section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <h2 style="margin: 0 0 4px 0;">Default Pipelines</h2>
+            <p style="color: #6b7280; font-size: 14px; margin: 0;">Configure default pipelines and stages created in new workspaces</p>
+          </div>
+          <button class="btn btn-primary" onclick="toggleEditMode('pipeline')">Edit</button>
+        </div>
+
+        <div id="pipelines-view" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;"></div>
+
+        <div id="pipelines-edit" style="display: none;">
+          <div id="pipelines-form" style="display: grid; grid-template-columns: 1fr; gap: 24px; margin-bottom: 24px;"></div>
+          <button class="btn" onclick="addPipeline()" style="background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; margin-bottom: 16px;">+ Add Pipeline</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-primary" onclick="saveDefaults('pipeline')">Save</button>
+            <button class="btn" onclick="toggleEditMode('pipeline')">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="message" class="message" style="display: none;"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api/admin';
+    const COLUMN_LABELS = {
+      'company': 'Company',
+      'email': 'Email',
+      'phone': 'Phone',
+      'stage_id': 'Stage',
+      'assigned_to': 'Assignee',
+      'created_at': 'Created At',
+    };
+    const FIXED_COLUMNS = ['email', 'phone'];
+    const EDITABLE_COLUMNS = ['company', 'stage_id', 'assigned_to', 'created_at'];
+    const FIELD_TYPES = ['text', 'email', 'phone', 'number', 'dropdown', 'date', 'url'];
+    let currentDefaults = {};
+    let editMode = null;
+
+    async function checkAdminStatus() {
+      const res = await fetch(`${API_BASE}/me`);
+      const data = await res.json();
+      if (data.isAdmin) {
+        document.getElementById('login-form').style.display = 'none';
+        document.getElementById('admin-dashboard').style.display = 'block';
+        loadDashboard();
+      }
+    }
+
+    async function adminLogin() {
+      const secret = document.getElementById('admin-secret').value;
+      const errorEl = document.getElementById('login-error');
+      errorEl.innerHTML = '';
+
+      try {
+        const res = await fetch(`${API_BASE}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ secret })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          document.getElementById('login-form').style.display = 'none';
+          document.getElementById('admin-dashboard').style.display = 'block';
+          loadDashboard();
+        } else {
+          errorEl.innerHTML = `<div class="message error">${data.error}</div>`;
+        }
+      } catch (e) {
+        errorEl.innerHTML = `<div class="message error">Error: ${e.message}</div>`;
+      }
+    }
+
+    async function adminLogout() {
+      await fetch(`${API_BASE}/logout`, { method: 'POST' });
+      document.getElementById('login-form').style.display = 'block';
+      document.getElementById('admin-dashboard').style.display = 'none';
+      document.getElementById('admin-secret').value = '';
+    }
+
+    async function loadDashboard() {
+      try {
+        const [statsRes, defaultsRes] = await Promise.all([
+          fetch(`${API_BASE}/stats`),
+          fetch(`${API_BASE}/defaults`)
+        ]);
+
+        const stats = await statsRes.json();
+        const defaults = await defaultsRes.json();
+        currentDefaults = defaults;
+
+        // Update stats
+        document.getElementById('stat-workspaces').textContent = stats.totalWorkspaces || 0;
+        document.getElementById('stat-users').textContent = stats.totalUsers || 0;
+        document.getElementById('stat-contacts').textContent = stats.totalContacts || 0;
+        document.getElementById('stat-deals').textContent = stats.totalDeals || 0;
+
+        // Update columns view (builtin + custom)
+        document.getElementById('contact-columns-view').innerHTML = currentDefaults.contactColumns
+          .map(c => {
+            const label = c.label || COLUMN_LABELS[c.key] || c.name || c.key;
+            const type = c.type ? `<span style="font-size: 11px; color: #9ca3af; margin-left: 4px;">(${c.type})</span>` : '';
+            const options = c.options && c.options.length > 0 ? `<div style="font-size: 11px; color: #6b7280; margin-top: 4px;">${c.options.slice(0, 2).join(', ')}${c.options.length > 2 ? '...' : ''}</div>` : '';
+            return `
+              <div style="background: #f9fafb; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <input type="checkbox" ${c.visible ? 'checked' : ''} disabled style="cursor: default;" />
+                  <span style="font-weight: 500; font-size: 14px;">${label}</span>
+                  ${type}
+                </div>
+                ${options}
+              </div>
+            `;
+          }).join('');
+
+        // Update pipelines view
+        renderPipelinesView();
+
+        // Initialize edit forms
+        renderEditForms();
+      } catch (e) {
+        showMessage(`Error loading dashboard: ${e.message}`, 'error');
+      }
+    }
+
+    function renderEditForms() {
+      // Builtin columns
+      const builtinCols = currentDefaults.contactColumns.filter(c => !c.isCustom);
+      document.getElementById('contact-builtin-form').innerHTML = builtinCols
+        .map((c, i) => {
+          const isFixed = FIXED_COLUMNS.includes(c.key);
+          const label = c.label || COLUMN_LABELS[c.key] || c.key;
+          return `
+            <div style="background: #f9fafb; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb;">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                <input type="checkbox" ${c.visible ? 'checked' : ''} onchange="currentDefaults.contactColumns.find(x => x.key === '${c.key}').visible = this.checked" />
+                <span style="font-weight: 500; font-size: 14px; flex: 1;">
+                  ${isFixed ? label : '<input type="text" value="' + label + '" onchange="currentDefaults.contactColumns.find(x => x.key === \''+c.key+'\').label = this.value" style="width: 100%; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 3px; font-size: 13px;" />'}
+                </span>
+              </div>
+              ${isFixed ? '<div style="font-size: 11px; color: #9ca3af; margin-left: 24px;">(Fixed)</div>' : ''}
+            </div>
+          `;
+        }).join('');
+
+      // Custom fields
+      const customFields = currentDefaults.contactColumns.filter(c => c.isCustom);
+      document.getElementById('contact-custom-fields').innerHTML = customFields
+        .map((c, i) => `
+          <div style="background: #f9fafb; padding: 12px; border-radius: 6px; border: 1px solid #e5e7eb;">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+              <div style="flex: 1;">
+                <div class="input-group" style="margin-bottom: 8px;">
+                  <label>Field Name</label>
+                  <input type="text" value="${c.name}" onchange="updateCustomFieldName('${c.key}', this.value)" />
+                </div>
+                <div style="font-size: 11px; color: #9ca3af; padding: 6px 8px; background: white; border-radius: 3px; margin-bottom: 8px; border: 1px solid #e5e7eb; font-family: monospace;">
+                  Database key: <strong>${c.key}</strong>
+                </div>
+                <div class="input-group">
+                  <label>Field Type</label>
+                  <select onchange="updateFieldType('${c.key}', this.value); renderEditForms();">
+                    ${FIELD_TYPES.map(t => `<option value="${t}" ${c.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+                  </select>
+                </div>
+                ${c.type === 'dropdown' ? `
+                  <div class="input-group">
+                    <label>Default Options (one per line)</label>
+                    <textarea onchange="currentDefaults.contactColumns.find(x => x.key === '${c.key}' && x.isCustom).options = this.value.split('\\n').map(o => o.trim()).filter(o => o)" style="width: 100%; min-height: 80px; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; font-family: monospace; resize: vertical;">${(c.options || []).join('\n')}</textarea>
+                  </div>
+                ` : ''}
+              </div>
+              <button class="btn" onclick="removeCustomField('${c.key}')" style="background: #fee2e2; color: #991b1b; margin-left: 8px;">Remove</button>
+            </div>
+          </div>
+        `).join('');
+
+      // Pipelines
+      document.getElementById('pipelines-form').innerHTML = (currentDefaults.defaultPipelines || [])
+        .map((p, pIdx) => `
+          <div style="background: #f9fafb; padding: 16px; border-radius: 6px; border: 1px solid #e5e7eb;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <div class="input-group" style="flex: 1; margin: 0;">
+                <label>Pipeline Name</label>
+                <input type="text" value="${p.name}" onchange="currentDefaults.defaultPipelines[${pIdx}].name = this.value" />
+              </div>
+              <button class="btn" onclick="removePipeline(${pIdx})" style="background: #fee2e2; color: #991b1b; margin-left: 8px; margin-top: 20px;">Remove</button>
+            </div>
+            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #d1d5db;">
+              <h4 style="margin: 0 0 12px 0; font-size: 13px; color: #6b7280;">Stages</h4>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-bottom: 12px;">
+                ${(p.stages || []).map((s, sIdx) => `
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" placeholder="Stage name" value="${s.name}" onchange="currentDefaults.defaultPipelines[${pIdx}].stages[${sIdx}].name = this.value" style="flex: 1; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
+                    <input type="color" value="${s.color}" onchange="currentDefaults.defaultPipelines[${pIdx}].stages[${sIdx}].color = this.value" style="width: 40px; height: 34px; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer;" />
+                    <button class="btn" onclick="currentDefaults.defaultPipelines[${pIdx}].stages.splice(${sIdx}, 1); renderEditForms();" style="background: #fee2e2; color: #991b1b; padding: 4px 8px; font-size: 12px;">Remove</button>
+                  </div>
+                `).join('')}
+              </div>
+              <button class="btn" onclick="currentDefaults.defaultPipelines[${pIdx}].stages.push({name: '', color: '#3b82f6'}); renderEditForms();" style="background: #eff6ff; color: #1e40af; font-size: 12px; padding: 4px 8px;">+ Add Stage</button>
+            </div>
+          </div>
+        `).join('');
+    }
+
+    function renderPipelinesView() {
+      document.getElementById('pipelines-view').innerHTML = (currentDefaults.defaultPipelines || [])
+        .map(p => `
+          <div style="background: white; padding: 16px; border-radius: 8px; border: 1px solid #e5e7eb;">
+            <h3 style="margin: 0 0 12px 0; font-size: 16px;">${p.name}</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px;">
+              ${(p.stages || []).map(s => `
+                <div style="background: #f9fafb; padding: 8px; border-radius: 4px; border-left: 3px solid ${s.color}; font-size: 12px; font-weight: 500;">
+                  ${s.name}
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('');
+    }
+
+    function generateFieldKey(name) {
+      return name
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
+    }
+
+    function updateCustomFieldName(oldKey, newName) {
+      const field = currentDefaults.contactColumns.find(x => x.key === oldKey && x.isCustom);
+      if (!field) return;
+
+      field.name = newName;
+
+      // Generate new key from name
+      const newKey = generateFieldKey(newName);
+      if (newKey && newKey !== oldKey) {
+        // Check for duplicates
+        const isDuplicate = currentDefaults.contactColumns.some(x => x.key === newKey && x.key !== oldKey);
+        if (!isDuplicate) {
+          field.key = newKey;
+        }
+      }
+
+      renderEditForms();
+    }
+
+    function updateFieldType(key, newType) {
+      const field = currentDefaults.contactColumns.find(x => x.key === key && x.isCustom);
+      if (field) {
+        field.type = newType;
+        if (newType !== 'dropdown') {
+          field.options = [];
+        } else if (!field.options || field.options.length === 0) {
+          field.options = ['Option 1', 'Option 2'];
+        }
+      }
+    }
+
+    function addCustomField() {
+      const newKey = `field_${Date.now()}`;
+      currentDefaults.contactColumns.push({
+        key: newKey,
+        name: 'New Field',
+        type: 'text',
+        options: [],
+        isCustom: true,
+        visible: true
+      });
+      renderEditForms();
+    }
+
+    function removeCustomField(key) {
+      const idx = currentDefaults.contactColumns.findIndex(c => c.key === key && c.isCustom);
+      if (idx > -1) {
+        currentDefaults.contactColumns.splice(idx, 1);
+        renderEditForms();
+      }
+    }
+
+    function addPipeline() {
+      if (!currentDefaults.defaultPipelines) currentDefaults.defaultPipelines = [];
+      currentDefaults.defaultPipelines.push({
+        name: 'New Pipeline',
+        stages: [
+          { name: 'Stage 1', color: '#3b82f6' },
+          { name: 'Stage 2', color: '#8b5cf6' }
+        ]
+      });
+      renderEditForms();
+    }
+
+    function removePipeline(idx) {
+      currentDefaults.defaultPipelines.splice(idx, 1);
+      renderEditForms();
+    }
+
+    function toggleEditMode(type) {
+      if (type === 'pipeline') {
+        const viewEl = document.getElementById('pipelines-view');
+        const editEl = document.getElementById('pipelines-edit');
+        if (editMode === type) {
+          viewEl.style.display = 'grid';
+          editEl.style.display = 'none';
+          editMode = null;
+        } else {
+          viewEl.style.display = 'none';
+          editEl.style.display = 'block';
+          editMode = type;
+        }
+      } else {
+        const viewEl = document.getElementById('contact-columns-view');
+        const editEl = document.getElementById('contact-columns-edit');
+        if (editMode === type) {
+          viewEl.style.display = 'grid';
+          editEl.style.display = 'none';
+          editMode = null;
+        } else {
+          viewEl.style.display = 'none';
+          editEl.style.display = 'block';
+          editMode = type;
+        }
+      }
+    }
+
+    async function saveDefaults(type) {
+      try {
+        const payload = {};
+        if (type === 'contact') {
+          payload.contactColumns = currentDefaults.contactColumns;
+        } else if (type === 'pipeline') {
+          payload.defaultPipelines = currentDefaults.defaultPipelines;
+        }
+
+        const res = await fetch(`${API_BASE}/defaults`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          showMessage(`Default ${type} ${type === 'contact' ? 'columns' : 'pipelines'} updated successfully`, 'success');
+          toggleEditMode(type);
+          loadDashboard();
+        } else {
+          showMessage(`Error: ${data.error}`, 'error');
+        }
+      } catch (e) {
+        showMessage(`Error saving defaults: ${e.message}`, 'error');
+      }
+    }
+
+    function showMessage(text, type) {
+      const msgEl = document.getElementById('message');
+      msgEl.className = `message ${type}`;
+      msgEl.textContent = text;
+      msgEl.style.display = 'block';
+      setTimeout(() => { msgEl.style.display = 'none'; }, 5000);
+    }
+
+    checkAdminStatus();
+  </script>
+</body>
+</html>

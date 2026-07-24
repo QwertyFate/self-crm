@@ -256,21 +256,14 @@ async function handleCreateWorkspace(e) {
   e.preventDefault();
   const errEl = document.getElementById('cw-error');
   errEl.classList.add('hidden');
-  const data = await api.post('/api/auth/create-workspace', {
-    workspace_name:       document.getElementById('cw-name').value.trim(),
-    platform_invite_code: document.getElementById('cw-code').value.trim(),
+  const data = await api.post('/api/workspace', {
+    name:                  document.getElementById('cw-name').value.trim(),
+    platform_invite_code:  document.getElementById('cw-code').value.trim(),
   });
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
   closeCreateWorkspaceModal();
-  currentWorkspace = data.workspace;
-  kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
-  contactColumns   = data.workspace.contact_columns || [];
-  objectColumns    = data.workspace.object_columns  || [];
-  document.getElementById('sidebar-workspace').textContent = data.workspace.name || '';
-  const settingsLabel = document.getElementById('settings-workspace-label');
-  if (settingsLabel) settingsLabel.textContent = data.workspace.name || '';
-  invalidate();
-  switchPage('workspaces');
+  // Reload to get new workspace with proper defaults applied
+  window.location.reload();
 }
 
 function showJoinWorkspace(e) {

@@ -209,11 +209,70 @@ router.post('/signup', async (req, res, next) => {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+
+        // Get default contact columns and pipelines from admin settings
+        let defaultContactColumns = [
+          { key: 'company', label: 'Company', visible: true, isCustom: false },
+          { key: 'email', label: 'Email', visible: true, isCustom: false },
+          { key: 'phone', label: 'Phone', visible: true, isCustom: false },
+          { key: 'stage_id', label: 'Stage', visible: true, isCustom: false },
+          { key: 'assigned_to', label: 'Assignee', visible: true, isCustom: false },
+          { key: 'created_at', label: 'Created At', visible: false, isCustom: false },
+        ];
+        let defaultPipelines = [
+          {
+            name: 'Sales Pipeline',
+            stages: [
+              { name: 'New', color: '#6b7280' },
+              { name: 'Contacted', color: '#3b82f6' },
+              { name: 'Proposal', color: '#f59e0b' },
+              { name: 'Negotiation', color: '#8b5cf6' },
+              { name: 'Won', color: '#22c55e' },
+              { name: 'Lost', color: '#ef4444' },
+            ]
+          }
+        ];
+
+        try {
+          const [colRes, pipeRes] = await Promise.all([
+            client.query('SELECT value FROM platform_settings WHERE key=$1', ['default_contact_columns']),
+            client.query('SELECT value FROM platform_settings WHERE key=$1', ['default_pipelines'])
+          ]);
+          if (colRes.rows[0]) defaultContactColumns = colRes.rows[0].value;
+          if (pipeRes.rows[0]) defaultPipelines = pipeRes.rows[0].value;
+        } catch (e) {
+          // Use defaults if query fails
+        }
+
         const { rows: [ws] } = await client.query(
-          'INSERT INTO workspaces (name) VALUES ($1) RETURNING id',
-          [workspace_name.trim()]
+          'INSERT INTO workspaces (name, contact_columns) VALUES ($1, $2) RETURNING id',
+          [workspace_name.trim(), JSON.stringify(defaultContactColumns.filter(c => !c.isCustom))]
         );
-        await seedDefaultPipeline(ws.id, client);
+
+        // Create default custom fields for contacts
+        const customFields = defaultContactColumns.filter(c => c.isCustom);
+        for (const field of customFields) {
+          await client.query(
+            'INSERT INTO custom_fields (workspace_id, name, field_key, type, options, position) VALUES ($1,$2,$3,$4,$5,$6)',
+            [ws.id, field.name, field.key, field.type, JSON.stringify(field.options || []), 0]
+          );
+        }
+
+        // Create default pipelines
+        for (const pipeline of defaultPipelines) {
+          const { rows: [p] } = await client.query(
+            'INSERT INTO pipelines (workspace_id, name, position) VALUES ($1,$2,0) RETURNING id',
+            [ws.id, pipeline.name]
+          );
+          for (let i = 0; i < (pipeline.stages || []).length; i++) {
+            const stage = pipeline.stages[i];
+            await client.query(
+              'INSERT INTO pipeline_stages (workspace_id, pipeline_id, name, color, position) VALUES ($1,$2,$3,$4,$5)',
+              [ws.id, p.id, stage.name, stage.color, i]
+            );
+          }
+        }
+
         const { rows: [u] } = await client.query(
           'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
           [ws.id, name.trim(), normalizedEmail, password_hash, 'owner']

@@ -951,8 +951,13 @@
       <!-- ── Workspaces page ── -->
       <section id="page-workspaces" class="page" style="overflow-y:auto">
         <div class="page-header" style="flex-shrink:0">
-          <h1>Workspaces</h1>
-          <p style="color:var(--muted);font-size:13px;margin:4px 0 0">Switch between your workspaces or create a new one.</p>
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div>
+              <h1>Workspaces</h1>
+              <p style="color:var(--muted);font-size:13px;margin:4px 0 0">Switch between your workspaces or create a new one.</p>
+            </div>
+            <button class="btn btn-primary" onclick="openCreateWorkspaceModal()" style="flex-shrink: 0;">+ New Workspace</button>
+          </div>
         </div>
         <div id="workspaces-grid" class="ws-page-grid"></div>
       </section>
