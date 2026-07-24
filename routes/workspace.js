@@ -2,8 +2,116 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const { seedDefaultPipeline } = require('../db');
 
 router.use(requireAuth);
+
+router.post('/', async (req, res, next) => {
+  try {
+    const { name, platform_invite_code } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Workspace name required' });
+    if (!platform_invite_code?.trim()) return res.status(400).json({ error: 'Platform invite code required' });
+
+    const { rows: [platformInvite] } = await pool.query(
+      'SELECT * FROM platform_invites WHERE code = $1 AND used = 0',
+      [platform_invite_code.trim()]
+    );
+    if (!platformInvite) return res.status(400).json({ error: 'Invalid or already used platform invite code' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Get default contact columns and pipelines from admin settings
+      let defaultContactColumns = [
+        { key: 'company', label: 'Company', visible: true, isCustom: false },
+        { key: 'email', label: 'Email', visible: true, isCustom: false },
+        { key: 'phone', label: 'Phone', visible: true, isCustom: false },
+        { key: 'stage_id', label: 'Stage', visible: true, isCustom: false },
+        { key: 'assigned_to', label: 'Assignee', visible: true, isCustom: false },
+        { key: 'created_at', label: 'Created At', visible: false, isCustom: false },
+      ];
+      let defaultPipelines = [
+        {
+          name: 'Sales Pipeline',
+          stages: [
+            { name: 'New', color: '#6b7280' },
+            { name: 'Contacted', color: '#3b82f6' },
+            { name: 'Proposal', color: '#f59e0b' },
+            { name: 'Negotiation', color: '#8b5cf6' },
+            { name: 'Won', color: '#22c55e' },
+            { name: 'Lost', color: '#ef4444' },
+          ]
+        }
+      ];
+
+      try {
+        const [colRes, pipeRes] = await Promise.all([
+          client.query('SELECT value FROM platform_settings WHERE key=$1', ['default_contact_columns']),
+          client.query('SELECT value FROM platform_settings WHERE key=$1', ['default_pipelines'])
+        ]);
+        if (colRes.rows[0]) defaultContactColumns = colRes.rows[0].value;
+        if (pipeRes.rows[0]) defaultPipelines = pipeRes.rows[0].value;
+      } catch (e) {
+        // Use defaults if query fails
+      }
+
+      const { rows: [ws] } = await client.query(
+        'INSERT INTO workspaces (name, contact_columns) VALUES ($1, $2) RETURNING id',
+        [name.trim(), JSON.stringify(defaultContactColumns.filter(c => !c.isCustom))]
+      );
+
+      // Create default custom fields for contacts
+      const customFields = defaultContactColumns.filter(c => c.isCustom);
+      for (const field of customFields) {
+        await client.query(
+          'INSERT INTO custom_fields (workspace_id, name, field_key, type, options, position) VALUES ($1,$2,$3,$4,$5,$6)',
+          [ws.id, field.name, field.key, field.type, JSON.stringify(field.options || []), 0]
+        );
+      }
+
+      // Create default pipelines
+      for (const pipeline of defaultPipelines) {
+        const { rows: [p] } = await client.query(
+          'INSERT INTO pipelines (workspace_id, name, position) VALUES ($1,$2,0) RETURNING id',
+          [ws.id, pipeline.name]
+        );
+        for (let i = 0; i < (pipeline.stages || []).length; i++) {
+          const stage = pipeline.stages[i];
+          await client.query(
+            'INSERT INTO pipeline_stages (workspace_id, pipeline_id, name, color, position) VALUES ($1,$2,$3,$4,$5)',
+            [ws.id, p.id, stage.name, stage.color, i]
+          );
+        }
+      }
+
+      // Add current user to new workspace as owner
+      const { rows: [currentUser] } = await client.query('SELECT name, email FROM users WHERE id=$1', [req.userId]);
+      const { rows: [newUser] } = await client.query(
+        'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+        [ws.id, currentUser.name, currentUser.email, 'placeholder', 'owner']
+      );
+
+      await client.query(
+        'INSERT INTO user_workspaces (user_id, workspace_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
+        [newUser.id, ws.id, 'owner']
+      );
+
+      await client.query(
+        'UPDATE platform_invites SET used=1, used_by_workspace_id=$1 WHERE id=$2',
+        [ws.id, platformInvite.id]
+      );
+
+      await client.query('COMMIT');
+      res.status(201).json({ success: true, workspace_id: ws.id });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (e) { next(e); }
+});
 
 router.get('/members', async (req, res, next) => {
   try {

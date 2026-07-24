@@ -1,5 +1,11 @@
 // ── DEALS ─────────────────────────────────────────────────
 async function loadDeals() {
+  // Clear UI immediately to prevent showing stale data
+  const dealsBoard = document.getElementById('deals-board');
+  const dealsList = document.getElementById('deals-list-view');
+  if (dealsBoard) dealsBoard.innerHTML = '';
+  if (dealsList) dealsList.innerHTML = '';
+
   await ensureMembers();
   [pipelines, dealFields] = await Promise.all([
     api.get('/api/pipelines'),

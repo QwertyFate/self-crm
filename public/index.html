@@ -344,16 +344,7 @@
           <div class="page-header">
             <h1 data-i18n="page_contacts">Contacts</h1>
             <div style="display:flex;gap:8px;align-items:center">
-              <div class="view-toggle">
-                <button class="view-toggle-btn active" id="contact-view-kanban-btn" onclick="setContactViewMode('kanban')" title="Kanban view">
-                  <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="0" width="6" height="6" rx="1"/><rect x="8" y="0" width="6" height="6" rx="1"/><rect x="0" y="8" width="6" height="6" rx="1"/><rect x="8" y="8" width="6" height="6" rx="1"/></svg>
-                </button>
-                <button class="view-toggle-btn" id="contact-view-list-btn" onclick="setContactViewMode('list')" title="List view">
-                  <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="1" width="14" height="2.5" rx="1.25"/><rect x="0" y="5.75" width="14" height="2.5" rx="1.25"/><rect x="0" y="10.5" width="14" height="2.5" rx="1.25"/></svg>
-                </button>
-              </div>
-              <button class="btn btn-primary btn-sm" id="kanban-add-btn" onclick="openKanbanAddContactModal()" title="Add to Kanban">+ Add to Kanban</button>
-              <button class="btn btn-primary hidden" id="list-add-btn" onclick="openContactModal()" data-i18n="add_contact">+ Add Contact</button>
+              <button class="btn btn-primary" id="list-add-btn" onclick="openContactModal()" data-i18n="add_contact">+ Add Contact</button>
             </div>
           </div>
           <div class="toolbar">
@@ -367,14 +358,12 @@
               <button class="btn btn-sm filter-toggle-btn" id="filter-toggle-btn" onclick="toggleFilterPanel()">
                 ⊕ Filter <span id="filter-badge" class="filter-badge hidden">0</span>
               </button>
-              <button class="btn btn-sm hidden" id="kanban-add-stage-btn" onclick="openKanbanStageModal()">+ Add Stage</button>
               <button class="btn btn-sm" onclick="openImportModal()" data-i18n="import_csv">⬆ Import CSV</button>
               <button class="btn btn-sm" onclick="exportContactsCSV()" data-i18n="export_csv">⬇ Export CSV</button>
             </div>
           </div>
           <div id="filter-panel" class="filter-panel hidden"></div>
           <div id="filter-chips" class="filter-chips hidden"></div>
-          <div id="contacts-kanban-board" class="pipeline-board hidden"></div>
           <div id="contacts-table-wrap" class="table-wrap">
             <table class="table" id="contacts-table">
               <thead id="contacts-thead"></thead>
@@ -962,8 +951,13 @@
       <!-- ── Workspaces page ── -->
       <section id="page-workspaces" class="page" style="overflow-y:auto">
         <div class="page-header" style="flex-shrink:0">
-          <h1>Workspaces</h1>
-          <p style="color:var(--muted);font-size:13px;margin:4px 0 0">Switch between your workspaces or create a new one.</p>
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div>
+              <h1>Workspaces</h1>
+              <p style="color:var(--muted);font-size:13px;margin:4px 0 0">Switch between your workspaces or create a new one.</p>
+            </div>
+            <button class="btn btn-primary" onclick="openCreateWorkspaceModal()" style="flex-shrink: 0;">+ New Workspace</button>
+          </div>
         </div>
         <div id="workspaces-grid" class="ws-page-grid"></div>
       </section>

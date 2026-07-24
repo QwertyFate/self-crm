@@ -1459,6 +1459,18 @@ body {
 .intg-url-box { display:flex; gap:6px; align-items:center; }
 .intg-url-input { flex:1; font-size:12px; font-family:monospace; padding:7px 10px; border:1.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg); color:var(--text); }
 
+#intg-pipeline,
+#intg-stage,
+#intg-assignee {
+  max-width: 360px;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
+
 /* Field map */
 .intg-field-map { display:flex; flex-direction:column; gap:6px; }
 .intg-map-section-label {
@@ -1555,7 +1567,15 @@ body {
   padding-top: 10px;
   border-top: 1px dashed var(--border);
 }
-.intg-add-select { font-size: 13px; flex: 1; }
+.intg-add-select {
+  font-size: 13px;
+  flex: 1;
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+}
 
 /* Platform guides */
 .intg-guides { display:flex; flex-direction:column; gap:2px; }
