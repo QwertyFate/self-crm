@@ -603,18 +603,201 @@ async function logContactPanelNote(contactId) {
   contentEl?.focus();
 }
 
+const DEAL_NOTES_PREVIEW_COUNT = 5;
+
+const _timelineIcons = { note: '📝', call: '📞', email: '✉️', whatsapp: '💬' };
+
+const DEAL_NOTE_PREVIEW_LINES = 3;
+
+function _countNoteLines(html = '') {
+  const raw = String(html || '');
+  if (!raw.trim()) return 0;
+  // Count vertical breaks from Enter presses: <br>, block tags, and \n
+  const breaks = (raw.match(/<br\s*\/?>/gi) || []).length
+    + (raw.match(/<\/(div|p|li|h[1-6]|tr)>/gi) || []).length
+    + (raw.match(/\n/g) || []).length;
+  return Math.max(1, breaks + 1);
+}
+
+function renderTimelineItem(a, options = {}) {
+  const { fullContent = false } = options;
+  const shouldCollapse = !fullContent && _countNoteLines(a.content) > DEAL_NOTE_PREVIEW_LINES;
+  return `
+    <div class="deal-timeline-item" data-activity-id="${a.id}" onclick="inlineEditDealNote(${a.id}, this)">
+      <div class="deal-timeline-icon type-${a.type}">${_timelineIcons[a.type] || '📝'}</div>
+      <div class="deal-timeline-body">
+        <div class="deal-timeline-header">
+          <span class="deal-timeline-type type-${a.type}">${t('act_' + a.type)}</span>
+          <span class="deal-timeline-date">${fmtDate(a.created_at)}</span>
+        </div>
+        <div class="deal-timeline-content ${shouldCollapse ? 'collapsed' : ''}">${a.content}</div>
+        ${shouldCollapse ? '<button type="button" class="deal-note-expand-btn" onclick="event.stopPropagation();toggleDealNoteExpand(this)">Show more</button>' : ''}
+        ${a.logged_by_name ? `<div class="deal-timeline-author">${t('logged_by')} ${esc(a.logged_by_name)}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderDealTimeline(acts, showAll) {
+  if (!acts?.length) return `<p style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center">No activities yet. Click <strong>+ Add Note</strong> to get started.</p>`;
+  const visible = showAll ? acts : acts.slice(0, DEAL_NOTES_PREVIEW_COUNT);
+  return visible.map(a => renderTimelineItem(a, { fullContent: false })).join('');
+}
+
+function toggleDealNoteExpand(btn) {
+  const content = btn.closest('.deal-timeline-body')?.querySelector('.deal-timeline-content');
+  if (!content) return;
+  const isCollapsed = content.classList.toggle('collapsed');
+  btn.textContent = isCollapsed ? 'Show more' : 'Show less';
+}
+
 async function loadDealActivities(contactId) {
   const container = document.getElementById('deal-activities-list');
   if (!container) return;
   container.dataset.contactId = contactId;
   try {
     const c = await api.get(`/api/contacts/${contactId}`);
-    container.innerHTML = c.activities && c.activities.length > 0
-      ? renderMiniActs(c.activities)
-      : `<p style="color:var(--muted);font-size:12px">No activities yet.</p>`;
+    container.innerHTML = renderDealTimeline(c.activities, false);
+    updateShowAllBtn(c.activities?.length || 0);
   } catch (e) {
     console.error('Error loading activities:', e);
     container.innerHTML = `<p style="color:var(--danger);font-size:13px">Error loading activities.</p>`;
+  }
+}
+
+function updateShowAllBtn(total) {
+  const btn = document.getElementById('deal-show-all-btn');
+  if (!btn) return;
+  btn.style.display = '';
+  btn.textContent = total > 0 ? `Show All (${total})` : 'Show All';
+}
+
+async function toggleShowAllDealNotes() {
+  const contactId = document.getElementById('deal-activity-deal-id')?.value;
+  if (!contactId) return;
+  try {
+    const c = await api.get(`/api/contacts/${parseInt(contactId)}`);
+    openAllNotesModal(c.activities || []);
+  } catch (e) {
+    console.error('Error loading all notes:', e);
+  }
+}
+
+function openAllNotesModal(acts) {
+  document.getElementById('all-notes-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'all-notes-modal';
+  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+  const items = acts?.length
+    ? acts.map(a => renderTimelineItem(a, { fullContent: true })).join('')
+    : `<p style="color:var(--muted);font-size:13px;padding:40px 0;text-align:center">No activities yet.</p>`;
+  modal.innerHTML = `
+    <div class="modal" style="max-width:720px;width:92vw;max-height:85vh;display:flex;flex-direction:column">
+      <div class="modal-header" style="flex-shrink:0">
+        <h2>All Notes & Activities</h2>
+        <button class="close-btn" onclick="document.getElementById('all-notes-modal')?.remove()">&times;</button>
+      </div>
+      <div class="deal-timeline" style="flex:1;overflow-y:auto;padding:18px 24px">${items}</div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function inlineEditDealNote(activityId, el) {
+  if (el.classList.contains('editing')) return;
+  const activity = await api.get(`/api/activities/${activityId}`);
+  if (!activity) return;
+
+  window.currentEditActivityId = activityId;
+  const contactId = document.getElementById('deal-activities-list')?.dataset.contactId
+    || document.getElementById('deal-activity-deal-id')?.value;
+  window.currentEditActivityContactId = contactId;
+
+  el.classList.add('editing');
+  el.onclick = null;
+  el.innerHTML = `
+    <div class="deal-timeline-icon type-${activity.type}">${_timelineIcons[activity.type] || '📝'}</div>
+    <div class="deal-timeline-body" style="width:100%">
+      <select class="inline-edit-type" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;margin-bottom:6px;background:var(--input-bg);color:var(--text);font-size:12px">
+        <option value="note" ${activity.type === 'note' ? 'selected' : ''}>Note</option>
+        <option value="call" ${activity.type === 'call' ? 'selected' : ''}>Call</option>
+        <option value="email" ${activity.type === 'email' ? 'selected' : ''}>Email</option>
+        <option value="whatsapp" ${activity.type === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
+      </select>
+      <div class="note-editor-toolbar" style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap">
+        <button type="button" class="fmt-btn" onclick="event.stopPropagation();document.execCommand('bold',false,null)" title="Bold"><strong>B</strong></button>
+        <button type="button" class="fmt-btn" onclick="event.stopPropagation();document.execCommand('italic',false,null)" title="Italic"><em>I</em></button>
+        <button type="button" class="fmt-btn" onclick="event.stopPropagation();document.execCommand('underline',false,null)" title="Underline"><u>U</u></button>
+      </div>
+      <div class="note-editor inline-edit-content" contenteditable="true" style="min-height:60px;font-size:13px"
+        onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();saveInlineEdit(this.closest('.deal-timeline-item'));}">${activity.content}</div>
+      <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end">
+        <button class="btn btn-sm" onclick="event.stopPropagation();cancelInlineEdit()">Cancel</button>
+        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteInlineEdit()">Delete</button>
+        <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();saveInlineEdit(this.closest('.deal-timeline-item'))">Save</button>
+      </div>
+      <div style="color:var(--muted);font-size:11px;margin-top:6px">${activity.logged_by_name ? `${t('logged_by')} ${esc(activity.logged_by_name)} · ` : ''}${fmtDate(activity.created_at)}</div>
+    </div>`;
+  el.querySelector('.inline-edit-content')?.focus();
+  const editor = el.querySelector('.inline-edit-content');
+  if (editor) {
+    editor.focus();
+    // Place caret at end so the insertion point is immediately visible
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}
+
+async function saveInlineEdit(el) {
+  if (!el) return;
+  const content = el.querySelector('.inline-edit-content')?.innerHTML.trim();
+  const type = el.querySelector('.inline-edit-type')?.value || 'note';
+  if (!content || content === '<br>') { alert('Please enter some content'); return; }
+  const activityId = window.currentEditActivityId;
+  const contactId = window.currentEditActivityContactId;
+  await api.patch(`/api/activities/${activityId}`, { type, content });
+  if (contactId) await loadDealActivities(parseInt(contactId));
+  refreshAllNotesModal(contactId);
+}
+
+function cancelInlineEdit() {
+  const contactId = window.currentEditActivityContactId || document.getElementById('deal-activity-deal-id')?.value;
+  if (contactId) loadDealActivities(parseInt(contactId));
+}
+
+async function deleteInlineEdit() {
+  const activityId = window.currentEditActivityId;
+  const contactId = window.currentEditActivityContactId;
+  if (!confirm('Delete this activity? This cannot be undone.')) return;
+  await api.delete(`/api/activities/${activityId}`);
+  if (contactId) await loadDealActivities(parseInt(contactId));
+  refreshAllNotesModal(contactId);
+}
+
+async function refreshAllNotesModal(contactId) {
+  const modal = document.getElementById('all-notes-modal');
+  if (!modal || !contactId) return;
+  try {
+    const c = await api.get(`/api/contacts/${parseInt(contactId)}`);
+    const timeline = modal.querySelector('.deal-timeline');
+    if (timeline) {
+      const acts = c.activities || [];
+      timeline.innerHTML = acts.length
+        ? acts.map(a => renderTimelineItem(a, { fullContent: true })).join('')
+        : `<p style="color:var(--muted);font-size:13px;padding:40px 0;text-align:center">No activities yet.</p>`;
+    }
+  } catch(e) { console.error(e); }
+}
+
+function toggleDealNoteForm() {
+  const wrapper = document.getElementById('deal-note-form-wrapper');
+  if (!wrapper) return;
+  wrapper.classList.toggle('hidden');
+  if (!wrapper.classList.contains('hidden')) {
+    document.getElementById('deal-activity-content')?.focus();
   }
 }
 
@@ -633,8 +816,9 @@ async function saveDealActivity() {
   const type = document.getElementById('deal-activity-type')?.value || 'note';
   await api.post('/api/activities', { contact_id: parseInt(contactId), type, content });
   contentEl.innerHTML = '';
+  const wrapper = document.getElementById('deal-note-form-wrapper');
+  if (wrapper) wrapper.classList.add('hidden');
   await loadDealActivities(parseInt(contactId));
-  contentEl?.focus();
 }
 
 async function editContactPanel(contactId) {
@@ -696,6 +880,8 @@ function onDealContactChange() {
 }
 
 async function openDealModal(id) {
+  const noteFormW = document.getElementById('deal-note-form-wrapper');
+  if (noteFormW) noteFormW.classList.add('hidden');
   document.getElementById('deal-form').reset();
   document.getElementById('deal-id').value = id || '';
   document.getElementById('deal-modal-title').textContent = id ? 'Edit Deal' : 'Add Deal';
