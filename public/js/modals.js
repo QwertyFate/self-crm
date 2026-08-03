@@ -668,6 +668,166 @@ const DEAL_NOTES_PREVIEW_COUNT = 5;
 
 const _timelineIcons = { note: '📝', call: '📞', email: '✉️', whatsapp: '💬' };
 
+// ── @Mention Autocomplete ─────────────────────────────────
+let mentionTimeout = null;
+let mentionEl = null;
+
+// Close mention dropdown on any click outside the dropdown
+document.addEventListener('mousedown', e => {
+  if (mentionEl && !e.target.closest('#mention-autocomplete')) {
+    closeMentionAutocomplete();
+  }
+});
+
+function closeMentionAutocomplete() {
+  if (mentionEl) {
+    mentionEl.remove();
+    mentionEl = null;
+  }
+  if (mentionTimeout) { clearTimeout(mentionTimeout); mentionTimeout = null; }
+}
+
+// Global delegation: any .note-editor or .inline-edit-content gets mention support
+document.addEventListener('input', e => {
+  const editor = e.target.closest('.note-editor, .inline-edit-content');
+  if (!editor || !editor.isContentEditable) return;
+  if (mentionTimeout) clearTimeout(mentionTimeout);
+  mentionTimeout = setTimeout(() => checkForMention(editor), 180);
+});
+
+document.addEventListener('keydown', e => {
+  if (!mentionEl) return;
+  const editor = e.target.closest('.note-editor, .inline-edit-content');
+  if (!editor) { closeMentionAutocomplete(); return; }
+
+  if (e.key === 'Escape') {
+    closeMentionAutocomplete();
+    return;
+  }
+  
+  // If space or backspace is pressed while dropdown is open, close it
+  if (e.key === ' ' || e.key === 'Backspace') {
+    closeMentionAutocomplete();
+    return;
+  }
+
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+    const items = mentionEl.querySelectorAll('.mention-item');
+    const active = mentionEl.querySelector('.mention-item.active');
+    let idx = Array.from(items).indexOf(active);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = (idx + 1) % items.length;
+      items.forEach(i => i.classList.remove('active'));
+      items[next].classList.add('active');
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prev = (idx - 1 + items.length) % items.length;
+      items.forEach(i => i.classList.remove('active'));
+      items[prev].classList.add('active');
+    } else if (e.key === 'Enter' && active) {
+      e.preventDefault();
+      selectMention(editor, active);
+    }
+  }
+});
+
+function checkForMention(editor) {
+  // Find the @ symbol in the text before cursor
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !editor.contains(sel.anchorNode)) { closeMentionAutocomplete(); return; }
+
+  const textNode = sel.anchorNode;
+  if (textNode.nodeType !== 3) { closeMentionAutocomplete(); return; }
+  
+  const text = textNode.textContent || '';
+  const cursorOffset = sel.anchorOffset;
+  const textBefore = text.slice(0, cursorOffset);
+
+  // Look for @word at cursor position (word chars only)
+  const match = textBefore.match(/@(\w*)$/);
+  if (!match) {
+    closeMentionAutocomplete();
+    return;
+  }
+
+  const query = match[1] || '';
+  showMentionDropdown(editor, query);
+}
+
+function showMentionDropdown(editor, query) {
+  closeMentionAutocomplete();
+  if (!members.length) return;
+
+  const filtered = members.filter(m =>
+    m.name.toLowerCase().includes(query.toLowerCase())
+  );
+  if (!filtered.length) return;
+
+  const rect = editor.getBoundingClientRect();
+
+  mentionEl = document.createElement('div');
+  mentionEl.id = 'mention-autocomplete';
+  mentionEl.className = 'mention-autocomplete';
+  mentionEl.innerHTML = filtered.map(m => `
+    <div class="mention-item" data-name="${esc(m.name)}" data-id="${m.id}">
+      <span class="mention-item-avatar">${esc(m.name[0]?.toUpperCase() || '?')}</span>
+      <span class="mention-item-name">${esc(m.name)}</span>
+      ${m.id === currentUser?.id ? '<span class="mention-item-you">(you)</span>' : ''}
+    </div>
+  `).join('');
+  if (mentionEl.firstElementChild) mentionEl.firstElementChild.classList.add('active');
+  mentionEl.style.left = `${rect.left + 16}px`;
+  mentionEl.style.top = `${rect.top - Math.min(filtered.length * 36 + 8, 200)}px`;
+
+  mentionEl.querySelectorAll('.mention-item').forEach(item => {
+    item.addEventListener('mousedown', e => {
+      e.preventDefault();
+      selectMention(editor, item);
+    });
+    item.addEventListener('mouseenter', () => {
+      mentionEl.querySelectorAll('.mention-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+    });
+  });
+
+  document.body.appendChild(mentionEl);
+}
+
+function selectMention(editor, item) {
+  const name = item.dataset.name;
+  closeMentionAutocomplete();
+  
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  
+  const textNode = sel.anchorNode;
+  if (textNode.nodeType !== 3) return;
+  
+  const text = textNode.textContent || '';
+  const offset = sel.anchorOffset;
+  const before = text.slice(0, offset);
+  const after = text.slice(offset);
+  
+  // Find the last @ before cursor
+  const atIdx = before.lastIndexOf('@');
+  if (atIdx === -1) return;
+  
+  // Replace everything from @ to cursor with @Name 
+  const newText = before.slice(0, atIdx) + '@' + name + ' ' + after;
+  textNode.textContent = newText;
+  
+  // Place cursor after the inserted name
+  const newOffset = atIdx + name.length + 2;
+  const range = document.createRange();
+  range.setStart(textNode, Math.min(newOffset, newText.length));
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  editor.focus();
+}
+
 const DEAL_NOTE_PREVIEW_LINES = 3;
 
 function _countNoteLines(html = '') {
