@@ -1166,6 +1166,166 @@ body {
 .deal-timeline-content u { text-decoration: underline; }
 .deal-timeline-content ul, .deal-timeline-content ol { margin-left: 16px; margin-top: 4px; }
 .deal-timeline-author { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+/* ── Deal comment section (threaded comments on notes) ── */
+.deal-comment-section {
+  margin-top: 6px;
+  padding-top: 4px;
+}
+.deal-comment-toggle-btn {
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+  opacity: 0;
+}
+.deal-timeline-item:hover .deal-comment-toggle-btn {
+  opacity: 1;
+  color: var(--primary);
+}
+.deal-comment-toggle-btn:hover {
+  background: var(--primary-light);
+}
+.deal-comments-container {
+  margin-top: 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+}
+.deal-comment {
+  padding: 4px 0;
+  margin-bottom: 4px;
+}
+.deal-comment-author {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  display: inline;
+}
+.deal-comment-date {
+  font-size: 10px;
+  color: var(--muted);
+  display: inline;
+  margin-left: 6px;
+}
+.deal-comment-content {
+  font-size: 12px;
+  color: var(--text);
+  margin: 2px 0;
+  word-wrap: break-word;
+}
+.deal-comment-reply-btn {
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-block;
+  padding: 1px 4px;
+  border-radius: 3px;
+  transition: background 0.15s, color 0.15s;
+}
+.deal-comment-reply-btn:hover {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+.deal-comment-nested {
+  margin-left: 14px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.deal-comment-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+.deal-comment-input {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+  background: var(--input-bg);
+  color: var(--text);
+  outline: none;
+}
+.deal-comment-input:focus {
+  border-color: var(--primary);
+}
+.deal-comment-submit {
+  font-size: 11px;
+  padding: 4px 10px;
+  flex-shrink: 0;
+}
+.deal-comment-reply-form-container {
+  margin-top: 0;
+}
+/* ── Contact timeline and note form (same as deal modal) ── */
+.contact-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+}
+.contact-note-form-wrapper {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--card-bg);
+}
+.contact-note-form-wrapper.hidden {
+  display: none;
+}
+
+/* ── @Mention Autocomplete ── */
+.mention-autocomplete {
+  position: fixed;
+  z-index: 10001;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.15);
+  max-height: 200px;
+  overflow-y: auto;
+  min-width: 160px;
+  padding: 4px 0;
+}
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+  transition: background .1s;
+}
+.mention-item.active,
+.mention-item:hover {
+  background: var(--primary-light);
+}
+.mention-item-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.mention-item-name {
+  flex: 1;
+}
+.mention-item-you {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+
 .deal-note-expand-btn {
   margin-top: 6px; padding: 0; border: none; background: transparent;
   color: var(--primary); font-size: 12px; font-weight: 600; cursor: pointer;

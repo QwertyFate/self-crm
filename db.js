@@ -398,6 +398,19 @@ async function initDb() {
     )
   `);
 
+  // Activity comments (threaded comments on notes/activities)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS activity_comments (
+      id           SERIAL PRIMARY KEY,
+      activity_id  INTEGER NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+      parent_id    INTEGER REFERENCES activity_comments(id) ON DELETE CASCADE,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      content      TEXT NOT NULL,
+      created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   // Allow whatsapp as an activity type
   try {
     await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);

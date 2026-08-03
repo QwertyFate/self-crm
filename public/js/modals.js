@@ -121,26 +121,39 @@ function buildDetailHTML(c, contactDeals, id) {
       <div class="contact-deals-list" id="contact-deals-list">${renderContactDeals(contactDeals)}</div>
     </div>
     <div class="detail-section">
-      <h3>${t('detail_activities')}</h3>
-      <div class="mini-acts" id="detail-acts" data-contact-id="${id}">${renderMiniActs(c.activities)}</div>
-    </div>
-    <div class="inline-log">
-      <select id="inline-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;background:var(--input-bg);color:var(--text)">
-        <option value="note">${t('act_note')}</option><option value="call">${t('act_call')}</option>
-        <option value="email">${t('act_email')}</option><option value="whatsapp">${t('act_whatsapp')}</option>
-      </select>
-      <div class="note-editor-toolbar" style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
-        <button type="button" class="fmt-btn" onclick="formatInlineNote('bold')" title="Bold"><strong>B</strong></button>
-        <button type="button" class="fmt-btn" onclick="formatInlineNote('italic')" title="Italic"><em>I</em></button>
-        <button type="button" class="fmt-btn" onclick="formatInlineNote('underline')" title="Underline"><u>U</u></button>
-        <div style="width:1px;background:var(--border)"></div>
-        <button type="button" class="fmt-btn" onclick="formatInlineNote('insertUnorderedList')" title="List">• List</button>
-        <button type="button" class="fmt-btn" onclick="formatInlineNote('createLink')" title="Link">🔗 Link</button>
-        <button type="button" class="fmt-btn" onclick="formatInlineNote('removeFormat')" title="Clear">✕ Clear</button>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <h3>${t('detail_activities')}</h3>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="btn btn-sm btn-primary" onclick="toggleContactNoteForm(${id})">+ Add Note</button>
+          <button type="button" class="btn btn-sm" onclick="toggleContactShowAllNotes(${id})" id="contact-show-all-btn">Show All</button>
+        </div>
       </div>
-      <div id="inline-content" class="note-editor" contenteditable="true" placeholder="${t('detail_log_ph')}"
-        onkeydown="if(event.key==='Enter' && event.ctrlKey){event.preventDefault();logInlineActivity(${id});}"></div>
-      <button class="btn btn-primary" style="width:100%;margin-top:8px" onclick="logInlineActivity(${id})">${t('btn_log')} (Ctrl+Enter)</button>
+      <!-- Collapsible add-note form -->
+      <div id="contact-note-form-wrapper" class="contact-note-form-wrapper hidden">
+        <input type="hidden" id="contact-activity-contact-id" value="${id}" />
+        <select id="contact-activity-type" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;background:var(--input-bg);color:var(--text)">
+          <option value="note">Note</option>
+          <option value="call">Call</option>
+          <option value="email">Email</option>
+          <option value="whatsapp">WhatsApp</option>
+        </select>
+        <div class="note-editor-toolbar" style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
+          <button type="button" class="fmt-btn" onclick="formatContactActivityNote('bold')" title="Bold"><strong>B</strong></button>
+          <button type="button" class="fmt-btn" onclick="formatContactActivityNote('italic')" title="Italic"><em>I</em></button>
+          <button type="button" class="fmt-btn" onclick="formatContactActivityNote('underline')" title="Underline"><u>U</u></button>
+          <div style="width:1px;background:var(--border)"></div>
+          <button type="button" class="fmt-btn" onclick="formatContactActivityNote('insertUnorderedList')" title="List">• List</button>
+          <button type="button" class="fmt-btn" onclick="formatContactActivityNote('createLink')" title="Link">🔗 Link</button>
+          <button type="button" class="fmt-btn" onclick="formatContactActivityNote('removeFormat')" title="Clear">✕ Clear</button>
+        </div>
+        <div id="contact-activity-content" class="note-editor" contenteditable="true" placeholder="Add note, call, or email…"
+          onkeydown="if(event.key==='Enter' && event.ctrlKey){event.preventDefault();saveContactActivity();}"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button type="button" class="btn btn-primary" style="flex:1" onclick="saveContactActivity()">Log (Ctrl+Enter)</button>
+          <button type="button" class="btn" onclick="toggleContactNoteForm()">Cancel</button>
+        </div>
+      </div>
+      <div class="contact-timeline" id="detail-acts" data-contact-id="${id}">${renderDealTimeline(c.activities, false)}</div>
     </div>
     <div class="detail-actions">
       <button class="btn btn-danger btn-sm" onclick="deleteContact(${id})">${t('btn_delete')}</button>
@@ -287,7 +300,55 @@ async function logInlineActivity(contactId) {
   await api.post('/api/activities', { contact_id: contactId, type: document.getElementById('inline-type').value, content });
   contentEl.innerHTML = '';
   const c = await api.get(`/api/contacts/${contactId}`);
-  document.getElementById('detail-acts').innerHTML = renderMiniActs(c.activities);
+  const actsEl = document.getElementById('detail-acts');
+  if (actsEl) {
+    actsEl.innerHTML = renderDealTimeline(c.activities, false);
+  }
+}
+
+// ── Contact panel note form (same pattern as deal modal) ──
+function toggleContactNoteForm(contactId) {
+  const wrapper = document.getElementById('contact-note-form-wrapper');
+  if (!wrapper) return;
+  wrapper.classList.toggle('hidden');
+  if (!wrapper.classList.contains('hidden')) {
+    document.getElementById('contact-activity-content')?.focus();
+  }
+}
+
+function formatContactActivityNote(cmd) {
+  document.execCommand(cmd, false, null);
+  document.getElementById('contact-activity-content')?.focus();
+}
+
+async function saveContactActivity() {
+  const contactId = document.getElementById('contact-activity-contact-id').value;
+  if (!contactId) { console.error('No contactId'); return; }
+  const contentEl = document.getElementById('contact-activity-content');
+  if (!contentEl) { console.error('contact-activity-content not found'); return; }
+  const content = contentEl.innerHTML.trim();
+  if (!content || content === '<br>') return;
+  const type = document.getElementById('contact-activity-type')?.value || 'note';
+  await api.post('/api/activities', { contact_id: parseInt(contactId), type, content });
+  contentEl.innerHTML = '';
+  const wrapper = document.getElementById('contact-note-form-wrapper');
+  if (wrapper) wrapper.classList.add('hidden');
+  // Reload timeline
+  const c = await api.get(`/api/contacts/${parseInt(contactId)}`);
+  const actsEl = document.getElementById('detail-acts');
+  if (actsEl) {
+    actsEl.innerHTML = renderDealTimeline(c.activities, false);
+  }
+}
+
+async function toggleContactShowAllNotes(contactId) {
+  if (!contactId) return;
+  try {
+    const c = await api.get(`/api/contacts/${parseInt(contactId)}`);
+    openAllNotesModal(c.activities || []);
+  } catch (e) {
+    console.error('Error loading all notes:', e);
+  }
 }
 
 async function editActivity(activityId) {
@@ -480,7 +541,7 @@ async function deleteActivityConfirmed() {
   const activityId = window.currentEditActivityId;
   const contactId = window.currentEditActivityContactId;
   if (activityId) {
-    await api.delete(`/api/activities/${activityId}`);
+    await api.del(`/api/activities/${activityId}`);
     if (contactId) {
       const dealModal = document.getElementById('deal-modal');
       if (dealModal && !dealModal.classList.contains('hidden')) {
@@ -607,6 +668,166 @@ const DEAL_NOTES_PREVIEW_COUNT = 5;
 
 const _timelineIcons = { note: '📝', call: '📞', email: '✉️', whatsapp: '💬' };
 
+// ── @Mention Autocomplete ─────────────────────────────────
+let mentionTimeout = null;
+let mentionEl = null;
+
+// Close mention dropdown on any click outside the dropdown
+document.addEventListener('mousedown', e => {
+  if (mentionEl && !e.target.closest('#mention-autocomplete')) {
+    closeMentionAutocomplete();
+  }
+});
+
+function closeMentionAutocomplete() {
+  if (mentionEl) {
+    mentionEl.remove();
+    mentionEl = null;
+  }
+  if (mentionTimeout) { clearTimeout(mentionTimeout); mentionTimeout = null; }
+}
+
+// Global delegation: any .note-editor or .inline-edit-content gets mention support
+document.addEventListener('input', e => {
+  const editor = e.target.closest('.note-editor, .inline-edit-content');
+  if (!editor || !editor.isContentEditable) return;
+  if (mentionTimeout) clearTimeout(mentionTimeout);
+  mentionTimeout = setTimeout(() => checkForMention(editor), 180);
+});
+
+document.addEventListener('keydown', e => {
+  if (!mentionEl) return;
+  const editor = e.target.closest('.note-editor, .inline-edit-content');
+  if (!editor) { closeMentionAutocomplete(); return; }
+
+  if (e.key === 'Escape') {
+    closeMentionAutocomplete();
+    return;
+  }
+  
+  // If space or backspace is pressed while dropdown is open, close it
+  if (e.key === ' ' || e.key === 'Backspace') {
+    closeMentionAutocomplete();
+    return;
+  }
+
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+    const items = mentionEl.querySelectorAll('.mention-item');
+    const active = mentionEl.querySelector('.mention-item.active');
+    let idx = Array.from(items).indexOf(active);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const next = (idx + 1) % items.length;
+      items.forEach(i => i.classList.remove('active'));
+      items[next].classList.add('active');
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prev = (idx - 1 + items.length) % items.length;
+      items.forEach(i => i.classList.remove('active'));
+      items[prev].classList.add('active');
+    } else if (e.key === 'Enter' && active) {
+      e.preventDefault();
+      selectMention(editor, active);
+    }
+  }
+});
+
+function checkForMention(editor) {
+  // Find the @ symbol in the text before cursor
+  const sel = window.getSelection();
+  if (!sel.rangeCount || !editor.contains(sel.anchorNode)) { closeMentionAutocomplete(); return; }
+
+  const textNode = sel.anchorNode;
+  if (textNode.nodeType !== 3) { closeMentionAutocomplete(); return; }
+  
+  const text = textNode.textContent || '';
+  const cursorOffset = sel.anchorOffset;
+  const textBefore = text.slice(0, cursorOffset);
+
+  // Look for @word at cursor position (word chars only)
+  const match = textBefore.match(/@(\w*)$/);
+  if (!match) {
+    closeMentionAutocomplete();
+    return;
+  }
+
+  const query = match[1] || '';
+  showMentionDropdown(editor, query);
+}
+
+function showMentionDropdown(editor, query) {
+  closeMentionAutocomplete();
+  if (!members.length) return;
+
+  const filtered = members.filter(m =>
+    m.name.toLowerCase().includes(query.toLowerCase())
+  );
+  if (!filtered.length) return;
+
+  const rect = editor.getBoundingClientRect();
+
+  mentionEl = document.createElement('div');
+  mentionEl.id = 'mention-autocomplete';
+  mentionEl.className = 'mention-autocomplete';
+  mentionEl.innerHTML = filtered.map(m => `
+    <div class="mention-item" data-name="${esc(m.name)}" data-id="${m.id}">
+      <span class="mention-item-avatar">${esc(m.name[0]?.toUpperCase() || '?')}</span>
+      <span class="mention-item-name">${esc(m.name)}</span>
+      ${m.id === currentUser?.id ? '<span class="mention-item-you">(you)</span>' : ''}
+    </div>
+  `).join('');
+  if (mentionEl.firstElementChild) mentionEl.firstElementChild.classList.add('active');
+  mentionEl.style.left = `${rect.left + 16}px`;
+  mentionEl.style.top = `${rect.top - Math.min(filtered.length * 36 + 8, 200)}px`;
+
+  mentionEl.querySelectorAll('.mention-item').forEach(item => {
+    item.addEventListener('mousedown', e => {
+      e.preventDefault();
+      selectMention(editor, item);
+    });
+    item.addEventListener('mouseenter', () => {
+      mentionEl.querySelectorAll('.mention-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+    });
+  });
+
+  document.body.appendChild(mentionEl);
+}
+
+function selectMention(editor, item) {
+  const name = item.dataset.name;
+  closeMentionAutocomplete();
+  
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  
+  const textNode = sel.anchorNode;
+  if (textNode.nodeType !== 3) return;
+  
+  const text = textNode.textContent || '';
+  const offset = sel.anchorOffset;
+  const before = text.slice(0, offset);
+  const after = text.slice(offset);
+  
+  // Find the last @ before cursor
+  const atIdx = before.lastIndexOf('@');
+  if (atIdx === -1) return;
+  
+  // Replace everything from @ to cursor with @Name 
+  const newText = before.slice(0, atIdx) + '@' + name + ' ' + after;
+  textNode.textContent = newText;
+  
+  // Place cursor after the inserted name
+  const newOffset = atIdx + name.length + 2;
+  const range = document.createRange();
+  range.setStart(textNode, Math.min(newOffset, newText.length));
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  editor.focus();
+}
+
 const DEAL_NOTE_PREVIEW_LINES = 3;
 
 function _countNoteLines(html = '') {
@@ -633,6 +854,14 @@ function renderTimelineItem(a, options = {}) {
         <div class="deal-timeline-content ${shouldCollapse ? 'collapsed' : ''}">${a.content}</div>
         ${shouldCollapse ? '<button type="button" class="deal-note-expand-btn" onclick="event.stopPropagation();toggleDealNoteExpand(this)">Show more</button>' : ''}
         ${a.logged_by_name ? `<div class="deal-timeline-author">${t('logged_by')} ${esc(a.logged_by_name)}</div>` : ''}
+        <div class="deal-comment-section" onclick="event.stopPropagation()">
+          <div class="deal-comment-toggle-btn" onclick="event.stopPropagation();toggleActivityComments(${a.id}, this)">
+            💬 Comment
+          </div>
+          <div class="deal-comments-container" id="deal-comments-${a.id}" style="display:none">
+            <div class="deal-comments-loading" style="color:var(--muted);font-size:12px;padding:4px 0">Loading comments...</div>
+          </div>
+        </div>
       </div>
     </div>`;
 }
@@ -759,21 +988,51 @@ async function saveInlineEdit(el) {
   const activityId = window.currentEditActivityId;
   const contactId = window.currentEditActivityContactId;
   await api.patch(`/api/activities/${activityId}`, { type, content });
-  if (contactId) await loadDealActivities(parseInt(contactId));
+  if (contactId) {
+    // Check if we're in deal modal or contact side panel, refresh accordingly
+    const dealModal = document.getElementById('deal-modal');
+    if (dealModal && !dealModal.classList.contains('hidden')) {
+      await loadDealActivities(parseInt(contactId));
+    } else {
+      const c = await api.get(`/api/contacts/${parseInt(contactId)}`);
+      const actsEl = document.getElementById('detail-acts');
+      if (actsEl) actsEl.innerHTML = renderDealTimeline(c.activities, false);
+    }
+  }
   refreshAllNotesModal(contactId);
 }
 
 function cancelInlineEdit() {
   const contactId = window.currentEditActivityContactId || document.getElementById('deal-activity-deal-id')?.value;
-  if (contactId) loadDealActivities(parseInt(contactId));
+  if (contactId) {
+    const dealModal = document.getElementById('deal-modal');
+    if (dealModal && !dealModal.classList.contains('hidden')) {
+      loadDealActivities(parseInt(contactId));
+    } else {
+      refreshContactTimeline(parseInt(contactId));
+    }
+  }
+}
+
+async function refreshContactTimeline(contactId) {
+  const c = await api.get(`/api/contacts/${contactId}`);
+  const actsEl = document.getElementById('detail-acts');
+  if (actsEl) actsEl.innerHTML = renderDealTimeline(c.activities, false);
 }
 
 async function deleteInlineEdit() {
   const activityId = window.currentEditActivityId;
   const contactId = window.currentEditActivityContactId;
   if (!confirm('Delete this activity? This cannot be undone.')) return;
-  await api.delete(`/api/activities/${activityId}`);
-  if (contactId) await loadDealActivities(parseInt(contactId));
+  await api.del(`/api/activities/${activityId}`);
+  if (contactId) {
+    const dealModal = document.getElementById('deal-modal');
+    if (dealModal && !dealModal.classList.contains('hidden')) {
+      await loadDealActivities(parseInt(contactId));
+    } else {
+      await refreshContactTimeline(parseInt(contactId));
+    }
+  }
   refreshAllNotesModal(contactId);
 }
 
@@ -1091,4 +1350,120 @@ async function saveActivity(e) {
   });
   closeModal('activity-modal');
   if (document.getElementById('page-activities').classList.contains('active')) loadActivities();
+}
+
+// ── ACTIVITY COMMENTS (threaded comments on notes) ────────
+async function toggleActivityComments(activityId, btn) {
+  // Find the container relative to the clicked button, not by global ID
+  // This ensures it works even when the same activity appears in multiple modals
+  const timelineItem = btn.closest('.deal-timeline-item');
+  if (!timelineItem) return;
+  const container = timelineItem.querySelector('.deal-comments-container');
+  if (!container) return;
+  const isVisible = container.style.display !== 'none';
+  if (isVisible) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+  await renderActivityComments(activityId, container);
+}
+
+async function renderActivityComments(activityId, container) {
+  if (!container) {
+    container = document.getElementById(`deal-comments-${activityId}`);
+  }
+  if (!container) return;
+  container.innerHTML = '<div class="deal-comments-loading" style="color:var(--muted);font-size:12px;padding:4px 0">Loading comments...</div>';
+  try {
+    const comments = await api.get(`/api/activity-comments?activity_id=${activityId}`);
+    container.innerHTML = renderCommentTree(comments, activityId, null);
+    // Add the comment form at the bottom
+    container.innerHTML += commentFormHTML(activityId, null);
+  } catch (e) {
+    console.error('Error loading comments:', e);
+    container.innerHTML = '<div style="color:var(--danger);font-size:12px">Error loading comments.</div>';
+  }
+}
+
+function renderCommentTree(comments, activityId, parentId) {
+  if (!comments || !comments.length) return '';
+  return comments.map(c => {
+    const childrenHtml = c.children && c.children.length
+      ? `<div class="deal-comment-nested">${renderCommentTree(c.children, activityId, c.id)}</div>`
+      : '';
+    return `
+      <div class="deal-comment" data-comment-id="${c.id}">
+        <div class="deal-comment-author">${esc(c.created_by_name || 'Unknown')}</div>
+        <div class="deal-comment-date">${fmtDate(c.created_at)}</div>
+        <div class="deal-comment-content">${esc(c.content)}</div>
+        <div class="deal-comment-reply-btn" onclick="event.stopPropagation();showCommentReplyForm(${activityId}, ${c.id}, this)">↳ Reply</div>
+        ${childrenHtml}
+        <div class="deal-comment-reply-form-container" id="reply-form-${c.id}" style="display:none"></div>
+      </div>`;
+  }).join('');
+}
+
+function commentFormHTML(activityId, parentId) {
+  const idSuffix = parentId ? `reply-${parentId}` : `top-${activityId}`;
+  return `
+    <div class="deal-comment-form" data-parent-id="${parentId || ''}">
+      <input type="text" class="deal-comment-input" id="comment-input-${idSuffix}"
+        placeholder="${parentId ? 'Write a reply…' : 'Write a comment…'}"
+        onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();submitComment(${activityId}, ${parentId || 'null'}, this.value)}" />
+      <button class="btn btn-sm btn-primary deal-comment-submit" onclick="submitComment(${activityId}, ${parentId || 'null'}, this.previousElementSibling.value)">Send</button>
+    </div>`;
+}
+
+function showCommentReplyForm(activityId, parentId, el) {
+  const container = document.getElementById(`reply-form-${parentId}`);
+  if (!container) return;
+  const isVisible = container.style.display !== 'none';
+  if (isVisible) {
+    // Hide reply form and restore top-level comment form
+    container.style.display = 'none';
+    const timelineItem = el.closest('.deal-timeline-item');
+    if (timelineItem) {
+      const topForm = timelineItem.querySelector('.deal-comment-form[data-parent-id=""]');
+      if (topForm) topForm.style.display = '';
+    }
+    return;
+  }
+  // Hide the top-level comment form when showing a reply form
+  const timelineItem = el.closest('.deal-timeline-item');
+  if (timelineItem) {
+    const topForm = timelineItem.querySelector('.deal-comment-form[data-parent-id=""]');
+    if (topForm) topForm.style.display = 'none';
+  }
+  container.innerHTML = commentFormHTML(activityId, parentId);
+  container.style.display = 'block';
+  container.querySelector('input')?.focus();
+}
+
+async function submitComment(activityId, parentId, content) {
+  if (!content?.trim()) return;
+  // Find the container from the button's closest timeline item
+  const btn = event?.target?.closest?.('.deal-comment-form')?.querySelector?.('.deal-comment-submit')
+    || document.querySelector(`#comment-input-top-${activityId}`)?.nextElementSibling;
+  const timelineItem = event?.target?.closest?.('.deal-timeline-item');
+  const container = timelineItem ? timelineItem.querySelector('.deal-comments-container') : null;
+  if (btn) btn.disabled = true;
+  try {
+    await api.post('/api/activity-comments', {
+      activity_id: activityId,
+      parent_id: parentId || null,
+      content: content.trim(),
+    });
+    // Clear the input
+    const idSuffix = parentId ? `reply-${parentId}` : `top-${activityId}`;
+    const input = document.getElementById(`comment-input-${idSuffix}`);
+    if (input) input.value = '';
+    // Refresh comments using the correct container (within the same modal)
+    await renderActivityComments(activityId, container);
+  } catch (e) {
+    console.error('Error saving comment:', e);
+    alert('Error saving comment');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }

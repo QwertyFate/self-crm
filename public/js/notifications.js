@@ -9,6 +9,7 @@ const NOTIF_ICONS = {
   deal_stage_changed: '🔄',
   task_created:    '✅',
   system:          '🚀',
+  mention:         '@',
   default:         '🔔',
 };
 
