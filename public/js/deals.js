@@ -4,7 +4,13 @@ async function loadDeals() {
   const dealsBoard = document.getElementById('deals-board');
   const dealsList = document.getElementById('deals-list-view');
   if (dealsBoard) dealsBoard.innerHTML = '';
-  if (dealsList) dealsList.innerHTML = '';
+  // Only clear the table body — don't wipe thead/tbody elements themselves
+  if (dealsList) {
+    const tbody = dealsList.querySelector('#deals-tbody');
+    if (tbody) tbody.innerHTML = '';
+    const thead = dealsList.querySelector('#deals-thead');
+    if (thead) thead.innerHTML = '';
+  }
 
   await ensureMembers();
   [pipelines, dealFields] = await Promise.all([
