@@ -194,6 +194,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs JSONB NOT NULL DEFAULT '{"contacts":true,"deals":true,"tasks":true,"objects":true,"activities":true}'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Europe/Berlin'`);
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS event_date DATE`);
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_activities_event_date ON activities (workspace_id, event_date)`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS analytics_layout JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`

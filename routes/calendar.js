@@ -13,8 +13,12 @@ router.get('/', async (req, res, next) => {
     if (!start || !end) return res.status(400).json({ error: 'start and end dates required (YYYY-MM-DD)' });
 
     const { rows } = await pool.query(`
+<<<<<<< HEAD
       SELECT a.id, a.type, a.content, a.completed, a.created_at,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
+=======
+      SELECT a.id, a.type, a.content, a.event_date, a.completed, a.created_at,
+>>>>>>> 3c8a432 (adding clickable calendar)
              c.name AS contact_name, c.id AS contact_id,
              d.id AS deal_id, d.title AS deal_title
       FROM activities a
