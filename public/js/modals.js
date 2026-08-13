@@ -137,6 +137,10 @@ function buildDetailHTML(c, contactDeals, id) {
           <option value="email">Email</option>
           <option value="whatsapp">WhatsApp</option>
         </select>
+        <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;flex-shrink:0">📅 Date</label>
+          <input type="date" id="contact-activity-date" style="flex:1;max-width:160px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text);font-size:12px" />
+        </div>
         <div class="note-editor-toolbar" style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
           <button type="button" class="fmt-btn" onclick="formatContactActivityNote('bold')" title="Bold"><strong>B</strong></button>
           <button type="button" class="fmt-btn" onclick="formatContactActivityNote('italic')" title="Italic"><em>I</em></button>
@@ -329,8 +333,11 @@ async function saveContactActivity() {
   const content = contentEl.innerHTML.trim();
   if (!content || content === '<br>') return;
   const type = document.getElementById('contact-activity-type')?.value || 'note';
-  await api.post('/api/activities', { contact_id: parseInt(contactId), type, content });
+  const event_date = document.getElementById('contact-activity-date')?.value || null;
+  await api.post('/api/activities', { contact_id: parseInt(contactId), type, content, event_date });
   contentEl.innerHTML = '';
+  const dateEl = document.getElementById('contact-activity-date');
+  if (dateEl) dateEl.value = '';
   const wrapper = document.getElementById('contact-note-form-wrapper');
   if (wrapper) wrapper.classList.add('hidden');
   // Reload timeline
@@ -668,6 +675,23 @@ const DEAL_NOTES_PREVIEW_COUNT = 5;
 
 const _timelineIcons = { note: '📝', call: '📞', email: '✉️', whatsapp: '💬' };
 
+// Format event date (handles ISO timestamps and YYYY-MM-DD) to MM-DD-YYYY
+function fmtEventDate(dt) {
+  if (!dt) return '';
+  const s = String(dt);
+  // Extract just the date portion: 2026-08-18T16:00:00.000Z -> 2026-08-18
+  const datePart = s.slice(0, 10);
+  const parts = datePart.split('-');
+  if (parts.length === 3) return `${parts[1]}-${parts[2]}-${parts[0]}`;
+  return s;
+}
+
+// Normalize any date value into YYYY-MM-DD for <input type="date">
+function toDateInputValue(dt) {
+  if (!dt) return '';
+  return String(dt).slice(0, 10);
+}
+
 // ── @Mention Autocomplete ─────────────────────────────────
 let mentionTimeout = null;
 let mentionEl = null;
@@ -849,8 +873,9 @@ function renderTimelineItem(a, options = {}) {
       <div class="deal-timeline-body">
         <div class="deal-timeline-header">
           <span class="deal-timeline-type type-${a.type}">${t('act_' + a.type)}</span>
-          <span class="deal-timeline-date">${fmtDate(a.created_at)}</span>
+          <span class="deal-timeline-date">${fmtEventDate(String(a.created_at).split('T')[0].split(' ')[0])}</span>
         </div>
+        ${a.event_date ? `<div class="deal-event-date-badge">📅 ${fmtEventDate(a.event_date)}</div>` : ''}
         <div class="deal-timeline-content ${shouldCollapse ? 'collapsed' : ''}">${a.content}</div>
         ${shouldCollapse ? '<button type="button" class="deal-note-expand-btn" onclick="event.stopPropagation();toggleDealNoteExpand(this)">Show more</button>' : ''}
         ${a.logged_by_name ? `<div class="deal-timeline-author">${t('logged_by')} ${esc(a.logged_by_name)}</div>` : ''}
@@ -937,7 +962,10 @@ async function inlineEditDealNote(activityId, el) {
   if (!activity) return;
 
   window.currentEditActivityId = activityId;
-  const contactId = document.getElementById('deal-activities-list')?.dataset.contactId
+  // Find the contact ID from the closest timeline container (works in both
+  // the deal modal's #deal-activities-list and the contact side panel's #detail-acts)
+  const container = el.closest('[data-contact-id]');
+  const contactId = container?.dataset.contactId
     || document.getElementById('deal-activity-deal-id')?.value;
   window.currentEditActivityContactId = contactId;
 
@@ -946,12 +974,15 @@ async function inlineEditDealNote(activityId, el) {
   el.innerHTML = `
     <div class="deal-timeline-icon type-${activity.type}">${_timelineIcons[activity.type] || '📝'}</div>
     <div class="deal-timeline-body" style="width:100%">
-      <select class="inline-edit-type" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;margin-bottom:6px;background:var(--input-bg);color:var(--text);font-size:12px">
-        <option value="note" ${activity.type === 'note' ? 'selected' : ''}>Note</option>
-        <option value="call" ${activity.type === 'call' ? 'selected' : ''}>Call</option>
-        <option value="email" ${activity.type === 'email' ? 'selected' : ''}>Email</option>
-        <option value="whatsapp" ${activity.type === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
-      </select>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <select class="inline-edit-type" style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text);font-size:12px">
+          <option value="note" ${activity.type === 'note' ? 'selected' : ''}>Note</option>
+          <option value="call" ${activity.type === 'call' ? 'selected' : ''}>Call</option>
+          <option value="email" ${activity.type === 'email' ? 'selected' : ''}>Email</option>
+          <option value="whatsapp" ${activity.type === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
+        </select>
+        <input type="date" class="inline-edit-date" value="${toDateInputValue(activity.event_date)}" style="flex:1;max-width:150px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text);font-size:12px" />
+      </div>
       <div class="note-editor-toolbar" style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap">
         <button type="button" class="fmt-btn" onclick="event.stopPropagation();document.execCommand('bold',false,null)" title="Bold"><strong>B</strong></button>
         <button type="button" class="fmt-btn" onclick="event.stopPropagation();document.execCommand('italic',false,null)" title="Italic"><em>I</em></button>
@@ -985,9 +1016,10 @@ async function saveInlineEdit(el) {
   const content = el.querySelector('.inline-edit-content')?.innerHTML.trim();
   const type = el.querySelector('.inline-edit-type')?.value || 'note';
   if (!content || content === '<br>') { alert('Please enter some content'); return; }
+  const event_date = el.querySelector('.inline-edit-date')?.value || null;
   const activityId = window.currentEditActivityId;
   const contactId = window.currentEditActivityContactId;
-  await api.patch(`/api/activities/${activityId}`, { type, content });
+  await api.patch(`/api/activities/${activityId}`, { type, content, event_date });
   if (contactId) {
     // Check if we're in deal modal or contact side panel, refresh accordingly
     const dealModal = document.getElementById('deal-modal');
@@ -1073,8 +1105,11 @@ async function saveDealActivity() {
   const content = contentEl.innerHTML.trim();
   if (!content || content === '<br>') return;
   const type = document.getElementById('deal-activity-type')?.value || 'note';
-  await api.post('/api/activities', { contact_id: parseInt(contactId), type, content });
+  const event_date = document.getElementById('deal-activity-date')?.value || null;
+  await api.post('/api/activities', { contact_id: parseInt(contactId), type, content, event_date });
   contentEl.innerHTML = '';
+  const dateEl = document.getElementById('deal-activity-date');
+  if (dateEl) dateEl.value = '';
   const wrapper = document.getElementById('deal-note-form-wrapper');
   if (wrapper) wrapper.classList.add('hidden');
   await loadDealActivities(parseInt(contactId));

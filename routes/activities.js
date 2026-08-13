@@ -2,7 +2,6 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
-const { notify }  = require('../notifications');
 
 router.use(requireAuth);
 
@@ -23,12 +22,21 @@ async function notifyMentions(workspaceId, actorId, actorName, content, activity
     });
     if (nameSet.size === 0) return;
 
-    // Find matching workspace members
+    // Find matching workspace members (match by first name or full name prefix)
     const { rows: users } = await pool.query(
-      'SELECT id, name FROM users WHERE workspace_id = $1 AND LOWER(name) = ANY($2)',
-      [workspaceId, [...nameSet]]
+      'SELECT id, name FROM users WHERE workspace_id = $1',
+      [workspaceId]
     );
-    if (users.length === 0) return;
+    const matched = users.filter(u => {
+      const lowerName = u.name.toLowerCase();
+      const words = lowerName.split(/\s+/);
+      return [...nameSet].some(name =>
+        lowerName === name ||
+        lowerName.startsWith(name) ||
+        words.some(w => w.startsWith(name))
+      );
+    });
+    if (!matched.length) return;
 
     // Get activity info for richer notification body
     const { rows: [activity] } = await pool.query(`
@@ -46,7 +54,7 @@ async function notifyMentions(workspaceId, actorId, actorName, content, activity
     let dealId = null;
     if (activity?.contact_id) {
       const { rows: deals } = await pool.query(
-        'SELECT id, title FROM deals WHERE contact_id = $1 AND workspace_id = $2 ORDER BY updated_at DESC LIMIT 1',
+        'SELECT id FROM deals WHERE contact_id = $1 AND workspace_id = $2 ORDER BY updated_at DESC LIMIT 1',
         [activity.contact_id, workspaceId]
       );
       if (deals.length) dealId = deals[0].id;
@@ -54,7 +62,7 @@ async function notifyMentions(workspaceId, actorId, actorName, content, activity
 
     const body = `In ${contactName}: "${preview}"`;
 
-    for (const user of users) {
+    for (const user of matched) {
       if (user.id === actorId) continue;
       await pool.query(`
         INSERT INTO notifications (workspace_id, user_id, actor_id, type, category, title, body, entity_type, entity_id)
@@ -90,13 +98,13 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { contact_id, type, content } = req.body;
+    const { contact_id, type, content, event_date } = req.body;
     if (!content) return res.status(400).json({ error: 'Content required' });
     if (!['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
     const { rows: [row] } = await pool.query(
-      'INSERT INTO activities (workspace_id, contact_id, type, content, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-      [req.workspaceId, contact_id||null, type, content, req.userId]
+      'INSERT INTO activities (workspace_id, contact_id, type, content, created_by, event_date) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+      [req.workspaceId, contact_id||null, type, content, req.userId, event_date || null]
     );
 
     // Notify mentioned users
@@ -122,13 +130,13 @@ router.get('/:id', async (req, res, next) => {
 
 router.patch('/:id', async (req, res, next) => {
   try {
-    const { type, content } = req.body;
+    const { type, content, event_date } = req.body;
     if (!content) return res.status(400).json({ error: 'Content required' });
     if (type && !['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
     const result = await pool.query(
-      'UPDATE activities SET type=$1, content=$2 WHERE id=$3 AND workspace_id=$4 RETURNING id',
-      [type, content, req.params.id, req.workspaceId]
+      'UPDATE activities SET type=$1, content=$2, event_date=$5 WHERE id=$3 AND workspace_id=$4 RETURNING id',
+      [type, content, req.params.id, req.workspaceId, event_date || null]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Activity not found' });
 

@@ -61,6 +61,7 @@ function showApp() {
   updateSuppliersNav();
   loadNotifPrefs();
   startNotifPolling();
+  startClock();
   loadDeals();
   setTimeout(maybeStartGuide, 800);
 }
@@ -388,6 +389,7 @@ async function switchPage(page) {
   if (page === 'contacts')   { currentContactType = 'contact'; await loadContacts(); }
   if (page === 'suppliers')  { currentContactType = 'supplier'; await loadContacts(); }
   if (page === 'activities') await loadActivities();
+  if (page === 'calendar')   renderCalendar();
   if (page === 'settings')   await loadSettings();
   if (page === 'objects')    await loadObjects();
   if (page === 'tasks')      await loadTasks();

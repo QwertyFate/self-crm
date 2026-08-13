@@ -10,10 +10,10 @@ router.get('/me', async (req, res, next) => {
     if (!req.session?.userId) return res.json({ user: null });
 
     const { rows: [user] } = await pool.query(
-      'SELECT id, name, email, role, workspace_id, column_widths, deal_columns, analytics_layout FROM users WHERE id = $1',
+      'SELECT id, name, email, role, workspace_id, column_widths, deal_columns, analytics_layout, timezone FROM users WHERE id = $1',
       [req.session.userId]
     );
-    if (user) { user.column_widths = user.column_widths || {}; user.deal_columns = user.deal_columns || []; }
+    if (user) { user.column_widths = user.column_widths || {}; user.deal_columns = user.deal_columns || []; user.timezone = user.timezone || 'Europe/Berlin'; }
     const { rows: [workspace] } = await pool.query(
       'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id = $1',
       [req.session.workspaceId]
@@ -408,7 +408,7 @@ router.post('/reset-password', async (req, res, next) => {
 router.patch('/preferences', async (req, res, next) => {
   try {
     if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
-    const { column_widths, deal_columns } = req.body;
+    const { column_widths, deal_columns, timezone } = req.body;
     if (column_widths && typeof column_widths === 'object' && !Array.isArray(column_widths)) {
       await pool.query('UPDATE users SET column_widths=$1 WHERE id=$2',
         [JSON.stringify(column_widths), req.session.userId]);
@@ -416,6 +416,11 @@ router.patch('/preferences', async (req, res, next) => {
     if (Array.isArray(deal_columns)) {
       await pool.query('UPDATE users SET deal_columns=$1 WHERE id=$2',
         [JSON.stringify(deal_columns), req.session.userId]);
+    }
+    if (timezone && typeof timezone === 'string') {
+      // Validate timezone
+      try { Intl.DateTimeFormat(undefined, { timeZone: timezone }); } catch { return res.status(400).json({ error: 'Invalid timezone' }); }
+      await pool.query('UPDATE users SET timezone=$1 WHERE id=$2', [timezone, req.session.userId]);
     }
     res.json({ success: true });
   } catch (e) { next(e); }

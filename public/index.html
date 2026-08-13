@@ -229,6 +229,8 @@
           <div class="workspace-name" id="sidebar-workspace"></div>
           <svg class="ws-switcher-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M4 6l4 4 4-4"/></svg>
         </button>
+        <!-- User timezone clock (defaults to Germany, per-user editable) -->
+        <div class="sidebar-clock" id="sidebar-clock" title="Click to change timezone" onclick="switchPage('settings')"></div>
       </div>
 
       <!-- Main nav — grows to push footer down -->
@@ -245,6 +247,7 @@
         <ul class="sidebar-nav">
           <li><a href="#" data-page="chat"><span>Team Chat</span></a></li>
           <li><a href="#" data-page="activities"><span data-i18n="nav_activities">Activities</span></a></li>
+          <li><a href="#" data-page="calendar"><span>Calendar</span></a></li>
           <li><a href="#" data-page="objects" id="nav-objects-link"><span id="nav-objects-label">Listings</span></a></li>
           <li><a href="#" data-page="board" id="nav-board-link"><span data-i18n="nav_board">Board</span></a></li>
           <li><a href="#" data-page="analytics"><span>Analytics</span></a></li>
@@ -401,6 +404,20 @@
           <button class="btn btn-primary" onclick="openActivityModal()" data-i18n="log_activity">+ Log Activity</button>
         </div>
         <div id="activities-list" class="activities-list"></div>
+      </section>
+
+      <!-- ── Calendar ── -->
+      <section id="page-calendar" class="page">
+        <div class="page-header">
+          <h1>📅 Calendar</h1>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-sm" onclick="calendarGoToday()">Today</button>
+            <button class="btn btn-sm" onclick="calendarPrevMonth()">←</button>
+            <button class="btn btn-sm" onclick="calendarNextMonth()">→</button>
+            <span id="calendar-month-label" style="font-size:15px;font-weight:600;min-width:180px;text-align:center"></span>
+          </div>
+        </div>
+        <div id="calendar-grid" class="calendar-grid"></div>
       </section>
 
       <!-- ── Objects ── -->
@@ -660,6 +677,16 @@
                 </div>
                 <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveNotifPrefs()">Save Preferences</button>
                 <span id="notif-pref-msg" class="workspace-name-msg hidden"></span>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2>Timezone</h2></div>
+                <p class="settings-hint">Your sidebar clock uses this timezone. Defaults to Germany (Berlin).</p>
+                <div class="workspace-name-row">
+                  <select id="timezone-select" class="workspace-name-input"></select>
+                  <button class="btn btn-primary btn-sm" onclick="saveTimezoneSetting()">Save</button>
+                </div>
+                <div id="timezone-msg" class="workspace-name-msg hidden"></div>
               </div>
 
               <div class="settings-card">
@@ -1347,6 +1374,10 @@
                 <button type="button" class="fmt-btn" onclick="formatDealNote('createLink')" title="Link">🔗 Link</button>
                 <button type="button" class="fmt-btn" onclick="formatDealNote('removeFormat')" title="Clear">✕ Clear</button>
               </div>
+              <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+                <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;flex-shrink:0">📅 Date</label>
+                <input type="date" id="deal-activity-date" style="flex:1;max-width:160px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text);font-size:12px" />
+              </div>
               <div id="deal-activity-content" class="note-editor" contenteditable="true" placeholder="Add note, call, or email…"
                 onkeydown="if(event.key==='Enter' && event.ctrlKey){event.preventDefault();saveDealActivity();}"></div>
               <div style="display:flex;gap:8px;margin-top:8px">
@@ -1707,6 +1738,8 @@
   <script src="js/modals.js"></script>
   <script src="js/tasks.js"></script>
   <script src="js/notifications.js"></script>
+  <script src="js/calendar.js"></script>
+  <script src="js/clock.js"></script>
   <!-- ── Guide / Tour overlay ── -->
   <div id="guide-overlay" class="hidden" style="position:fixed;inset:0;z-index:99997;pointer-events:none">
     <div id="guide-spotlight" class="guide-spotlight" style="display:none"></div>
