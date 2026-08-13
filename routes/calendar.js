@@ -13,7 +13,8 @@ router.get('/', async (req, res, next) => {
     if (!start || !end) return res.status(400).json({ error: 'start and end dates required (YYYY-MM-DD)' });
 
     const { rows } = await pool.query(`
-      SELECT a.id, a.type, a.content, a.event_date, a.created_at,
+      SELECT a.id, a.type, a.content, a.completed, a.created_at,
+             TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              c.name AS contact_name, c.id AS contact_id,
              d.id AS deal_id, d.title AS deal_title
       FROM activities a
@@ -38,7 +39,8 @@ router.get('/', async (req, res, next) => {
 router.get('/today', async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
-      SELECT a.id, a.type, a.content, a.event_date, a.created_at,
+      SELECT a.id, a.type, a.content, a.completed, a.created_at,
+             TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              c.name AS contact_name, c.id AS contact_id,
              d.id AS deal_id, d.title AS deal_title
       FROM activities a

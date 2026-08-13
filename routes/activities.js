@@ -84,7 +84,10 @@ async function notifyMentions(workspaceId, actorId, actorName, content, activity
 router.get('/', async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
-      SELECT a.*, c.name AS contact_name,
+      SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
+             a.completed,
+             TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
+             c.name AS contact_name,
              u.name AS logged_by_name, u.email AS logged_by_email
       FROM activities a
       LEFT JOIN contacts c ON c.id = a.contact_id
@@ -118,7 +121,10 @@ router.post('/', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const { rows: [row] } = await pool.query(`
-      SELECT a.*, u.name AS logged_by_name, u.email AS logged_by_email
+      SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
+             a.completed,
+             TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
+             u.name AS logged_by_name, u.email AS logged_by_email
       FROM activities a
       LEFT JOIN users u ON u.id = a.created_by
       WHERE a.id = $1 AND a.workspace_id = $2
@@ -130,13 +136,15 @@ router.get('/:id', async (req, res, next) => {
 
 router.patch('/:id', async (req, res, next) => {
   try {
-    const { type, content, event_date } = req.body;
-    if (!content) return res.status(400).json({ error: 'Content required' });
+    const { type, content, event_date, completed } = req.body;
+
+    // Allow partial updates: toggle completed without requiring content
+    if (!content && completed === undefined) return res.status(400).json({ error: 'Content required' });
     if (type && !['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
     const result = await pool.query(
-      'UPDATE activities SET type=$1, content=$2, event_date=$5 WHERE id=$3 AND workspace_id=$4 RETURNING id',
-      [type, content, req.params.id, req.workspaceId, event_date || null]
+      'UPDATE activities SET type=$1, content=$2, event_date=$5, completed=$6 WHERE id=$3 AND workspace_id=$4 RETURNING id',
+      [type || 'note', content || '', req.params.id, req.workspaceId, event_date || null, completed === true]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Activity not found' });
 
