@@ -69,7 +69,6 @@ async function renderCalendar() {
           ${dayEvents.map(e => `
             <div class="calendar-event type-${e.type} ${e.completed ? 'completed' : 'pending'}" onclick="openDayModal('${dateStr}')"
                  title="${esc(e.contact_name || '')} — ${esc(stripHtml(e.content || '').slice(0, 80))}">
-              ${_timelineIcons[e.type] || '📝'}
               <span class="calendar-event-label">
                 ${e.contact_name ? esc(e.contact_name) + ': ' : ''}${esc(stripHtml(e.content || '').slice(0, 40))}
               </span>
@@ -112,7 +111,6 @@ async function openDayModal(dateStr) {
         <div class="day-event-item ${e.completed ? 'completed' : 'pending'}">
           <input type="checkbox" class="day-event-check" ${e.completed ? 'checked' : ''} 
                  onchange="toggleActivityComplete(${e.id}, this.checked)" />
-          <span class="day-event-icon">${_timelineIcons[e.type] || '📝'}</span>
           <div class="day-event-body">
             <div class="day-event-title">${esc(e.contact_name || 'Activity')}${e.deal_title ? ` — ${esc(e.deal_title)}` : ''}</div>
             <div class="day-event-content">${esc(stripHtml(e.content || '').slice(0, 200))}</div>
@@ -125,7 +123,7 @@ async function openDayModal(dateStr) {
   modal.innerHTML = `
     <div class="modal" style="max-width:640px;width:92vw;max-height:85vh;display:flex;flex-direction:column">
       <div class="modal-header" style="flex-shrink:0">
-        <h2>📅 ${dateLabel}</h2>
+        <h2>${dateLabel}</h2>
         <button class="close-btn" onclick="document.getElementById('day-events-modal')?.remove()">&times;</button>
       </div>
       <div class="day-events-list" style="flex:1;overflow-y:auto;padding:16px 24px;display:flex;flex-direction:column;gap:8px">
