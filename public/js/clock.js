@@ -44,14 +44,20 @@ function updateClock() {
   if (!el) return;
   const tz = currentTimezone();
   try {
-    el.textContent = new Date().toLocaleTimeString('en-GB', {
+    el.textContent = new Date().toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
+      hour12: true,
       timeZone: tz,
     });
   } catch {
-    el.textContent = new Date().toLocaleTimeString('en-GB');
+    el.textContent = new Date().toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    });
   }
 }
 
