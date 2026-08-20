@@ -143,7 +143,10 @@ router.get('/:id', async (req, res, next) => {
     if (!contact) return res.status(404).json({ error: 'Not found' });
 
     const { rows: activities } = await pool.query(`
-      SELECT a.*, u.name AS logged_by_name, u.email AS logged_by_email
+      SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
+             a.completed,
+             TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
+             u.name AS logged_by_name, u.email AS logged_by_email
       FROM activities a
       LEFT JOIN users u ON u.id = a.created_by
       WHERE a.contact_id = $1 AND a.workspace_id = $2

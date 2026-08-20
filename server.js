@@ -95,6 +95,7 @@ app.use('/api/stages',        require('./routes/stages'));
 app.use('/api/fields',        require('./routes/fields'));
 app.use('/api/activities',         require('./routes/activities'));
 app.use('/api/activity-comments',  require('./routes/activity-comments'));
+app.use('/api/calendar',           require('./routes/calendar'));
 app.use('/api/invites',       require('./routes/invites'));
 app.use('/api/workspace',     require('./routes/workspace'));
 app.use('/api/pipelines',     require('./routes/pipelines'));
