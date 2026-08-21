@@ -34,13 +34,14 @@ async function renderCalendar() {
   // Load events for this month
   const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
   const end = `${year}-${String(month + 1).padStart(2, '0')}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, '0')}`;
-  calEvents = await api.get(`/api/calendar?start=${start}&end=${end}`);
+  const data = await api.get(`/api/calendar?start=${start}&end=${end}`);
 
   // Normalize each event's date to YYYY-MM-DD (handles Date objects and ISO timestamps)
-  calEvents = calEvents.map(e => ({
+  // Guard against non-array responses (e.g. { error: ... } from the server)
+  calEvents = Array.isArray(data) ? data.map(e => ({
     ...e,
     event_date: String(e.event_date || '').slice(0, 10),
-  }));
+  })) : [];
 
   // Build grid: Sunday-first
   const firstDay = new Date(year, month, 1).getDay();
