@@ -8,6 +8,8 @@ router.use(requireAuth);
 // Parse @mentions from HTML content and notify mentioned users
 async function notifyMentions(workspaceId, actorId, actorName, content, activityId) {
   try {
+    // If no content provided, nothing to scan for mentions
+    if (!content) return;
     // Strip HTML tags to get plain text
     const plain = content.replace(/<[^>]*>/g, ' ');
     // Match @mention: @ followed by word characters
@@ -139,12 +141,20 @@ router.patch('/:id', async (req, res, next) => {
     const { type, content, event_date, completed } = req.body;
 
     // Allow partial updates: toggle completed without requiring content
-    if (!content && completed === undefined) return res.status(400).json({ error: 'Content required' });
+    if (!content && completed === undefined && type === undefined && event_date === undefined) {
+      return res.status(400).json({ error: 'Nothing to update' });
+    }
     if (type && !['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
+    // Only update provided fields — preserve existing values when omitted
     const result = await pool.query(
-      'UPDATE activities SET type=$1, content=$2, event_date=$5, completed=$6 WHERE id=$3 AND workspace_id=$4 RETURNING id',
-      [type || 'note', content || '', req.params.id, req.workspaceId, event_date || null, completed === true]
+      `UPDATE activities SET
+         type        = COALESCE($1, type),
+         content     = COALESCE($2, content),
+         event_date  = COALESCE($5, event_date),
+         completed   = COALESCE($6, completed)
+       WHERE id=$3 AND workspace_id=$4 RETURNING id`,
+      [type ?? null, content ?? null, req.params.id, req.workspaceId, event_date ?? null, completed ?? null]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Activity not found' });
 
