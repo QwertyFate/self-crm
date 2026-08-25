@@ -205,6 +205,44 @@ function fmtDate(dt) {
   return new Date(dt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
 }
 
+// Toggle "No date" on a note form date row: disables/clears the date input
+function toggleNoDate(cb) {
+  if (!cb) return;
+  const row = cb.closest('div');
+  const dateInput = row ? row.querySelector('input[type="date"]') : null;
+  if (dateInput) {
+    dateInput.disabled = cb.checked;
+    if (cb.checked) dateInput.value = '';
+  }
+}
+
+function resetNoDate(cb) {
+  if (!cb) return;
+  cb.checked = false;
+  const row = cb.closest('div');
+  const dateInput = row ? row.querySelector('input[type="date"]') : null;
+  if (dateInput) {
+    dateInput.disabled = false;
+  }
+}
+
+// Toggle "No date" for the inline note edit form
+function toggleInlineNoDate(cb) {
+  toggleNoDate(cb);
+}
+
+// Default a note form date row to "No date": box checked, date input disabled/cleared
+function defaultNoDate(cb) {
+  if (!cb) return;
+  cb.checked = true;
+  const row = cb.closest('div');
+  const dateInput = row ? row.querySelector('input[type="date"]') : null;
+  if (dateInput) {
+    dateInput.disabled = true;
+    dateInput.value = '';
+  }
+}
+
 function buildPageNumbers(current, total) {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const pages = [1];

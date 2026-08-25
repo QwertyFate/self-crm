@@ -139,7 +139,10 @@ function buildDetailHTML(c, contactDeals, id) {
         </select>
         <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
           <label style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;flex-shrink:0">📅 Date</label>
-          <input type="date" id="contact-activity-date" style="flex:1;max-width:160px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text);font-size:12px" />
+          <input type="date" id="contact-activity-date" disabled style="flex:1;max-width:160px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text);font-size:12px" />
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);cursor:pointer;flex-shrink:0;white-space:nowrap" title="Save this note without a date — it won't appear on the calendar">
+            <input type="checkbox" id="contact-activity-no-date" checked onchange="toggleNoDate(this)" /> No date
+          </label>
         </div>
         <div class="note-editor-toolbar" style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap">
           <button type="button" class="fmt-btn" onclick="formatContactActivityNote('bold')" title="Bold"><strong>B</strong></button>
@@ -316,6 +319,7 @@ function toggleContactNoteForm(contactId) {
   if (!wrapper) return;
   wrapper.classList.toggle('hidden');
   if (!wrapper.classList.contains('hidden')) {
+    defaultNoDate(document.getElementById('contact-activity-no-date'));
     document.getElementById('contact-activity-content')?.focus();
   }
 }
@@ -333,11 +337,13 @@ async function saveContactActivity() {
   const content = contentEl.innerHTML.trim();
   if (!content || content === '<br>') return;
   const type = document.getElementById('contact-activity-type')?.value || 'note';
-  const event_date = document.getElementById('contact-activity-date')?.value || null;
+  const noDate = document.getElementById('contact-activity-no-date')?.checked;
+  const event_date = noDate ? null : (document.getElementById('contact-activity-date')?.value || null);
   await api.post('/api/activities', { contact_id: parseInt(contactId), type, content, event_date });
   contentEl.innerHTML = '';
   const dateEl = document.getElementById('contact-activity-date');
   if (dateEl) dateEl.value = '';
+  defaultNoDate(document.getElementById('contact-activity-no-date'));
   const wrapper = document.getElementById('contact-note-form-wrapper');
   if (wrapper) wrapper.classList.add('hidden');
   // Reload timeline
@@ -981,7 +987,10 @@ async function inlineEditDealNote(activityId, el) {
           <option value="email" ${activity.type === 'email' ? 'selected' : ''}>Email</option>
           <option value="whatsapp" ${activity.type === 'whatsapp' ? 'selected' : ''}>WhatsApp</option>
         </select>
-        <input type="date" class="inline-edit-date" value="${toDateInputValue(activity.event_date)}" style="flex:1;max-width:150px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text);font-size:12px" />
+        <input type="date" class="inline-edit-date" value="${toDateInputValue(activity.event_date)}" style="flex:1;max-width:150px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text);font-size:12px" ${activity.event_date ? '' : 'disabled'} />
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);cursor:pointer;flex-shrink:0;white-space:nowrap" title="Save this note without a date — it won't appear on the calendar">
+          <input type="checkbox" class="inline-edit-no-date" ${activity.event_date ? '' : 'checked'} onchange="toggleInlineNoDate(this)" /> No date
+        </label>
       </div>
       <div class="note-editor-toolbar" style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap">
         <button type="button" class="fmt-btn" onclick="event.stopPropagation();document.execCommand('bold',false,null)" title="Bold"><strong>B</strong></button>
@@ -1016,7 +1025,8 @@ async function saveInlineEdit(el) {
   const content = el.querySelector('.inline-edit-content')?.innerHTML.trim();
   const type = el.querySelector('.inline-edit-type')?.value || 'note';
   if (!content || content === '<br>') { alert('Please enter some content'); return; }
-  const event_date = el.querySelector('.inline-edit-date')?.value || null;
+  const noDateCb = el.querySelector('.inline-edit-no-date');
+  const event_date = (noDateCb && noDateCb.checked) ? null : (el.querySelector('.inline-edit-date')?.value || null);
   const activityId = window.currentEditActivityId;
   const contactId = window.currentEditActivityContactId;
   await api.patch(`/api/activities/${activityId}`, { type, content, event_date });
@@ -1088,6 +1098,7 @@ function toggleDealNoteForm() {
   if (!wrapper) return;
   wrapper.classList.toggle('hidden');
   if (!wrapper.classList.contains('hidden')) {
+    defaultNoDate(document.getElementById('deal-activity-no-date'));
     document.getElementById('deal-activity-content')?.focus();
   }
 }
@@ -1105,11 +1116,13 @@ async function saveDealActivity() {
   const content = contentEl.innerHTML.trim();
   if (!content || content === '<br>') return;
   const type = document.getElementById('deal-activity-type')?.value || 'note';
-  const event_date = document.getElementById('deal-activity-date')?.value || null;
+  const noDate = document.getElementById('deal-activity-no-date')?.checked;
+  const event_date = noDate ? null : (document.getElementById('deal-activity-date')?.value || null);
   await api.post('/api/activities', { contact_id: parseInt(contactId), type, content, event_date });
   contentEl.innerHTML = '';
   const dateEl = document.getElementById('deal-activity-date');
   if (dateEl) dateEl.value = '';
+  defaultNoDate(document.getElementById('deal-activity-no-date'));
   const wrapper = document.getElementById('deal-note-form-wrapper');
   if (wrapper) wrapper.classList.add('hidden');
   await loadDealActivities(parseInt(contactId));
