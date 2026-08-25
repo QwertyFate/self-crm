@@ -148,13 +148,13 @@ router.patch('/:id', async (req, res, next) => {
 
     // Only update provided fields — preserve existing values when omitted
     const result = await pool.query(
-      `UPDATE activities SET
-         type        = COALESCE($1, type),
-         content     = COALESCE($2, content),
-         event_date  = COALESCE($5, event_date),
-         completed   = COALESCE($6, completed)
-       WHERE id=$3 AND workspace_id=$4 RETURNING id`,
-      [type ?? null, content ?? null, req.params.id, req.workspaceId, event_date ?? null, completed ?? null]
+       `UPDATE activities SET
+          type        = COALESCE($1, type),
+          content     = COALESCE($2, content),
+          event_date  = CASE WHEN $5 = 'CLEAR_DATE' THEN NULL ELSE COALESCE($5, event_date) END,
+          completed   = COALESCE($6, completed)
+        WHERE id=$3 AND workspace_id=$4 RETURNING id`,
+       [type ?? null, content ?? null, req.params.id, req.workspaceId, event_date === null ? 'CLEAR_DATE' : (event_date ?? null), completed ?? null]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Activity not found' });
 
