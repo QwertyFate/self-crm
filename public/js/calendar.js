@@ -36,12 +36,13 @@ async function renderCalendar() {
   const end = `${year}-${String(month + 1).padStart(2, '0')}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, '0')}`;
   const data = await api.get(`/api/calendar?start=${start}&end=${end}`);
 
-  // Normalize each event's date to YYYY-MM-DD & coerce completed to boolean
-  calEvents = calEvents.map(e => ({
+  // Normalize each event's date to YYYY-MM-DD & coerce completed to boolean.
+  // Guard against non-array responses (e.g. { error: ... } from the server).
+  calEvents = Array.isArray(data) ? data.map(e => ({
     ...e,
     event_date: String(e.event_date || '').slice(0, 10),
     completed: !!e.completed,
-  }));
+  })) : [];
 
   // Build grid: Sunday-first
   const firstDay = new Date(year, month, 1).getDay();
@@ -159,6 +160,8 @@ function openCalendarEvent(activityId) {
   const ev = calEvents.find(e => e.id === activityId);
   if (!ev) return;
   if (ev.deal_id) {
+    // Close the day events popup before opening the deal modal
+    document.getElementById('day-events-modal')?.remove();
     openDealModal(ev.deal_id);
   }
 }
