@@ -146,15 +146,17 @@ router.patch('/:id', async (req, res, next) => {
     }
     if (type && !['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
-    // Only update provided fields — preserve existing values when omitted
+    // Only update provided fields — preserve existing values when omitted.
+    // A boolean clearDate flag ($7) tells us to explicitly NULL out event_date,
+    // since COALESCE(null, event_date) would otherwise leave it unchanged.
     const result = await pool.query(
        `UPDATE activities SET
           type        = COALESCE($1, type),
           content     = COALESCE($2, content),
-          event_date  = CASE WHEN $5 = 'CLEAR_DATE' THEN NULL ELSE COALESCE($5, event_date) END,
+          event_date  = CASE WHEN $7 THEN NULL ELSE COALESCE($5, event_date) END,
           completed   = COALESCE($6, completed)
         WHERE id=$3 AND workspace_id=$4 RETURNING id`,
-       [type ?? null, content ?? null, req.params.id, req.workspaceId, event_date === null ? 'CLEAR_DATE' : (event_date ?? null), completed ?? null]
+       [type ?? null, content ?? null, req.params.id, req.workspaceId, event_date ?? null, completed ?? null, event_date === null]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Activity not found' });
 
