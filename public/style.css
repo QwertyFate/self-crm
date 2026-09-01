@@ -2607,9 +2607,13 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 }
 .chat-fab-badge.hidden { display: none !important; }
 .chat-badge {
-  padding: 1px var(--sp-15); border-radius: var(--r-full);
-  background: var(--danger); color: #fff; font-size: var(--fs-3xs); font-weight: 700;
+  position: absolute; top: -5px; right: -7px;
+  display: grid; place-items: center; min-width: 15px; height: 15px; padding: 0 4px;
+  border-radius: var(--r-full); background: var(--danger); color: #fff;
+  font-size: 9px; font-weight: 700; line-height: 1;
+  border: 1.5px solid var(--nav-bg);
 }
+.chat-badge.hidden { display: none !important; }
 
 /* @mention autocomplete */
 .mention-autocomplete {

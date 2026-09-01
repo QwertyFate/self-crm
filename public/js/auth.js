@@ -63,6 +63,8 @@ function showApp() {
   startNotifPolling();
   startClock();
   loadDeals();
+  initChatSocket();
+  refreshChatBadge();
   setTimeout(maybeStartGuide, 800);
 }
 
