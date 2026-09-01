@@ -115,21 +115,23 @@ function updateChatBadge(count) {
   badge.classList.toggle('hidden', count === 0);
 }
 
+// Fetch the unread count once (called on app load)
+async function refreshChatBadge() {
+  try {
+    const data = await apiFetchSilent('/api/chat/unread');
+    if (data && !data.error) updateChatBadge(data.unread);
+  } catch { /* silent */ }
+}
+
 
 // ── Socket.io connection ──────────────────────────────────
 function initChatSocket() {
-  console.log('initChatSocket called');
-  if (socket) {
-    console.log('Socket already initialized');
-    return;
-  }
+  if (socket) return;
 
-  console.log('Creating new socket.io connection...');
   socket = io();
-  console.log('Socket created:', socket);
 
   socket.on('connect', () => {
-    console.log('Chat socket connected with id:', socket.id);
+    renderPageOnlineUsers();
   });
 
   socket.on('connect_error', (error) => {
@@ -142,8 +144,6 @@ function initChatSocket() {
   });
 
   socket.on('new_message', (msg) => {
-    console.log('Received message:', msg);
-
     // Update page chat
     const pageEl = document.getElementById('chat-page-messages');
     if (pageEl && chatPageOpen) {
@@ -204,43 +204,26 @@ function renderPageOnlineUsers() {
 
 
 async function loadChatPage() {
-  // Team chat is coming soon - just return
-  return;
-}
-
-async function _loadChatPageDisabled() {
-  console.log('loadChatPage called');
   chatPageOpen = true;
   chatOldestId = null;
   chatNewestId = null;
+  chatLoadingMore = false;
 
-  if (!socket) {
-    console.log('Socket not initialized, initializing...');
-    initChatSocket();
-  }
+  if (!socket) initChatSocket();
 
   const el = document.getElementById('chat-page-messages');
-  if (!el) {
-    console.error('chat-page-messages element not found');
-    return;
-  }
+  if (!el) return;
 
   try {
-    console.log('Fetching chat messages...');
     const data = await api.get('/api/chat/messages');
-    console.log('Chat messages response:', data);
-
     if (!data || data.error) {
-      console.error('Chat messages error:', data?.error);
       el.innerHTML = '<div class="chat-empty">Could not load messages.</div>';
       return;
     }
 
     if (!data.messages || !data.messages.length) {
-      console.log('No messages found');
       el.innerHTML = '<div class="chat-empty">No messages yet. Say hello to your team!</div>';
     } else {
-      console.log('Rendering', data.messages.length, 'messages');
       el.innerHTML = '';
       renderMessagesToPage(data.messages);
       chatOldestId = data.messages[0].id;
@@ -257,9 +240,41 @@ async function _loadChatPageDisabled() {
         if (pageEl.scrollTop < 60 && !chatLoadingMore && chatOldestId) loadOlderMessages();
       };
     }
-    console.log('loadChatPage completed');
   } catch (err) {
     console.error('Error in loadChatPage:', err);
+    el.innerHTML = '<div class="chat-empty">Error loading messages.</div>';
+  }
+}
+
+// Re-fetch the current chat thread (Refresh button)
+async function renderChatRoom() {
+  if (!chatPageOpen) chatPageOpen = true;
+  const el = document.getElementById('chat-page-messages');
+  if (!el) return;
+  chatOldestId = null;
+  chatNewestId = null;
+  chatLoadingMore = false;
+  if (!socket) initChatSocket();
+  el.innerHTML = '<div class="chat-empty">Loading…</div>';
+  try {
+    const data = await api.get('/api/chat/messages');
+    if (!data || data.error || !data.messages) {
+      el.innerHTML = '<div class="chat-empty">Could not load messages.</div>';
+      return;
+    }
+    el.innerHTML = data.messages.length
+      ? ''
+      : '<div class="chat-empty">No messages yet. Say hello to your team!</div>';
+    if (data.messages.length) {
+      renderMessagesToPage(data.messages);
+      chatOldestId = data.messages[0].id;
+      chatNewestId = data.messages[data.messages.length - 1].id;
+      scrollChatPageBottom();
+    }
+    api.patch('/api/chat/read', {});
+    updateChatBadge(0);
+  } catch (err) {
+    console.error('Error in renderChatRoom:', err);
     el.innerHTML = '<div class="chat-empty">Error loading messages.</div>';
   }
 }
@@ -339,7 +354,6 @@ function sendChatMessageFromPage() {
     return;
   }
 
-  console.log('Sending message:', content);
   input.value = '';
   socket.emit('chat_message', content);
 }
