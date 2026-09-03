@@ -229,6 +229,7 @@ async function initDb() {
   `);
   await pool.query(`ALTER TABLE contacts   ADD COLUMN IF NOT EXISTS contact_type   TEXT NOT NULL DEFAULT 'contact'`);
   await pool.query(`ALTER TABLE deals      ADD COLUMN IF NOT EXISTS supplier_id    INTEGER REFERENCES contacts(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE deals      ADD COLUMN IF NOT EXISTS urgency        INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS objects (
       id           SERIAL PRIMARY KEY,
