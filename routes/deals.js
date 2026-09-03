@@ -6,6 +6,13 @@ const { notify }  = require('../notifications');
 
 router.use(requireAuth);
 
+// Deal urgency: 0 = not set, 1 Low, 2 Medium, 3 High, 4 Very urgent
+function clampUrgency(v) {
+  const n = parseInt(v, 10);
+  if (!Number.isInteger(n)) return 0;
+  return Math.min(4, Math.max(0, n));
+}
+
 router.get('/', async (req, res, next) => {
   try {
     const pipeline_id = parseInt(req.query.pipeline_id) || null;
@@ -58,13 +65,13 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { contact_id, supplier_id, pipeline_id, stage_id, title, value, assigned_to, custom_data } = req.body;
+    const { contact_id, supplier_id, pipeline_id, stage_id, title, value, assigned_to, custom_data, urgency } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
     if (!pipeline_id)   return res.status(400).json({ error: 'Pipeline required' });
     const assignee = assigned_to ? Number(assigned_to) : req.userId;
     const { rows: [row] } = await pool.query(
-      'INSERT INTO deals (workspace_id,contact_id,supplier_id,pipeline_id,stage_id,title,value,assigned_to,custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
-      [req.workspaceId, contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assignee, JSON.stringify(custom_data||{})]
+      'INSERT INTO deals (workspace_id,contact_id,supplier_id,pipeline_id,stage_id,title,value,assigned_to,urgency,custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id',
+      [req.workspaceId, contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assignee, clampUrgency(urgency), JSON.stringify(custom_data||{})]
     );
     notify(req.workspaceId, req.userId, {
       type: 'deal_created', category: 'deals',
@@ -78,11 +85,11 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const { contact_id, supplier_id, pipeline_id, stage_id, title, value, assigned_to, custom_data } = req.body;
+    const { contact_id, supplier_id, pipeline_id, stage_id, title, value, assigned_to, custom_data, urgency } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
     const result = await pool.query(
-      'UPDATE deals SET contact_id=$1,supplier_id=$2,pipeline_id=$3,stage_id=$4,title=$5,value=$6,assigned_to=$7,custom_data=$8,updated_at=NOW() WHERE id=$9 AND workspace_id=$10',
-      [contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assigned_to||null, JSON.stringify(custom_data||{}), req.params.id, req.workspaceId]
+      'UPDATE deals SET contact_id=$1,supplier_id=$2,pipeline_id=$3,stage_id=$4,title=$5,value=$6,assigned_to=$7,urgency=$8,custom_data=$9,updated_at=NOW() WHERE id=$10 AND workspace_id=$11',
+      [contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assigned_to||null, clampUrgency(urgency), JSON.stringify(custom_data||{}), req.params.id, req.workspaceId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     notify(req.workspaceId, req.userId, {
@@ -108,6 +115,19 @@ router.patch('/:id/stage', async (req, res, next) => {
       entityType: 'deal', entityId: Number(req.params.id),
     });
     res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
+// PATCH /:id/urgency — quick update from the kanban card shortcut
+router.patch('/:id/urgency', async (req, res, next) => {
+  try {
+    const urgency = clampUrgency(req.body.urgency);
+    const result = await pool.query(
+      'UPDATE deals SET urgency=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3',
+      [urgency, req.params.id, req.workspaceId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, urgency });
   } catch (e) { next(e); }
 });
 

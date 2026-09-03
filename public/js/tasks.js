@@ -24,11 +24,16 @@ function getActiveTaskStatuses() {
 
 // ── Load ──────────────────────────────────────────────────
 async function loadTasks() {
-  // Clear UI immediately to prevent showing stale data
+  // Clear UI immediately to prevent showing stale data.
+  // NOTE: only clear the dynamic task areas — #tasks-content contains the
+  // static header chrome (#tasks-breadcrumb, #tasks-main-title, toolbar) that
+  // must stay in the DOM for selectList()/setTaskView() to keep working.
   const taskNav = document.getElementById('tasks-project-nav');
-  const taskContent = document.getElementById('tasks-content');
   if (taskNav) taskNav.innerHTML = '';
-  if (taskContent) taskContent.innerHTML = '';
+  const listView = document.getElementById('tasks-list-view');
+  if (listView) listView.innerHTML = '';
+  const kanbanView = document.getElementById('tasks-kanban-view');
+  if (kanbanView) kanbanView.innerHTML = '';
 
   await ensureMembers();
   taskProjects = await api.get('/api/task-projects');
@@ -78,8 +83,10 @@ async function selectList(project, list) {
   content.style.display = 'flex';
 
   // Update header
-  document.getElementById('tasks-breadcrumb').textContent = project.name;
-  document.getElementById('tasks-main-title').textContent = list.name;
+  const bcEl = document.getElementById('tasks-breadcrumb');
+  if (bcEl) bcEl.textContent = project.name;
+  const titleEl = document.getElementById('tasks-main-title');
+  if (titleEl) titleEl.textContent = list.name;
 
   // Load tasks for this list
   tasks = await api.get(`/api/tasks?list_id=${list.id}`);
@@ -219,7 +226,8 @@ async function saveList() {
   renderProjectNav();
   // If we renamed the current list, update the header
   if (listId && parseInt(listId) === currentListId) {
-    document.getElementById('tasks-main-title').textContent = name;
+    const titleEl = document.getElementById('tasks-main-title');
+    if (titleEl) titleEl.textContent = name;
   }
 }
 

@@ -2943,3 +2943,32 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 
 .import-upload-icon .ic, .import-done-icon .ic { stroke-width: 1.6; }
 .empty-state-art .ic { width: 26px; height: 26px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   33 · DEAL URGENCY (outline colors: 0 none, 1 Low … 4 Very urgent)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.deal-card.urgency-1 { border-left: 4px solid var(--success); }
+.deal-card.urgency-2 { border-left: 4px solid var(--warning); }
+.deal-card.urgency-3 { border-left: 4px solid #f59e0b; }
+.deal-card.urgency-4 { border-left: 4px solid var(--danger); }
+
+.urgency-dot {
+  width: 9px; height: 9px; border-radius: var(--r-full);
+  display: inline-block; flex-shrink: 0; vertical-align: -1px;
+  border: 1px solid var(--line-soft);
+}
+
+.urgency-label { font-size: var(--fs-xs); font-weight: 560; color: var(--ink-secondary); }
+
+.card-urgency-select {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+}
+.urgency-select {
+  font-size: var(--fs-2xs); color: var(--ink-secondary);
+  padding: 2px var(--sp-15); max-width: 100px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-xs);
+  background: var(--surface); cursor: pointer;
+}
+.urgency-select:hover { border-color: var(--brand); }
+.card-urgency-select .urgency-dot { width: 7px; height: 7px; }
+

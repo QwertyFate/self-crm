@@ -1,4 +1,29 @@
 // ── DEALS ─────────────────────────────────────────────────
+
+// Deal urgency levels (0 = not set, 1 Low → 4 Very urgent)
+const DEAL_URGENCY = [
+  { value: 0, label: 'No urgency', color: 'transparent' },
+  { value: 1, label: 'Low',        color: 'var(--success)' },
+  { value: 2, label: 'Medium',     color: 'var(--warning)' },
+  { value: 3, label: 'High',       color: '#f59e0b' },
+  { value: 4, label: 'Very urgent',color: 'var(--danger)' },
+];
+function urgencyMeta(v) {
+  const n = parseInt(v, 10) || 0;
+  return DEAL_URGENCY.find(u => u.value === n) || DEAL_URGENCY[0];
+}
+function urgencyDotHtml(v) {
+  const m = urgencyMeta(v);
+  const visible = m.value > 0 ? m.color : 'transparent';
+  return `<span class="urgency-dot" style="background:${visible}" title="${esc(m.label)}"></span>`;
+}
+function urgencySelectOptions(selected) {
+  const cur = parseInt(selected, 10) || 0;
+  return DEAL_URGENCY.map(u =>
+    `<option value="${u.value}"${u.value === cur ? ' selected' : ''}>${esc(u.label)}</option>`
+  ).join('');
+}
+
 async function loadDeals() {
   // Clear UI immediately to prevent showing stale data
   const dealsBoard = document.getElementById('deals-board');
@@ -59,6 +84,7 @@ function effectiveDealColumns() {
     { key: 'stage',       label: () => t('col_stage'),      show: true  },
     { key: 'contact',     label: () => t('lbl_contact'),    show: true  },
     { key: 'value',       label: () => t('lbl_deal_value'), show: true  },
+    { key: 'urgency',     label: () => 'Urgency',           show: true  },
     { key: 'assigned_to', label: () => t('col_assignee'),   show: true  },
     { key: 'created_at',  label: () => t('col_created_at'), show: false },
   ];
@@ -146,6 +172,11 @@ function renderDealsList() {
           : dash;
         return `<td>${badge}</td>`;
       }
+      if (col.key === 'urgency') {
+        const m = urgencyMeta(d.urgency);
+        const color = m.value > 0 ? m.color : '';
+        return `<td>${urgencyDotHtml(d.urgency)}<span class="urgency-label"${color ? ` style="color:${color}"` : ''}>${esc(m.label)}</span></td>`;
+      }
       if (col.key === 'contact')     return `<td>${d.contact_name ? esc(d.contact_name) : dash}</td>`;
       if (col.key === 'value')       return `<td>${d.value != null ? `<span class="deal-value-chip">€ ${Number(d.value).toLocaleString()}</span>` : dash}</td>`;
       if (col.key === 'assigned_to') return `<td>${d.assigned_to_name ? esc(d.assigned_to_name) : dash}</td>`;
@@ -197,8 +228,9 @@ function renderDealsBoard() {
 
 function dealCard(d) {
   const fmtVal = d.value != null ? Number(d.value).toLocaleString() : null;
+  const urgency = parseInt(d.urgency, 10) || 0;
   return `
-    <div class="contact-card deal-card" draggable="true" data-id="${d.id}"
+    <div class="contact-card deal-card urgency-${urgency}" draggable="true" data-id="${d.id}"
       ondragstart="dealDragStart(event,${d.id})" ondragend="dealDragEnd(event)"
       onclick="openDealModal(${d.id})">
       <div class="card-name">${esc(d.title)}</div>
@@ -206,9 +238,30 @@ function dealCard(d) {
       ${fmtVal != null ? `<div class="card-field deal-value-chip">€ ${fmtVal}</div>` : ''}
       ${d.assigned_to_name ? `<div class="card-field">→ ${esc(d.assigned_to_name)}</div>` : ''}
       <div class="card-actions">
+        <div class="card-urgency-select" title="Set urgency" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
+          <span class="urgency-dot" style="background:${urgencyMeta(urgency).color}"></span>
+          <select class="urgency-select" onchange="setDealUrgency(${d.id}, this.value)" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
+            ${urgencySelectOptions(urgency)}
+          </select>
+        </div>
         <button class="btn btn-sm btn-danger btn-icon" title="Delete" onclick="event.stopPropagation();deleteDeal(${d.id})">✕</button>
       </div>
     </div>`;
+}
+
+// Quick urgency update from the kanban card / list shortcut
+async function setDealUrgency(dealId, value) {
+  const urgency = parseInt(value, 10) || 0;
+  const deal = deals.find(d => d.id === dealId);
+  if (!deal) return;
+  deal.urgency = urgency; // optimistic
+  if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
+  const res = await api.patch(`/api/deals/${dealId}/urgency`, { urgency });
+  if (res && res.error) {
+    const fresh = await api.get(`/api/deals?pipeline_id=${currentPipelineId || ''}`);
+    if (fresh) deals = fresh;
+    if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
+  }
 }
 
 // ── Drag & Drop ───────────────────────────────────────────

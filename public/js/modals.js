@@ -1186,6 +1186,17 @@ function onDealContactChange() {
   renderContactPanelReadOnly(contacts.find(c => c.id === contactId) || null);
 }
 
+// Keep the colored urgency swatch next to the modal select in sync
+function updateUrgencyDot() {
+  const sel = document.getElementById('df-urgency'), dot = document.getElementById('df-urgency-dot');
+  if (!sel || !dot) return;
+  const v = parseInt(sel.value, 10) || 0;
+  let color = 'transparent';
+  if (typeof urgencyMeta === 'function') color = urgencyMeta(v).color || 'transparent';
+  else color = ({ 1: 'var(--success)', 2: 'var(--warning)', 3: '#f59e0b', 4: 'var(--danger)' })[v] || 'transparent';
+  dot.style.background = color;
+}
+
 async function openDealModal(id) {
   const noteFormW = document.getElementById('deal-note-form-wrapper');
   if (noteFormW) noteFormW.classList.add('hidden');
@@ -1193,6 +1204,7 @@ async function openDealModal(id) {
   document.getElementById('deal-id').value = id || '';
   document.getElementById('deal-modal-title').textContent = id ? 'Edit Deal' : 'Add Deal';
   document.getElementById('deal-delete-btn').style.display = id ? '' : 'none';
+  updateUrgencyDot(); // reset the urgency swatch back to "no urgency"
 
   // Batch all API calls together
   const [, , , , pipelinesRes, dealFieldsRes, allContacts, allSuppliers, dealDataRes, objectsRes, objectFieldsRes] = await Promise.all([
@@ -1251,6 +1263,9 @@ async function openDealModal(id) {
     supplierSel.value = d.supplier_id || '';
     assigneeSel.value = d.assigned_to || '';
     dealFields.forEach(f => { const el = document.getElementById(`dfield-${f.field_key}`); if (el) el.value = d.custom_data?.[f.field_key] ?? ''; });
+    const urgSel = document.getElementById('df-urgency');
+    if (urgSel) urgSel.value = String(d.urgency ?? 0);
+    updateUrgencyDot();
     if (d.contact_id) {
       linkedContact = allContacts.find(c => c.id === d.contact_id) || null;
       document.getElementById('deal-activity-deal-id').value = d.contact_id;
@@ -1355,6 +1370,7 @@ async function saveDeal(e) {
     stage_id:    document.getElementById('df-stage').value    || null,
     value:       document.getElementById('df-value').value    || null,
     assigned_to: document.getElementById('df-assignee').value || null,
+    urgency:     document.getElementById('df-urgency').value || 0,
     custom_data: Object.fromEntries(dealFields.map(f => [f.field_key, document.getElementById(`dfield-${f.field_key}`)?.value || ''])),
   };
   if (id) await api.put(`/api/deals/${id}`, payload); else await api.post('/api/deals', payload);
