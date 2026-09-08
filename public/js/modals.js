@@ -114,8 +114,8 @@ function buildDetailHTML(c, contactDeals, id) {
       <div class="detail-section-header">
         <h3>Deals</h3>
         <div style="display:flex;gap:6px">
-          <button class="btn btn-sm btn-primary" onclick="openAddToKanbanModal(${id})">+ Add to Kanban</button>
           <button class="btn btn-sm btn-primary" onclick="closeSidePanel();closeModal('detail-modal');openDealModalForContact(${id})">+ Add Deal</button>
+          <button class="btn btn-sm btn-primary" onclick="openTaskModalForContact(${id})">+ Add Task</button>
         </div>
       </div>
       <div class="contact-deals-list" id="contact-deals-list">${renderContactDeals(contactDeals)}</div>
@@ -197,42 +197,6 @@ async function openDetail(id) {
 async function updateContactStage(contactId, stageId) {
   await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: stageId || null });
   invalidate();
-}
-
-function openAddToKanbanModal(contactId) {
-  const stageSelect = document.getElementById('add-to-kanban-stage');
-  stageSelect.innerHTML = '<option value="">— Select a stage —</option>' +
-    (stages || []).map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
-
-  // Store the contact ID for use in the submit handler
-  document.getElementById('add-to-kanban-form').dataset.contactId = contactId;
-  document.getElementById('add-to-kanban-modal').classList.remove('hidden');
-}
-
-async function confirmAddToKanban(e) {
-  e.preventDefault();
-  const contactId = parseInt(document.getElementById('add-to-kanban-form').dataset.contactId);
-  const stageId = parseInt(document.getElementById('add-to-kanban-stage').value);
-
-  if (!stageId) {
-    alert('Please select a stage');
-    return;
-  }
-
-  await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: stageId });
-  closeModal('add-to-kanban-modal');
-  closeSidePanel();
-  closeModal('detail-modal');
-
-  // Update local contacts array
-  const contact = contacts.find(c => c.id === contactId);
-  if (contact) {
-    contact.stage_id = stageId;
-  }
-
-  // Reload contacts and switch to kanban view
-  await loadContacts();
-  setContactViewMode('kanban');
 }
 
 function renderContactDeals(deals) {
@@ -1204,6 +1168,8 @@ async function openDealModal(id) {
   document.getElementById('deal-id').value = id || '';
   document.getElementById('deal-modal-title').textContent = id ? 'Edit Deal' : 'Add Deal';
   document.getElementById('deal-delete-btn').style.display = id ? '' : 'none';
+  const addTaskBtn = document.getElementById('deal-add-task-btn');
+  if (addTaskBtn) addTaskBtn.style.display = id ? '' : 'none';
   updateUrgencyDot(); // reset the urgency swatch back to "no urgency"
 
   // Batch all API calls together
@@ -1394,6 +1360,20 @@ async function deleteDealFromModal() {
   closeModal('deal-modal');
   deals = deals.filter(d => d.id !== Number(id));
   if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
+}
+
+// Open the task modal pre-linked to the deal currently shown (and its contact)
+async function addTaskFromDeal() {
+  const id = Number(document.getElementById('deal-id').value);
+  if (!id) { alert('Save the deal first, then you can add a task from it.'); return; }
+  const d = await api.get(`/api/deals/${id}`);
+  if (!d || d.error) { alert(d?.error || 'Could not load the deal'); return; }
+  openTaskModal(null, {
+    dealId:   d.id,
+    dealTitle: d.title,
+    contactId: d.contact_id || null,
+    contactName: d.contact_name || null,
+  });
 }
 
 // ── ACTIVITY MODAL ────────────────────────────────────────

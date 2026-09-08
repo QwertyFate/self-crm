@@ -321,6 +321,8 @@ async function initDb() {
   `);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES task_projects(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS list_id    INTEGER REFERENCES task_lists(id)    ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deal_id    INTEGER REFERENCES deals(id)    ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_attachments (

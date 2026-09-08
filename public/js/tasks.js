@@ -464,16 +464,24 @@ function renderTaskFieldInput(f, value = '') {
   return `<input type="${typeMap[f.type]||'text'}" id="${id}" value="${esc(value)}" />`;
 }
 
-async function openTaskModal(id) {
+async function openTaskModal(id, ctx = null) {
   await ensureMembers();
   // Ensure task fields are loaded
   if (!taskFields.length) taskFields = await api.get('/api/task-fields');
+  // Ensure projects/lists are loaded for the project & list selects
+  if (!taskProjects.length) {
+    try { taskProjects = await api.get('/api/task-projects'); } catch (e) { taskProjects = []; }
+  }
+
+  let taskEdit = null;
 
   document.getElementById('task-form').reset();
   document.getElementById('task-id').value        = id || '';
   document.getElementById('task-parent-id').value = '';
   document.getElementById('task-modal-title').textContent = id ? 'Edit Task' : 'Add Task';
   document.getElementById('task-delete-btn').style.display = id ? '' : 'none';
+  document.getElementById('task-deal-id').value = '';
+  document.getElementById('task-contact-id').value = '';
 
   const statuses = getActiveTaskStatuses();
   document.getElementById('task-status').innerHTML =
@@ -483,11 +491,13 @@ async function openTaskModal(id) {
     `<option value="">— Unassigned —</option>` +
     members.map(m => `<option value="${m.id}"${m.id === currentUser?.id && !id ? ' selected' : ''}>${esc(m.name)}</option>`).join('');
 
-  const subCol = document.getElementById('task-subtasks-col');
+  const sideCol = document.getElementById('task-side-col');
+  const subSection = document.getElementById('task-subtasks-section');
 
   if (id) {
     currentTaskId = id;
     const t = await api.get(`/api/tasks/${id}`);
+    taskEdit = t;
     document.getElementById('task-title').value       = t.title;
     document.getElementById('task-description').value = t.description || '';
     document.getElementById('task-status').value      = t.status;
@@ -500,9 +510,10 @@ async function openTaskModal(id) {
       `<div class="form-group"><label>${esc(f.name)}</label>${renderTaskFieldInput(f, t.custom_data?.[f.field_key] ?? '')}</div>`
     ).join('');
 
-    subCol.style.display = '';
+    // Show the side column and its editing sections (linked is always visible)
+    if (sideCol)    sideCol.style.display    = '';
+    if (subSection) subSection.style.display = '';
     renderSubtasksList(t.subtasks || [], id);
-    loadTaskAttachments(id);
   } else {
     currentTaskId = null;
     document.getElementById('task-status').value = statuses[0]?.key || 'todo';
@@ -512,10 +523,187 @@ async function openTaskModal(id) {
       `<div class="form-group"><label>${esc(f.name)}</label>${renderTaskFieldInput(f, '')}</div>`
     ).join('');
 
-    subCol.style.display = 'none';
+    // New task: keep the side column (shows Linked), hide subtasks
+    if (sideCol)    sideCol.style.display    = '';
+    if (subSection) subSection.style.display = 'none';
   }
 
+  setupTaskModalContext(taskEdit, ctx);
+
   document.getElementById('task-modal').classList.remove('hidden');
+}
+
+// ── Task modal: project/list + linked deal/contact setup ──────────────────
+let taskOpenLinks = { dealId: null, dealTitle: null, contactId: null, contactName: null };
+
+function populateTaskProjectSelect(selectedProjectId) {
+  const sel = document.getElementById('task-project');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— No project —</option>' +
+    taskProjects.map(p =>
+      `<option value="${p.id}"${p.id === selectedProjectId ? ' selected' : ''}>${esc(p.name)}</option>`
+    ).join('');
+}
+
+function populateTaskListSelect(projectId, selectedListId) {
+  const sel = document.getElementById('task-list');
+  if (!sel) return;
+  const project = taskProjects.find(p => p.id === projectId);
+  const lists   = project?.lists || [];
+  sel.innerHTML = '<option value="">— No list —</option>' +
+    lists.map(l =>
+      `<option value="${l.id}"${l.id === selectedListId ? ' selected' : ''}>${esc(l.name)}</option>`
+    ).join('');
+}
+
+function onTaskProjectChange() {
+  populateTaskListSelect(parseInt(document.getElementById('task-project')?.value) || null, null);
+}
+
+function setupTaskModalContext(taskEdit, ctx) {
+  hideTaskLinkPicker();
+  // Project + list defaults
+  let projectId = null, listId = null;
+  if (taskEdit) {
+    projectId = taskEdit.project_id || currentProjectId || null;
+    listId    = taskEdit.list_id    || currentListId    || null;
+  } else {
+    projectId = currentProjectId || (taskProjects[0]?.id) || null;
+    listId    = currentListId;
+    if (!listId && projectId) listId = (taskProjects.find(p => p.id === projectId)?.lists || [])[0]?.id || null;
+  }
+  populateTaskProjectSelect(projectId);
+  populateTaskListSelect(projectId, listId);
+
+  // Linked deal / contact (edit data wins; otherwise use the passed context)
+  const links = taskEdit
+    ? {
+        dealId:     taskEdit.deal_id     || null,
+        dealTitle:  taskEdit.deal_title  || null,
+        contactId:  taskEdit.contact_id  || null,
+        contactName: taskEdit.contact_name || null,
+      }
+    : (ctx || {});
+  renderTaskLinks(links);
+}
+
+function renderTaskLinks(links = {}) {
+  taskOpenLinks = {
+    dealId:     links.dealId     || null,
+    dealTitle:  links.dealTitle  || null,
+    contactId:  links.contactId  || null,
+    contactName: links.contactName || null,
+  };
+  document.getElementById('task-deal-id').value    = taskOpenLinks.dealId || '';
+  document.getElementById('task-contact-id').value = taskOpenLinks.contactId || '';
+
+  const el = document.getElementById('task-links');
+  if (!el) return;
+  const rows = [];
+  if (taskOpenLinks.dealId) {
+    rows.push(`<div class="task-link-row">
+      <span class="task-link-k">Deal</span>
+      <a class="task-link-a" onclick="openLinkedTaskObject('deal',${taskOpenLinks.dealId})" title="Open deal">${esc(taskOpenLinks.dealTitle || `Deal #${taskOpenLinks.dealId}`)}</a>
+      <button type="button" class="task-link-clear" onclick="clearTaskLink('deal')" title="Unlink deal">×</button>
+    </div>`);
+  }
+  if (taskOpenLinks.contactId) {
+    rows.push(`<div class="task-link-row">
+      <span class="task-link-k">Contact</span>
+      <a class="task-link-a" onclick="openLinkedTaskObject('contact',${taskOpenLinks.contactId})" title="Open contact">${esc(taskOpenLinks.contactName || `Contact #${taskOpenLinks.contactId}`)}</a>
+      <button type="button" class="task-link-clear" onclick="clearTaskLink('contact')" title="Unlink contact">×</button>
+    </div>`);
+  }
+  el.innerHTML = rows.length
+    ? rows.join('')
+    : '<span class="task-link-empty">Not linked to a deal or contact.</span>';
+}
+
+function clearTaskLink(kind) {
+  const links = { ...taskOpenLinks };
+  if (kind === 'deal')    { links.dealId = null;    links.dealTitle = null; }
+  if (kind === 'contact') { links.contactId = null; links.contactName = null; }
+  renderTaskLinks(links);
+}
+
+// ── Link picker (choose a deal / contact from inside the task modal) ──────
+let taskLinkOptionsCache = null;
+
+async function ensureTaskLinkOptions() {
+  if (taskLinkOptionsCache) return taskLinkOptionsCache;
+  const [deals, contacts] = await Promise.all([
+    api.get('/api/deals'),
+    api.get('/api/contacts?contact_type=contact'),
+  ]);
+  taskLinkOptionsCache = { deals: deals || [], contacts: contacts || [] };
+  return taskLinkOptionsCache;
+}
+
+function hideTaskLinkPicker() {
+  const picker = document.getElementById('task-link-picker');
+  if (picker) picker.style.display = 'none';
+}
+
+async function toggleTaskLinkPicker() {
+  const picker = document.getElementById('task-link-picker');
+  if (!picker) return;
+  if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
+
+  picker.style.display = 'flex';
+  const { deals, contacts } = await ensureTaskLinkOptions();
+
+  const dealSel = document.getElementById('task-link-deal');
+  if (dealSel) {
+    dealSel.innerHTML = '<option value="">— No deal —</option>' +
+      deals.map(d => `<option value="${d.id}"${taskOpenLinks.dealId === d.id ? ' selected' : ''}>${esc(d.title || 'Deal #' + d.id)}</option>`).join('');
+  }
+  const contactSel = document.getElementById('task-link-contact');
+  if (contactSel) {
+    contactSel.innerHTML = '<option value="">— No contact —</option>' +
+      contacts.map(c => `<option value="${c.id}"${taskOpenLinks.contactId === c.id ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  }
+}
+
+function cancelTaskLinkPicker() {
+  hideTaskLinkPicker();
+}
+
+function confirmTaskLink() {
+  const dealSel    = document.getElementById('task-link-deal');
+  const contactSel = document.getElementById('task-link-contact');
+  const dealVal    = parseInt(dealSel?.value, 10) || null;
+  const contactVal = parseInt(contactSel?.value, 10) || null;
+  if (!dealVal && !contactVal) { alert('Select a deal or contact to link.'); return; }
+
+  const links = { ...taskOpenLinks };
+  const options = taskLinkOptionsCache || { deals: [], contacts: [] };
+  if (dealVal) {
+    links.dealId    = dealVal;
+    links.dealTitle = options.deals.find(d => d.id === dealVal)?.title || null;
+  }
+  if (contactVal) {
+    links.contactId    = contactVal;
+    links.contactName  = options.contacts.find(c => c.id === contactVal)?.name || null;
+  }
+  renderTaskLinks(links);
+  hideTaskLinkPicker();
+}
+
+// Open the linked deal / contact from the task modal
+function openLinkedTaskObject(kind, id) {
+  closeModal('task-modal');
+  if (kind === 'deal')    openDealModal(id);
+  else                    openDetail(id);
+}
+
+// Pre-link a new task to a contact (used from the contact detail view)
+async function openTaskModalForContact(contactId) {
+  let contactName = null;
+  try {
+    const c = await api.get(`/api/contacts/${contactId}`);
+    if (c && !c.error) contactName = c.name;
+  } catch (e) { /* optional */ }
+  openTaskModal(null, { contactId: contactId || null, contactName });
 }
 
 function renderSubtasksList(subtasks, parentId) {
@@ -588,8 +776,10 @@ async function saveTask(e) {
     priority:    document.getElementById('task-priority').value,
     assigned_to: document.getElementById('task-assignee').value || null,
     due_date:    document.getElementById('task-due-date').value || null,
-    project_id:  currentProjectId,
-    list_id:     currentListId,
+    project_id:  document.getElementById('task-project').value || currentProjectId || null,
+    list_id:     document.getElementById('task-list').value || null,
+    deal_id:     document.getElementById('task-deal-id').value || null,
+    contact_id:  document.getElementById('task-contact-id').value || null,
     custom_data,
   };
   if (id) await api.put(`/api/tasks/${id}`, payload);
