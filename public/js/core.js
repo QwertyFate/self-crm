@@ -1,4 +1,3 @@
-// ── State ─────────────────────────────────────────────────
 let currentUser      = null;
 let currentWorkspace = null;
 let kanbanFields     = ['company', 'email'];
@@ -16,7 +15,7 @@ let objectColumns    = [];
 let objColDragIdx    = null;
 let objCurrentPage   = 1;
 let objectViewMode     = localStorage.getItem('objectViewMode') || 'table';
-let currentContactType = 'contact'; // 'contact' | 'supplier'
+let currentContactType = 'contact';
 let dealFields       = [];
 let dealKanbanFields = ['contact', 'value'];
 let currentPipelineId = null;
@@ -39,7 +38,6 @@ let activeFilters  = {};
 let filterPanelOpen = false;
 let currentLang   = localStorage.getItem('lang') || 'en';
 
-// ── Translations ──────────────────────────────────────────
 const TRANSLATIONS = {
   en: {
     nav_deals:'Deals', nav_contacts:'Contacts', nav_activities:'Activities', nav_settings:'Settings', nav_board:'Board',
@@ -183,12 +181,10 @@ const BUILTIN_FIELDS = [
   { key: 'assignee', label: 'Assignee', type: 'text' },
 ];
 
-// ── Helpers ───────────────────────────────────────────────
 function closeModal(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.classList.add('hidden');
-  // Reset submit guard and re-enable buttons for any form inside this modal
   el.querySelectorAll('form').forEach(f => {
     f._submitting = false;
     f.querySelectorAll('[type="submit"]').forEach(btn => { btn.disabled = false; });
@@ -205,7 +201,6 @@ function fmtDate(dt) {
   return new Date(dt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
 }
 
-// Toggle "No date" on a note form date row: disables/clears the date input
 function toggleNoDate(cb) {
   if (!cb) return;
   const row = cb.closest('div');
@@ -226,12 +221,10 @@ function resetNoDate(cb) {
   }
 }
 
-// Toggle "No date" for the inline note edit form
 function toggleInlineNoDate(cb) {
   toggleNoDate(cb);
 }
 
-// Default a note form date row to "No date": box checked, date input disabled/cleared
 function defaultNoDate(cb) {
   if (!cb) return;
   cb.checked = true;
@@ -253,7 +246,6 @@ function buildPageNumbers(current, total) {
   return pages;
 }
 
-// ── Dark mode ─────────────────────────────────────────────
 function applyTheme(dark) {
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : '');
   const track = document.getElementById('dark-toggle-track');
@@ -268,20 +260,18 @@ function toggleDarkMode() {
   applyTheme(next);
 }
 
-// Apply saved theme immediately
 (function () {
   const saved = localStorage.getItem('theme');
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   applyTheme(saved ? saved === 'dark' : prefersDark);
 })();
 
-// ── Loading bar + overlay ─────────────────────────────────
 const loader = (() => {
   let count = 0, fillTimer = null, hideTimer = null, overlayTimer = null, startTime = null;
   const bar     = () => document.getElementById('loading-bar');
   const fill    = () => document.getElementById('loading-bar-fill');
   const overlay = () => document.getElementById('loading-overlay');
-  const MIN_DISPLAY_TIME = 500; // Minimum time to show loading bar
+  const MIN_DISPLAY_TIME = 500;
 
   function start() {
     if (count === 0) startTime = Date.now();
@@ -322,7 +312,6 @@ const loader = (() => {
   return { start, done };
 })();
 
-// ── API ───────────────────────────────────────────────────
 async function apiFetch(url, opts = {}) {
   loader.start();
   try {
@@ -335,7 +324,6 @@ async function apiFetch(url, opts = {}) {
   }
 }
 
-// Silent fetch — no loading bar, no overlay. For background polling.
 async function apiFetchSilent(url, opts = {}) {
   try {
     const r = await fetch(url, opts);
@@ -353,8 +341,6 @@ const api = {
   del:   url      => apiFetch(url, { method:'DELETE' }),
 };
 
-// ── Duplicate submit guard ────────────────────────────────
-// Runs in capture phase (before the onsubmit handler) so it can cancel duplicates.
 document.addEventListener('submit', e => {
   const form = e.target;
   if (form._submitting) {
@@ -365,21 +351,16 @@ document.addEventListener('submit', e => {
   form._submitting = true;
   const btn = e.submitter || form.querySelector('[type="submit"]');
   if (btn) btn.disabled = true;
-  // Safety net: always unlock after 10s in case the handler throws without closing the modal
   setTimeout(() => {
     form._submitting = false;
     if (btn) btn.disabled = false;
   }, 10000);
 }, true);
 
-// Close modals on backdrop click
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.add('hidden'); });
 });
 
-// ── Global search-dropdown closer ────────────────────────
-// Single persistent handler — closes any open .deal-search-dropdown
-// when the user clicks outside the search wrap or dropdown itself.
 document.addEventListener('mousedown', e => {
   if (!e.target.closest('.deal-search-wrap') && !e.target.closest('.deal-search-dropdown')) {
     document.querySelectorAll('.deal-search-dropdown').forEach(dd => dd.classList.add('hidden'));

@@ -1,4 +1,3 @@
-// ── ADMIN PANEL ───────────────────────────────────────────
 async function handleAdminLogin(e) {
   e.preventDefault();
   const errEl = document.getElementById('admin-login-error'); errEl.classList.add('hidden');
@@ -45,7 +44,6 @@ function adminCopyCode(code, btn) {
   navigator.clipboard.writeText(code).then(() => { const orig = btn.textContent; btn.textContent = '✓'; setTimeout(() => { btn.textContent = orig; }, 1500); });
 }
 
-// ── CSV EXPORT ────────────────────────────────────────────
 function exportContactsCSV() {
   if (!contacts.length) { alert('No contacts to export.'); return; }
   const hdrs = ['Name','Company','Email','Phone','Stage','Assignee', ...fields.map(f => f.name)];
@@ -60,7 +58,6 @@ function exportContactsCSV() {
   a.click();
 }
 
-// ── CSV IMPORT ────────────────────────────────────────────
 async function readFileText(file) {
   const buf = await file.arrayBuffer(), bytes = new Uint8Array(buf);
   if (bytes[0] === 0xFF && bytes[1] === 0xFE) return new TextDecoder('utf-16le').decode(buf).replace(/^﻿/, '');
@@ -252,7 +249,6 @@ async function runImport() {
       else if (m.mapTo === 'new' && newKeyByCol[i]) c.custom_data[newKeyByCol[i]] = val;
     });
 
-    // Combine first_name and last_name into name if split name is enabled
     if (splitName) {
       c.name = [c.first_name, c.last_name].filter(Boolean).join(' ') || c.name;
       delete c.first_name;
@@ -271,7 +267,6 @@ async function runImport() {
   const pipelineId = createDeals ? parseInt(document.getElementById('import-pipeline').value) || null : null;
   const stageId = createDeals ? parseInt(document.getElementById('import-stage').value) || null : null;
 
-  // Get assignee: prefer manually selected one, then fall back to integration default
   let assigneeId = parseInt(document.getElementById('import-assignee').value) || null;
   if (!assigneeId) {
     const intgSettings = await api.get('/api/integrations/settings');
@@ -298,5 +293,4 @@ async function runImport() {
   showImportStep('done'); invalidate();
 }
 
-// ── Boot ──────────────────────────────────────────────────
 init();

@@ -1,4 +1,3 @@
-// ── CRM GUIDE / ONBOARDING TOUR ───────────────────────────
 const GUIDE_KEY = 'crm_guide_seen_v1';
 
 const GUIDE_STEPS = [
@@ -94,7 +93,6 @@ let guideStep    = 0;
 let guideActive  = false;
 let guideResizeObs = null;
 
-// ── Public API ─────────────────────────────────────────────
 function startGuide() {
   guideStep   = 0;
   guideActive = true;
@@ -106,7 +104,6 @@ function endGuide() {
   guideActive = false;
   document.getElementById('guide-overlay').classList.add('hidden');
   document.getElementById('guide-spotlight').style.cssText = 'display:none';
-  // Save to both localStorage (fast) and DB (cross-device)
   localStorage.setItem(GUIDE_KEY, '1');
   api.patch('/api/analytics/layout', { guide_seen: true }).then(() => {
     if (currentUser) currentUser.analytics_layout = { ...(currentUser.analytics_layout || {}), guide_seen: true };
@@ -124,18 +121,15 @@ function guidePrev() {
 }
 
 function maybeStartGuide() {
-  // Check DB first (source of truth), fall back to localStorage
   const seenInDb    = currentUser?.analytics_layout?.guide_seen === true;
   const seenLocally = !!localStorage.getItem(GUIDE_KEY);
   if (seenInDb) {
-    // Sync localStorage so future checks are instant
     localStorage.setItem(GUIDE_KEY, '1');
     return;
   }
   if (!seenLocally) startGuide();
 }
 
-// ── Step rendering ─────────────────────────────────────────
 async function showGuideStep(idx) {
   const step = GUIDE_STEPS[idx];
   if (!step) { endGuide(); return; }
@@ -145,16 +139,13 @@ async function showGuideStep(idx) {
     await new Promise(r => setTimeout(r, 380));
   }
 
-  // Update text
   document.getElementById('guide-title').innerHTML = step.title;
   document.getElementById('guide-body').innerHTML  = step.body;
   document.getElementById('guide-step-counter').textContent = `${idx + 1} of ${GUIDE_STEPS.length}`;
 
-  // Prev / Next buttons
   document.getElementById('guide-prev-btn').style.visibility = idx === 0 ? 'hidden' : '';
   document.getElementById('guide-next-btn').textContent = idx === GUIDE_STEPS.length - 1 ? 'Finish' : 'Next →';
 
-  // Progress dots
   document.getElementById('guide-dots').innerHTML = GUIDE_STEPS.map((_, i) =>
     `<span class="guide-dot${i === idx ? ' active' : ''}"></span>`
   ).join('');
@@ -167,7 +158,6 @@ function positionGuideStep(step) {
   const tooltip   = document.getElementById('guide-tooltip');
 
   if (!step.target) {
-    // Centered card — no spotlight
     spotlight.style.cssText = 'display:none';
     tooltip.style.cssText   = '';
     tooltip.className       = 'guide-tooltip guide-tooltip-center';
@@ -199,10 +189,9 @@ function placeSpotlight(step, target) {
     height: ${r.height + pad * 2}px;
   `;
 
-  // Tooltip positioning
   tooltip.className = 'guide-tooltip';
   const vw = window.innerWidth, vh = window.innerHeight;
-  const tw = 320, th = 200; // approx tooltip size
+  const tw = 320, th = 200;
 
   if (step.pos === 'right') {
     tooltip.style.cssText = `left:${Math.min(r.right + pad + 12, vw - tw - 12)}px; top:${Math.max(r.top, 12)}px;`;
@@ -218,7 +207,6 @@ function placeSpotlight(step, target) {
   }
 }
 
-// Reposition on scroll/resize
 window.addEventListener('resize', () => {
   if (!guideActive) return;
   const step = GUIDE_STEPS[guideStep];
@@ -228,7 +216,6 @@ window.addEventListener('resize', () => {
   }
 });
 
-// Close on Escape
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && guideActive) endGuide();
 });

@@ -5,7 +5,6 @@ const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
 
-// GET /api/chat/messages?before=<id>  — last 50 messages (paginated)
 router.get('/messages', async (req, res, next) => {
   try {
     const { before } = req.query;
@@ -27,7 +26,6 @@ router.get('/messages', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/chat/unread — unread message count for badge
 router.get('/unread', async (req, res, next) => {
   try {
     const { rows: [row] } = await pool.query(`
@@ -44,7 +42,6 @@ router.get('/unread', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/chat/messages — send a message
 router.post('/messages', async (req, res, next) => {
   try {
     const { content } = req.body;
@@ -54,7 +51,6 @@ router.post('/messages', async (req, res, next) => {
        VALUES ($1, $2, $3) RETURNING id, created_at`,
       [req.workspaceId, req.userId, content.trim()]
     );
-    // Auto-mark as read for sender
     await pool.query(
       `INSERT INTO chat_reads (user_id, workspace_id, last_read_at)
        VALUES ($1, $2, NOW())
@@ -65,7 +61,6 @@ router.post('/messages', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PATCH /api/chat/read — mark all messages as read
 router.patch('/read', async (req, res, next) => {
   try {
     await pool.query(

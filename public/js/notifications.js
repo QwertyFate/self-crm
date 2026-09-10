@@ -1,4 +1,3 @@
-// ── NOTIFICATIONS ──────────────────────────────────────────
 let notifPanelOpen = false;
 let notifPollTimer = null;
 
@@ -28,7 +27,6 @@ function notifTimeAgo(dateStr) {
 
 async function loadNotifications(showLoader = false) {
   try {
-    // Use silent fetch for background polls — no loading bar or overlay
     const res = showLoader
       ? await api.get('/api/notifications')
       : await apiFetchSilent('/api/notifications');
@@ -68,9 +66,7 @@ function renderNotifList(notifications) {
 }
 
 async function onNotifClick(id, entityType, entityId) {
-  // Mark as read
   await api.patch(`/api/notifications/${id}/read`);
-  // Navigate to the entity if applicable
   if (entityType === 'deal' && entityId) {
     toggleNotifPanel();
     switchPage('deals');
@@ -79,18 +75,15 @@ async function onNotifClick(id, entityType, entityId) {
     toggleNotifPanel();
     switchPage('contacts');
   }
-  // Refresh list
   loadNotifications();
 }
 
 function toggleNotifPanel() {
   notifPanelOpen = !notifPanelOpen;
   document.getElementById('notif-panel')?.classList.toggle('hidden', !notifPanelOpen);
-  // Show loader when user deliberately opens the panel, not on background polls
   if (notifPanelOpen) loadNotifications(true);
 }
 
-// Close panel when clicking outside
 document.addEventListener('mousedown', e => {
   if (!notifPanelOpen) return;
   if (!e.target.closest('#notif-panel') && !e.target.closest('#notif-bell-btn')) {
@@ -109,12 +102,10 @@ async function clearReadNotifs() {
   loadNotifications();
 }
 
-// ── Notification preferences ──────────────────────────────
 function loadNotifPrefs() {
   const prefs = currentUser?.notification_prefs || {};
   document.querySelectorAll('#notif-pref-list input[data-pref]').forEach(cb => {
     const key = cb.dataset.pref;
-    // Default to true if not set
     cb.checked = prefs[key] !== false;
   });
 }
@@ -135,7 +126,6 @@ async function saveNotifPrefs() {
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
-// ── Polling — check every 30 seconds ─────────────────────
 function startNotifPolling() {
   loadNotifications(false);
   notifPollTimer = setInterval(() => { loadNotifications(false); }, 30000);

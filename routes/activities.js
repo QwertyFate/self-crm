@@ -5,18 +5,13 @@ const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
 
-// Parse @mentions from HTML content and notify mentioned users
 async function notifyMentions(workspaceId, actorId, actorName, content, activityId) {
   try {
-    // If no content provided, nothing to scan for mentions
     if (!content) return;
-    // Strip HTML tags to get plain text
     const plain = content.replace(/<[^>]*>/g, ' ');
-    // Match @mention: @ followed by word characters
     const mentions = plain.match(/@(\w+)/g);
     if (!mentions) return;
 
-    // Get unique name candidates
     const nameSet = new Set();
     mentions.forEach(m => {
       const name = m.slice(1).trim().toLowerCase();
@@ -24,7 +19,6 @@ async function notifyMentions(workspaceId, actorId, actorName, content, activity
     });
     if (nameSet.size === 0) return;
 
-    // Find matching workspace members (match by first name or full name prefix)
     const { rows: users } = await pool.query(
       'SELECT id, name FROM users WHERE workspace_id = $1',
       [workspaceId]
@@ -40,7 +34,6 @@ async function notifyMentions(workspaceId, actorId, actorName, content, activity
     });
     if (!matched.length) return;
 
-    // Get activity info for richer notification body
     const { rows: [activity] } = await pool.query(`
       SELECT a.contact_id, a.type, c.name AS contact_name
       FROM activities a
@@ -48,11 +41,9 @@ async function notifyMentions(workspaceId, actorId, actorName, content, activity
       WHERE a.id = $1
     `, [activityId]);
 
-    // Get a preview of the note (first 120 chars of plain text)
     const preview = plain.replace(/@\w+/g, '').trim().slice(0, 120).replace(/\s+\S*$/, '') || 'a note';
     const contactName = activity?.contact_name || 'a contact';
 
-    // Find which deal(s) are linked to this contact so we can navigate there
     let dealId = null;
     if (activity?.contact_id) {
       const { rows: deals } = await pool.query(
@@ -112,7 +103,6 @@ router.post('/', async (req, res, next) => {
       [req.workspaceId, contact_id||null, type, content, req.userId, event_date || null]
     );
 
-    // Notify mentioned users
     const { rows: [actor] } = await pool.query('SELECT name FROM users WHERE id=$1', [req.userId]);
     await notifyMentions(req.workspaceId, req.userId, actor?.name || 'Someone', content, row.id);
 
@@ -140,15 +130,11 @@ router.patch('/:id', async (req, res, next) => {
   try {
     const { type, content, event_date, completed } = req.body;
 
-    // Allow partial updates: toggle completed without requiring content
     if (!content && completed === undefined && type === undefined && event_date === undefined) {
       return res.status(400).json({ error: 'Nothing to update' });
     }
     if (type && !['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
-    // Only update provided fields — preserve existing values when omitted.
-    // A boolean clearDate flag ($7) tells us to explicitly NULL out event_date,
-    // since COALESCE(null, event_date) would otherwise leave it unchanged.
     const result = await pool.query(
        `UPDATE activities SET
           type        = COALESCE($1, type),
@@ -160,7 +146,6 @@ router.patch('/:id', async (req, res, next) => {
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Activity not found' });
 
-    // Notify mentioned users on update too
     const { rows: [actor] } = await pool.query('SELECT name FROM users WHERE id=$1', [req.userId]);
     await notifyMentions(req.workspaceId, req.userId, actor?.name || 'Someone', content, result.rows[0].id);
 

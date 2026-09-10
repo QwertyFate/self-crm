@@ -1,4 +1,3 @@
-// ── SETTINGS ──────────────────────────────────────────────
 let currentSettingsTab = 'general';
 let taskFields = [];
 let taskStatusDragIdx = null;
@@ -7,7 +6,6 @@ function switchSettingsTab(tab) {
   currentSettingsTab = tab;
   document.querySelectorAll('.settings-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
   document.querySelectorAll('.settings-pane').forEach(pane => pane.classList.toggle('active', pane.id === `settings-pane-${tab}`));
-  // Always re-render task settings when switching to that tab so it's never empty
   if (tab === 'tasks') loadTaskSettings();
 }
 
@@ -31,7 +29,6 @@ async function loadSettings() {
   pipelines  = await api.get('/api/pipelines');
   dealFields = await api.get('/api/deal-fields');
   renderPipelinesSettings(); renderDealFieldsList(); renderDealColumnSettings();
-  // Tasks settings
   await loadTaskSettings();
   loadNotifPrefs();
   switchSettingsTab(currentSettingsTab);
@@ -43,7 +40,6 @@ async function loadSettings() {
     document.getElementById('workspace-name-input').value = currentWorkspace?.name || '';
     document.getElementById('workspace-name-msg').classList.add('hidden');
 
-    // Check if user has multiple workspaces
     const meRes = await api.get('/api/auth/me');
     const workspaceCount = meRes?.workspaces?.length || 1;
     const deleteCard = document.getElementById('delete-workspace-card');
@@ -71,7 +67,6 @@ async function saveWorkspaceName() {
   setTimeout(() => msgEl.classList.add('hidden'), 2500);
 }
 
-// ── Pipelines ─────────────────────────────────────────────
 function renderPipelinesSettings() {
   const el = document.getElementById('pipelines-list'); if (!el) return;
   if (!pipelines.length) { el.innerHTML = `<p style="color:var(--muted);font-size:13px;padding:8px 0">No pipelines yet.</p>`; return; }
@@ -161,7 +156,6 @@ async function deletePipelineStage(pipelineId, stageId) {
   pipelines = await api.get('/api/pipelines'); renderPipelinesSettings();
 }
 
-// ── Deal Fields ───────────────────────────────────────────
 function renderDealFieldsList() {
   const el = document.getElementById('deal-fields-list'); if (!el) return;
   if (!dealFields.length) { el.innerHTML = `<li style="color:var(--muted);font-size:13px;padding:6px 10px">No deal fields yet.</li>`; return; }
@@ -209,7 +203,6 @@ async function deleteDealField(id) {
   await api.del(`/api/deal-fields/${id}`); dealFields = dealFields.filter(f => f.id !== id); renderDealFieldsList();
 }
 
-// ── WhatsApp template ─────────────────────────────────────
 function insertWaVar(variable) {
   const el = document.getElementById('wa-template-input'); if (!el) return;
   const start = el.selectionStart, end = el.selectionEnd;
@@ -228,7 +221,6 @@ async function saveWaTemplate() {
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
-// ── Contact stages ────────────────────────────────────────
 function renderStagesList() {
   document.getElementById('stages-list').innerHTML = stages.map((s, i) => `
     <li class="settings-row" draggable="true" data-id="${s.id}"
@@ -293,7 +285,6 @@ function renderContactStagesList() {
     </li>`).join('');
 }
 
-// ── Contact custom fields ─────────────────────────────────
 function renderFieldsList() {
   const el = document.getElementById('fields-list');
   if (!fields.length) { el.innerHTML = `<li style="color:var(--muted);font-size:13px;padding:6px 10px">${t('no_fields')}</li>`; return; }
@@ -340,7 +331,6 @@ async function deleteField(id) {
   await api.del(`/api/fields/${id}`); invalidate(); await loadSettings();
 }
 
-// ── Contact column settings ───────────────────────────────
 function renderContactColumnSettings() {
   const el = document.getElementById('contact-columns-list'); if (!el) return;
   const cols = effectiveContactColumns();
@@ -378,7 +368,6 @@ async function saveContactColumns() {
   setTimeout(() => msgEl?.classList.add('hidden'), 2500); filterContacts();
 }
 
-// ── Kanban fields ─────────────────────────────────────────
 function renderKanbanFields() {
   const el = document.getElementById('kanban-fields-list'); if (!el) return;
   const allOptions = [...BUILTIN_FIELDS, ...fields.map(f => ({ key: f.field_key, label: f.name, type: f.type }))];
@@ -395,7 +384,6 @@ async function saveKanbanFields() {
   kanbanFields = checked; currentWorkspace.kanban_fields = checked; alert('Kanban fields saved.');
 }
 
-// ── Invites & Members ─────────────────────────────────────
 async function loadInvites() {
   const codes = await api.get('/api/invites');
   document.getElementById('invites-list').innerHTML = codes.length
@@ -442,18 +430,15 @@ async function deleteWorkspace() {
   const res = await api.del('/api/workspace');
   if (res.error) { alert(res.error); return; }
 
-  // Redirect to workspace selection or home
   window.location.href = '/';
 }
 
-// ── TASK SETTINGS ─────────────────────────────────────────
 async function loadTaskSettings() {
   try {
     const [me, tf] = await Promise.all([
       api.get('/api/auth/me'),
       api.get('/api/task-fields'),
     ]);
-    // Refresh task_statuses from the server so it's always current
     if (me?.workspace?.task_statuses) {
       currentWorkspace.task_statuses = me.workspace.task_statuses;
     }
@@ -538,7 +523,6 @@ function saveTaskStatus(e) {
   if (currentWorkspace) currentWorkspace.task_statuses = statuses;
   closeModal('task-status-modal');
   renderTaskStatusesList();
-  // Auto-save
   saveTaskStatuses();
 }
 
@@ -561,11 +545,9 @@ async function saveTaskStatuses() {
   if (currentWorkspace) currentWorkspace.task_statuses = res.statuses;
   if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
-  // Refresh kanban if on tasks page
   if (document.getElementById('page-tasks')?.classList.contains('active')) renderTasksCurrent();
 }
 
-// ── Task Custom Fields ─────────────────────────────────────
 function renderTaskFieldsList() {
   const el = document.getElementById('task-fields-list');
   if (!el) return;

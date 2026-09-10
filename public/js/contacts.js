@@ -1,4 +1,3 @@
-// ── CONTACTS ──────────────────────────────────────────────
 let selectedContactIds = new Set();
 let selectionModeOn = false;
 let contactViewMode = 'list';
@@ -6,7 +5,6 @@ let filteredContacts = [];
 
 async function loadContacts() {
   selectedContactIds.clear();
-  // Clear UI immediately to prevent showing stale data
   const contactsBody = document.getElementById('contacts-body');
   const kanbanBoard = document.getElementById('contacts-kanban-board');
   if (contactsBody) contactsBody.innerHTML = '';
@@ -32,7 +30,6 @@ function updateContactsPageHeader() {
   if (search) search.placeholder = `Search ${name.toLowerCase()}…`;
 }
 
-// ── Column widths ─────────────────────────────────────────
 function loadColWidths() { colWidths = { ...(currentUser?.column_widths || {}) }; }
 function saveColWidths() {
   if (currentUser) currentUser.column_widths = { ...colWidths };
@@ -80,7 +77,6 @@ function effectiveContactColumns() {
   return ordered;
 }
 
-// ── Sort ──────────────────────────────────────────────────
 function toggleSort(key) {
   if (sortKey === key) { if (sortDir === 'asc') { sortDir = 'desc'; } else { sortKey = null; sortDir = 'asc'; } }
   else { sortKey = key; sortDir = 'asc'; }
@@ -177,7 +173,6 @@ function renderContactsTable(list) {
 
   renderPagination(sorted.length);
 
-  // Measure + apply column widths
   let measured = false;
   document.querySelectorAll('#contacts-thead th').forEach(th => {
     const key = th.dataset.colKey;
@@ -207,7 +202,6 @@ function renderContactsTable(list) {
   });
 }
 
-// ── Inline edit ───────────────────────────────────────────
 function startInlineEdit(td, contactId, fieldKey, fieldType) {
   if (td.querySelector('input,select')) return;
   const contact = contacts.find(c => c.id === contactId);
@@ -300,7 +294,6 @@ function filterContacts() {
   for (const [key, values] of Object.entries(activeFilters)) {
     if (!values?.length) continue;
 
-    // Handle keyword filters
     if (key.startsWith('keyword:')) {
       const col = key.substring(8);
       filtered = filtered.filter(c => {
@@ -314,7 +307,6 @@ function filterContacts() {
         return values.some(keyword => strValue.includes(keyword.toLowerCase()));
       });
     } else {
-      // Handle regular filters (dropdown/select)
       filtered = filtered.filter(c => {
         const cv = key === 'stage_id'    ? (c.stage_id    == null ? '' : String(c.stage_id))
                  : key === 'assigned_to' ? (c.assigned_to == null ? '' : String(c.assigned_to))
@@ -331,7 +323,6 @@ function filterContacts() {
   }
 }
 
-// ── Pagination ────────────────────────────────────────────
 function goToPage(page) { currentPage = page; filterContacts(); }
 
 function renderPagination(total) {
@@ -353,7 +344,6 @@ function renderPagination(total) {
     </div>`;
 }
 
-// ── Filters ───────────────────────────────────────────────
 function toggleFilterPanel() {
   filterPanelOpen = !filterPanelOpen;
   document.getElementById('filter-panel')?.classList.toggle('hidden', !filterPanelOpen);
@@ -410,7 +400,6 @@ function renderFilterPanel() {
   };
   const sections = [];
 
-  // Keyword filter section
   const keywordFilterCol = document.getElementById('keyword-filter-col')?.value || 'name';
   const keywordFilterVal = document.getElementById('keyword-filter-val')?.value || '';
   const filterableColumns = [
@@ -505,7 +494,6 @@ function renderFilterChips() {
   if (badge) { badge.textContent = count; badge.classList.toggle('hidden', count === 0); }
 }
 
-// ── SELECTION MODE ─────────────────────────────────────────
 function toggleSelectMode() {
   selectionModeOn = !selectionModeOn;
   const btn = document.getElementById('select-mode-btn');
@@ -523,7 +511,6 @@ function toggleSelectMode() {
   filterContacts();
 }
 
-// ── BULK DELETE ────────────────────────────────────────────
 function toggleContactSelection(contactId, isChecked) {
   if (isChecked) {
     selectedContactIds.add(contactId);
@@ -538,11 +525,9 @@ function toggleContactSelection(contactId, isChecked) {
 function toggleSelectAll(isChecked) {
   selectedContactIds.clear();
   if (isChecked) {
-    // Select all filtered/visible contacts (all pages)
     const sorted = sortContacts(contacts);
     sorted.forEach(c => selectedContactIds.add(c.id));
   }
-  // Update all visible checkboxes on current page
   document.querySelectorAll('.contact-checkbox').forEach(cb => {
     cb.checked = isChecked;
   });
@@ -597,20 +582,16 @@ async function confirmBulkDelete() {
   await loadContacts();
 }
 
-// ── Kanban view ────────────────────────────────
 let kanbanAllContacts = [];
 
 async function openKanbanAddContactModal() {
-  // Get all contacts (including those without a stage)
   kanbanAllContacts = await api.get(`/api/contacts?contact_type=${currentContactType}`);
 
-  // Populate contact dropdown
   const contactSel = document.getElementById('kanban-contact-select');
   contactSel.innerHTML = kanbanAllContacts.map(c =>
     `<option value="${c.id}">${esc(c.name)}${c.company ? ` - ${esc(c.company)}` : ''}</option>`
   ).join('');
 
-  // Populate stage dropdown
   const stageSel = document.getElementById('kanban-stage-select');
   stageSel.innerHTML = stages.map(s =>
     `<option value="${s.id}">${esc(s.name)}</option>`
@@ -656,11 +637,9 @@ function setContactViewMode(mode) {
   document.getElementById('contacts-table-wrap')?.classList.toggle('hidden', mode === 'kanban');
   document.getElementById('contacts-pagination')?.classList.toggle('hidden', mode === 'kanban');
 
-  // Update toggle button active class
   document.getElementById('contact-view-kanban-btn')?.classList.toggle('active', mode === 'kanban');
   document.getElementById('contact-view-list-btn')?.classList.toggle('active', mode === 'list');
 
-  // Toggle add buttons based on view mode
   document.getElementById('kanban-add-btn')?.classList.toggle('hidden', mode === 'list');
   document.getElementById('list-add-btn')?.classList.toggle('hidden', mode === 'kanban');
   document.getElementById('kanban-add-stage-btn')?.classList.toggle('hidden', mode === 'list' || !stages.length);

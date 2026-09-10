@@ -22,7 +22,6 @@ router.post('/', async (req, res, next) => {
     try {
       await client.query('BEGIN');
 
-      // Get default contact columns and pipelines from admin settings
       let defaultContactColumns = [
         { key: 'company', label: 'Company', visible: true, isCustom: false },
         { key: 'email', label: 'Email', visible: true, isCustom: false },
@@ -53,7 +52,6 @@ router.post('/', async (req, res, next) => {
         if (colRes.rows[0]) defaultContactColumns = colRes.rows[0].value;
         if (pipeRes.rows[0]) defaultPipelines = pipeRes.rows[0].value;
       } catch (e) {
-        // Use defaults if query fails
       }
 
       const { rows: [ws] } = await client.query(
@@ -61,7 +59,6 @@ router.post('/', async (req, res, next) => {
         [name.trim(), JSON.stringify(defaultContactColumns.filter(c => !c.isCustom))]
       );
 
-      // Create default custom fields for contacts
       const customFields = defaultContactColumns.filter(c => c.isCustom);
       for (const field of customFields) {
         await client.query(
@@ -70,7 +67,6 @@ router.post('/', async (req, res, next) => {
         );
       }
 
-      // Create default pipelines
       for (const pipeline of defaultPipelines) {
         const { rows: [p] } = await client.query(
           'INSERT INTO pipelines (workspace_id, name, position) VALUES ($1,$2,0) RETURNING id',
@@ -85,7 +81,6 @@ router.post('/', async (req, res, next) => {
         }
       }
 
-      // Add current user to new workspace as owner
       const { rows: [currentUser] } = await client.query('SELECT name, email FROM users WHERE id=$1', [req.userId]);
       const { rows: [newUser] } = await client.query(
         'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
@@ -167,7 +162,6 @@ router.delete('/', async (req, res, next) => {
   try {
     if (req.userRole !== 'owner') return res.status(403).json({ error: 'Owner only' });
 
-    // Check if user has other workspaces
     const { rows: userWorkspaces } = await pool.query(
       'SELECT COUNT(*) as count FROM user_workspaces WHERE user_id=$1',
       [req.userId]
@@ -179,7 +173,6 @@ router.delete('/', async (req, res, next) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      // Delete all related data
       await client.query('DELETE FROM chat_messages WHERE workspace_id=$1', [req.workspaceId]);
       await client.query('DELETE FROM notifications WHERE workspace_id=$1', [req.workspaceId]);
       await client.query('DELETE FROM activities WHERE workspace_id=$1', [req.workspaceId]);

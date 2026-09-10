@@ -6,7 +6,6 @@ const { notifySystem } = require('../notifications');
 
 router.use(requireAuth);
 
-// GET — list recent notifications for current user
 router.get('/', async (req, res, next) => {
   try {
     const { rows } = await pool.query(`
@@ -22,7 +21,6 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// PATCH — mark one as read
 router.patch('/:id/read', async (req, res, next) => {
   try {
     await pool.query(
@@ -33,7 +31,6 @@ router.patch('/:id/read', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// PATCH — mark all as read
 router.patch('/read-all', async (req, res, next) => {
   try {
     await pool.query(
@@ -44,7 +41,6 @@ router.patch('/read-all', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// DELETE — clear all read notifications
 router.delete('/clear', async (req, res, next) => {
   try {
     await pool.query(
@@ -55,7 +51,6 @@ router.delete('/clear', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// PATCH — update notification preferences
 router.patch('/preferences', async (req, res, next) => {
   try {
     const { prefs } = req.body;
@@ -68,7 +63,6 @@ router.patch('/preferences', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST — admin pushes a system announcement (owner only)
 router.post('/announce', async (req, res, next) => {
   try {
     if (req.userRole !== 'owner') return res.status(403).json({ error: 'Owner only' });

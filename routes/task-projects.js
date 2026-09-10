@@ -12,7 +12,6 @@ const DEFAULT_STATUSES = [
   { key: 'done',        label: 'Done',        color: '#22c55e', position: 3 },
 ];
 
-// ── Projects ───────────────────────────────────────────────
 router.get('/', async (req, res, next) => {
   try {
     const { rows: projects } = await pool.query(`
@@ -49,7 +48,6 @@ router.post('/', async (req, res, next) => {
     const { name, color } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
 
-    // Check for duplicate project name
     const { rows: [existing] } = await client.query(
       'SELECT id FROM task_projects WHERE workspace_id=$1 AND LOWER(name)=LOWER($2)',
       [req.workspaceId, name.trim()]
@@ -65,14 +63,12 @@ router.post('/', async (req, res, next) => {
       'INSERT INTO task_projects (workspace_id, name, color, position, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING id',
       [req.workspaceId, name.trim(), color||'#3b82f6', m+1, req.userId]
     );
-    // Seed default statuses
     for (const s of DEFAULT_STATUSES) {
       await client.query(
         'INSERT INTO task_project_statuses (project_id, key, label, color, position) VALUES ($1,$2,$3,$4,$5)',
         [proj.id, s.key, s.label, s.color, s.position]
       );
     }
-    // Seed a default list
     await client.query(
       'INSERT INTO task_lists (workspace_id, project_id, name, position) VALUES ($1,$2,$3,$4)',
       [req.workspaceId, proj.id, 'Tasks', 0]
@@ -108,13 +104,11 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ── Lists ──────────────────────────────────────────────────
 router.post('/:id/lists', async (req, res, next) => {
   try {
     const { name } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
 
-    // Check for duplicate list name in same project
     const { rows: [existing] } = await pool.query(
       'SELECT id FROM task_lists WHERE project_id=$1 AND LOWER(name)=LOWER($2)',
       [req.params.id, name.trim()]
@@ -154,7 +148,6 @@ router.delete('/lists/:listId', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ── Per-project statuses ────────────────────────────────────
 router.get('/:id/statuses', async (req, res, next) => {
   try {
     const { rows } = await pool.query(

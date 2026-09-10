@@ -4,11 +4,9 @@ const crypto      = require('crypto');
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
 
-// ── Authenticated routes ───────────────────────────────────
 router.use('/settings', requireAuth);
 router.use('/logs',     requireAuth);
 
-// GET /api/integrations/settings — get or create webhook config for workspace
 router.get('/settings', async (req, res, next) => {
   try {
     const wid = req.workspaceId;
@@ -20,7 +18,6 @@ router.get('/settings', async (req, res, next) => {
        WHERE w.workspace_id=$1`, [wid]
     );
     if (!wh) {
-      // Auto-create on first access
       const key = crypto.randomBytes(20).toString('hex');
       const { rows: [created] } = await pool.query(
         `INSERT INTO workspace_webhook (workspace_id, webhook_key) VALUES ($1,$2) RETURNING *`,
@@ -29,7 +26,6 @@ router.get('/settings', async (req, res, next) => {
       wh = created;
     }
 
-    // Fetch pipelines + stages for the UI
     const { rows: pipelines } = await pool.query(
       `SELECT id, name FROM pipelines WHERE workspace_id=$1 ORDER BY position`, [wid]
     );
@@ -39,12 +35,10 @@ router.get('/settings', async (req, res, next) => {
        WHERE ps.workspace_id=$1 ORDER BY p.position, ps.position`, [wid]
     );
 
-    // Contact custom fields so the UI can build a dynamic field map
     const { rows: contact_fields } = await pool.query(
       `SELECT field_key, name, type FROM custom_fields WHERE workspace_id=$1 ORDER BY position`, [wid]
     );
 
-    // Fetch workspace members for assignee dropdown
     const { rows: members } = await pool.query(
       `SELECT DISTINCT u.id, u.name FROM users u
        JOIN user_workspaces uw ON uw.user_id = u.id
@@ -55,7 +49,6 @@ router.get('/settings', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PATCH /api/integrations/settings — update config
 router.patch('/settings', async (req, res, next) => {
   try {
     const { field_map, create_deal, pipeline_id, stage_id, default_assignee_id, active } = req.body;
@@ -77,7 +70,6 @@ router.patch('/settings', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// POST /api/integrations/settings/regenerate-key
 router.post('/settings/regenerate-key', async (req, res, next) => {
   try {
     const key = crypto.randomBytes(20).toString('hex');
@@ -89,7 +81,6 @@ router.post('/settings/regenerate-key', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/integrations/logs — last 50 webhook events
 router.get('/logs', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -105,8 +96,6 @@ router.get('/logs', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ── Public webhook receiver ────────────────────────────────
-// POST /api/webhooks/:key
 router.post('/receive/:key', async (req, res) => {
   const { key } = req.params;
   try {
@@ -119,14 +108,11 @@ router.post('/receive/:key', async (req, res) => {
     const fieldMap  = wh.field_map || {};
     const wid       = wh.workspace_id;
 
-    // Map incoming fields → contact fields
     function pick(key) {
       if (!key) return null;
-      // Support dot notation: "data.email" → payload.data.email
       return key.split('.').reduce((o, k) => (o && o[k] !== undefined ? o[k] : null), payload);
     }
 
-    // Build name from mapping (supports "first_name last_name" template)
     let name = pick(fieldMap.name) || '';
     if (!name && (fieldMap.first_name || fieldMap.last_name)) {
       name = [pick(fieldMap.first_name), pick(fieldMap.last_name)].filter(Boolean).join(' ');
@@ -135,7 +121,6 @@ router.post('/receive/:key', async (req, res) => {
     const phone   = pick(fieldMap.phone)   || null;
     const company = pick(fieldMap.company) || null;
 
-    // Reject if both name and email are missing — one is required
     if (!name?.trim() && !email?.trim()) {
       await pool.query(
         `INSERT INTO webhook_logs (workspace_id, status, payload, captured, error) VALUES ($1,'error',$2,$3,$4)`,
@@ -147,10 +132,9 @@ router.post('/receive/:key', async (req, res) => {
       });
     }
 
-    // Any field not built-in goes into custom_data
     const BUILTIN = new Set(['name', 'first_name', 'last_name', 'email', 'phone', 'company']);
     const customData = {};
-    const skipped    = {};   // for debug logging
+    const skipped    = {};
     for (const [crmKey, incomingKey] of Object.entries(fieldMap)) {
       if (!BUILTIN.has(crmKey) && incomingKey) {
         const val = pick(incomingKey);
@@ -162,7 +146,6 @@ router.post('/receive/:key', async (req, res) => {
       }
     }
 
-    // Build a summary of what was captured for the log
     const captured = {
       name:    name    || null,
       email:   email   || null,
@@ -172,7 +155,6 @@ router.post('/receive/:key', async (req, res) => {
       _skipped: Object.keys(skipped).length ? skipped : undefined,
     };
 
-    // Check if contact with same email already exists in this workspace
     let contact;
     const defaultAssigneeId = wh.default_assignee_id || null;
 
@@ -184,7 +166,6 @@ router.post('/receive/:key', async (req, res) => {
       );
 
       if (existing) {
-        // Update existing contact
         const { rows: [updated] } = await pool.query(
           `UPDATE contacts SET name=$1, phone=$2, company=$3, custom_data=$4, updated_at=NOW()
            WHERE id=$5 AND workspace_id=$6 RETURNING id, name`,
@@ -192,7 +173,6 @@ router.post('/receive/:key', async (req, res) => {
         );
         contact = updated;
       } else {
-        // Create new contact with default assignee
         const { rows: [newContact] } = await pool.query(
           `INSERT INTO contacts (workspace_id, name, email, phone, company, contact_type, custom_data, assigned_to)
            VALUES ($1,$2,$3,$4,$5,'contact',$6,$7) RETURNING id, name`,
@@ -201,7 +181,6 @@ router.post('/receive/:key', async (req, res) => {
         contact = newContact;
       }
     } else {
-      // Create new contact if no email (with default assignee)
       const { rows: [newContact] } = await pool.query(
         `INSERT INTO contacts (workspace_id, name, email, phone, company, contact_type, custom_data, assigned_to)
          VALUES ($1,$2,$3,$4,$5,'contact',$6,$7) RETURNING id, name`,

@@ -1,4 +1,3 @@
-// ── TASKS ──────────────────────────────────────────────────
 let tasks            = [];
 let taskProjects     = [];
 let currentProjectId = null;
@@ -6,7 +5,7 @@ let currentListId    = null;
 let currentProject   = null;
 let taskViewMode     = localStorage.getItem('taskViewMode') || 'list';
 let dragTaskId       = null;
-let collapsedTasks   = new Set(); // task IDs whose subtasks are collapsed in kanban
+let collapsedTasks   = new Set();
 
 const DEFAULT_TASK_STATUSES = [
   { key: 'todo',        label: 'Todo',        color: '#94a3b8' },
@@ -22,12 +21,7 @@ function getActiveTaskStatuses() {
   return (Array.isArray(saved) && saved.length) ? saved : DEFAULT_TASK_STATUSES;
 }
 
-// ── Load ──────────────────────────────────────────────────
 async function loadTasks() {
-  // Clear UI immediately to prevent showing stale data.
-  // NOTE: only clear the dynamic task areas — #tasks-content contains the
-  // static header chrome (#tasks-breadcrumb, #tasks-main-title, toolbar) that
-  // must stay in the DOM for selectList()/setTaskView() to keep working.
   const taskNav = document.getElementById('tasks-project-nav');
   if (taskNav) taskNav.innerHTML = '';
   const listView = document.getElementById('tasks-list-view');
@@ -40,7 +34,6 @@ async function loadTasks() {
   renderProjectNav();
   populateTaskAssigneeFilter();
 
-  // Restore last selected list
   const savedListId = parseInt(localStorage.getItem('lastTaskListId'));
   if (savedListId) {
     for (const p of taskProjects) {
@@ -51,7 +44,6 @@ async function loadTasks() {
   showTasksEmptyState();
 }
 
-// Select a list by IDs (used by sidebar onclick — avoids JSON in HTML)
 function selectListById(projectId, listId) {
   const project = taskProjects.find(p => p.id === projectId);
   const list    = (project?.lists || []).find(l => l.id === listId);
@@ -72,28 +64,23 @@ async function selectList(project, list) {
   currentProject   = project;
   localStorage.setItem('lastTaskListId', list.id);
 
-  // Update sidebar active state
   document.querySelectorAll('.tasks-list-item').forEach(el => el.classList.remove('active'));
   document.getElementById(`list-item-${list.id}`)?.classList.add('active');
 
-  // Show main content, hide empty state
   document.getElementById('tasks-empty-state').style.display = 'none';
   const content = document.getElementById('tasks-content');
   content.classList.remove('hidden');
   content.style.display = 'flex';
 
-  // Update header
   const bcEl = document.getElementById('tasks-breadcrumb');
   if (bcEl) bcEl.textContent = project.name;
   const titleEl = document.getElementById('tasks-main-title');
   if (titleEl) titleEl.textContent = list.name;
 
-  // Load tasks for this list
   tasks = await api.get(`/api/tasks?list_id=${list.id}`);
   setTaskView(taskViewMode, false);
 }
 
-// ── Sidebar nav ───────────────────────────────────────────
 function renderProjectNav() {
   const nav = document.getElementById('tasks-project-nav');
   if (!nav) return;
@@ -146,7 +133,6 @@ function toggleProjectExpand(projectId) {
   else localStorage.setItem(`proj-collapsed-${projectId}`, '1');
 }
 
-// ── Project CRUD ──────────────────────────────────────────
 let editingProjectId = null;
 function openProjectModal(id) {
   editingProjectId = id || null;
@@ -185,7 +171,6 @@ async function saveProject() {
   errorEl.style.display = 'none';
   closeModal('project-modal');
   taskProjects = await api.get('/api/task-projects');
-  // Refresh currentProject if it was updated
   if (editingProjectId && currentProjectId === editingProjectId) {
     currentProject = taskProjects.find(p => p.id === currentProjectId);
   }
@@ -200,7 +185,6 @@ async function deleteProject(id) {
   renderProjectNav();
 }
 
-// ── List CRUD ─────────────────────────────────────────────
 function openListModal(projectId, listId, currentName) {
   document.getElementById('list-project-id').value = projectId;
   document.getElementById('list-edit-id').value    = listId || '';
@@ -224,7 +208,6 @@ async function saveList() {
   closeModal('list-modal');
   taskProjects = await api.get('/api/task-projects');
   renderProjectNav();
-  // If we renamed the current list, update the header
   if (listId && parseInt(listId) === currentListId) {
     const titleEl = document.getElementById('tasks-main-title');
     if (titleEl) titleEl.textContent = name;
@@ -239,7 +222,6 @@ async function deleteList(listId) {
   renderProjectNav();
 }
 
-// ── View toggle ───────────────────────────────────────────
 function populateTaskAssigneeFilter() {
   const sel = document.getElementById('task-filter-assignee');
   if (!sel) return;
@@ -278,7 +260,6 @@ function renderTasksCurrent() {
   else renderTasksList(getFilteredTasks());
 }
 
-// ── LIST VIEW ─────────────────────────────────────────────
 function renderTasksList(list) {
   const el = document.getElementById('tasks-list-view');
   if (!el) return;
@@ -337,7 +318,6 @@ function toggleSubtasksRow(e, taskId) {
   container.classList.toggle('hidden', isOpen);
 }
 
-// ── KANBAN VIEW ───────────────────────────────────────────
 function renderTasksKanban(list) {
   const el = document.getElementById('tasks-kanban-view');
   if (!el) return;
@@ -410,7 +390,6 @@ function toggleKanbanSubtasks(taskId) {
   renderTasksCurrent();
 }
 
-// ── Drag & drop ───────────────────────────────────────────
 function taskDragStart(e, id) {
   dragTaskId = id; e.dataTransfer.effectAllowed = 'move';
   setTimeout(() => e.target.classList.add('dragging'), 0);
@@ -430,7 +409,6 @@ async function taskDrop(e, status) {
   dragTaskId = null;
 }
 
-// ── Task done toggle ──────────────────────────────────────
 async function toggleTaskDone(e, taskId, isDone) {
   e.stopPropagation();
   const statuses  = getActiveTaskStatuses();
@@ -451,7 +429,6 @@ async function deleteTask(e, taskId) {
   renderTasksCurrent();
 }
 
-// ── Task modal ────────────────────────────────────────────
 let currentTaskId = null;
 
 function renderTaskFieldInput(f, value = '') {
@@ -466,9 +443,7 @@ function renderTaskFieldInput(f, value = '') {
 
 async function openTaskModal(id, ctx = null) {
   await ensureMembers();
-  // Ensure task fields are loaded
   if (!taskFields.length) taskFields = await api.get('/api/task-fields');
-  // Ensure projects/lists are loaded for the project & list selects
   if (!taskProjects.length) {
     try { taskProjects = await api.get('/api/task-projects'); } catch (e) { taskProjects = []; }
   }
@@ -505,12 +480,10 @@ async function openTaskModal(id, ctx = null) {
     document.getElementById('task-assignee').value    = t.assigned_to || '';
     document.getElementById('task-due-date').value    = t.due_date ? t.due_date.slice(0,10) : '';
 
-    // Render custom fields with saved values
     document.getElementById('task-custom-fields').innerHTML = taskFields.map(f =>
       `<div class="form-group"><label>${esc(f.name)}</label>${renderTaskFieldInput(f, t.custom_data?.[f.field_key] ?? '')}</div>`
     ).join('');
 
-    // Show the side column and its editing sections (linked is always visible)
     if (sideCol)    sideCol.style.display    = '';
     if (subSection) subSection.style.display = '';
     renderSubtasksList(t.subtasks || [], id);
@@ -518,12 +491,10 @@ async function openTaskModal(id, ctx = null) {
     currentTaskId = null;
     document.getElementById('task-status').value = statuses[0]?.key || 'todo';
 
-    // Render custom fields empty
     document.getElementById('task-custom-fields').innerHTML = taskFields.map(f =>
       `<div class="form-group"><label>${esc(f.name)}</label>${renderTaskFieldInput(f, '')}</div>`
     ).join('');
 
-    // New task: keep the side column (shows Linked), hide subtasks
     if (sideCol)    sideCol.style.display    = '';
     if (subSection) subSection.style.display = 'none';
   }
@@ -533,7 +504,6 @@ async function openTaskModal(id, ctx = null) {
   document.getElementById('task-modal').classList.remove('hidden');
 }
 
-// ── Task modal: project/list + linked deal/contact setup ──────────────────
 let taskOpenLinks = { dealId: null, dealTitle: null, contactId: null, contactName: null };
 
 function populateTaskProjectSelect(selectedProjectId) {
@@ -562,7 +532,6 @@ function onTaskProjectChange() {
 
 function setupTaskModalContext(taskEdit, ctx) {
   hideTaskLinkPicker();
-  // Project + list defaults
   let projectId = null, listId = null;
   if (taskEdit) {
     projectId = taskEdit.project_id || currentProjectId || null;
@@ -575,7 +544,6 @@ function setupTaskModalContext(taskEdit, ctx) {
   populateTaskProjectSelect(projectId);
   populateTaskListSelect(projectId, listId);
 
-  // Linked deal / contact (edit data wins; otherwise use the passed context)
   const links = taskEdit
     ? {
         dealId:     taskEdit.deal_id     || null,
@@ -626,7 +594,6 @@ function clearTaskLink(kind) {
   renderTaskLinks(links);
 }
 
-// ── Link picker (choose a deal / contact from inside the task modal) ──────
 let taskLinkOptionsCache = null;
 
 async function ensureTaskLinkOptions() {
@@ -689,14 +656,12 @@ function confirmTaskLink() {
   hideTaskLinkPicker();
 }
 
-// Open the linked deal / contact from the task modal
 function openLinkedTaskObject(kind, id) {
   closeModal('task-modal');
   if (kind === 'deal')    openDealModal(id);
   else                    openDetail(id);
 }
 
-// Pre-link a new task to a contact (used from the contact detail view)
 async function openTaskModalForContact(contactId) {
   let contactName = null;
   try {
@@ -800,7 +765,6 @@ async function deleteTaskFromModal() {
   renderTasksCurrent();
 }
 
-// ── TASK ATTACHMENTS ──────────────────────────────────────
 const VIEWABLE_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -891,7 +855,6 @@ async function deleteAttachment(taskId, attachmentId) {
   document.getElementById(`attach-${attachmentId}`)?.remove();
 }
 
-// Drag-and-drop
 function taskAttachDragOver(e) { e.preventDefault(); document.getElementById('task-drop-zone')?.classList.add('drag-over'); }
 function taskAttachDragLeave(e) { document.getElementById('task-drop-zone')?.classList.remove('drag-over'); }
 function taskAttachDrop(e) {
@@ -903,7 +866,7 @@ function taskAttachDrop(e) {
 function taskAttachFileChange(e) {
   const files = Array.from(e.target.files);
   if (files.length) uploadAttachments(files);
-  e.target.value = ''; // reset so same file can be re-selected
+  e.target.value = '';
 }
 
 async function uploadAttachments(files) {

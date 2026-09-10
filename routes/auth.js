@@ -24,7 +24,6 @@ router.get('/me', async (req, res, next) => {
       return res.json({ user: null });
     }
 
-    // Get all workspaces user belongs to
     const { rows: workspaces } = await pool.query(
       `SELECT w.id, w.name FROM user_workspaces uw
        JOIN workspaces w ON w.id = uw.workspace_id
@@ -50,7 +49,6 @@ router.post('/login', async (req, res, next) => {
     if (!user || !bcrypt.compareSync(password, user.password_hash))
       return res.status(401).json({ error: 'Invalid email or password' });
 
-    // Get all workspaces where this email exists (handles multi-workspace users with different user_ids)
     const { rows: memberships } = await pool.query(
       `SELECT DISTINCT w.id, w.name, u.role
        FROM users u
@@ -60,16 +58,13 @@ router.post('/login', async (req, res, next) => {
       [email.toLowerCase().trim()]
     );
 
-    // If no workspaces found, something is wrong
     if (!memberships.length) {
       return res.status(401).json({ error: 'User has no workspace access' });
     }
 
-    // If user has multiple workspaces, return the list for the picker
     if (memberships.length > 1) {
       req.session.userId   = user.id;
       req.session.userRole = user.role;
-      // Don't set workspaceId yet — wait for picker selection
       return res.json({
         needs_workspace_picker: true,
         workspaces: memberships,
@@ -77,7 +72,6 @@ router.post('/login', async (req, res, next) => {
       });
     }
 
-    // Single workspace — proceed as before
     const activeWsId = memberships[0].id;
     req.session.userId      = user.id;
     req.session.workspaceId = activeWsId;
@@ -93,20 +87,17 @@ router.post('/login', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /api/auth/select-workspace — called from workspace picker after login
 router.post('/select-workspace', async (req, res, next) => {
   try {
     if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
     const { workspace_id } = req.body;
 
-    // Get current user's email
     const { rows: [currentUser] } = await pool.query(
       'SELECT email FROM users WHERE id=$1',
       [req.session.userId]
     );
     if (!currentUser) return res.status(401).json({ error: 'User not found' });
 
-    // Find user record in target workspace (same email might have different user_id there)
     const { rows: [user] } = await pool.query(
       'SELECT id, name, email, column_widths, deal_columns, analytics_layout, role FROM users WHERE email=$1 AND workspace_id=$2',
       [currentUser.email, workspace_id]
@@ -127,20 +118,17 @@ router.post('/select-workspace', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /api/auth/switch-workspace — switch active workspace (already logged in)
 router.post('/switch-workspace', async (req, res, next) => {
   try {
     if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
     const { workspace_id } = req.body;
 
-    // Get current user's email
     const { rows: [currentUser] } = await pool.query(
       'SELECT email FROM users WHERE id=$1',
       [req.session.userId]
     );
     if (!currentUser) return res.status(401).json({ error: 'User not found' });
 
-    // Find user record in target workspace (same email might have different user_id there)
     const { rows: [targetUser] } = await pool.query(
       'SELECT id, role FROM users WHERE email=$1 AND workspace_id=$2',
       [currentUser.email, workspace_id]
@@ -161,18 +149,15 @@ router.post('/switch-workspace', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /api/auth/my-workspaces — list all workspaces for logged-in user
 router.get('/my-workspaces', async (req, res, next) => {
   try {
     if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
-    // Get current user's email
     const { rows: [currentUser] } = await pool.query(
       'SELECT email FROM users WHERE id=$1',
       [req.session.userId]
     );
     if (!currentUser) return res.status(401).json({ error: 'User not found' });
 
-    // Find all workspaces where this email exists
     const { rows } = await pool.query(
       `SELECT DISTINCT w.id, w.name, u.role
        FROM users u JOIN workspaces w ON u.workspace_id=w.id
@@ -210,7 +195,6 @@ router.post('/signup', async (req, res, next) => {
       try {
         await client.query('BEGIN');
 
-        // Get default contact columns and pipelines from admin settings
         let defaultContactColumns = [
           { key: 'company', label: 'Company', visible: true, isCustom: false },
           { key: 'email', label: 'Email', visible: true, isCustom: false },
@@ -241,7 +225,6 @@ router.post('/signup', async (req, res, next) => {
           if (colRes.rows[0]) defaultContactColumns = colRes.rows[0].value;
           if (pipeRes.rows[0]) defaultPipelines = pipeRes.rows[0].value;
         } catch (e) {
-          // Use defaults if query fails
         }
 
         const { rows: [ws] } = await client.query(
@@ -249,7 +232,6 @@ router.post('/signup', async (req, res, next) => {
           [workspace_name.trim(), JSON.stringify(defaultContactColumns.filter(c => !c.isCustom))]
         );
 
-        // Create default custom fields for contacts
         const customFields = defaultContactColumns.filter(c => c.isCustom);
         for (const field of customFields) {
           await client.query(
@@ -258,7 +240,6 @@ router.post('/signup', async (req, res, next) => {
           );
         }
 
-        // Create default pipelines
         for (const pipeline of defaultPipelines) {
           const { rows: [p] } = await client.query(
             'INSERT INTO pipelines (workspace_id, name, position) VALUES ($1,$2,0) RETURNING id',
@@ -418,7 +399,6 @@ router.patch('/preferences', async (req, res, next) => {
         [JSON.stringify(deal_columns), req.session.userId]);
     }
     if (timezone && typeof timezone === 'string') {
-      // Validate timezone
       try { Intl.DateTimeFormat(undefined, { timeZone: timezone }); } catch { return res.status(400).json({ error: 'Invalid timezone' }); }
       await pool.query('UPDATE users SET timezone=$1 WHERE id=$2', [timezone, req.session.userId]);
     }
@@ -426,7 +406,6 @@ router.patch('/preferences', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /api/auth/create-workspace — create a new workspace while already logged in
 router.post('/create-workspace', async (req, res, next) => {
   try {
     if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -449,19 +428,16 @@ router.post('/create-workspace', async (req, res, next) => {
       );
       await seedDefaultPipeline(ws.id, client);
 
-      // Get the current user's info to add them to the new workspace
       const { rows: [currentUser] } = await client.query(
         'SELECT id, name, email, password_hash FROM users WHERE id=$1',
         [req.session.userId]
       );
 
-      // Insert user into the new workspace's users table
       const { rows: [newUser] } = await client.query(
         'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
         [ws.id, currentUser.name, currentUser.email, currentUser.password_hash, 'owner']
       );
 
-      // Also add to user_workspaces for backwards compatibility
       await client.query(
         'INSERT INTO user_workspaces (user_id, workspace_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
         [newUser.id, ws.id, 'owner']
@@ -492,7 +468,6 @@ router.post('/create-workspace', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /api/auth/join-workspace — join a new workspace while already logged in
 router.post('/join-workspace', async (req, res, next) => {
   try {
     if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -505,21 +480,18 @@ router.post('/join-workspace', async (req, res, next) => {
     if (!invite)     return res.status(400).json({ error: 'Invalid invite code' });
     if (invite.used) return res.status(400).json({ error: 'Invite code already used' });
 
-    // Get current user's info from original workspace
     const { rows: [currentUser] } = await pool.query(
       'SELECT email, name FROM users WHERE id=$1',
       [req.session.userId]
     );
     if (!currentUser) return res.status(401).json({ error: 'User not found' });
 
-    // Check if already a member
     const { rows: [existing] } = await pool.query(
       'SELECT 1 FROM users WHERE email=$1 AND workspace_id=$2',
       [currentUser.email, invite.workspace_id]
     );
     if (existing) return res.status(400).json({ error: 'You are already a member of this workspace' });
 
-    // Create new user row in the new workspace
     const { rows: [newUser] } = await pool.query(
       'INSERT INTO users (workspace_id, email, name, password_hash, role) SELECT $1, $2, $3, password_hash, $4 FROM users WHERE id=$5 RETURNING id',
       [invite.workspace_id, currentUser.email, currentUser.name, 'member', req.session.userId]

@@ -1,5 +1,4 @@
-// ── CALENDAR ────────────────────────────────────────────────
-let calViewDate = new Date(); // first day of currently displayed month
+let calViewDate = new Date();
 let calEvents = [];
 
 function switchPageCalendar() {
@@ -31,30 +30,24 @@ async function renderCalendar() {
   const month = calViewDate.getMonth();
   label.textContent = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-  // Load events for this month
   const start = `${year}-${String(month + 1).padStart(2, '0')}-01`;
   const end = `${year}-${String(month + 1).padStart(2, '0')}-${String(new Date(year, month + 1, 0).getDate()).padStart(2, '0')}`;
   const data = await api.get(`/api/calendar?start=${start}&end=${end}`);
 
-  // Normalize each event's date to YYYY-MM-DD & coerce completed to boolean.
-  // Guard against non-array responses (e.g. { error: ... } from the server).
   calEvents = Array.isArray(data) ? data.map(e => ({
     ...e,
     event_date: String(e.event_date || '').slice(0, 10),
     completed: !!e.completed,
   })) : [];
 
-  // Build grid: Sunday-first
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-  // Weekday headers
   const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   let html = `<div class="calendar-weekdays">${weekdays.map(d => `<div class="calendar-weekday">${d}</div>`).join('')}</div>`;
 
-  // Empty cells before first day
   let cells = '';
   for (let i = 0; i < firstDay; i++) cells += '<div class="calendar-cell calendar-empty"></div>';
 
@@ -79,7 +72,6 @@ async function renderCalendar() {
       </div>`;
   }
 
-  // Fill remaining cells
   const totalCells = firstDay + daysInMonth;
   const remaining = (7 - (totalCells % 7)) % 7;
   for (let i = 0; i < remaining; i++) cells += '<div class="calendar-cell calendar-empty"></div>';
@@ -93,12 +85,9 @@ function stripHtml(html) {
   return div.textContent || '';
 }
 
-// ── Day modal: list all notes for a given date with completion checkboxes ──
 async function openDayModal(dateStr) {
-  // Get the day's events
   const dayEvents = calEvents.filter(e => e.event_date === dateStr);
 
-  // Remove any existing day modal
   document.getElementById('day-events-modal')?.remove();
 
   const dateLabel = `${dateStr.slice(5, 7)}-${dateStr.slice(8, 10)}-${dateStr.slice(0, 4)}`;
@@ -110,7 +99,7 @@ async function openDayModal(dateStr) {
   const items = dayEvents.length
     ? dayEvents.map(e => `
         <div class="day-event-item ${e.completed ? 'completed' : 'pending'}">
-          <input type="checkbox" class="day-event-check" ${e.completed ? 'checked' : ''} 
+          <input type="checkbox" class="day-event-check" ${e.completed ? 'checked' : ''}
                  onchange="toggleActivityComplete(${e.id}, this.checked)" />
           <div class="day-event-body">
             <div class="day-event-title">${esc(e.contact_name || 'Activity')}${e.deal_title ? ` — ${esc(e.deal_title)}` : ''}</div>
@@ -142,11 +131,8 @@ async function openDayModal(dateStr) {
 async function toggleActivityComplete(activityId, completed) {
   try {
     await api.patch(`/api/activities/${activityId}`, { completed });
-    // Update local events
     calEvents = calEvents.map(ce => ce.id === activityId ? { ...ce, completed } : ce);
-    // Refresh the calendar grid so colors update
     renderCalendar();
-    // Refresh the day modal with the updated state
     const ev = calEvents.find(e => e.id === activityId);
     if (ev) openDayModal(ev.event_date);
   } catch (e) {
@@ -156,11 +142,9 @@ async function toggleActivityComplete(activityId, completed) {
 }
 
 function openCalendarEvent(activityId) {
-  // Open the deal modal for the event's linked contact/deal
   const ev = calEvents.find(e => e.id === activityId);
   if (!ev) return;
   if (ev.deal_id) {
-    // Close the day events popup before opening the deal modal
     document.getElementById('day-events-modal')?.remove();
     openDealModal(ev.deal_id);
   }

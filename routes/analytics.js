@@ -5,7 +5,6 @@ const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
 
-// GET /api/analytics/summary
 router.get('/summary', async (req, res, next) => {
   try {
     const wid = req.workspaceId;
@@ -16,9 +15,8 @@ router.get('/summary', async (req, res, next) => {
     const config     = ws?.analytics_config || {};
     const wonIds     = (config.won_stage_ids  || []).map(Number);
     const lostIds    = (config.lost_stage_ids || []).map(Number);
-    const valueField = config.value_field || null; // null = no value tracking
+    const valueField = config.value_field || null;
 
-    // Contacts
     const { rows: [{ total_contacts }] } = await pool.query(
       `SELECT COUNT(*) AS total_contacts FROM contacts WHERE workspace_id=$1`, [wid]
     );
@@ -26,7 +24,6 @@ router.get('/summary', async (req, res, next) => {
       `SELECT COUNT(*) AS new_contacts FROM contacts WHERE workspace_id=$1 AND created_at >= date_trunc('month', NOW())`, [wid]
     );
 
-    // Build value expression for deals
     let valExpr = 'NULL::numeric';
     if (valueField === 'value') {
       valExpr = 'value';
@@ -34,7 +31,6 @@ router.get('/summary', async (req, res, next) => {
       valExpr = `(custom_data->>'${valueField}')::numeric`;
     }
 
-    // Deals grouped by stage
     const { rows: dealRows } = await pool.query(
       `SELECT stage_id, COUNT(*) AS cnt, COALESCE(SUM(${valExpr}),0) AS val
        FROM deals WHERE workspace_id=$1 GROUP BY stage_id`, [wid]
@@ -59,12 +55,10 @@ router.get('/summary', async (req, res, next) => {
     const closed   = won_deals + lost_deals;
     const win_rate = closed > 0 ? Math.round((won_deals / closed) * 100) : null;
 
-    // New deals this month
     const { rows: [{ new_deals }] } = await pool.query(
       `SELECT COUNT(*) AS new_deals FROM deals WHERE workspace_id=$1 AND created_at >= date_trunc('month', NOW())`, [wid]
     );
 
-    // Average deal value (only when a field is configured)
     let avg_value = null;
     if (valueField) {
       const { rows: [{ av }] } = await pool.query(
@@ -73,7 +67,6 @@ router.get('/summary', async (req, res, next) => {
       avg_value = av ? parseFloat(av) : null;
     }
 
-    // Tasks
     const { rows: [tk] } = await pool.query(
       `SELECT
          COUNT(*)                                                        AS total_tasks,
@@ -82,7 +75,6 @@ router.get('/summary', async (req, res, next) => {
        FROM tasks WHERE workspace_id=$1`, [wid]
     );
 
-    // Deals by pipeline — value only if field configured
     const pipelineValExpr = valueField === 'value'
       ? 'd.value'
       : valueField
@@ -99,7 +91,6 @@ router.get('/summary', async (req, res, next) => {
        ORDER BY p.position`, [wid]
     );
 
-    // All pipeline stages for config UI — grouped with pipeline info
     const { rows: all_stages } = await pool.query(
       `SELECT ps.id, ps.name, ps.color, p.id AS pipeline_id, p.name AS pipeline_name
        FROM pipeline_stages ps
@@ -108,12 +99,10 @@ router.get('/summary', async (req, res, next) => {
        ORDER BY p.position, ps.position`, [wid]
     );
 
-    // Deal fields (for value field selector)
     const { rows: deal_fields } = await pool.query(
       `SELECT field_key, name, type FROM deal_fields WHERE workspace_id=$1 ORDER BY position`, [wid]
     );
 
-    // Per-user layout preferences
     const { rows: [usr] } = await pool.query(
       'SELECT analytics_layout FROM users WHERE id=$1', [req.userId]
     );
@@ -141,7 +130,6 @@ router.get('/summary', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PATCH /api/analytics/layout  — per-user layout prefs
 router.patch('/layout', async (req, res, next) => {
   try {
     const { stat_card_order, hidden_stat_cards, section_order, trend_config } = req.body;
@@ -158,7 +146,6 @@ router.patch('/layout', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/analytics/trend?period=week|month|year
 router.get('/trend', async (req, res, next) => {
   try {
     const wid = req.workspaceId;
@@ -218,7 +205,6 @@ router.get('/trend', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// PATCH /api/analytics/config
 router.patch('/config', async (req, res, next) => {
   try {
     const { won_stage_ids = [], lost_stage_ids = [], value_field = null } = req.body;

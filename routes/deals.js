@@ -6,7 +6,6 @@ const { notify }  = require('../notifications');
 
 router.use(requireAuth);
 
-// Deal urgency: 0 = not set, 1 Low, 2 Medium, 3 High, 4 Very urgent
 function clampUrgency(v) {
   const n = parseInt(v, 10);
   if (!Number.isInteger(n)) return 0;
@@ -118,7 +117,6 @@ router.patch('/:id/stage', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// PATCH /:id/urgency — quick update from the kanban card shortcut
 router.patch('/:id/urgency', async (req, res, next) => {
   try {
     const urgency = clampUrgency(req.body.urgency);
@@ -142,7 +140,6 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Link / unlink objects from deal side
 router.get('/:id/objects', async (req, res, next) => {
   try {
     const { rows } = await pool.query(

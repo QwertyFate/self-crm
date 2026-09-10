@@ -1,7 +1,6 @@
-// ── ANALYTICS ─────────────────────────────────────────────
 let analyticsData  = null;
-let statCardOrder  = []; // [{ id, hidden }]
-let sectionOrder   = []; // ['stats','winloss','pipeline','trends']
+let statCardOrder  = [];
+let sectionOrder   = [];
 
 const STAT_CARD_DEFS = {
   contacts:       { label: 'Total Contacts',  color: '#3b82f6' },
@@ -29,7 +28,6 @@ function fmtCurrency(n) {
 }
 
 async function loadAnalytics() {
-  // Clear UI immediately to prevent showing stale data
   const mainSections = document.getElementById('analytics-main-sections');
   if (mainSections) mainSections.innerHTML = '';
 
@@ -41,7 +39,6 @@ async function loadAnalytics() {
   document.getElementById('analytics-period').textContent =
     now.toLocaleString('default', { month: 'long', year: 'numeric' });
 
-  // Layout is per-user; config (won/lost/value) is per-workspace
   const layout = data.layout || {};
   statCardOrder = buildStatOrder(layout.stat_card_order || [], layout.hidden_stat_cards || [], data);
   sectionOrder  = buildSectionOrder(layout.section_order || []);
@@ -68,12 +65,10 @@ function buildSectionOrder(saved) {
   return base.filter(id => DEFAULT_SECTION_ORDER.includes(id));
 }
 
-// ── Section rendering ──────────────────────────────────────
 function renderAllSections(d) {
   const main = document.getElementById('analytics-main-sections');
   if (!main) return;
 
-  // Re-order the existing section elements
   sectionOrder.forEach(id => {
     const el = document.getElementById(`analytics-sec-${id}`);
     if (el) main.appendChild(el);
@@ -85,7 +80,6 @@ function renderAllSections(d) {
   initSectionDragDrop();
 }
 
-// ── Stat cards ─────────────────────────────────────────────
 function getStatCardContent(id, d) {
   switch (id) {
     case 'contacts':       return { value: fmt(d.total_contacts),  sub: `+${d.new_contacts} this month` };
@@ -156,13 +150,11 @@ function initStatCardDragDrop() {
   });
 }
 
-// ── Section drag-drop ──────────────────────────────────────
 let dragSectionId = null;
 function initSectionDragDrop() {
   const main = document.getElementById('analytics-main-sections');
   if (!main) return;
   main.querySelectorAll('.analytics-draggable-section').forEach(sec => {
-    // Always draggable — handle is just visual
     sec.setAttribute('draggable', 'true');
 
     sec.addEventListener('dragstart', e => {
@@ -257,7 +249,6 @@ function renderByPipeline(d) {
   }).join('');
 }
 
-// ── Trend charts ──────────────────────────────────────────
 const TREND_DEFS = {
   contacts: { title: 'New Contacts', key: 'cnt', color: '#3b82f6', dataKey: 'contacts' },
   deals:    { title: 'New Deals',    key: 'cnt', color: '#8b5cf6', dataKey: 'deals'    },
@@ -265,7 +256,7 @@ const TREND_DEFS = {
 };
 
 let currentTrendPeriod = 'week';
-let trendCardOrder     = [];  // [{ id, view }]
+let trendCardOrder     = [];
 let trendRawData       = null;
 let dragCardId         = null;
 
@@ -278,7 +269,6 @@ async function loadTrend(period) {
   const hasValue = analyticsData?.config?.value_field != null;
   const saved    = analyticsData?.layout?.trend_config || [];
 
-  // Build ordered list from saved config, adding/removing value card as needed
   const base = saved.length
     ? saved.filter(c => c.id !== 'value' || hasValue)
     : [{ id: 'contacts', view: 'line' }, { id: 'deals', view: 'line' }];
@@ -314,7 +304,6 @@ function renderTrendCards() {
     </div>`;
   }).join('');
 
-  // Draw charts
   trendCardOrder.forEach(({ id, view }) => {
     const def    = TREND_DEFS[id];
     const rows   = trendRawData?.[def.dataKey] || [];
@@ -345,7 +334,6 @@ function saveTrendConfig() {
   });
 }
 
-// Drag-and-drop reordering
 function initTrendDragDrop() {
   const grid = document.getElementById('analytics-trend-grid');
   grid.querySelectorAll('.trend-card').forEach(card => {
@@ -388,7 +376,6 @@ function formatTrendLabel(dateStr, period) {
   return d.toLocaleString('default', { weekday: 'short' });
 }
 
-// ── Line chart ─────────────────────────────────────────────
 function renderSparkline(containerId, values, labels, color, isCurrency) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -429,7 +416,6 @@ function renderSparkline(containerId, values, labels, color, isCurrency) {
   });
 }
 
-// ── Bar chart ──────────────────────────────────────────────
 function renderBarChart(containerId, values, labels, color, isCurrency) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -470,7 +456,6 @@ function renderBarChart(containerId, values, labels, color, isCurrency) {
   });
 }
 
-// ── Detail view ────────────────────────────────────────────
 function renderDetailView(containerId, values, labels, color, isCurrency) {
   const el = document.getElementById(containerId);
   if (!el) return;
@@ -512,7 +497,6 @@ function switchTrendPeriod(period) {
   loadTrend(period);
 }
 
-// ── Config modal ───────────────────────────────────────────
 function openAnalyticsConfig() {
   if (!analyticsData) return;
   const { all_stages, deal_fields, config } = analyticsData;
@@ -520,7 +504,6 @@ function openAnalyticsConfig() {
   const lostIds    = (config.lost_stage_ids || []).map(Number);
   const valueField = config.value_field || '';
 
-  // Group stages by pipeline
   const pipelines = [];
   const pipelineMap = {};
   for (const s of all_stages) {
@@ -549,7 +532,6 @@ function openAnalyticsConfig() {
   renderStageGroup('analytics-won-stages',  wonIds);
   renderStageGroup('analytics-lost-stages', lostIds);
 
-  // Value field selector
   const numericFields = deal_fields.filter(f => f.type === 'number' || f.type === 'currency');
   const valueOptions  = [
     { key: '',      label: 'None — hide value metrics' },
@@ -559,7 +541,6 @@ function openAnalyticsConfig() {
   document.getElementById('analytics-value-field').innerHTML =
     valueOptions.map(o => `<option value="${o.key}" ${valueField === o.key ? 'selected' : ''}>${o.label}</option>`).join('');
 
-  // Card visibility toggles
   const hasValue = analyticsData?.config?.value_field != null;
   document.getElementById('analytics-card-visibility').innerHTML =
     Object.entries(STAT_CARD_DEFS)
@@ -596,16 +577,13 @@ async function saveAnalyticsConfig() {
     return;
   }
 
-  // Apply card visibility from checkboxes
   document.querySelectorAll('#analytics-card-visibility input[data-card-vis]').forEach(cb => {
     const card = statCardOrder.find(c => c.id === cb.dataset.cardVis);
     if (card) card.hidden = !cb.checked;
     else statCardOrder.push({ id: cb.dataset.cardVis, hidden: !cb.checked });
   });
 
-  // Workspace-level config (shared across users)
   const res = await api.patch('/api/analytics/config', { won_stage_ids: wonIds, lost_stage_ids: lostIds, value_field: valueField });
-  // Per-user layout
   await api.patch('/api/analytics/layout', {
     stat_card_order:   statCardOrder.map(c => c.id),
     hidden_stat_cards: statCardOrder.filter(c => c.hidden).map(c => c.id),

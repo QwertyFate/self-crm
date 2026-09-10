@@ -6,7 +6,6 @@ const { notify }  = require('../notifications');
 
 router.use(requireAuth);
 
-// Tasks — optionally filtered by list_id. Returns parents + subtasks together.
 router.get('/', async (req, res, next) => {
   try {
     const { list_id } = req.query;
@@ -34,7 +33,6 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Single task with its subtasks
 router.get('/:id', async (req, res, next) => {
   try {
     const { rows: [task] } = await pool.query(`
@@ -81,7 +79,6 @@ router.post('/', async (req, res, next) => {
        title.trim(), description||null, status||'todo', priority||'medium',
        assigned_to||null, due_date||null, req.userId]
     );
-    // Only notify for parent tasks (not subtasks)
     if (!parent_id) {
       notify(req.workspaceId, req.userId, {
         type: 'task_created', category: 'tasks',
