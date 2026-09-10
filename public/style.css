@@ -2972,3 +2972,40 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 .urgency-select:hover { border-color: var(--brand); }
 .card-urgency-select .urgency-dot { width: 7px; height: 7px; }
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   34 · TASK LINKING (deal / contact chips)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.task-link-row {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line); border-radius: var(--r-sm);
+  font-size: var(--fs-xs);
+}
+.task-link-k {
+  flex: 0 0 auto; min-width: 44px;
+  font-size: var(--fs-3xs); font-weight: 700;
+  text-transform: uppercase; letter-spacing: .5px; color: var(--ink-muted);
+}
+.task-link-a {
+  flex: 1; min-width: 0; color: var(--brand-ink);
+  cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.task-link-a:hover { text-decoration: underline; }
+.task-link-clear {
+  border: none; background: transparent; color: var(--ink-subtle);
+  cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; flex-shrink: 0;
+}
+.task-link-clear:hover { color: var(--danger); }
+.task-link-empty { font-size: var(--fs-xs); color: var(--ink-muted); }
+
+
+/* Task modal side column: breathing room + divider between sections */
+.task-side-section + .task-side-section {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+  margin-top: 6px;
+}
+.task-side-section .eyebrow { margin-bottom: 4px; }
+

@@ -164,7 +164,6 @@ async function getAdminDefaultStages(client) {
       return saved.value.contactStages;
     }
   } catch (e) {
-    // If query fails or platform_settings doesn't exist, fall back to defaults
   }
   return DEFAULT_STAGES.map(([name, color, pos]) => ({ name, color, position: pos }));
 }
@@ -181,7 +180,6 @@ async function seedDefaultStages(workspaceId, client) {
 
 async function initDb() {
   await pool.query(SCHEMA);
-  // Safe migrations for new columns on existing databases
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS contact_columns   JSONB NOT NULL DEFAULT '[]'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS deal_kanban_fields JSONB NOT NULL DEFAULT '["contact","value"]'`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS column_widths JSONB NOT NULL DEFAULT '{}'`);
@@ -286,7 +284,6 @@ async function initDb() {
     )
   `);
 
-  // Task projects, lists, and per-project statuses
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_projects (
       id           SERIAL PRIMARY KEY,
@@ -321,6 +318,8 @@ async function initDb() {
   `);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS project_id INTEGER REFERENCES task_projects(id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS list_id    INTEGER REFERENCES task_lists(id)    ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deal_id    INTEGER REFERENCES deals(id)    ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_attachments (
@@ -337,7 +336,6 @@ async function initDb() {
     )
   `);
 
-  // One webhook config per workspace
   await pool.query(`
     CREATE TABLE IF NOT EXISTS workspace_webhook (
       id           SERIAL PRIMARY KEY,
@@ -368,7 +366,6 @@ async function initDb() {
   await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS captured JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE workspace_webhook ADD COLUMN IF NOT EXISTS default_assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
 
-  // Multi-workspace membership table
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_workspaces (
       user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
@@ -384,7 +381,6 @@ async function initDb() {
     ON CONFLICT DO NOTHING
   `);
 
-  // Team chat
   await pool.query(`
     CREATE TABLE IF NOT EXISTS chat_messages (
       id           SERIAL PRIMARY KEY,
@@ -403,7 +399,6 @@ async function initDb() {
     )
   `);
 
-  // Activity comments (threaded comments on notes/activities)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS activity_comments (
       id           SERIAL PRIMARY KEY,
@@ -416,16 +411,13 @@ async function initDb() {
     )
   `);
 
-  // Allow whatsapp as an activity type
   try {
     await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);
     await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp'))`);
   } catch (e) {
-    // Constraint may already exist, that's fine
     if (e.code !== '42710') throw e;
   }
 
-  // Print a first-run platform invite code if the database is empty
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');
   if (wsCount === 0 && piCount === 0) {
@@ -456,7 +448,6 @@ async function getAdminDefaultPipelineStages(client) {
       return saved.value.dealStages;
     }
   } catch (e) {
-    // If query fails or platform_settings doesn't exist, fall back to defaults
   }
   return DEFAULT_PIPELINE_STAGES.map(([name, color, pos]) => ({ name, color, position: pos }));
 }
@@ -468,7 +459,6 @@ async function getAdminPipelineName(client) {
       return saved.value.pipelineName;
     }
   } catch (e) {
-    // Fall back to default name
   }
   return 'Sales Pipeline';
 }

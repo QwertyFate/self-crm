@@ -5,8 +5,6 @@ const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
 
-// GET /api/calendar?start=YYYY-MM-DD&end=YYYY-MM-DD
-// Returns activities scheduled between start and end (inclusive)
 router.get('/', async (req, res, next) => {
   try {
     const { start, end } = req.query;
@@ -35,7 +33,6 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /api/calendar/today — shorthand for today's events
 router.get('/today', async (req, res, next) => {
   try {
     const { rows } = await pool.query(`

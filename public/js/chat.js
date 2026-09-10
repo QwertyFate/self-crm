@@ -1,4 +1,3 @@
-// ── TEAM CHAT ─────────────────────────────────────────────
 let chatOpen         = false;
 let chatPageOpen     = false;
 let chatOldestId     = null;
@@ -54,14 +53,12 @@ function renderMessages(messages, prepend = false) {
     const isMe    = msg.user_id === myId;
     const msgDate = msg.created_at;
 
-    // Day separator
     if (!lastDate || !isSameDay(lastDate, msgDate)) {
       html += `<div class="chat-day-sep"><span>${dayLabel(msgDate)}</span></div>`;
       lastUser = null;
     }
     lastDate = msgDate;
 
-    // Group consecutive messages from the same user
     const grouped = lastUser === msg.user_id;
     lastUser = msg.user_id;
 
@@ -80,15 +77,12 @@ function renderMessages(messages, prepend = false) {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
     el.insertBefore(tempDiv, el.firstChild);
-    // Maintain scroll position
     el.scrollTop = el.scrollHeight - prevScroll;
   } else {
-    // Remove loading placeholder
     el.querySelector('.chat-loading')?.remove();
     el.innerHTML += html;
   }
 }
-
 
 async function loadOlderMessages() {
   chatLoadingMore = true;
@@ -100,14 +94,11 @@ async function loadOlderMessages() {
   chatLoadingMore = false;
 }
 
-
 function scrollChatBottom() {
   const el = document.getElementById('chat-messages');
   if (el) el.scrollTop = el.scrollHeight;
 }
 
-
-// ── Unread badge (polled silently alongside notifications) ─
 function updateChatBadge(count) {
   const badge = document.getElementById('chat-badge');
   if (!badge) return;
@@ -115,7 +106,6 @@ function updateChatBadge(count) {
   badge.classList.toggle('hidden', count === 0);
 }
 
-// Fetch the unread count once (called on app load)
 async function refreshChatBadge() {
   try {
     const data = await apiFetchSilent('/api/chat/unread');
@@ -123,8 +113,6 @@ async function refreshChatBadge() {
   } catch { /* silent */ }
 }
 
-
-// ── Socket.io connection ──────────────────────────────────
 function initChatSocket() {
   if (socket) return;
 
@@ -144,7 +132,6 @@ function initChatSocket() {
   });
 
   socket.on('new_message', (msg) => {
-    // Update page chat
     const pageEl = document.getElementById('chat-page-messages');
     if (pageEl && chatPageOpen) {
       pageEl.querySelector('.chat-empty')?.remove();
@@ -154,14 +141,12 @@ function initChatSocket() {
         chatNewestId = msg.id;
       }
 
-      // Always scroll to bottom for new messages
       setTimeout(() => scrollChatPageBottom(), 50);
 
       api.patch('/api/chat/read', {});
       updateChatBadge(0);
     }
 
-    // Update badge if chat not open
     if (!chatPageOpen) {
       apiFetchSilent('/api/chat/unread').then(data => {
         if (data && !data.error) updateChatBadge(data.unread);
@@ -201,7 +186,6 @@ function renderPageOnlineUsers() {
   });
   bar.innerHTML = html;
 }
-
 
 async function loadChatPage() {
   chatPageOpen = true;
@@ -246,7 +230,6 @@ async function loadChatPage() {
   }
 }
 
-// Re-fetch the current chat thread (Refresh button)
 async function renderChatRoom() {
   if (!chatPageOpen) chatPageOpen = true;
   const el = document.getElementById('chat-page-messages');
@@ -290,7 +273,6 @@ function renderMessagesToPage(messages, prepend = false) {
   let lastDate = null;
   let lastUser = null;
 
-  // When appending new messages, check the last rendered date
   if (!prepend && el.innerHTML) {
     const lastMsg = el.querySelectorAll('.chat-msg:not(.chat-day-sep)');
     if (lastMsg.length > 0) {
@@ -306,7 +288,6 @@ function renderMessagesToPage(messages, prepend = false) {
     const isMe = msg.user_id === myId;
     const msgDate = msg.created_at;
 
-    // Only add day separator if it's a new day
     if (!lastDate || !isSameDay(lastDate, msgDate)) {
       html += `<div class="chat-day-sep"><span>${dayLabel(msgDate)}</span></div>`;
       lastUser = null;
@@ -328,13 +309,11 @@ function renderMessagesToPage(messages, prepend = false) {
   });
 
   if (prepend) {
-    // Loading older messages - insert silently
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
     el.insertBefore(tempDiv, el.firstChild);
     el.scrollTop = el.scrollHeight - prevScroll;
   } else {
-    // Initial load or new messages
     el.innerHTML += html;
   }
 }

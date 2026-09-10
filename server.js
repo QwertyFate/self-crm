@@ -31,7 +31,6 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// ── Rate limiters ─────────────────────────────────────────
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, max: 5,
   message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
@@ -61,7 +60,6 @@ const webhookKeyLimiter = rateLimit({
 
 app.use(express.json());
 
-// Extract session middleware so Socket.io can share it
 const sessionMiddleware = session({
   store: new pgSession({ pool, createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET || 'change-me-in-production',
@@ -82,7 +80,6 @@ app.use(express.static(path.join(__dirname, 'public'), {
   },
 }));
 
-// ── Apply rate limits ─────────────────────────────────────
 app.use('/api/auth/login',           loginLimiter);
 app.use('/api/auth/signup',          signupLimiter);
 app.use('/api/auth/forgot-password', passwordLimiter);
@@ -113,7 +110,6 @@ app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations',  require('./routes/integrations'));
 
-// Admin console
 app.get('/adminconsole', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
@@ -123,16 +119,13 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// ── Socket.io — real-time chat + presence ─────────────────
 const io = new Server(httpServer, {
   cors: { origin: false },
   transports: ['websocket', 'polling'],
 });
 
-// Share Express session with Socket.io
 io.engine.use(sessionMiddleware);
 
-// workspaceId → Map<userId, { name, sockets: Set<socketId> }>
 const presence = new Map();
 
 function getOnlineList(workspaceId) {
@@ -148,7 +141,6 @@ io.on('connection', async (socket) => {
   const userId      = sess.userId;
   const workspaceId = sess.workspaceId;
 
-  // Verify membership
   try {
     const { rows: [mem] } = await pool.query(
       'SELECT role FROM user_workspaces WHERE user_id=$1 AND workspace_id=$2',
@@ -162,16 +154,13 @@ io.on('connection', async (socket) => {
 
   socket.join(`ws-${workspaceId}`);
 
-  // Update presence
   if (!presence.has(workspaceId)) presence.set(workspaceId, new Map());
   const wsPresence = presence.get(workspaceId);
   if (!wsPresence.has(userId)) wsPresence.set(userId, { name: userName, sockets: new Set() });
   wsPresence.get(userId).sockets.add(socket.id);
 
-  // Broadcast updated online list to workspace
   io.to(`ws-${workspaceId}`).emit('online_users', getOnlineList(workspaceId));
 
-  // ── Incoming message ──────────────────────────────────────
   socket.on('chat_message', async (content) => {
     if (!content?.trim() || content.length > 2000) return;
     try {
@@ -179,7 +168,6 @@ io.on('connection', async (socket) => {
         `INSERT INTO chat_messages (workspace_id, user_id, content) VALUES ($1,$2,$3) RETURNING id, created_at`,
         [workspaceId, userId, content.trim()]
       );
-      // Auto-mark sender as read
       await pool.query(
         `INSERT INTO chat_reads (user_id, workspace_id, last_read_at) VALUES ($1,$2,NOW())
          ON CONFLICT (user_id, workspace_id) DO UPDATE SET last_read_at = NOW()`,
@@ -195,7 +183,6 @@ io.on('connection', async (socket) => {
     } catch (e) { console.error('Socket chat error:', e); }
   });
 
-  // ── Disconnect ────────────────────────────────────────────
   socket.on('disconnect', () => {
     const u = wsPresence?.get(userId);
     if (u) {

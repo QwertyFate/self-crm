@@ -84,7 +84,6 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ── Deal linking ───────────────────────────────────────────
 router.post('/:id/deals', async (req, res, next) => {
   try {
     const { deal_id } = req.body;
@@ -112,7 +111,6 @@ router.delete('/:id/deals/:dealId', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ── Contact/Supplier linking ───────────────────────────────
 router.get('/:id/contacts', async (req, res, next) => {
   try {
     const { rows } = await pool.query(

@@ -11,8 +11,6 @@ const DEFAULT_STAGES = [
   ['Negotiation', '#8b5cf6', 3], ['Won', '#22c55e', 4], ['Lost', '#ef4444', 5],
 ];
 
-// ── Pipelines ─────────────────────────────────────────────
-
 router.get('/', async (req, res, next) => {
   try {
     const { rows: pipelines } = await pool.query(`
@@ -86,8 +84,6 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// ── Pipeline Stages ───────────────────────────────────────
-
 router.post('/:id/stages', async (req, res, next) => {
   try {
     const { name, color } = req.body;
@@ -143,7 +139,6 @@ router.delete('/:id/stages/:sid', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// Deal kanban fields
 router.patch('/deal-kanban-fields', async (req, res, next) => {
   try {
     const { fields } = req.body;

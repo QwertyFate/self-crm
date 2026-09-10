@@ -1,4 +1,3 @@
-// ── TASKS ──────────────────────────────────────────────────
 let tasks            = [];
 let taskProjects     = [];
 let currentProjectId = null;
@@ -6,7 +5,7 @@ let currentListId    = null;
 let currentProject   = null;
 let taskViewMode     = localStorage.getItem('taskViewMode') || 'list';
 let dragTaskId       = null;
-let collapsedTasks   = new Set(); // task IDs whose subtasks are collapsed in kanban
+let collapsedTasks   = new Set();
 
 const DEFAULT_TASK_STATUSES = [
   { key: 'todo',        label: 'Todo',        color: '#94a3b8' },
@@ -22,12 +21,7 @@ function getActiveTaskStatuses() {
   return (Array.isArray(saved) && saved.length) ? saved : DEFAULT_TASK_STATUSES;
 }
 
-// ── Load ──────────────────────────────────────────────────
 async function loadTasks() {
-  // Clear UI immediately to prevent showing stale data.
-  // NOTE: only clear the dynamic task areas — #tasks-content contains the
-  // static header chrome (#tasks-breadcrumb, #tasks-main-title, toolbar) that
-  // must stay in the DOM for selectList()/setTaskView() to keep working.
   const taskNav = document.getElementById('tasks-project-nav');
   if (taskNav) taskNav.innerHTML = '';
   const listView = document.getElementById('tasks-list-view');
@@ -40,7 +34,6 @@ async function loadTasks() {
   renderProjectNav();
   populateTaskAssigneeFilter();
 
-  // Restore last selected list
   const savedListId = parseInt(localStorage.getItem('lastTaskListId'));
   if (savedListId) {
     for (const p of taskProjects) {
@@ -51,7 +44,6 @@ async function loadTasks() {
   showTasksEmptyState();
 }
 
-// Select a list by IDs (used by sidebar onclick — avoids JSON in HTML)
 function selectListById(projectId, listId) {
   const project = taskProjects.find(p => p.id === projectId);
   const list    = (project?.lists || []).find(l => l.id === listId);
@@ -72,28 +64,23 @@ async function selectList(project, list) {
   currentProject   = project;
   localStorage.setItem('lastTaskListId', list.id);
 
-  // Update sidebar active state
   document.querySelectorAll('.tasks-list-item').forEach(el => el.classList.remove('active'));
   document.getElementById(`list-item-${list.id}`)?.classList.add('active');
 
-  // Show main content, hide empty state
   document.getElementById('tasks-empty-state').style.display = 'none';
   const content = document.getElementById('tasks-content');
   content.classList.remove('hidden');
   content.style.display = 'flex';
 
-  // Update header
   const bcEl = document.getElementById('tasks-breadcrumb');
   if (bcEl) bcEl.textContent = project.name;
   const titleEl = document.getElementById('tasks-main-title');
   if (titleEl) titleEl.textContent = list.name;
 
-  // Load tasks for this list
   tasks = await api.get(`/api/tasks?list_id=${list.id}`);
   setTaskView(taskViewMode, false);
 }
 
-// ── Sidebar nav ───────────────────────────────────────────
 function renderProjectNav() {
   const nav = document.getElementById('tasks-project-nav');
   if (!nav) return;
@@ -146,7 +133,6 @@ function toggleProjectExpand(projectId) {
   else localStorage.setItem(`proj-collapsed-${projectId}`, '1');
 }
 
-// ── Project CRUD ──────────────────────────────────────────
 let editingProjectId = null;
 function openProjectModal(id) {
   editingProjectId = id || null;
@@ -185,7 +171,6 @@ async function saveProject() {
   errorEl.style.display = 'none';
   closeModal('project-modal');
   taskProjects = await api.get('/api/task-projects');
-  // Refresh currentProject if it was updated
   if (editingProjectId && currentProjectId === editingProjectId) {
     currentProject = taskProjects.find(p => p.id === currentProjectId);
   }
@@ -200,7 +185,6 @@ async function deleteProject(id) {
   renderProjectNav();
 }
 
-// ── List CRUD ─────────────────────────────────────────────
 function openListModal(projectId, listId, currentName) {
   document.getElementById('list-project-id').value = projectId;
   document.getElementById('list-edit-id').value    = listId || '';
@@ -224,7 +208,6 @@ async function saveList() {
   closeModal('list-modal');
   taskProjects = await api.get('/api/task-projects');
   renderProjectNav();
-  // If we renamed the current list, update the header
   if (listId && parseInt(listId) === currentListId) {
     const titleEl = document.getElementById('tasks-main-title');
     if (titleEl) titleEl.textContent = name;
@@ -239,7 +222,6 @@ async function deleteList(listId) {
   renderProjectNav();
 }
 
-// ── View toggle ───────────────────────────────────────────
 function populateTaskAssigneeFilter() {
   const sel = document.getElementById('task-filter-assignee');
   if (!sel) return;
@@ -278,7 +260,6 @@ function renderTasksCurrent() {
   else renderTasksList(getFilteredTasks());
 }
 
-// ── LIST VIEW ─────────────────────────────────────────────
 function renderTasksList(list) {
   const el = document.getElementById('tasks-list-view');
   if (!el) return;
@@ -337,7 +318,6 @@ function toggleSubtasksRow(e, taskId) {
   container.classList.toggle('hidden', isOpen);
 }
 
-// ── KANBAN VIEW ───────────────────────────────────────────
 function renderTasksKanban(list) {
   const el = document.getElementById('tasks-kanban-view');
   if (!el) return;
@@ -410,7 +390,6 @@ function toggleKanbanSubtasks(taskId) {
   renderTasksCurrent();
 }
 
-// ── Drag & drop ───────────────────────────────────────────
 function taskDragStart(e, id) {
   dragTaskId = id; e.dataTransfer.effectAllowed = 'move';
   setTimeout(() => e.target.classList.add('dragging'), 0);
@@ -430,7 +409,6 @@ async function taskDrop(e, status) {
   dragTaskId = null;
 }
 
-// ── Task done toggle ──────────────────────────────────────
 async function toggleTaskDone(e, taskId, isDone) {
   e.stopPropagation();
   const statuses  = getActiveTaskStatuses();
@@ -451,7 +429,6 @@ async function deleteTask(e, taskId) {
   renderTasksCurrent();
 }
 
-// ── Task modal ────────────────────────────────────────────
 let currentTaskId = null;
 
 function renderTaskFieldInput(f, value = '') {
@@ -464,16 +441,22 @@ function renderTaskFieldInput(f, value = '') {
   return `<input type="${typeMap[f.type]||'text'}" id="${id}" value="${esc(value)}" />`;
 }
 
-async function openTaskModal(id) {
+async function openTaskModal(id, ctx = null) {
   await ensureMembers();
-  // Ensure task fields are loaded
   if (!taskFields.length) taskFields = await api.get('/api/task-fields');
+  if (!taskProjects.length) {
+    try { taskProjects = await api.get('/api/task-projects'); } catch (e) { taskProjects = []; }
+  }
+
+  let taskEdit = null;
 
   document.getElementById('task-form').reset();
   document.getElementById('task-id').value        = id || '';
   document.getElementById('task-parent-id').value = '';
   document.getElementById('task-modal-title').textContent = id ? 'Edit Task' : 'Add Task';
   document.getElementById('task-delete-btn').style.display = id ? '' : 'none';
+  document.getElementById('task-deal-id').value = '';
+  document.getElementById('task-contact-id').value = '';
 
   const statuses = getActiveTaskStatuses();
   document.getElementById('task-status').innerHTML =
@@ -483,11 +466,13 @@ async function openTaskModal(id) {
     `<option value="">— Unassigned —</option>` +
     members.map(m => `<option value="${m.id}"${m.id === currentUser?.id && !id ? ' selected' : ''}>${esc(m.name)}</option>`).join('');
 
-  const subCol = document.getElementById('task-subtasks-col');
+  const sideCol = document.getElementById('task-side-col');
+  const subSection = document.getElementById('task-subtasks-section');
 
   if (id) {
     currentTaskId = id;
     const t = await api.get(`/api/tasks/${id}`);
+    taskEdit = t;
     document.getElementById('task-title').value       = t.title;
     document.getElementById('task-description').value = t.description || '';
     document.getElementById('task-status').value      = t.status;
@@ -495,27 +480,195 @@ async function openTaskModal(id) {
     document.getElementById('task-assignee').value    = t.assigned_to || '';
     document.getElementById('task-due-date').value    = t.due_date ? t.due_date.slice(0,10) : '';
 
-    // Render custom fields with saved values
     document.getElementById('task-custom-fields').innerHTML = taskFields.map(f =>
       `<div class="form-group"><label>${esc(f.name)}</label>${renderTaskFieldInput(f, t.custom_data?.[f.field_key] ?? '')}</div>`
     ).join('');
 
-    subCol.style.display = '';
+    if (sideCol)    sideCol.style.display    = '';
+    if (subSection) subSection.style.display = '';
     renderSubtasksList(t.subtasks || [], id);
-    loadTaskAttachments(id);
   } else {
     currentTaskId = null;
     document.getElementById('task-status').value = statuses[0]?.key || 'todo';
 
-    // Render custom fields empty
     document.getElementById('task-custom-fields').innerHTML = taskFields.map(f =>
       `<div class="form-group"><label>${esc(f.name)}</label>${renderTaskFieldInput(f, '')}</div>`
     ).join('');
 
-    subCol.style.display = 'none';
+    if (sideCol)    sideCol.style.display    = '';
+    if (subSection) subSection.style.display = 'none';
   }
 
+  setupTaskModalContext(taskEdit, ctx);
+
   document.getElementById('task-modal').classList.remove('hidden');
+}
+
+let taskOpenLinks = { dealId: null, dealTitle: null, contactId: null, contactName: null };
+
+function populateTaskProjectSelect(selectedProjectId) {
+  const sel = document.getElementById('task-project');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— No project —</option>' +
+    taskProjects.map(p =>
+      `<option value="${p.id}"${p.id === selectedProjectId ? ' selected' : ''}>${esc(p.name)}</option>`
+    ).join('');
+}
+
+function populateTaskListSelect(projectId, selectedListId) {
+  const sel = document.getElementById('task-list');
+  if (!sel) return;
+  const project = taskProjects.find(p => p.id === projectId);
+  const lists   = project?.lists || [];
+  sel.innerHTML = '<option value="">— No list —</option>' +
+    lists.map(l =>
+      `<option value="${l.id}"${l.id === selectedListId ? ' selected' : ''}>${esc(l.name)}</option>`
+    ).join('');
+}
+
+function onTaskProjectChange() {
+  populateTaskListSelect(parseInt(document.getElementById('task-project')?.value) || null, null);
+}
+
+function setupTaskModalContext(taskEdit, ctx) {
+  hideTaskLinkPicker();
+  let projectId = null, listId = null;
+  if (taskEdit) {
+    projectId = taskEdit.project_id || currentProjectId || null;
+    listId    = taskEdit.list_id    || currentListId    || null;
+  } else {
+    projectId = currentProjectId || (taskProjects[0]?.id) || null;
+    listId    = currentListId;
+    if (!listId && projectId) listId = (taskProjects.find(p => p.id === projectId)?.lists || [])[0]?.id || null;
+  }
+  populateTaskProjectSelect(projectId);
+  populateTaskListSelect(projectId, listId);
+
+  const links = taskEdit
+    ? {
+        dealId:     taskEdit.deal_id     || null,
+        dealTitle:  taskEdit.deal_title  || null,
+        contactId:  taskEdit.contact_id  || null,
+        contactName: taskEdit.contact_name || null,
+      }
+    : (ctx || {});
+  renderTaskLinks(links);
+}
+
+function renderTaskLinks(links = {}) {
+  taskOpenLinks = {
+    dealId:     links.dealId     || null,
+    dealTitle:  links.dealTitle  || null,
+    contactId:  links.contactId  || null,
+    contactName: links.contactName || null,
+  };
+  document.getElementById('task-deal-id').value    = taskOpenLinks.dealId || '';
+  document.getElementById('task-contact-id').value = taskOpenLinks.contactId || '';
+
+  const el = document.getElementById('task-links');
+  if (!el) return;
+  const rows = [];
+  if (taskOpenLinks.dealId) {
+    rows.push(`<div class="task-link-row">
+      <span class="task-link-k">Deal</span>
+      <a class="task-link-a" onclick="openLinkedTaskObject('deal',${taskOpenLinks.dealId})" title="Open deal">${esc(taskOpenLinks.dealTitle || `Deal #${taskOpenLinks.dealId}`)}</a>
+      <button type="button" class="task-link-clear" onclick="clearTaskLink('deal')" title="Unlink deal">×</button>
+    </div>`);
+  }
+  if (taskOpenLinks.contactId) {
+    rows.push(`<div class="task-link-row">
+      <span class="task-link-k">Contact</span>
+      <a class="task-link-a" onclick="openLinkedTaskObject('contact',${taskOpenLinks.contactId})" title="Open contact">${esc(taskOpenLinks.contactName || `Contact #${taskOpenLinks.contactId}`)}</a>
+      <button type="button" class="task-link-clear" onclick="clearTaskLink('contact')" title="Unlink contact">×</button>
+    </div>`);
+  }
+  el.innerHTML = rows.length
+    ? rows.join('')
+    : '<span class="task-link-empty">Not linked to a deal or contact.</span>';
+}
+
+function clearTaskLink(kind) {
+  const links = { ...taskOpenLinks };
+  if (kind === 'deal')    { links.dealId = null;    links.dealTitle = null; }
+  if (kind === 'contact') { links.contactId = null; links.contactName = null; }
+  renderTaskLinks(links);
+}
+
+let taskLinkOptionsCache = null;
+
+async function ensureTaskLinkOptions() {
+  if (taskLinkOptionsCache) return taskLinkOptionsCache;
+  const [deals, contacts] = await Promise.all([
+    api.get('/api/deals'),
+    api.get('/api/contacts?contact_type=contact'),
+  ]);
+  taskLinkOptionsCache = { deals: deals || [], contacts: contacts || [] };
+  return taskLinkOptionsCache;
+}
+
+function hideTaskLinkPicker() {
+  const picker = document.getElementById('task-link-picker');
+  if (picker) picker.style.display = 'none';
+}
+
+async function toggleTaskLinkPicker() {
+  const picker = document.getElementById('task-link-picker');
+  if (!picker) return;
+  if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
+
+  picker.style.display = 'flex';
+  const { deals, contacts } = await ensureTaskLinkOptions();
+
+  const dealSel = document.getElementById('task-link-deal');
+  if (dealSel) {
+    dealSel.innerHTML = '<option value="">— No deal —</option>' +
+      deals.map(d => `<option value="${d.id}"${taskOpenLinks.dealId === d.id ? ' selected' : ''}>${esc(d.title || 'Deal #' + d.id)}</option>`).join('');
+  }
+  const contactSel = document.getElementById('task-link-contact');
+  if (contactSel) {
+    contactSel.innerHTML = '<option value="">— No contact —</option>' +
+      contacts.map(c => `<option value="${c.id}"${taskOpenLinks.contactId === c.id ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
+  }
+}
+
+function cancelTaskLinkPicker() {
+  hideTaskLinkPicker();
+}
+
+function confirmTaskLink() {
+  const dealSel    = document.getElementById('task-link-deal');
+  const contactSel = document.getElementById('task-link-contact');
+  const dealVal    = parseInt(dealSel?.value, 10) || null;
+  const contactVal = parseInt(contactSel?.value, 10) || null;
+  if (!dealVal && !contactVal) { alert('Select a deal or contact to link.'); return; }
+
+  const links = { ...taskOpenLinks };
+  const options = taskLinkOptionsCache || { deals: [], contacts: [] };
+  if (dealVal) {
+    links.dealId    = dealVal;
+    links.dealTitle = options.deals.find(d => d.id === dealVal)?.title || null;
+  }
+  if (contactVal) {
+    links.contactId    = contactVal;
+    links.contactName  = options.contacts.find(c => c.id === contactVal)?.name || null;
+  }
+  renderTaskLinks(links);
+  hideTaskLinkPicker();
+}
+
+function openLinkedTaskObject(kind, id) {
+  closeModal('task-modal');
+  if (kind === 'deal')    openDealModal(id);
+  else                    openDetail(id);
+}
+
+async function openTaskModalForContact(contactId) {
+  let contactName = null;
+  try {
+    const c = await api.get(`/api/contacts/${contactId}`);
+    if (c && !c.error) contactName = c.name;
+  } catch (e) { /* optional */ }
+  openTaskModal(null, { contactId: contactId || null, contactName });
 }
 
 function renderSubtasksList(subtasks, parentId) {
@@ -588,8 +741,10 @@ async function saveTask(e) {
     priority:    document.getElementById('task-priority').value,
     assigned_to: document.getElementById('task-assignee').value || null,
     due_date:    document.getElementById('task-due-date').value || null,
-    project_id:  currentProjectId,
-    list_id:     currentListId,
+    project_id:  document.getElementById('task-project').value || currentProjectId || null,
+    list_id:     document.getElementById('task-list').value || null,
+    deal_id:     document.getElementById('task-deal-id').value || null,
+    contact_id:  document.getElementById('task-contact-id').value || null,
     custom_data,
   };
   if (id) await api.put(`/api/tasks/${id}`, payload);
@@ -610,7 +765,6 @@ async function deleteTaskFromModal() {
   renderTasksCurrent();
 }
 
-// ── TASK ATTACHMENTS ──────────────────────────────────────
 const VIEWABLE_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -701,7 +855,6 @@ async function deleteAttachment(taskId, attachmentId) {
   document.getElementById(`attach-${attachmentId}`)?.remove();
 }
 
-// Drag-and-drop
 function taskAttachDragOver(e) { e.preventDefault(); document.getElementById('task-drop-zone')?.classList.add('drag-over'); }
 function taskAttachDragLeave(e) { document.getElementById('task-drop-zone')?.classList.remove('drag-over'); }
 function taskAttachDrop(e) {
@@ -713,7 +866,7 @@ function taskAttachDrop(e) {
 function taskAttachFileChange(e) {
   const files = Array.from(e.target.files);
   if (files.length) uploadAttachments(files);
-  e.target.value = ''; // reset so same file can be re-selected
+  e.target.value = '';
 }
 
 async function uploadAttachments(files) {

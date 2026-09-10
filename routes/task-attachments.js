@@ -7,12 +7,11 @@ const { uploadFile, deleteFile } = require('../storage');
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits:  { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  limits:  { fileSize: 10 * 1024 * 1024 },
 });
 
 router.use(requireAuth);
 
-// GET all attachments for a task
 router.get('/:taskId/attachments', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -27,7 +26,6 @@ router.get('/:taskId/attachments', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST upload a file
 router.post('/:taskId/attachments', upload.single('file'), async (req, res, next) => {
   try {
     const file = req.file;
@@ -54,7 +52,6 @@ router.post('/:taskId/attachments', upload.single('file'), async (req, res, next
   }
 });
 
-// DELETE an attachment
 router.delete('/:taskId/attachments/:id', async (req, res, next) => {
   try {
     const { rows: [att] } = await pool.query(

@@ -1,7 +1,3 @@
-// ── CLOCK ─────────────────────────────────────────────────
-// User-specific timezone clock displayed in the top-left sidebar.
-// Defaults to Germany (Europe/Berlin) for every user, but each user
-// can change their own timezone via Settings → General → Timezone.
 
 let clockTimer = null;
 const COMMON_TIMEZONES = [

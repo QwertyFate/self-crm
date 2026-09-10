@@ -51,7 +51,6 @@ router.post('/import', async (req, res, next) => {
       let count = 0;
       let dealsCreated = 0;
 
-      // Get first stage if deal creation is enabled but no stage specified
       let defaultStageId = stageId;
       if ((createDealsForNew || createDealsForUpdated) && pipelineId && !stageId) {
         const { rows: [firstStage] } = await client.query(
@@ -64,7 +63,6 @@ router.post('/import', async (req, res, next) => {
       for (const row of rows) {
         if (!row.name?.trim()) continue;
 
-        // Check if contact with same email already exists in this workspace
         let contactId;
         let isNew = true;
         if (row.email) {
@@ -74,7 +72,6 @@ router.post('/import', async (req, res, next) => {
           );
 
           if (existing) {
-            // Update existing contact
             await client.query(
               'UPDATE contacts SET name=$1, phone=$2, company=$3, stage_id=$4, assigned_to=$5, custom_data=$6, updated_at=NOW() WHERE id=$7 AND workspace_id=$8',
               [row.name.trim(), row.phone||null, row.company||null, row.stage_id||null,
@@ -84,7 +81,6 @@ router.post('/import', async (req, res, next) => {
             isNew = false;
             count++;
           } else {
-            // Create new contact if no email or email doesn't exist (use default assignee if provided)
             const assignedTo = defaultAssigneeId || req.userId;
             const { rows: [newContact] } = await client.query(
               'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
@@ -96,7 +92,6 @@ router.post('/import', async (req, res, next) => {
             count++;
           }
         } else {
-          // Create new contact if no email (use default assignee if provided)
           const assignedTo = defaultAssigneeId || req.userId;
           const { rows: [newContact] } = await client.query(
             'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
@@ -108,7 +103,6 @@ router.post('/import', async (req, res, next) => {
           count++;
         }
 
-        // Create deal if enabled
         const shouldCreateDeal = (isNew && createDealsForNew) || (!isNew && createDealsForUpdated);
         if (shouldCreateDeal && pipelineId && contactId) {
           await client.query(
@@ -164,7 +158,6 @@ router.post('/', async (req, res, next) => {
     const assignee = assigned_to ? Number(assigned_to) : req.userId;
     const type = contact_type || 'contact';
 
-    // Check if contact with same email already exists in this workspace
     if (email) {
       const normalizedEmail = email.toLowerCase().trim();
       const { rows: [existing] } = await pool.query(

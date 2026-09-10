@@ -1,4 +1,3 @@
-// ── AUTH ──────────────────────────────────────────────────
 async function init() {
   const params     = new URLSearchParams(window.location.search);
   const resetToken = params.get('reset');
@@ -159,7 +158,6 @@ async function selectWorkspace(workspaceId) {
   showApp();
 }
 
-// ── Workspaces page ────────────────────────────────────────
 const WS_PALETTE = [
   ['#6366f1','#818cf8'], ['#3b82f6','#60a5fa'], ['#10b981','#34d399'],
   ['#f59e0b','#fbbf24'], ['#ef4444','#f87171'], ['#8b5cf6','#a78bfa'],
@@ -265,7 +263,6 @@ async function handleCreateWorkspace(e) {
   });
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
   closeCreateWorkspaceModal();
-  // Reload to get new workspace with proper defaults applied
   window.location.reload();
 }
 
@@ -375,7 +372,6 @@ async function logout(e) {
   showAuth();
 }
 
-// ── Navigation ────────────────────────────────────────────
 document.querySelectorAll('.sidebar-nav a[data-page]').forEach(link => {
   link.addEventListener('click', e => { e.preventDefault(); switchPage(link.dataset.page); });
 });
@@ -384,7 +380,6 @@ async function switchPage(page) {
   document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelector(`.sidebar-nav a[data-page="${page}"]`)?.classList.add('active');
-  // Suppliers reuses the contacts page element — no separate page-suppliers div
   const pageElId = page === 'suppliers' ? 'page-contacts' : `page-${page}`;
   document.getElementById(pageElId)?.classList.add('active');
   if (page === 'deals')      { closeSidePanel(); await loadDeals(); }
@@ -402,9 +397,8 @@ async function switchPage(page) {
   if (page === 'chat')         await loadChatPage();
 }
 
-// ── Shared loaders ────────────────────────────────────────
 function invalidate() { contacts = []; stages = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }
 async function ensureStages()   { if (!stages.length)   stages   = await api.get('/api/stages'); }
 async function ensureFields()   { if (!fields.length)   fields   = await api.get('/api/fields'); }
-async function ensureContacts() { if (!contacts.length) contacts = await api.get('/api/contacts'); } // loads current type only; deal modal fetches both types directly
+async function ensureContacts() { if (!contacts.length) contacts = await api.get('/api/contacts'); }
 async function ensureMembers()  { if (!members.length)  members  = await api.get('/api/workspace/members'); }

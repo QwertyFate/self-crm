@@ -1,7 +1,5 @@
 const { pool } = require('./db');
 
-// Send a notification to all workspace members except the actor,
-// respecting each user's notification preferences.
 async function notify(workspaceId, actorId, { type, category, title, body, entityType, entityId }) {
   try {
     const { rows: users } = await pool.query(
@@ -28,12 +26,10 @@ async function notify(workspaceId, actorId, { type, category, title, body, entit
       VALUES ${values}
     `, params);
   } catch (e) {
-    // Notifications are non-critical — never crash the main request
     console.error('Notification error:', e.message);
   }
 }
 
-// Push a system announcement to all users (or all in a workspace)
 async function notifySystem(title, body, workspaceId = null) {
   try {
     const query = workspaceId

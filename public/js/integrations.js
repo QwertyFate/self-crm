@@ -1,7 +1,5 @@
-// ── INTEGRATIONS ───────────────────────────────────────────
 let intgData = null;
 
-// Built-in fields always shown
 const INTG_BUILTIN_FIELDS = [
   { key: 'name',    label: 'Name',    placeholder: 'full_name'     },
   { key: 'email',   label: 'Email',   placeholder: 'email'         },
@@ -9,7 +7,6 @@ const INTG_BUILTIN_FIELDS = [
   { key: 'company', label: 'Company', placeholder: 'company'       },
 ];
 
-// ── Platform guide definitions ─────────────────────────────
 const INTG_PLATFORMS = [
   {
     id: 'make',
@@ -126,7 +123,6 @@ function renderIntgPlatforms() {
     </button>`).join('');
 }
 
-// Sample values for JSON preview — keyed by common field names
 const INTG_SAMPLE_VALUES = {
   name: 'Jane Doe', full_name: 'Jane Doe', first_name: 'Jane', last_name: 'Doe',
   email: 'jane@example.com', phone: '+49123456789', phone_number: '+49123456789',
@@ -135,13 +131,11 @@ const INTG_SAMPLE_VALUES = {
 };
 
 function buildGuideJson(platformId) {
-  // Read current mapping from inputs (live)
   const mapping = {};
   document.querySelectorAll('#intg-field-map .intg-map-input').forEach(inp => {
     if (inp.value.trim()) mapping[inp.dataset.crm] = inp.value.trim();
   });
 
-  // If no mapping yet, fall back to platform defaults
   if (!Object.keys(mapping).length) {
     return platformId === 'n8n'
       ? '{\n  "full_name": "{{ $json.full_name }}",\n  "email": "{{ $json.email }}",\n  "phone_number": "{{ $json.phone_number }}"\n}'
@@ -209,7 +203,6 @@ function showIntgGuide(id) {
 }
 
 async function loadIntegrations() {
-  // Clear UI immediately to prevent showing stale data
   const intgFieldMap = document.getElementById('intg-field-map');
   if (intgFieldMap) intgFieldMap.innerHTML = '';
 
@@ -221,26 +214,21 @@ async function loadIntegrations() {
   const { webhook, pipelines, stages } = data;
   const origin = data.base_url || window.location.origin;
 
-  // Webhook URL
   document.getElementById('intg-url').value =
     `${origin}/api/integrations/receive/${webhook.webhook_key}`;
   document.getElementById('intg-active').checked = webhook.active;
 
-  // Field mapping — reset custom keys so they're derived fresh from saved map
   activeCustomKeys = [];
   renderIntgFieldMap(webhook.field_map || {});
 
-  // Deal toggle
   document.getElementById('intg-create-deal').checked = webhook.create_deal;
   document.getElementById('intg-deal-options').classList.toggle('hidden', !webhook.create_deal);
 
-  // Pipeline dropdown
   const pipelineEl = document.getElementById('intg-pipeline');
   pipelineEl.innerHTML = pipelines.map(p =>
     `<option value="${p.id}" ${webhook.pipeline_id == p.id ? 'selected' : ''}>${esc(p.name)}</option>`
   ).join('');
 
-  // Stage dropdown
   const stageEl = document.getElementById('intg-stage');
   const filteredStages = stages.filter(s =>
     !pipelineEl.value || s.pipeline_name === pipelines.find(p => p.id == pipelineEl.value)?.name
@@ -250,7 +238,6 @@ async function loadIntegrations() {
       `<option value="${s.id}" ${webhook.stage_id == s.id ? 'selected' : ''}>${esc(s.name)}</option>`
     ).join('');
 
-  // Default assignee dropdown
   const assigneeEl = document.getElementById('intg-assignee');
   assigneeEl.innerHTML = `<option value="">— Not set (assigned to self) —</option>` +
     members.map(m =>
@@ -262,18 +249,15 @@ async function loadIntegrations() {
   loadIntgLogs();
 }
 
-// activeFieldKeys = set of custom field keys the user has added to the mapping
 let activeCustomKeys = [];
 
 function renderIntgFieldMap(fieldMap) {
   const el           = document.getElementById('intg-field-map');
   const customFields = intgData?.contact_fields || [];
 
-  // Determine which custom fields are currently active (either saved in fieldMap or manually added)
   const savedCustomKeys = Object.keys(fieldMap).filter(k =>
     !INTG_BUILTIN_FIELDS.some(b => b.key === k) && customFields.some(f => f.field_key === k)
   );
-  // Merge saved + user-added (without duplication)
   activeCustomKeys = [...new Set([...savedCustomKeys, ...activeCustomKeys])];
 
   el.innerHTML = `
@@ -300,7 +284,6 @@ function renderIntgFieldMap(fieldMap) {
 }
 
 function renderFieldRow(key, label, placeholder, value, isCustom) {
-  // Use saved value, fall back to the default placeholder
   const displayVal = value || placeholder;
   const removeBtn  = isCustom
     ? `<button class="intg-map-remove" onclick="intgRemoveField('${key}')" title="Remove">×</button>`
@@ -340,7 +323,6 @@ function intgToggleKeyEdit(btn) {
 }
 
 function intgKeyBlur(input) {
-  // If empty, restore to placeholder/default
   if (!input.value.trim()) {
     const crmKey  = input.dataset.crm;
     const builtin = INTG_BUILTIN_FIELDS.find(f => f.key === crmKey);
@@ -358,11 +340,9 @@ async function intgAddField() {
   const key = sel?.value;
   if (!key) return;
   if (!activeCustomKeys.includes(key)) activeCustomKeys.push(key);
-  // Preserve current values before re-render
   const current = getIntgFieldMap();
   renderIntgFieldMap(current);
   refreshGuideJson();
-  // Auto-save so the webhook receiver immediately knows about the new field
   await saveIntegration(true);
 }
 
@@ -383,7 +363,6 @@ function getIntgFieldMap() {
   return map;
 }
 
-// Re-render the active guide's JSON whenever mapping changes
 function refreshGuideJson() {
   if (activeGuideId) showIntgGuide(activeGuideId);
 }
@@ -416,7 +395,6 @@ async function saveIntegration(silent = false) {
   });
 
   if (silent) {
-    // show brief indicator near the field map
     const el = document.getElementById('intg-field-map');
     if (el) {
       const tip = document.createElement('div');

@@ -5,7 +5,6 @@ const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
 
-// Parse @mentions from comment content and notify mentioned users
 async function notifyMentionsInComment(workspaceId, actorId, actorName, content, commentId, activityId) {
   try {
     const plain = content.replace(/<[^>]*>/g, ' ');
@@ -25,7 +24,6 @@ async function notifyMentionsInComment(workspaceId, actorId, actorName, content,
     );
     if (users.length === 0) return;
 
-    // Get activity info for context
     const { rows: [activity] } = await pool.query(`
       SELECT a.contact_id, c.name AS contact_name
       FROM activities a
@@ -66,7 +64,6 @@ async function notifyMentionsInComment(workspaceId, actorId, actorName, content,
   }
 }
 
-// GET /api/activity-comments?activity_id=X — get all comments for an activity (flat, with nesting info)
 router.get('/', async (req, res, next) => {
   try {
     const activityId = parseInt(req.query.activity_id);
@@ -80,7 +77,6 @@ router.get('/', async (req, res, next) => {
       ORDER BY ac.created_at ASC
     `, [activityId, req.workspaceId]);
 
-    // Build threaded tree structure
     const map = {};
     const roots = [];
     rows.forEach(c => {
@@ -98,14 +94,12 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// POST /api/activity-comments — add a comment to an activity
 router.post('/', async (req, res, next) => {
   try {
     const { activity_id, parent_id, content } = req.body;
     if (!activity_id) return res.status(400).json({ error: 'activity_id required' });
     if (!content?.trim()) return res.status(400).json({ error: 'Content required' });
 
-    // Verify the activity exists in this workspace
     const { rows: [activity] } = await pool.query(
       'SELECT id FROM activities WHERE id=$1 AND workspace_id=$2',
       [activity_id, req.workspaceId]
@@ -118,11 +112,9 @@ router.post('/', async (req, res, next) => {
       [activity_id, parent_id || null, req.workspaceId, content.trim(), req.userId]
     );
 
-    // Notify mentioned users in the comment
     const { rows: [actor] } = await pool.query('SELECT name FROM users WHERE id=$1', [req.userId]);
     await notifyMentionsInComment(req.workspaceId, req.userId, actor?.name || 'Someone', content, row.id, activity_id);
 
-    // Return the full comment record
     const { rows: [comment] } = await pool.query(`
       SELECT ac.*, u.name AS created_by_name
       FROM activity_comments ac
@@ -134,7 +126,6 @@ router.post('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// DELETE /api/activity-comments/:id
 router.delete('/:id', async (req, res, next) => {
   try {
     const result = await pool.query(

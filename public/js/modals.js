@@ -1,4 +1,3 @@
-// ── CONTACT MODAL ─────────────────────────────────────────
 async function openContactModal(id) {
   await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
   document.getElementById('contact-form').reset();
@@ -85,7 +84,6 @@ function closeSidePanel() {
   document.querySelectorAll('#contacts-body tr.side-panel-active').forEach(r => r.classList.remove('side-panel-active'));
 }
 
-// ── CONTACT DETAIL ────────────────────────────────────────
 function buildDetailHTML(c, contactDeals, id) {
   const stageOptions = stages.map(s => `<option value="${s.id}" ${c.stage_id === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('');
   const stageField = `<select style="width:100%;padding:6px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:var(--text)" onchange="updateContactStage(${id}, this.value)"><option value="">— None —</option>${stageOptions}</select>`;
@@ -114,8 +112,8 @@ function buildDetailHTML(c, contactDeals, id) {
       <div class="detail-section-header">
         <h3>Deals</h3>
         <div style="display:flex;gap:6px">
-          <button class="btn btn-sm btn-primary" onclick="openAddToKanbanModal(${id})">+ Add to Kanban</button>
           <button class="btn btn-sm btn-primary" onclick="closeSidePanel();closeModal('detail-modal');openDealModalForContact(${id})">+ Add Deal</button>
+          <button class="btn btn-sm btn-primary" onclick="openTaskModalForContact(${id})">+ Add Task</button>
         </div>
       </div>
       <div class="contact-deals-list" id="contact-deals-list">${renderContactDeals(contactDeals)}</div>
@@ -179,7 +177,6 @@ async function openDetail(id) {
   const usePanel   = activePage === 'contacts' || activePage === 'suppliers';
 
   if (usePanel) {
-    // Highlight the clicked row
     document.querySelectorAll('#contacts-body tr').forEach(r => r.classList.remove('side-panel-active'));
     document.querySelector(`#contacts-body tr td strong[onclick="openDetail(${id})"]`)
       ?.closest('tr')?.classList.add('side-panel-active');
@@ -197,42 +194,6 @@ async function openDetail(id) {
 async function updateContactStage(contactId, stageId) {
   await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: stageId || null });
   invalidate();
-}
-
-function openAddToKanbanModal(contactId) {
-  const stageSelect = document.getElementById('add-to-kanban-stage');
-  stageSelect.innerHTML = '<option value="">— Select a stage —</option>' +
-    (stages || []).map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
-
-  // Store the contact ID for use in the submit handler
-  document.getElementById('add-to-kanban-form').dataset.contactId = contactId;
-  document.getElementById('add-to-kanban-modal').classList.remove('hidden');
-}
-
-async function confirmAddToKanban(e) {
-  e.preventDefault();
-  const contactId = parseInt(document.getElementById('add-to-kanban-form').dataset.contactId);
-  const stageId = parseInt(document.getElementById('add-to-kanban-stage').value);
-
-  if (!stageId) {
-    alert('Please select a stage');
-    return;
-  }
-
-  await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: stageId });
-  closeModal('add-to-kanban-modal');
-  closeSidePanel();
-  closeModal('detail-modal');
-
-  // Update local contacts array
-  const contact = contacts.find(c => c.id === contactId);
-  if (contact) {
-    contact.stage_id = stageId;
-  }
-
-  // Reload contacts and switch to kanban view
-  await loadContacts();
-  setContactViewMode('kanban');
 }
 
 function renderContactDeals(deals) {
@@ -313,7 +274,6 @@ async function logInlineActivity(contactId) {
   }
 }
 
-// ── Contact panel note form (same pattern as deal modal) ──
 function toggleContactNoteForm(contactId) {
   const wrapper = document.getElementById('contact-note-form-wrapper');
   if (!wrapper) return;
@@ -346,7 +306,6 @@ async function saveContactActivity() {
   defaultNoDate(document.getElementById('contact-activity-no-date'));
   const wrapper = document.getElementById('contact-note-form-wrapper');
   if (wrapper) wrapper.classList.add('hidden');
-  // Reload timeline
   const c = await api.get(`/api/contacts/${parseInt(contactId)}`);
   const actsEl = document.getElementById('detail-acts');
   if (actsEl) {
@@ -365,28 +324,23 @@ async function toggleContactShowAllNotes(contactId) {
 }
 
 async function editActivity(activityId) {
-  // Fetch the activity
   const activity = await api.get(`/api/activities/${activityId}`);
   if (!activity) {
     alert('Activity not found');
     return;
   }
 
-  // Store the contact ID for later use (check both contact tab and deal view)
   let contactId = document.getElementById('detail-acts')?.dataset.contactId;
   if (!contactId) contactId = document.getElementById('deal-activities-list')?.dataset.contactId;
   window.currentEditActivityContactId = contactId;
   window.currentEditActivityId = activityId;
 
-  // Check if we're in deal view or contact view
   const dealModal = document.getElementById('deal-modal');
   const isInDealView = dealModal && !dealModal.classList.contains('hidden');
 
   if (isInDealView) {
-    // Show modal dialog for deal view
     showActivityEditModal(activity);
   } else {
-    // Use side panel for contact view
     const panel = document.getElementById('side-panel-body');
     if (!panel) return;
 
@@ -487,9 +441,7 @@ function formatActivityNote(cmd) {
   document.getElementById('act-content-edit')?.focus();
 }
 
-
 function confirmDiscardEdit() {
-  // If in deal view, just close the modal without confirmation
   const dealModal = document.getElementById('deal-modal');
   if (dealModal && !dealModal.classList.contains('hidden')) {
     closeActivityEditModal();
@@ -600,7 +552,6 @@ async function saveActivityEdit() {
   }
 }
 
-// ── DEAL MODAL ────────────────────────────────────────────
 function renderDealFieldInput(f, value = '') {
   const id = `dfield-${f.field_key}`;
   if (f.type === 'dropdown') return `<select id="${id}"><option value="">— Select —</option>
@@ -681,28 +632,23 @@ const DEAL_NOTES_PREVIEW_COUNT = 5;
 
 const _timelineIcons = { note: '📝', call: '📞', email: '✉️', whatsapp: '💬' };
 
-// Format event date (handles ISO timestamps and YYYY-MM-DD) to MM-DD-YYYY
 function fmtEventDate(dt) {
   if (!dt) return '';
   const s = String(dt);
-  // Extract just the date portion: 2026-08-18T16:00:00.000Z -> 2026-08-18
   const datePart = s.slice(0, 10);
   const parts = datePart.split('-');
   if (parts.length === 3) return `${parts[1]}-${parts[2]}-${parts[0]}`;
   return s;
 }
 
-// Normalize any date value into YYYY-MM-DD for <input type="date">
 function toDateInputValue(dt) {
   if (!dt) return '';
   return String(dt).slice(0, 10);
 }
 
-// ── @Mention Autocomplete ─────────────────────────────────
 let mentionTimeout = null;
 let mentionEl = null;
 
-// Close mention dropdown on any click outside the dropdown
 document.addEventListener('mousedown', e => {
   if (mentionEl && !e.target.closest('#mention-autocomplete')) {
     closeMentionAutocomplete();
@@ -717,7 +663,6 @@ function closeMentionAutocomplete() {
   if (mentionTimeout) { clearTimeout(mentionTimeout); mentionTimeout = null; }
 }
 
-// Global delegation: any .note-editor or .inline-edit-content gets mention support
 document.addEventListener('input', e => {
   const editor = e.target.closest('.note-editor, .inline-edit-content');
   if (!editor || !editor.isContentEditable) return;
@@ -734,8 +679,7 @@ document.addEventListener('keydown', e => {
     closeMentionAutocomplete();
     return;
   }
-  
-  // If space or backspace is pressed while dropdown is open, close it
+
   if (e.key === ' ' || e.key === 'Backspace') {
     closeMentionAutocomplete();
     return;
@@ -764,18 +708,16 @@ document.addEventListener('keydown', e => {
 });
 
 function checkForMention(editor) {
-  // Find the @ symbol in the text before cursor
   const sel = window.getSelection();
   if (!sel.rangeCount || !editor.contains(sel.anchorNode)) { closeMentionAutocomplete(); return; }
 
   const textNode = sel.anchorNode;
   if (textNode.nodeType !== 3) { closeMentionAutocomplete(); return; }
-  
+
   const text = textNode.textContent || '';
   const cursorOffset = sel.anchorOffset;
   const textBefore = text.slice(0, cursorOffset);
 
-  // Look for @word at cursor position (word chars only)
   const match = textBefore.match(/@(\w*)$/);
   if (!match) {
     closeMentionAutocomplete();
@@ -828,27 +770,24 @@ function showMentionDropdown(editor, query) {
 function selectMention(editor, item) {
   const name = item.dataset.name;
   closeMentionAutocomplete();
-  
+
   const sel = window.getSelection();
   if (!sel.rangeCount) return;
-  
+
   const textNode = sel.anchorNode;
   if (textNode.nodeType !== 3) return;
-  
+
   const text = textNode.textContent || '';
   const offset = sel.anchorOffset;
   const before = text.slice(0, offset);
   const after = text.slice(offset);
-  
-  // Find the last @ before cursor
+
   const atIdx = before.lastIndexOf('@');
   if (atIdx === -1) return;
-  
-  // Replace everything from @ to cursor with @Name 
+
   const newText = before.slice(0, atIdx) + '@' + name + ' ' + after;
   textNode.textContent = newText;
-  
-  // Place cursor after the inserted name
+
   const newOffset = atIdx + name.length + 2;
   const range = document.createRange();
   range.setStart(textNode, Math.min(newOffset, newText.length));
@@ -863,7 +802,6 @@ const DEAL_NOTE_PREVIEW_LINES = 3;
 function _countNoteLines(html = '') {
   const raw = String(html || '');
   if (!raw.trim()) return 0;
-  // Count vertical breaks from Enter presses: <br>, block tags, and \n
   const breaks = (raw.match(/<br\s*\/?>/gi) || []).length
     + (raw.match(/<\/(div|p|li|h[1-6]|tr)>/gi) || []).length
     + (raw.match(/\n/g) || []).length;
@@ -968,8 +906,6 @@ async function inlineEditDealNote(activityId, el) {
   if (!activity) return;
 
   window.currentEditActivityId = activityId;
-  // Find the contact ID from the closest timeline container (works in both
-  // the deal modal's #deal-activities-list and the contact side panel's #detail-acts)
   const container = el.closest('[data-contact-id]');
   const contactId = container?.dataset.contactId
     || document.getElementById('deal-activity-deal-id')?.value;
@@ -1010,7 +946,6 @@ async function inlineEditDealNote(activityId, el) {
   const editor = el.querySelector('.inline-edit-content');
   if (editor) {
     editor.focus();
-    // Place caret at end so the insertion point is immediately visible
     const range = document.createRange();
     const sel = window.getSelection();
     range.selectNodeContents(editor);
@@ -1031,7 +966,6 @@ async function saveInlineEdit(el) {
   const contactId = window.currentEditActivityContactId;
   await api.patch(`/api/activities/${activityId}`, { type, content, event_date });
   if (contactId) {
-    // Check if we're in deal modal or contact side panel, refresh accordingly
     const dealModal = document.getElementById('deal-modal');
     if (dealModal && !dealModal.classList.contains('hidden')) {
       await loadDealActivities(parseInt(contactId));
@@ -1186,7 +1120,6 @@ function onDealContactChange() {
   renderContactPanelReadOnly(contacts.find(c => c.id === contactId) || null);
 }
 
-// Keep the colored urgency swatch next to the modal select in sync
 function updateUrgencyDot() {
   const sel = document.getElementById('df-urgency'), dot = document.getElementById('df-urgency-dot');
   if (!sel || !dot) return;
@@ -1204,9 +1137,10 @@ async function openDealModal(id) {
   document.getElementById('deal-id').value = id || '';
   document.getElementById('deal-modal-title').textContent = id ? 'Edit Deal' : 'Add Deal';
   document.getElementById('deal-delete-btn').style.display = id ? '' : 'none';
-  updateUrgencyDot(); // reset the urgency swatch back to "no urgency"
+  const addTaskBtn = document.getElementById('deal-add-task-btn');
+  if (addTaskBtn) addTaskBtn.style.display = id ? '' : 'none';
+  updateUrgencyDot();
 
-  // Batch all API calls together
   const [, , , , pipelinesRes, dealFieldsRes, allContacts, allSuppliers, dealDataRes, objectsRes, objectFieldsRes] = await Promise.all([
     ensureContacts(),
     ensureMembers(),
@@ -1396,7 +1330,19 @@ async function deleteDealFromModal() {
   if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
 }
 
-// ── ACTIVITY MODAL ────────────────────────────────────────
+async function addTaskFromDeal() {
+  const id = Number(document.getElementById('deal-id').value);
+  if (!id) { alert('Save the deal first, then you can add a task from it.'); return; }
+  const d = await api.get(`/api/deals/${id}`);
+  if (!d || d.error) { alert(d?.error || 'Could not load the deal'); return; }
+  openTaskModal(null, {
+    dealId:   d.id,
+    dealTitle: d.title,
+    contactId: d.contact_id || null,
+    contactName: d.contact_name || null,
+  });
+}
+
 async function openActivityModal() {
   await ensureContacts();
   document.getElementById('activity-form').reset();
@@ -1416,10 +1362,7 @@ async function saveActivity(e) {
   if (document.getElementById('page-activities').classList.contains('active')) loadActivities();
 }
 
-// ── ACTIVITY COMMENTS (threaded comments on notes) ────────
 async function toggleActivityComments(activityId, btn) {
-  // Find the container relative to the clicked button, not by global ID
-  // This ensures it works even when the same activity appears in multiple modals
   const timelineItem = btn.closest('.deal-timeline-item');
   if (!timelineItem) return;
   const container = timelineItem.querySelector('.deal-comments-container');
@@ -1442,7 +1385,6 @@ async function renderActivityComments(activityId, container) {
   try {
     const comments = await api.get(`/api/activity-comments?activity_id=${activityId}`);
     container.innerHTML = renderCommentTree(comments, activityId, null);
-    // Add the comment form at the bottom
     container.innerHTML += commentFormHTML(activityId, null);
   } catch (e) {
     console.error('Error loading comments:', e);
@@ -1484,7 +1426,6 @@ function showCommentReplyForm(activityId, parentId, el) {
   if (!container) return;
   const isVisible = container.style.display !== 'none';
   if (isVisible) {
-    // Hide reply form and restore top-level comment form
     container.style.display = 'none';
     const timelineItem = el.closest('.deal-timeline-item');
     if (timelineItem) {
@@ -1493,7 +1434,6 @@ function showCommentReplyForm(activityId, parentId, el) {
     }
     return;
   }
-  // Hide the top-level comment form when showing a reply form
   const timelineItem = el.closest('.deal-timeline-item');
   if (timelineItem) {
     const topForm = timelineItem.querySelector('.deal-comment-form[data-parent-id=""]');
@@ -1506,7 +1446,6 @@ function showCommentReplyForm(activityId, parentId, el) {
 
 async function submitComment(activityId, parentId, content) {
   if (!content?.trim()) return;
-  // Find the container from the button's closest timeline item
   const btn = event?.target?.closest?.('.deal-comment-form')?.querySelector?.('.deal-comment-submit')
     || document.querySelector(`#comment-input-top-${activityId}`)?.nextElementSibling;
   const timelineItem = event?.target?.closest?.('.deal-timeline-item');
@@ -1518,11 +1457,9 @@ async function submitComment(activityId, parentId, content) {
       parent_id: parentId || null,
       content: content.trim(),
     });
-    // Clear the input
     const idSuffix = parentId ? `reply-${parentId}` : `top-${activityId}`;
     const input = document.getElementById(`comment-input-${idSuffix}`);
     if (input) input.value = '';
-    // Refresh comments using the correct container (within the same modal)
     await renderActivityComments(activityId, container);
   } catch (e) {
     console.error('Error saving comment:', e);

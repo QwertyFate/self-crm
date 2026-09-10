@@ -1,4 +1,3 @@
-// ── SUPPLIERS NAV ─────────────────────────────────────────
 function updateSuppliersNav() {
   const name  = currentWorkspace?.supplier_name || 'Suppliers';
   const label = document.getElementById('nav-suppliers-label');
@@ -12,13 +11,11 @@ async function saveSupplierName() {
   if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
   currentWorkspace.supplier_name = res.name;
   updateSuppliersNav();
-  // Refresh header if currently on suppliers view
   if (currentContactType === 'supplier') updateContactsPageHeader();
   if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
-// ── OBJECTS ───────────────────────────────────────────────
 function updateObjectsNav() {
   const name  = currentWorkspace?.object_name || 'Listings';
   const label = document.getElementById('nav-objects-label');
@@ -44,7 +41,6 @@ function effectiveObjectColumns() {
 }
 
 async function loadObjects() {
-  // Clear UI immediately to prevent showing stale data
   const objTable = document.getElementById('objects-table-wrap');
   const objGrid = document.getElementById('objects-card-grid');
   if (objTable) objTable.innerHTML = '';
@@ -229,7 +225,6 @@ async function openObjectDetail(id) {
     return v ? `<div class="detail-item"><label>${esc(f.name)}</label><span>${esc(v)}</span></div>` : '';
   }).join('');
 
-  // Linked contacts/suppliers
   const linkedContactIds = new Set((obj.contacts || []).map(c => c.id));
   const contactRows = (obj.contacts || []).map(c => `
     <div class="contact-deal-row" style="cursor:pointer">
@@ -245,7 +240,6 @@ async function openObjectDetail(id) {
 
   const availablePeople = [...allContacts, ...allSuppliers].filter(c => !linkedContactIds.has(c.id));
 
-  // Linked deals
   const linkedDealIds = new Set((obj.deals || []).map(d => d.id));
   const dealRows = (obj.deals || []).map(d => `
     <div class="contact-deal-row" style="cursor:pointer" onclick="navigateToDeal(${d.id})">
@@ -291,17 +285,14 @@ async function openObjectDetail(id) {
       <button class="btn btn-sm" onclick="closeModal('object-detail-modal');openObjectModal(${id})">Edit</button>
     </div>`;
 
-  // Wire up contact search
   const contactInput = document.getElementById('obj-contact-search');
   contactInput._availablePeople = availablePeople;
   contactInput._selectedContactId = null;
 
-  // Wire up deal search
   const dealInput = document.getElementById('obj-deal-search');
   dealInput._availableDeals = deals.filter(d => !linkedDealIds.has(d.id));
   dealInput._selectedDealId = null;
 
-  // Close dropdowns if modal scrolls (fixed dropdowns would drift otherwise)
   document.querySelector('#object-detail-modal')?.addEventListener('scroll', () => {
     document.querySelectorAll('.deal-search-dropdown').forEach(dd => dd.classList.add('hidden'));
   }, { passive: true });
@@ -309,7 +300,6 @@ async function openObjectDetail(id) {
   document.getElementById('object-detail-modal').classList.remove('hidden');
 }
 
-// ── Dropdown positioning helper (bypasses modal overflow clipping) ──
 function positionDropdown(input, dropdown) {
   const rect = input.getBoundingClientRect();
   dropdown.style.top   = `${rect.bottom + 2}px`;
@@ -318,7 +308,6 @@ function positionDropdown(input, dropdown) {
 }
 
 function filterObjectContactSearch(objectId) {
-  // Close deal dropdown first — only one open at a time
   document.getElementById('obj-deal-dropdown')?.classList.add('hidden');
 
   const input = document.getElementById('obj-contact-search'), dropdown = document.getElementById('obj-contact-dropdown');
@@ -362,7 +351,6 @@ async function unlinkContactFromObject(objectId, contactId) {
 }
 
 function filterDealSearch(objectId) {
-  // Close contact dropdown first — only one open at a time
   document.getElementById('obj-contact-dropdown')?.classList.add('hidden');
 
   const input = document.getElementById('obj-deal-search'), dropdown = document.getElementById('obj-deal-dropdown');
@@ -403,7 +391,6 @@ async function navigateToDeal(dealId) {
   closeModal('object-detail-modal'); switchPage('deals'); await openDealModal(dealId);
 }
 
-// ── Object field settings ──────────────────────────────────
 function renderObjectFieldsList() {
   const el = document.getElementById('object-fields-list'); if (!el) return;
   if (!objectFields.length) { el.innerHTML = '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No fields yet.</li>'; return; }
@@ -456,7 +443,6 @@ async function deleteObjectField(id) {
   await api.del(`/api/object-fields/${id}`); objectFields = objectFields.filter(f => f.id !== id); renderObjectFieldsList();
 }
 
-// ── Object column settings ────────────────────────────────
 function renderObjectColumnSettings() {
   const el = document.getElementById('object-columns-list'); if (!el) return;
   const cols = effectiveObjectColumns();
@@ -497,7 +483,6 @@ async function saveObjectTypeName(){
   setTimeout(()=>msgEl?.classList.add('hidden'),2500);
 }
 
-// ── Miro Board ────────────────────────────────────────────
 function updateBoardNavVisibility() {
   document.getElementById('nav-board-link')?.classList.toggle('hidden', !currentWorkspace?.miro_url);
 }
@@ -506,7 +491,6 @@ function reloadMiroIframe() { const f = document.getElementById('miro-iframe'); 
 function loadBoard() {
   const el = document.getElementById('board-content'), url = currentWorkspace?.miro_url;
   if (!el) return;
-  // Clear UI immediately to prevent showing stale data
   el.innerHTML = '';
   if (!url) { el.innerHTML = `<div class="board-empty"><p>No Miro board linked yet.</p><p>Go to <strong>Settings → General → Miro Board</strong> and paste your embed URL.</p></div>`; return; }
   const boardUrl = getMiroBoardUrl(url);
@@ -530,7 +514,6 @@ async function saveMiroUrl() {
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
-// ── Activities ────────────────────────────────────────────
 async function loadActivities() {
   const el = document.getElementById('activities-list');
   if (el) el.innerHTML = '';

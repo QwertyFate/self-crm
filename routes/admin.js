@@ -60,7 +60,6 @@ router.delete('/invites/:id', requireAdmin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /api/admin/defaults - get current defaults
 router.get('/defaults', requireAdmin, async (req, res, next) => {
   try {
     const [colRes, pipeRes] = await Promise.all([
@@ -68,7 +67,6 @@ router.get('/defaults', requireAdmin, async (req, res, next) => {
       pool.query('SELECT value FROM platform_settings WHERE key=$1', ['default_pipelines'])
     ]);
 
-    // Default contact columns if not yet customized
     const defaultColumns = [
       { key: 'company', label: 'Company', visible: true, isCustom: false },
       { key: 'email', label: 'Email', visible: true, isCustom: false },
@@ -100,7 +98,6 @@ router.get('/defaults', requireAdmin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// PATCH /api/admin/defaults - update defaults (contact columns and/or pipelines)
 router.patch('/defaults', requireAdmin, async (req, res, next) => {
   try {
     const { contactColumns, defaultPipelines } = req.body;
@@ -139,7 +136,6 @@ router.patch('/defaults', requireAdmin, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// GET /api/admin/stats - workspace statistics
 router.get('/stats', requireAdmin, async (req, res, next) => {
   try {
     const stats = {};

@@ -1,6 +1,4 @@
-// ── DEALS ─────────────────────────────────────────────────
 
-// Deal urgency levels (0 = not set, 1 Low → 4 Very urgent)
 const DEAL_URGENCY = [
   { value: 0, label: 'No urgency', color: 'transparent' },
   { value: 1, label: 'Low',        color: 'var(--success)' },
@@ -25,11 +23,9 @@ function urgencySelectOptions(selected) {
 }
 
 async function loadDeals() {
-  // Clear UI immediately to prevent showing stale data
   const dealsBoard = document.getElementById('deals-board');
   const dealsList = document.getElementById('deals-list-view');
   if (dealsBoard) dealsBoard.innerHTML = '';
-  // Only clear the table body — don't wipe thead/tbody elements themselves
   if (dealsList) {
     const tbody = dealsList.querySelector('#deals-tbody');
     if (tbody) tbody.innerHTML = '';
@@ -78,7 +74,6 @@ function setDealView(mode) {
   if (mode === 'list') renderDealsList(); else renderDealsBoard();
 }
 
-// ── Deal columns (per-user) ───────────────────────────────
 function effectiveDealColumns() {
   const BUILTIN = [
     { key: 'stage',       label: () => t('col_stage'),      show: true  },
@@ -249,12 +244,11 @@ function dealCard(d) {
     </div>`;
 }
 
-// Quick urgency update from the kanban card / list shortcut
 async function setDealUrgency(dealId, value) {
   const urgency = parseInt(value, 10) || 0;
   const deal = deals.find(d => d.id === dealId);
   if (!deal) return;
-  deal.urgency = urgency; // optimistic
+  deal.urgency = urgency;
   if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
   const res = await api.patch(`/api/deals/${dealId}/urgency`, { urgency });
   if (res && res.error) {
@@ -264,7 +258,6 @@ async function setDealUrgency(dealId, value) {
   }
 }
 
-// ── Drag & Drop ───────────────────────────────────────────
 function dealDragStart(e, id) { dragDealId = id; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => e.target.classList.add('dragging'), 0); }
 function dealDragEnd(e)   { e.target.classList.remove('dragging'); }
 function dealDragOver(e)  { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
