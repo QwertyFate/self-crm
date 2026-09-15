@@ -991,3 +991,369 @@ Regression: Part 8's client harness holds at **13/13** — restore, disable, cou
 | `public/js/chat.js` | 398–402 | Rejection restores the head, not the most recent text |
 
 `public/index.html` and `public/style.css` are unchanged since Part 8 — the markup and styling stand. `server.js`, `utils/*`, `routes/*` and `private/admin.html` are unchanged since Part 7. Part 9 totals: `public/js/chat.js` +18 / −7.
+
+---
+---
+
+# Part 10 — HTTP chat write path shares the socket's bucket
+
+## The bypass
+
+Part 7 throttled `socket.on('chat_message')`. `POST /api/chat/messages` in `routes/chat.js` writes the **same two rows** to the same tables and was subject to none of it: no rate limit, and no length cap at all (the socket path had 2000). A logged-in user could bypass Part 7 entirely with a loop of HTTP posts and starve the pool exactly as before. Against `git HEAD`:
+
+```
+FAIL  A2. POST /messages mounts chatRateLimitMiddleware
+FAIL  A3. handler enforces CHAT_MAX_LENGTH
+FAIL  A4. handler rejects non-string content
+```
+
+The endpoint is kept — unused by the current client, retained for future use.
+
+## Decisions
+
+- **1100 / 1000 split.** The middleware pre-checks at 1100 characters (413); the handler enforces the business rule at 1000 (400). The 100-character gap is deliberate headroom, so the coarse guard never fires on a message the business rule would have allowed.
+- **Socket cap aligned to 1000.** It was 2000. Two write paths for one feature with two different limits meant a 1500-character message would send over the socket and be refused over HTTP. One exported constant now governs both.
+- **Length before bucket.** A malformed request is rejected without spending the user's legitimate quota (B8).
+
+## The ordering constraint that shaped the design
+
+`server.js` mounts the chat router at line 149 but built `chatLimiter` at line 183. A bucket living in `server.js` would be `undefined` when `routes/chat.js` is required. So the instance moved into `utils/chat-rate-limit.js` as a module singleton. Both files `require` it; Node's module cache guarantees they receive the same object, and both key it on the user id from the session. Six socket messages followed by an HTTP post is seven messages in one bucket, which is the property the request asked for and which B1/B2 prove in both directions.
+
+## Changes
+
+### `utils/chat-rate-limit.js:65–100` — the shared bucket, the limits, the middleware
+
+```js
+const CHAT_LIMIT       = { windowMs: 10_000, max: 6 };
+const CHAT_MAX_LENGTH  = 1000;   // business rule, enforced on both write paths
+const CHAT_HARD_LENGTH = 1100;   // coarse pre-check in the middleware; 100 chars of headroom
+const chatLimiter      = createChatRateLimiter(CHAT_LIMIT);
+```
+
+`chatRateLimitMiddleware(req, res, next)` at lines 76–92: string content over 1100 → 413; then `chatLimiter.check(req.userId)` → 429 with `{ error, retryAfterMs, limit, windowMs }`, the same shape as the socket's `chat_rate_limited` payload so a future client can reuse Part 8's countdown unchanged; otherwise `next()`. `createChatRateLimiter` stays exported — Part 7's unit test builds its own instances with an injected clock. (Was 57 lines; now 101.)
+
+### `routes/chat.js:5, 46–53`
+
+Import at line 5. The middleware is mounted on the route at line 48, and the handler gains two guards:
+
+```js
+if (typeof content !== 'string' || !content.trim()) return res.status(400).json({ error: 'Message cannot be empty' });
+if (content.length > CHAT_MAX_LENGTH)               return res.status(400).json({ error: `Message too long. Maximum ${CHAT_MAX_LENGTH} characters.` });
+```
+
+The `typeof` guard also fixes a live 500: `content?.trim()` on a numeric or array body threw `content.trim is not a function`. Same coercion class as Part 3 (B9 covers number, array, object, boolean, null). GET `/messages`, GET `/unread` and PATCH `/read` are untouched.
+
+### `server.js:178–182, 231`
+
+Lines 178–182 replace the local `createChatRateLimiter(...)` construction with an import of the shared `chatLimiter`, `CHAT_LIMIT`, `CHAT_MAX_LENGTH`. Line 231 in the socket handler:
+
+```js
+if (typeof content !== 'string' || !content.trim() || content.length > CHAT_MAX_LENGTH) return;
+```
+
+Was `content.length > 2000`, with no type guard. The bucket check above it and everything below are unchanged from Part 7.
+
+## Verification
+
+`chat-http-limit-test.js`, **17/17**. `routes/chat.js` cannot be mounted in a harness because `router.use(requireAuth)` queries the database, so the exported middleware runs directly and through a throwaway Express app with a stub auth and a handler mirroring the business rule. The "socket side" of each shared-bucket test is the same `chatLimiter.check(userId)` call the socket handler makes.
+
+| # | Assertion | Result |
+|---|---|---|
+| B1 | Six socket checks, then an HTTP post for the same user → 429 | shared |
+| B2 | Six HTTP posts (all 201), then a socket check → denied | shared, both directions |
+| B3 | A different user is unaffected | 201 |
+| B4 | 429 body carries `retryAfterMs` / `limit: 6` / `windowMs: 10000` | ok |
+| B5 | 1101 chars → 413 from the middleware | ok |
+| B6 | 1050 chars → passes middleware, 400 from the handler rule | ok |
+| B7 | Exactly 1000 chars → 201 | ok |
+| B8 | Six oversized (413) posts, then a valid one → 201 — 413 spends no quota | ok |
+| B9 | number / array / object / bool / null content → 400, never 500 | ok |
+
+Part A asserts the wiring by reading the files: the endpoint still exists, the middleware is mounted on it, both length rules and the type guard are present, `server.js` imports the singleton and no longer constructs its own, and no `2000` literal remains.
+
+Regression: Part 7 unit 10/10 and socket 8/8 — the factory is still exported and the socket guard still fires; Part 8 client 13/13; Part 9 invariant 6/6; all five admin harnesses. `node --check` on all three files.
+
+**Not proven here:** the route end to end against Postgres with a real session, since `requireAuth` needs both. The middleware, the shared instance, the status codes and the length rules all run against the real module.
+
+## Flagged, not done
+
+- **`requireAuth` runs before this middleware** and issues a session-store query per request. A flood still costs one DB round trip each even when thrown out at 429. Rate limiting ahead of authentication is a larger change.
+- **The HTTP route never emits `new_message`**, so a message posted this way does not appear live for other users until they reload. Pre-existing, unchanged.
+- **Socket cap dropped from 2000 to 1000.** A user who could previously send 1001–2000 characters over the socket no longer can. Chosen deliberately for one consistent rule.
+
+## Part 10 — files and lines
+
+| File | Lines | What changed |
+|---|---|---|
+| `utils/chat-rate-limit.js` | 65–68 | `CHAT_LIMIT`, `CHAT_MAX_LENGTH`, `CHAT_HARD_LENGTH`, the shared `chatLimiter` |
+| `utils/chat-rate-limit.js` | 76–92 | `chatRateLimitMiddleware` |
+| `utils/chat-rate-limit.js` | 94–101 | Exports extended |
+| `routes/chat.js` | 5 | Import |
+| `routes/chat.js` | 48 | Middleware mounted on `POST /messages` |
+| `routes/chat.js` | 52–53 | Type guard; 1000-char rule |
+| `server.js` | 178–182 | Local construction → shared import |
+| `server.js` | 231 | Socket cap `2000` → `CHAT_MAX_LENGTH`; type guard added |
+
+`public/*` and `private/admin.html` are unchanged since Part 9. Part 10 totals: `utils/chat-rate-limit.js` +44 / −1, `routes/chat.js` +7 / −2, `server.js` +4 / −5.
+
+---
+---
+
+# Part 11 — Pre-auth IP backstop so a rejected flood does zero DB work
+
+## Why, following Part 10
+
+Part 10's per-user limiter removed the two DB **writes** on a chat flood, but two DB **reads** survived per rejected request: the global session middleware (`connect-pg-simple` `SELECT sess`) and `requireAuth`'s `user_workspaces SELECT` both run before the per-user limiter, because you cannot key a limit on a user you have not yet identified. This adds a coarse backstop that rejects a flood **before authentication**, keyed on the client IP — trustworthy since Part 2 resolved `req.ip` through the Cloudflare CIDR list. It sits in front of the per-user bucket, not in place of it.
+
+## The ordering, which is the whole point
+
+`req.ip` is usable after `app.set('trust proxy', …)` at `server.js:42`. The DB touchpoints to get in front of are `express.json()` and the session middleware. So the backstop mounts **above both**: a flooded request is rejected before its body is parsed and before any session or auth query runs.
+
+## Change — `server.js` only, two additions
+
+### Lines 103–113 — the limiter
+
+```js
+const chatIpLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 120,
+  message: { error: 'Too many chat requests from this IP. Please slow down.' },
+  standardHeaders: true, legacyHeaders: false,
+});
+```
+
+No custom `keyGenerator` — the default keys on `req.ip` with express-rate-limit's IPv6-safe handling, inheriting the trusted `req.ip` from Part 2.
+
+### Line 117 — mounted above `express.json()` (119) and the session middleware (128)
+
+```js
+app.post('/api/chat/messages', chatIpLimiter);
+```
+
+`app.post`, not `app.use` — scoped to the write path only, so the client's `GET /messages` history and `GET /unread` polling are never throttled by it. Under the limit it calls `next()` and the request flows down the unchanged chain (json → session → `requireAuth` → the per-user `chatRateLimitMiddleware` → handler). Over the limit it returns 429 first.
+
+Nothing else changed: `routes/chat.js`, `utils/chat-rate-limit.js` and the socket handler stand as Part 10 left them.
+
+## Verification
+
+`chat-ip-backstop-test.js`, **10/10**. As in Part 2, the real `server.js` can't be required (it calls `initDb()` and listens), so the harness mirrors the middleware order with the **real** `utils/trusted-proxies.js` and an identically-configured limiter, then reads `server.js` to assert the real wiring. A counting stub after the limiter stands in for the session + auth SELECTs.
+
+| # | Assertion | Result |
+|---|---|---|
+| N1 | 130 POSTs from one IP → 120×201, 10×429 | ok |
+| N2 | **Rejected requests do zero DB work — stub ran exactly 120×** | `dbCalls=120` |
+| N3 | A different client IP has its own bucket | 201 |
+| N4 | Varying forged `X-Forwarded-For` still shares one bucket → flood blocked | `429=10` |
+| N5 | 429 carries `RateLimit-Limit` and `Retry-After` | `limit=120 retryAfter=60` |
+| W1–W5 | `chatIpLimiter` defined; mounted with `app.post` (not `app.use`); above `express.json()` (117 < 119); above the session middleware (117 < 128); Part 10's per-user route intact | ok |
+
+N2 is the crux: the 10 rejected requests never reached the stub, so a flood costs no session lookup and no auth query. N4 confirms the IP cannot be spoofed to split the bucket, reusing Part 2's `req.ip` resolution.
+
+Regression: Part 7 unit 10/10 and socket 8/8, Part 8 client 13/13, Part 9 invariant 6/6, Part 10 HTTP 17/17 (per-user bucket and length caps intact), Part 2 bypass control unchanged, all five admin harnesses. `node --check server.js`.
+
+**Not proven here:** the real boot against Postgres with a live session. Ordering, IP keying and the zero-DB property run against the real trust-proxy module and the real `server.js` text; only the socket/DB transport is simulated.
+
+## Accepted tradeoff
+
+IP keying means users behind one NAT or corporate egress share the 120/min allowance. It is a backstop well above the ~36/min a single authenticated user can legitimately reach (6 per 10 s), so normal use stays clear; `max` is one line to raise for a large shared egress. The per-user bucket remains the precise control, and the socket path is unaffected — it never carried this cost, since a socket connection authenticates once at connect time rather than per message.
+
+## Part 11 — files and lines
+
+| File | Lines | What changed |
+|---|---|---|
+| `server.js` | 103–113 | `chatIpLimiter` definition |
+| `server.js` | 115–117 | Mounted on `POST /api/chat/messages`, above json and session |
+
+`routes/chat.js`, `utils/chat-rate-limit.js`, `public/*` and `private/admin.html` are unchanged since Part 10. Part 11 totals: `server.js` +15 / −0.
+
+---
+---
+
+# Part 12 — Validate before the bucket: invalid messages no longer spend quota
+
+## The bug, which Part 7 introduced and Part 10 carried over
+
+`chatLimiter.check(userId)` **consumes** a token. On both write paths it ran before content validation, so a message rejected as empty, non-string or over the length cap had already spent the sender's quota.
+
+- **Socket** (`server.js`): bucket check at 237, validation at 246. Six oversized pastes left a legitimate user rate-limited with zero messages sent and no feedback.
+- **HTTP** (`utils/chat-rate-limit.js`): the middleware pre-checked only `> 1100` before the bucket. Empty content and lengths 1001–1100 passed that guard, consumed a token, then got 400 from the handler. Same bug, narrower window.
+
+Part 7 put the bucket first so a spammer "costs nothing beyond a Map lookup." That reasoning was about DB work and still holds — validation is pure CPU with no DB access and no state mutation, so running it first costs nothing, and the bucket still gates every `pool.query`. What changes: a token is spent only by a well-formed, acceptable message.
+
+Reproduced against a pre-edit snapshot:
+
+```
+FAIL  Q1. empty "" x6 -> 400 each, then 6 valid -> all 201   — valid=429,429,429,429,429,429
+FAIL  Q2. length 1050 x6 -> 400 each, then 6 valid -> all 201 — valid=429,429,429,429,429,429
+FAIL  Q3. non-string 123 x6 -> 400, then 6 valid -> all 201   — valid=429,429,429,429,429,429
+FAIL  S1. server.js: validation line is ABOVE chatLimiter.check — validation 246, check 237
+FAIL  S3. mirror: 10 oversized then 6 valid -> all 6 accepted  — accepted=0 limited=10
+```
+
+## Changes
+
+### `server.js:234–248` — reorder, no new logic
+
+The existing validation line moved from below the bucket check to above it (now line 238; the check is at 240). Comment rewritten to state the new rationale. The `chat_rate_limited` emit, the early return, and all DB writes are unchanged. Silent drop of invalid content is pre-existing behaviour and stays.
+
+### `utils/chat-rate-limit.js:79–90` — full validation before the bucket
+
+Was one guard (`> 1100 → 413`). Now three, in this order, all ahead of `chatLimiter.check`:
+
+```js
+if (typeof content !== 'string' || !content.trim()) → 400 'Message cannot be empty'
+if (content.length > CHAT_HARD_LENGTH)               → 413 'Message too long…'
+if (content.length > CHAT_MAX_LENGTH)                → 400 'Message too long…'
+```
+
+Order preserves the 413/400 split decided in Part 10: `> 1100` is tested before `> 1000`, so 1001–1100 still yields 400 and > 1100 still yields 413 (Q5).
+
+### `routes/chat.js` — untouched
+
+The handler's own checks (lines 52–53) are now redundant for the normal path but stay as defence in depth: the route still behaves correctly if ever mounted without the middleware.
+
+## Verification
+
+`chat-quota-order-test.js`, **10/10**. Run first against a pre-edit snapshot of both files (failing baseline above), then against the live tree.
+
+**HTTP — real exported middleware.** Each case sends six invalid messages for a fresh user, then six valid 1000-char messages; all six valid must be 201.
+
+| # | Six invalid → | Then six valid → | Before | After |
+|---|---|---|---|---|
+| Q1 | `""` → 400 | 201 | **429 ×6** | ok |
+| Q2 | 1050 chars → 400 | 201 | **429 ×6** | ok |
+| Q3 | `123` → 400 | 201 | **429 ×6** | ok |
+| Q4 | 1101 chars → 413 | 201 | ok | ok |
+| Q5 | Split preserved: 1050 → 400, 1101 → 413 | | ok | ok |
+| Q6 | 7th valid message → 429 (bucket intact) | | ok | ok |
+
+**Socket — static order on the real source + a mirror that follows it.** S1 parses `server.js` and asserts the validation line is above `chatLimiter.check` inside the handler (238 < 240); S2 that the check is still above the first `pool.query` (240 < 250), so Part 7's cost property holds. S3/S4 run a line-for-line mirror whose order is read from the source: ten oversized then six valid → all six accepted, zero rate-limited; the seventh → rate-limited.
+
+Regression: Part 7 unit 10/10 and socket 8/8, Part 8 client 13/13, Part 9 invariant 6/6, Part 10 HTTP 17/17, Part 11 backstop 10/10, Part 2 control unchanged, all five admin harnesses. `node --check` on both files.
+
+**Not proven here:** the real socket handler against Postgres with a live session. Its ordering is asserted from the real source; its behaviour from the mirror.
+
+## Flagged, not done
+
+- **Silent drop on the socket.** An oversized or empty socket message is still dropped with no event back — now at no cost to the sender's quota, but still with no explanation. A `chat_rejected` emit plus a client listener would be the follow-up, mirroring Part 8's `chat_rate_limited` handling.
+
+## Part 12 — files and lines
+
+| File | Lines | What changed |
+|---|---|---|
+| `server.js` | 235–238 | Validation moved above the bucket check; comment rewritten |
+| `utils/chat-rate-limit.js` | 79–90 | Empty/type and `> 1000` guards added ahead of the bucket, ordered to keep the 413/400 split |
+
+`routes/chat.js`, `public/*` and `private/admin.html` are unchanged since Part 11. Part 12 totals: `server.js` net-zero move (+4 / −4), `utils/chat-rate-limit.js` +9 / −0.
+
+---
+---
+
+# Part 13 — Chat send as request/response via Socket.IO acks
+
+## Why — and what it supersedes
+
+The socket send was fire-and-forget: `socket.emit('chat_message', content)`, with replies arriving as unrelated events (`new_message`, `chat_rate_limited`) or not at all. Nothing tied a reply to the send it answered, so the client grew a correlation mechanism — Part 8's slot, then Part 9's bounded FIFO with head-content matching — and two silent-loss paths remained: invalid content was dropped with no event (flagged in Parts 7 and 12), and a DB failure logged to the console while the client heard nothing and its pending entry went stale.
+
+Socket.IO acknowledgements make each send a request with its own response. The emit's callback receives *that emit's* outcome, so correlation is free, every send is answered, and `socket.timeout(ms)` turns "no answer" into a detectable error. **This part deletes Part 9's queue entirely** — the closure that emitted the message is the one that hears back about it. The `new_message` room broadcast is unchanged; the ack replaces only the sender-facing side channel.
+
+Baseline against a pre-edit snapshot of both files:
+
+```
+server (old handler):  FAIL A1–A4 — every ack times out ("operation has timed out"); invalid and DB error are silent
+                       FAIL W1–W6 — no ack parameter, no reply() fallback, no answered outcomes
+client (old chat.js):  FAIL C1     — emit carries no callback (cb=undefined, timeout=null)
+                       FAIL C9     — chatPending / chat_rate_limited listener still present
+```
+
+## Changes
+
+### `server.js:234–289` — handler takes `(content, ack)` and answers on every path
+
+A `reply(payload)` helper (239–248) calls the ack when present; when absent — a tab still running the previous `chat.js` — it falls back to the old `chat_rate_limited` emit so nothing is silently lost mid-deploy. Static JS is served `no-cache`, so that window closes on the tab's next reload.
+
+Four outcomes, two of them new:
+
+| Path | Line | Reply |
+|---|---|---|
+| Invalid (non-string / empty / > 1000) | 254 | `{ ok: false, reason: 'invalid', maxLength }` — **was silent** |
+| Over the per-user limit | 259–265 | `{ ok: false, reason: 'rate_limited', retryAfterMs, limit, windowMs }` |
+| Both inserts succeeded | 284 | `{ ok: true, id, created_at }` |
+| Either insert threw | 287 | `{ ok: false, reason: 'server_error' }` — **was silent** |
+
+Part 12's order — validate → bucket → `pool.query` — is preserved (W8). The two inserts and the `new_message` broadcast are untouched.
+
+### `public/js/chat.js` — send with a callback; queue deleted (415 → 424 lines)
+
+**Lines 9–18.** `CHAT_PENDING_MAX` and `chatPending` removed; `CHAT_ACK_TIMEOUT_MS = 5000` and `chatNoticeTimer` added. The three cooldown variables from Part 8 stay.
+
+**Line 145.** The `new_message` handler no longer shifts a queue; the `socket.on('chat_rate_limited', …)` registration is gone.
+
+**Lines 337–365 — `sendChatMessageFromPage()`.** After clearing the input:
+
+```js
+socket.timeout(CHAT_ACK_TIMEOUT_MS).emit('chat_message', content, (err, reply) => {
+  if (!err && reply?.ok) return;                 // rendered via the new_message broadcast
+  restoreChatInput(content);                     // this closure's own text — no queue
+  if (!err && reply?.reason === 'rate_limited') return beginChatCooldown(reply);
+  showChatNotice(err ? 'Message not sent — connection timed out. Try again.'
+    : reply?.reason === 'invalid' ? `Message must be 1–${reply.maxLength || 1000} characters.`
+    : 'Message not sent. Try again.', 4000);
+});
+```
+
+**Lines 387–424 — three functions replace `handleChatRateLimited`:**
+- `restoreChatInput(text)` — Part 8's non-destructive rule, unchanged: only if the field is empty.
+- `showChatNotice(text, ms)` — transient notice for invalid / timeout / server-error, reusing `#chat-rate-notice`; auto-hides; yields to the countdown if a cooldown is active.
+- `beginChatCooldown(reply)` — Part 8's disable + countdown + re-enable machinery, unchanged except it no longer touches a queue.
+
+`chatRateTick()` (367–385) is untouched. No markup or CSS changes.
+
+## Verification
+
+**Server — real Socket.IO round trip** (`chat-ack-server-test.js`, **14/14**). A throwaway server runs a handler mirroring `server.js` line for line with the real limiter and a switch in place of `pool.query`; a real `socket.io-client` drives it.
+
+| # | Assertion | Result |
+|---|---|---|
+| A1 | Valid → ack `{ ok: true, id }` **and** `new_message` broadcast received | both channels, one render path |
+| A2 | Oversized → ack `{ reason: 'invalid', maxLength: 1000 }` | no longer silent |
+| A3 | 7th message → ack `{ reason: 'rate_limited', retryAfterMs, limit: 6, windowMs: 10000 }` | ok |
+| A4 | DB failure → ack `{ reason: 'server_error' }` | no longer silent |
+| A5 | Client emitting **without** a callback, over the limit → still gets `chat_rate_limited` | stale-tab compat |
+| A6 | Server withholds the ack → `socket.timeout()` callback receives an error | ok |
+| W1–W8 | Signature has `ack`; `reply()` falls back; all four outcomes present; `catch` answers; broadcast intact; Part 12 order intact | ok |
+
+**Client — real `chat.js` in jsdom** (`chat-ack-client-test.js`, **10/10**). Fake socket whose `timeout()` returns itself and whose `emit` captures the callback.
+
+| # | Assertion | Result |
+|---|---|---|
+| C1 | Send emits with a callback and a 5000 ms timeout; input cleared | ok |
+| C2 | `ok` → nothing restored, no notice | ok |
+| C3 | `rate_limited` → restored, button disabled, "wait 1s", re-enabled after the window | Part 8 preserved |
+| C4 | `invalid` → restored, notice names the 1000 limit, button **stays enabled** | ok |
+| C5 / C6 | `server_error` / timeout error → restored, notice shown | ok |
+| C7 | **Two in flight, both rejected → first rejection restores the first text** | Part 9's bug, correct by construction |
+| C8 | Restore does not overwrite text typed since the send | ok |
+| C9 | No `chatPending`, `CHAT_PENDING_MAX`, `handleChatRateLimited`, or `chat_rate_limited` listener remains | ok |
+| C10 | Transient notice auto-hides after ~4 s | ok |
+
+**Retired harnesses, on purpose.** Part 8's `chat-client-ratelimit-test.js` and Part 9's `chat-pending-invariant-test.js` tested the queue this part removes. Run against the new code they fail for exactly that reason — Part 8 on "no `chat_rate_limited` listener registered", Part 9 with "`socket.timeout` is not a function" because its fake socket predates acks. Every behavioural guarantee they made (restore, cooldown, non-destructive restore, overlapping sends) is re-asserted above in C3, C7 and C8. They are not silently dropped; they are superseded.
+
+**Two kept harnesses needed a one-line regex relaxation**, not a logic change: Part 10's A7 and Part 12's S1 matched the socket validation line literally as `…CHAT_MAX_LENGTH) return;`, which is now `…CHAT_MAX_LENGTH) {`. Both now accept either form; their intent — "uses `CHAT_MAX_LENGTH`, no `2000` literal" and "validation precedes the bucket" — is unchanged and still passes.
+
+**Regression:** Part 7 unit 10/10 and socket 8/8, Part 10 HTTP 17/17, Part 11 backstop 10/10, Part 12 quota-order 10/10, Part 2 control unchanged, all five admin harnesses. `node --check` on both files.
+
+**Not proven here:** the real handler against Postgres with a live session. The server shape is mirrored line for line and the client is the real file.
+
+## Part 13 — files and lines
+
+| File | Lines | What changed |
+|---|---|---|
+| `server.js` | 234–248 | Signature `(content, ack)`; `reply()` helper with no-ack fallback |
+| `server.js` | 254, 259–265 | `invalid` and `rate_limited` answered through `reply()` |
+| `server.js` | 284, 285–288 | Success answered; `catch` answers `server_error` |
+| `public/js/chat.js` | 9–18 | Queue removed; `CHAT_ACK_TIMEOUT_MS`, `chatNoticeTimer` added |
+| `public/js/chat.js` | 145 | `new_message` shift and `chat_rate_limited` listener removed |
+| `public/js/chat.js` | 349–364 | Send uses `socket.timeout().emit(…, callback)` |
+| `public/js/chat.js` | 387–424 | `restoreChatInput`, `showChatNotice`, `beginChatCooldown` replace `handleChatRateLimited` |
+
+`routes/chat.js`, `utils/chat-rate-limit.js`, `public/index.html`, `public/style.css` and `private/admin.html` are unchanged since Part 12. Part 13 totals: `server.js` +26 / −4, `public/js/chat.js` +49 / −40.

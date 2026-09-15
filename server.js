@@ -100,6 +100,21 @@ const webhookKeyLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
   keyGenerator: (req) => req.params.key || 'unknown',
 });
+// Coarse pre-auth backstop for the chat write path, keyed on client IP
+// (trustworthy via the trust-proxy CIDR list above). Mounted before json and
+// session below, so a flood is rejected with zero DB work — no session lookup,
+// no auth query. The precise per-user bucket in routes/chat.js still applies
+// afterwards; a single user is capped at ~36/min there, so 120/min/IP leaves
+// room for several users behind one NAT while still cutting a flood dead.
+const chatIpLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 120,
+  message: { error: 'Too many chat requests from this IP. Please slow down.' },
+  standardHeaders: true, legacyHeaders: false,
+});
+
+// Runs before express.json() and the session middleware, so a rejected flood
+// never parses a body, never touches the session store, never queries auth.
+app.post('/api/chat/messages', chatIpLimiter);
 
 app.use(express.json());
 
@@ -175,12 +190,11 @@ const io = new Server(httpServer, {
 
 io.engine.use(sessionMiddleware);
 
-const { createChatRateLimiter } = require('./utils/chat-rate-limit');
-
 // Per-user chat throttle: 6 messages per 10 s, keyed by user id (not socket
 // id) so multiple tabs share one bucket and reconnecting does not reset it.
-const CHAT_LIMIT  = { windowMs: 10_000, max: 6 };
-const chatLimiter = createChatRateLimiter(CHAT_LIMIT);
+// The instance is a module singleton shared with routes/chat.js, so HTTP
+// posts and socket emits draw from the same allowance.
+const { chatLimiter, CHAT_LIMIT, CHAT_MAX_LENGTH } = require('./utils/chat-rate-limit');
 
 const presence = new Map();
 
@@ -217,19 +231,39 @@ io.on('connection', async (socket) => {
 
   io.to(`ws-${workspaceId}`).emit('online_users', getOnlineList(workspaceId));
 
-  socket.on('chat_message', async (content) => {
-    // Bucket check first — before validation and before any pool query — so a
-    // spamming user costs nothing beyond this Map lookup.
+  socket.on('chat_message', async (content, ack) => {
+    // Request/response: every send is answered through the ack callback with
+    // { ok: true, id } or { ok: false, reason }. A tab still running the
+    // previous chat.js emits with no callback; answer it the old way so nothing
+    // is silently lost mid-deploy.
+    const reply = (payload) => {
+      if (typeof ack === 'function') return ack(payload);
+      if (payload.ok === false && payload.reason === 'rate_limited') {
+        socket.emit('chat_rate_limited', {
+          retryAfterMs: payload.retryAfterMs,
+          limit:        payload.limit,
+          windowMs:     payload.windowMs,
+        });
+      }
+    };
+
+    // Validate first — pure CPU, no DB — so a malformed or oversized message
+    // costs the sender nothing: no quota spent, no query run. Then the bucket,
+    // which still gates every pool.query below.
+    if (typeof content !== 'string' || !content.trim() || content.length > CHAT_MAX_LENGTH) {
+      return reply({ ok: false, reason: 'invalid', maxLength: CHAT_MAX_LENGTH });
+    }
+
     const verdict = chatLimiter.check(userId);
     if (!verdict.allowed) {
-      socket.emit('chat_rate_limited', {
+      return reply({
+        ok:           false,
+        reason:       'rate_limited',
         retryAfterMs: verdict.retryAfterMs,
         limit:        CHAT_LIMIT.max,
         windowMs:     CHAT_LIMIT.windowMs,
       });
-      return;
     }
-    if (!content?.trim() || content.length > 2000) return;
     try {
       const { rows: [msg] } = await pool.query(
         `INSERT INTO chat_messages (workspace_id, user_id, content) VALUES ($1,$2,$3) RETURNING id, created_at`,
@@ -247,7 +281,11 @@ io.on('connection', async (socket) => {
         user_id: userId,
         user_name: userName,
       });
-    } catch (e) { console.error('Socket chat error:', e); }
+      reply({ ok: true, id: msg.id, created_at: msg.created_at });
+    } catch (e) {
+      console.error('Socket chat error:', e);
+      reply({ ok: false, reason: 'server_error' });
+    }
   });
 
   socket.on('disconnect', () => {

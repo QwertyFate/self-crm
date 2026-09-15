@@ -1,3 +1,4 @@
 node_modules
 .env
 .DS_store
+ADMIN_SECURITY_FIX.md
