@@ -2,6 +2,26 @@ const express  = require('express');
 const router   = express.Router();
 const crypto   = require('crypto');
 const { pool } = require('../db');
+const { regenerateSession } = require('../utils/session');
+
+/**
+ * Constant-time secret comparison. Strings only.
+ *
+ * Non-strings are rejected outright rather than coerced: String(['x']) is
+ * 'x', so coercion would let an array wrapping the secret authenticate. The
+ * type check depends only on the caller's input, never on the secret, so it
+ * leaks nothing through timing.
+ *
+ * Both sides are hashed to a fixed 32 bytes first so timingSafeEqual never
+ * sees mismatched lengths — it throws on unequal buffers, which would turn a
+ * wrong-length guess into a 500 and leak the secret's length via status code.
+ */
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const ha = crypto.createHash('sha256').update(a, 'utf8').digest();
+  const hb = crypto.createHash('sha256').update(b, 'utf8').digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
 
 function requireAdmin(req, res, next) {
   if (!req.session?.isAdmin) return res.status(401).json({ error: 'Admin access required' });
@@ -12,18 +32,33 @@ router.get('/me', (req, res) => {
   res.json({ isAdmin: !!req.session?.isAdmin });
 });
 
-router.post('/login', (req, res) => {
-  const { secret } = req.body;
-  const adminSecret = process.env.ADMIN_SECRET;
-  if (!adminSecret) return res.status(503).json({ error: 'ADMIN_SECRET is not configured on this server.' });
-  if (!secret || secret !== adminSecret) return res.status(401).json({ error: 'Invalid admin secret.' });
-  req.session.isAdmin = true;
-  res.json({ success: true });
+router.post('/login', async (req, res, next) => {
+  try {
+    const { secret } = req.body;
+    const adminSecret = process.env.ADMIN_SECRET;
+    if (!adminSecret) return res.status(503).json({ error: 'ADMIN_SECRET is not configured on this server.' });
+    // Strict type check first: only a non-empty string may reach the compare.
+    if (typeof secret !== 'string' || !secret || !safeEqual(secret, adminSecret)) {
+      return res.status(401).json({ error: 'Invalid admin secret.' });
+    }
+
+    // Issue a new session ID *after* authenticating, so a session ID an
+    // attacker planted in the operator's browser can never be upgraded into
+    // an admin session. Same pattern as the user login in routes/auth.js.
+    await regenerateSession(req);
+    req.session.isAdmin = true;
+    res.json({ success: true });
+  } catch (e) { next(e); }
 });
 
-router.post('/logout', (req, res) => {
-  req.session.isAdmin = false;
-  res.json({ success: true });
+router.post('/logout', (req, res, next) => {
+  // Destroy the whole session rather than toggling a flag, so the session ID
+  // in the browser stops resolving to anything server-side. Same pattern as
+  // the user logout in routes/auth.js.
+  req.session.destroy((err) => {
+    if (err) return next(err);
+    res.json({ success: true });
+  });
 });
 
 router.get('/invites', requireAdmin, async (req, res, next) => {
