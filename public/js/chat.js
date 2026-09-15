@@ -6,6 +6,19 @@ let chatLoadingMore  = false;
 let socket           = null;
 let onlineUsers      = [];
 
+// Rate-limit recovery. The server (socket handler in server.js) drops a
+// message over the limit and replies with chat_rate_limited, so each emitted
+// message is held here until its reply arrives. It is a queue, not a slot:
+// several sends can be in flight at once, and a reply answers the oldest
+// outstanding one. Entries leave in both directions — new_message confirms,
+// chat_rate_limited rejects — so the queue never holds a message the server
+// has already answered.
+const CHAT_PENDING_MAX = 20;
+let chatPending        = [];   // emitted, not yet confirmed or rejected — oldest first
+let chatRateBlocked    = false;
+let chatRateDeadline   = 0;
+let chatRateTimer      = null;
+
 function chatAvatar(name) {
   return (name || '?')[0].toUpperCase();
 }
@@ -131,7 +144,17 @@ function initChatSocket() {
     renderPageOnlineUsers();
   });
 
+  socket.on('chat_rate_limited', handleChatRateLimited);
+
   socket.on('new_message', (msg) => {
+    // The server accepted one of our sends — drop it from the pending queue so
+    // a later rejection can never restore text that already went through.
+    // Guarded on both the sender and the head content: another user's message,
+    // or our own from a different tab, must not consume this tab's entry.
+    if (msg.user_id === currentUser?.id && chatPending[0] === msg.content) {
+      chatPending.shift();
+    }
+
     const pageEl = document.getElementById('chat-page-messages');
     if (pageEl && chatPageOpen) {
       pageEl.querySelector('.chat-empty')?.remove();
@@ -324,6 +347,8 @@ function scrollChatPageBottom() {
 }
 
 function sendChatMessageFromPage() {
+  if (chatRateBlocked) return;
+
   const input = document.getElementById('chat-page-input');
   const content = input.value.trim();
   if (!content) return;
@@ -333,6 +358,57 @@ function sendChatMessageFromPage() {
     return;
   }
 
+  // Hold the text until the server answers. If chat_rate_limited comes back
+  // instead of new_message, handleChatRateLimited() puts it back. The cap
+  // keeps the queue bounded if replies never arrive at all.
+  chatPending.push(content);
+  if (chatPending.length > CHAT_PENDING_MAX) chatPending.shift();
   input.value = '';
   socket.emit('chat_message', content);
+}
+
+function chatRateTick() {
+  const remainingMs = chatRateDeadline - Date.now();
+  const notice = document.getElementById('chat-rate-notice');
+
+  if (remainingMs <= 0) {
+    clearInterval(chatRateTimer);
+    chatRateTimer   = null;
+    chatRateBlocked = false;
+    const btn = document.getElementById('chat-page-send');
+    if (btn) btn.disabled = false;
+    if (notice) { notice.hidden = true; notice.textContent = ''; }
+    return;
+  }
+
+  if (notice) {
+    notice.textContent = `Slow down — wait ${Math.ceil(remainingMs / 1000)}s`;
+    notice.hidden = false;
+  }
+}
+
+function handleChatRateLimited(payload) {
+  const retryAfterMs = Number(payload?.retryAfterMs) || 0;
+
+  // This reply answers the oldest outstanding send, so take the head rather
+  // than whatever was typed most recently. Put it back unless the user has
+  // already typed something new — never clobber what is in the field. With
+  // several rejections in one burst only the oldest can occupy the single
+  // input; the rest are dropped, which keeps the restore chronological.
+  const rejected = chatPending.shift() || '';
+  const input    = document.getElementById('chat-page-input');
+  if (input && rejected && !input.value.trim()) {
+    input.value = rejected;
+  }
+
+  chatRateBlocked  = true;
+  chatRateDeadline = Math.max(chatRateDeadline, Date.now() + retryAfterMs);
+
+  const btn = document.getElementById('chat-page-send');
+  if (btn) btn.disabled = true;
+
+  // A burst produces one event per rejected message; they all share a single
+  // timer, each only pushing the deadline out.
+  if (!chatRateTimer) chatRateTimer = setInterval(chatRateTick, 1000);
+  chatRateTick();
 }

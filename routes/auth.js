@@ -4,6 +4,7 @@ const bcrypt   = require('bcryptjs');
 const crypto   = require('crypto');
 const { pool, seedDefaultStages, seedDefaultPipeline } = require('../db');
 const { sendPasswordReset } = require('../utils/mailer');
+const { regenerateSession } = require('../utils/session');
 
 router.get('/me', async (req, res, next) => {
   try {
@@ -63,6 +64,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     if (memberships.length > 1) {
+      await regenerateSession(req);
       req.session.userId   = user.id;
       req.session.userRole = user.role;
       return res.json({
@@ -73,6 +75,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     const activeWsId = memberships[0].id;
+    await regenerateSession(req);
     req.session.userId      = user.id;
     req.session.workspaceId = activeWsId;
     req.session.userRole    = memberships[0].role;
@@ -267,6 +270,7 @@ router.post('/signup', async (req, res, next) => {
           [u.id, ws.id, 'owner']
         );
         await client.query('COMMIT');
+        await regenerateSession(req);
         req.session.userId      = u.id;
         req.session.workspaceId = ws.id;
         req.session.userRole    = 'owner';
@@ -305,6 +309,7 @@ router.post('/signup', async (req, res, next) => {
           [u.id, invite.workspace_id, 'member']
         );
         await client.query('COMMIT');
+        await regenerateSession(req);
         req.session.userId      = u.id;
         req.session.workspaceId = invite.workspace_id;
         req.session.userRole    = 'member';

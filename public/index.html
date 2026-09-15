@@ -27,50 +27,6 @@
   </div>
 
   <!-- ══════════════════════════════════════
-       ADMIN SCREEN
-  ══════════════════════════════════════ -->
-  <div id="admin-screen" class="hidden">
-    <div class="auth-wrap">
-      <div class="auth-card">
-        <div class="auth-logo">
-          <img src="/images/logo.png" alt="CRM Logo" />
-        </div>
-
-        <!-- ── Admin Login ── -->
-        <div id="admin-view-login">
-          <p class="admin-panel-title">Platform Admin</p>
-          <p class="admin-panel-sub">Enter your admin secret to manage platform invite codes.</p>
-          <form class="auth-form" onsubmit="handleAdminLogin(event)">
-            <div class="auth-field">
-              <label>Admin Secret</label>
-              <input type="password" id="admin-secret-input" required autocomplete="current-password" />
-            </div>
-            <div id="admin-login-error" class="auth-error hidden"></div>
-            <button type="submit" class="btn btn-primary auth-submit">Access panel</button>
-          </form>
-          <div class="auth-link-row" style="margin-top:16px">
-            <a href="/" onclick="location.href='/'"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back to app</span></a>
-          </div>
-        </div>
-
-        <!-- ── Admin Dashboard ── -->
-        <div id="admin-view-panel" class="hidden">
-          <div class="admin-panel-header">
-            <p class="admin-panel-title" style="margin:0">Platform Invites</p>
-            <button class="btn btn-primary btn-sm" onclick="adminGenerateCode()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Generate</span></button>
-          </div>
-          <p class="admin-panel-sub">One-time codes that allow someone to create a new workspace on signup.</p>
-          <div id="admin-invites-list" class="admin-invites-list"></div>
-          <div class="auth-link-row" style="margin-top:18px">
-            <a href="#" onclick="adminLogout(event)">Log out of admin</a>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-  <!-- ══════════════════════════════════════
        AUTH SCREEN
   ══════════════════════════════════════ -->
   <div id="auth-screen" class="hidden">
@@ -213,10 +169,6 @@
           <div class="auth-link-row">
             <a href="#" onclick="closeJoinWorkspace(event)"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back</span></a>
           </div>
-        </div>
-
-        <div class="admin-link-row">
-          <a href="/?admin" class="admin-link"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Admin</span></a>
         </div>
 
       </div>
@@ -410,9 +362,10 @@
         <div class="chat-composer">
           <input type="text" class="chat-input" id="chat-page-input" placeholder="Message your team..." autocomplete="off"
                  onkeydown="if(event.key==='Enter'){sendChatMessageFromPage();event.preventDefault()}" />
-          <button class="chat-send-btn" onclick="sendChatMessageFromPage()" title="Send" aria-label="Send message">
+          <button class="chat-send-btn" id="chat-page-send" onclick="sendChatMessageFromPage()" title="Send" aria-label="Send message">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
           </button>
+          <div class="chat-rate-notice" id="chat-rate-notice" role="status" aria-live="polite" hidden></div>
         </div>
       </section>
 
@@ -1082,7 +1035,7 @@
         <div class="form-group">
           <label>Platform Invite Code <span class="req">*</span></label>
           <input type="text" id="cw-code" placeholder="Paste platform code here" autocomplete="off" />
-          <span class="text-xs text-muted">Get a code from the admin panel (yoursite.com/?admin)</span>
+          <span class="text-xs text-muted">Ask your platform administrator for a code.</span>
         </div>
         <div id="cw-error" class="auth-error hidden" style="margin:0 22px 10px"></div>
         <div class="modal-actions">
