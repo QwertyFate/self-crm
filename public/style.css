@@ -2573,6 +2573,21 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 .chat-send-btn:hover { background: var(--brand-hover); }
 .chat-send-btn:active { transform: scale(.94); }
 [data-theme="dark"] .chat-send-btn { color: var(--navy-950); }
+.chat-send-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+.chat-send-btn:disabled:hover { background: var(--brand); }
+
+/* Rate-limit notice: sits above the composer, absolute so it never reflows
+   the input/button row. Hidden by the `hidden` attribute when inactive. */
+.chat-composer { position: relative; }
+.chat-rate-notice {
+  position: absolute; left: var(--page-pad); right: var(--page-pad);
+  bottom: calc(100% - 1px);
+  padding: var(--sp-15) var(--sp-3);
+  border: 1px solid var(--warning); border-bottom: none;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  background: var(--warning-wash); color: var(--warning-ink);
+  font-size: var(--fs-xs); font-weight: 600;
+}
 
 .chat-panel {
   position: fixed; right: var(--sp-5); bottom: var(--sp-5); z-index: 8500;
