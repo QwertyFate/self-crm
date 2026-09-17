@@ -161,7 +161,7 @@ router.post('/receive/:key', async (req, res) => {
     if (email) {
       const normalizedEmail = email.toLowerCase().trim();
       const { rows: [existing] } = await pool.query(
-        `SELECT id, name FROM contacts WHERE workspace_id=$1 AND email=$2`,
+        `SELECT id, name FROM contacts WHERE workspace_id=$1 AND LOWER(email)=$2`,
         [wid, normalizedEmail]
       );
 

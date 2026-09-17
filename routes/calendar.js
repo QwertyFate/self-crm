@@ -16,7 +16,7 @@ router.get('/', async (req, res, next) => {
              c.name AS contact_name, c.id AS contact_id,
              d.id AS deal_id, d.title AS deal_title
       FROM activities a
-      LEFT JOIN contacts c ON c.id = a.contact_id
+      LEFT JOIN contacts c ON c.id = a.contact_id AND c.workspace_id = a.workspace_id
       LEFT JOIN LATERAL (
         SELECT id, title FROM deals
         WHERE deals.contact_id = a.contact_id AND deals.workspace_id = a.workspace_id
@@ -41,7 +41,7 @@ router.get('/today', async (req, res, next) => {
              c.name AS contact_name, c.id AS contact_id,
              d.id AS deal_id, d.title AS deal_title
       FROM activities a
-      LEFT JOIN contacts c ON c.id = a.contact_id
+      LEFT JOIN contacts c ON c.id = a.contact_id AND c.workspace_id = a.workspace_id
       LEFT JOIN LATERAL (
         SELECT id, title FROM deals
         WHERE deals.contact_id = a.contact_id AND deals.workspace_id = a.workspace_id

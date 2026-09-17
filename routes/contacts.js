@@ -3,8 +3,15 @@ const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
 const { notify }  = require('../notifications');
+// Cross-workspace reference guard (stages + members prefetch, per-row check).
+// Shared with routes/deals.js; see utils/workspace-refs.js.
+const { workspaceRefs, refCheck } = require('../utils/workspace-refs');
 
 router.use(requireAuth);
+
+class ImportRejected extends Error {
+  constructor(message) { super(message); this.status = 400; }
+}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -17,8 +24,8 @@ router.get('/', async (req, res, next) => {
       SELECT c.*, s.name AS stage_name, s.color AS stage_color,
              u.name AS assigned_to_name, u.email AS assigned_to_email
       FROM contacts c
-      LEFT JOIN stages s ON s.id = c.stage_id
-      LEFT JOIN users  u ON u.id = c.assigned_to
+      LEFT JOIN stages s ON s.id = c.stage_id    AND s.workspace_id = c.workspace_id
+      LEFT JOIN users  u ON u.id = c.assigned_to AND u.workspace_id = c.workspace_id
       WHERE c.workspace_id = $1 ${filter}
       ORDER BY c.created_at DESC
     `, params);
@@ -26,81 +33,240 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Import: same rows, same columns, same values as the original per-row loop —
+// but batched, so a 1000-row file costs ~13 round trips instead of 1000–3000
+// and does not pin one of the pool's connections for the duration.
+const MAX_IMPORT_ROWS = 2000;
+const IMPORT_CHUNK    = 500;
+
+// pg error codes raised by the SET LOCAL limits inside the transaction, mapped
+// to a status the client can show. Anything else stays a 500 via next(e).
+function importErrorStatus(e) {
+  if (e instanceof ImportRejected) return [400, e.message];                          // a foreign reference
+  if (e?.code === '57014') return [504, 'Import timed out — try a smaller file.'];   // statement_timeout
+  if (e?.code === '55P03') return [503, 'Database busy — please try again.'];        // lock_timeout
+  return null;
+}
+
 router.post('/import', async (req, res, next) => {
   try {
     const { contacts: rows, newFields, createDealsForNew, createDealsForUpdated, pipelineId, stageId, defaultAssigneeId } = req.body;
     if (!Array.isArray(rows)) return res.status(400).json({ error: 'contacts must be an array' });
+    if (rows.length > MAX_IMPORT_ROWS) {
+      return res.status(413).json({ error: `Too many rows. Maximum ${MAX_IMPORT_ROWS} contacts per import.` });
+    }
+
+    // ---- Classify (no DB). The loop's own rules: skip nameless rows; email is
+    // lowercased and trimmed. Rows whose email appears more than once in this
+    // file keep today's exact insert-then-update behaviour by going through the
+    // original per-row path at the end; everything else is batched.
+    const emailCount = new Map();
+    for (const row of rows) {
+      if (!row?.name?.trim() || !row.email) continue;
+      const e = row.email.toLowerCase().trim();
+      emailCount.set(e, (emailCount.get(e) || 0) + 1);
+    }
+    const batchRows = [], legacyRows = [];
+    let skipped = 0;   // rows dropped for having no name — reported, never silent
+    for (const row of rows) {
+      if (!row?.name?.trim()) { skipped++; continue; }
+      const email = row.email ? row.email.toLowerCase().trim() : null;
+      if (email && emailCount.get(email) > 1) legacyRows.push(row);
+      else batchRows.push({ row, email });
+    }
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // Transaction-scoped limits: SET LOCAL resets on COMMIT/ROLLBACK and can
+      // never leak to the next user of this pooled connection.
+      await client.query("SET LOCAL statement_timeout = '30s'");
+      await client.query("SET LOCAL idle_in_transaction_session_timeout = '15s'");
+      await client.query("SET LOCAL lock_timeout = '5s'");
+
+      // ---- Every referenced id must belong to this workspace. One prefetch
+      // for stages + members; pipeline and stage checked directly. Rejected
+      // here, before any write and inside the transaction, so nothing foreign
+      // is ever stored. Thrown as ImportRejected -> ROLLBACK -> 400.
+      const refs = await workspaceRefs(client, req.workspaceId);
+      if ((defaultAssigneeId || null) !== null && !refs.members.has(Number(defaultAssigneeId))) {
+        throw new ImportRejected('defaultAssigneeId is not a member of this workspace');
+      }
+      if (pipelineId) {
+        const { rows: [p] } = await client.query(
+          'SELECT id FROM pipelines WHERE id=$1 AND workspace_id=$2', [pipelineId, req.workspaceId]
+        );
+        if (!p) throw new ImportRejected('pipelineId does not belong to this workspace');
+        if (stageId) {
+          const { rows: [ps] } = await client.query(
+            'SELECT id FROM pipeline_stages WHERE id=$1 AND pipeline_id=$2 AND workspace_id=$3',
+            [stageId, pipelineId, req.workspaceId]
+          );
+          if (!ps) throw new ImportRejected('stageId does not belong to this pipeline');
+        }
+      }
+      for (let i = 0; i < rows.length; i++) {
+        const bad = rows[i] && refCheck(refs, rows[i]);
+        if (bad) throw new ImportRejected(`Row ${i + 1}: ${bad}`);
+      }
 
       if (Array.isArray(newFields) && newFields.length) {
         const { rows: [{ m }] } = await client.query(
           'SELECT COALESCE(MAX(position), -1) AS m FROM custom_fields WHERE workspace_id=$1',
           [req.workspaceId]
         );
-        for (let i = 0; i < newFields.length; i++) {
-          await client.query(
-            'INSERT INTO custom_fields (workspace_id, name, field_key, type, options, position) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING',
-            [req.workspaceId, newFields[i].name, newFields[i].field_key, 'text', '[]', m + 1 + i]
-          );
-        }
+        // One statement for all new fields; positions m+1+i exactly as before.
+        await client.query(
+          `INSERT INTO custom_fields (workspace_id, name, field_key, type, options, position)
+           SELECT $1, v.name, v.field_key, 'text', '[]', v.position
+           FROM unnest($2::text[], $3::text[], $4::int[]) AS v(name, field_key, position)
+           ON CONFLICT DO NOTHING`,
+          [req.workspaceId, newFields.map(f => f.name), newFields.map(f => f.field_key), newFields.map((_, i) => m + 1 + i)]
+        );
       }
 
       let count = 0;
       let dealsCreated = 0;
+      let created = 0, updated = 0;   // split of `count`, both read back from DB results
+      let unmatched = 0;              // rows that produced no DB row (deleted mid-import) — so
+                                      // submitted === imported + skipped + unmatched always holds
 
       let defaultStageId = stageId;
       if ((createDealsForNew || createDealsForUpdated) && pipelineId && !stageId) {
         const { rows: [firstStage] } = await client.query(
-          'SELECT id FROM pipeline_stages WHERE pipeline_id=$1 ORDER BY position ASC LIMIT 1',
-          [pipelineId]
+          'SELECT id FROM pipeline_stages WHERE pipeline_id=$1 AND workspace_id=$2 ORDER BY position ASC LIMIT 1',
+          [pipelineId, req.workspaceId]
         );
         defaultStageId = firstStage?.id || null;
       }
 
-      for (const row of rows) {
-        if (!row.name?.trim()) continue;
+      // ---- One prefetch replaces N per-row email lookups. Same predicate.
+      const batchEmails = batchRows.map(b => b.email).filter(Boolean);
+      const existingByEmail = new Map();
+      if (batchEmails.length) {
+        const { rows: found } = await client.query(
+          // Case-insensitive on both sides: the incoming array is already
+          // lowercased; LOWER() brings the stored value to the same form.
+          'SELECT id, email FROM contacts WHERE workspace_id=$1 AND LOWER(email) = ANY($2::text[])',
+          [req.workspaceId, batchEmails]
+        );
+        // Key by the lowercased stored value so the lookup below (by the
+        // lowercased incoming value) hits even when the row was saved mixed-case.
+        for (const f of found) existingByEmail.set(f.email.toLowerCase(), f.id);
+      }
 
+      // ---- Partition. The loop's own decision: email found -> update, else insert.
+      const toUpdate = [], toInsert = [];
+      for (const b of batchRows) {
+        const id = b.email ? existingByEmail.get(b.email) : undefined;
+        if (id !== undefined) toUpdate.push({ ...b, id }); else toInsert.push(b);
+      }
+
+      // ---- Multi-row writes, chunked. Column lists and value expressions are
+      // the per-row statements' own; unnest keeps the parameter count constant.
+      const updatedIds = [], insertedIds = [];
+      for (let i = 0; i < toUpdate.length; i += IMPORT_CHUNK) {
+        const c = toUpdate.slice(i, i + IMPORT_CHUNK);
+        // RETURNING tells us which ids actually matched. The prefetch and this
+        // write see different snapshots (READ COMMITTED), so a contact deleted
+        // in between matches nothing here — it must not be counted or handed
+        // to the deals statement.
+        const { rows: matched } = await client.query(
+          `UPDATE contacts c
+             SET name=v.name, phone=v.phone, company=v.company, stage_id=v.stage_id,
+                 assigned_to=v.assigned_to, custom_data=v.custom_data, updated_at=NOW()
+           FROM unnest($2::int[], $3::text[], $4::text[], $5::text[], $6::int[], $7::int[], $8::jsonb[])
+                AS v(id, name, phone, company, stage_id, assigned_to, custom_data)
+           WHERE c.id=v.id AND c.workspace_id=$1
+           RETURNING c.id`,
+          [req.workspaceId,
+           c.map(x => x.id),
+           c.map(x => x.row.name.trim()),
+           c.map(x => x.row.phone||null),
+           c.map(x => x.row.company||null),
+           c.map(x => x.row.stage_id||null),
+           c.map(x => x.row.assigned_to||req.userId),
+           c.map(x => JSON.stringify(x.row.custom_data||{}))]
+        );
+        for (const r of matched) updatedIds.push(r.id);
+        count     += matched.length;
+        updated   += matched.length;
+        unmatched += c.length - matched.length;
+      }
+      for (let i = 0; i < toInsert.length; i += IMPORT_CHUNK) {
+        const c = toInsert.slice(i, i + IMPORT_CHUNK);
+        const assignedTo = defaultAssigneeId || req.userId;
+        const { rows: inserted } = await client.query(
+          `INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data)
+           SELECT $1, v.name, v.email, v.phone, v.company, v.stage_id, v.assigned_to, v.custom_data
+           FROM unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::int[], $7::int[], $8::jsonb[])
+                AS v(name, email, phone, company, stage_id, assigned_to, custom_data)
+           RETURNING id`,
+          [req.workspaceId,
+           c.map(x => x.row.name.trim()),
+           c.map(x => x.email),
+           c.map(x => x.row.phone||null),
+           c.map(x => x.row.company||null),
+           c.map(x => x.row.stage_id||null),
+           c.map(() => assignedTo),
+           c.map(x => JSON.stringify(x.row.custom_data||{}))]
+        );
+        for (const r of inserted) insertedIds.push(r.id);
+        count     += inserted.length;   // what came back, not what was sent
+        created   += inserted.length;
+        unmatched += c.length - inserted.length;   // cannot really happen for INSERT … RETURNING; keeps the identity exact
+      }
+
+      // ---- Deals in one statement. Title is 'Deal: ' + the trimmed name just
+      // written to the contact row; stage is defaultStageId — the per-row
+      // statement's own values. No dependence on RETURNING order.
+      const dealIds = [
+        ...(createDealsForNew     ? insertedIds : []),
+        ...(createDealsForUpdated ? updatedIds  : []),
+      ];
+      if (dealIds.length && pipelineId) {
+        const result = await client.query(
+          `INSERT INTO deals (workspace_id, contact_id, pipeline_id, stage_id, title)
+           SELECT $1, c.id, $2, $3, 'Deal: ' || c.name
+           FROM contacts c WHERE c.workspace_id=$1 AND c.id = ANY($4::int[])`,
+          [req.workspaceId, pipelineId, defaultStageId || null, dealIds]
+        );
+        dealsCreated += result.rowCount;
+      }
+
+      // ---- In-file duplicate emails: the original per-row path. Its rows were
+      // validated by the reference loop above together with the batch rows, so
+      // the raw row.stage_id / row.assigned_to reads below are already safe.
+      for (const row of legacyRows) {
         let contactId;
         let isNew = true;
-        if (row.email) {
-          const { rows: [existing] } = await client.query(
-            'SELECT id FROM contacts WHERE workspace_id=$1 AND email=$2',
-            [req.workspaceId, row.email.toLowerCase().trim()]
-          );
+        const { rows: [existing] } = await client.query(
+          'SELECT id FROM contacts WHERE workspace_id=$1 AND LOWER(email)=$2',
+          [req.workspaceId, row.email.toLowerCase().trim()]
+        );
 
-          if (existing) {
-            await client.query(
-              'UPDATE contacts SET name=$1, phone=$2, company=$3, stage_id=$4, assigned_to=$5, custom_data=$6, updated_at=NOW() WHERE id=$7 AND workspace_id=$8',
-              [row.name.trim(), row.phone||null, row.company||null, row.stage_id||null,
-               row.assigned_to||req.userId, JSON.stringify(row.custom_data||{}), existing.id, req.workspaceId]
-            );
-            contactId = existing.id;
-            isNew = false;
-            count++;
-          } else {
-            const assignedTo = defaultAssigneeId || req.userId;
-            const { rows: [newContact] } = await client.query(
-              'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-              [req.workspaceId, row.name.trim(), row.email.toLowerCase().trim(),
-               row.phone||null, row.company||null, row.stage_id||null, assignedTo, JSON.stringify(row.custom_data||{})]
-            );
-            contactId = newContact.id;
-            isNew = true;
-            count++;
-          }
+        if (existing) {
+          const upd = await client.query(
+            'UPDATE contacts SET name=$1, phone=$2, company=$3, stage_id=$4, assigned_to=$5, custom_data=$6, updated_at=NOW() WHERE id=$7 AND workspace_id=$8',
+            [row.name.trim(), row.phone||null, row.company||null, row.stage_id||null,
+             row.assigned_to||req.userId, JSON.stringify(row.custom_data||{}), existing.id, req.workspaceId]
+          );
+          // Vanished between the lookup and the write: not imported, and the
+          // deal block below must not run for it.
+          if (upd.rowCount === 0) { unmatched++; continue; }
+          contactId = existing.id;
+          isNew = false;
+          count++; updated++;
         } else {
           const assignedTo = defaultAssigneeId || req.userId;
           const { rows: [newContact] } = await client.query(
             'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-            [req.workspaceId, row.name.trim(), null,
+            [req.workspaceId, row.name.trim(), row.email.toLowerCase().trim(),
              row.phone||null, row.company||null, row.stage_id||null, assignedTo, JSON.stringify(row.custom_data||{})]
           );
           contactId = newContact.id;
           isNew = true;
-          count++;
+          count++; created++;
         }
 
         const shouldCreateDeal = (isNew && createDealsForNew) || (!isNew && createDealsForUpdated);
@@ -114,9 +280,14 @@ router.post('/import', async (req, res, next) => {
       }
 
       await client.query('COMMIT');
-      res.status(201).json({ imported: count, deals_created: dealsCreated });
+      // `imported` and `deals_created` are unchanged for the client; the rest
+      // are additive. imported === created + updated and
+      // submitted === imported + skipped + unmatched always.
+      res.status(201).json({ imported: count, deals_created: dealsCreated, created, updated, skipped, unmatched });
     } catch (e) {
       await client.query('ROLLBACK');
+      const mapped = importErrorStatus(e);
+      if (mapped) return res.status(mapped[0]).json({ error: mapped[1] });
       throw e;
     } finally {
       client.release();
@@ -130,8 +301,8 @@ router.get('/:id', async (req, res, next) => {
       SELECT c.*, s.name AS stage_name, s.color AS stage_color,
              u.name AS assigned_to_name, u.email AS assigned_to_email
       FROM contacts c
-      LEFT JOIN stages s ON s.id = c.stage_id
-      LEFT JOIN users  u ON u.id = c.assigned_to
+      LEFT JOIN stages s ON s.id = c.stage_id    AND s.workspace_id = c.workspace_id
+      LEFT JOIN users  u ON u.id = c.assigned_to AND u.workspace_id = c.workspace_id
       WHERE c.id = $1 AND c.workspace_id = $2
     `, [req.params.id, req.workspaceId]);
     if (!contact) return res.status(404).json({ error: 'Not found' });
@@ -142,7 +313,7 @@ router.get('/:id', async (req, res, next) => {
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              u.name AS logged_by_name, u.email AS logged_by_email
       FROM activities a
-      LEFT JOIN users u ON u.id = a.created_by
+      LEFT JOIN users u ON u.id = a.created_by AND u.workspace_id = a.workspace_id
       WHERE a.contact_id = $1 AND a.workspace_id = $2
       ORDER BY a.created_at DESC
     `, [req.params.id, req.workspaceId]);
@@ -155,13 +326,15 @@ router.post('/', async (req, res, next) => {
   try {
     const { name, email, phone, company, stage_id, assigned_to, custom_data, contact_type } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
+    const badRef = refCheck(await workspaceRefs(pool, req.workspaceId), { stage_id, assigned_to });
+    if (badRef) return res.status(400).json({ error: badRef });
     const assignee = assigned_to ? Number(assigned_to) : req.userId;
     const type = contact_type || 'contact';
 
     if (email) {
       const normalizedEmail = email.toLowerCase().trim();
       const { rows: [existing] } = await pool.query(
-        'SELECT id FROM contacts WHERE workspace_id=$1 AND email=$2',
+        'SELECT id FROM contacts WHERE workspace_id=$1 AND LOWER(email)=$2',
         [req.workspaceId, normalizedEmail]
       );
       if (existing) return res.status(409).json({ error: 'Contact with this email already exists in this workspace' });
@@ -185,9 +358,11 @@ router.put('/:id', async (req, res, next) => {
   try {
     const { name, email, phone, company, stage_id, assigned_to, custom_data, contact_type } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
+    const badRef = refCheck(await workspaceRefs(pool, req.workspaceId), { stage_id, assigned_to });
+    if (badRef) return res.status(400).json({ error: badRef });
     const result = await pool.query(
       'UPDATE contacts SET name=$1, email=$2, phone=$3, company=$4, stage_id=$5, assigned_to=$6, custom_data=$7, contact_type=COALESCE($8,contact_type), updated_at=NOW() WHERE id=$9 AND workspace_id=$10',
-      [name, email||null, phone||null, company||null, stage_id||null, assigned_to||null, JSON.stringify(custom_data||{}), contact_type||null, req.params.id, req.workspaceId]
+      [name, email ? email.toLowerCase().trim() : null, phone||null, company||null, stage_id||null, assigned_to||null, JSON.stringify(custom_data||{}), contact_type||null, req.params.id, req.workspaceId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
@@ -196,6 +371,8 @@ router.put('/:id', async (req, res, next) => {
 
 router.patch('/:id/stage', async (req, res, next) => {
   try {
+    const badRef = refCheck(await workspaceRefs(pool, req.workspaceId), { stage_id: req.body.stage_id });
+    if (badRef) return res.status(400).json({ error: badRef });
     const result = await pool.query(
       'UPDATE contacts SET stage_id=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3',
       [req.body.stage_id||null, req.params.id, req.workspaceId]

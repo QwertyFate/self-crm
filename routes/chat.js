@@ -2,6 +2,7 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const { chatRateLimitMiddleware, CHAT_MAX_LENGTH } = require('../utils/chat-rate-limit');
 
 router.use(requireAuth);
 
@@ -42,10 +43,14 @@ router.get('/unread', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/messages', async (req, res, next) => {
+// Same bucket as the socket handler in server.js: the middleware keys on
+// req.userId, so HTTP posts and socket emits count against one allowance.
+router.post('/messages', chatRateLimitMiddleware, async (req, res, next) => {
   try {
     const { content } = req.body;
-    if (!content?.trim()) return res.status(400).json({ error: 'Message cannot be empty' });
+    // Strings only — a numeric or array body used to throw on .trim() and 500.
+    if (typeof content !== 'string' || !content.trim()) return res.status(400).json({ error: 'Message cannot be empty' });
+    if (content.length > CHAT_MAX_LENGTH) return res.status(400).json({ error: `Message too long. Maximum ${CHAT_MAX_LENGTH} characters.` });
     const { rows: [msg] } = await pool.query(
       `INSERT INTO chat_messages (workspace_id, user_id, content)
        VALUES ($1, $2, $3) RETURNING id, created_at`,

@@ -5,6 +5,19 @@ const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
 
+// Every link endpoint must own BOTH ends: the object in the URL and the
+// linked deal/contact. Foreign keys are global, so either id can be another
+// workspace's real row. One round trip; `table` is an internal literal
+// ('deals' | 'contacts'), never request input. Returns { obj, linked }.
+async function ownsLink(workspaceId, objectId, table, linkedId) {
+  const { rows: [r] } = await pool.query(
+    `SELECT EXISTS (SELECT 1 FROM objects WHERE id=$1 AND workspace_id=$3) AS obj,
+            EXISTS (SELECT 1 FROM ${table} WHERE id=$2 AND workspace_id=$3) AS linked`,
+    [objectId, linkedId, workspaceId]
+  );
+  return r;
+}
+
 router.get('/', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
@@ -30,9 +43,9 @@ router.get('/:id', async (req, res, next) => {
              p.name  AS pipeline_name
       FROM deal_objects dobj
       JOIN deals          d  ON d.id  = dobj.deal_id
-      LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
-      LEFT JOIN contacts        c  ON c.id  = d.contact_id
-      LEFT JOIN pipelines       p  ON p.id  = d.pipeline_id
+      LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id   AND ps.workspace_id = d.workspace_id
+      LEFT JOIN contacts        c  ON c.id  = d.contact_id AND c.workspace_id  = d.workspace_id
+      LEFT JOIN pipelines       p  ON p.id  = d.pipeline_id AND p.workspace_id = d.workspace_id
       WHERE dobj.object_id = $1 AND d.workspace_id = $2
       ORDER BY d.created_at DESC
     `, [req.params.id, req.workspaceId]);
@@ -88,11 +101,9 @@ router.post('/:id/deals', async (req, res, next) => {
   try {
     const { deal_id } = req.body;
     if (!deal_id) return res.status(400).json({ error: 'deal_id required' });
-    const { rows: [deal] } = await pool.query(
-      'SELECT id FROM deals WHERE id=$1 AND workspace_id=$2',
-      [deal_id, req.workspaceId]
-    );
-    if (!deal) return res.status(404).json({ error: 'Deal not found' });
+    const own = await ownsLink(req.workspaceId, req.params.id, 'deals', deal_id);
+    if (!own.obj)    return res.status(404).json({ error: 'Not found' });
+    if (!own.linked) return res.status(404).json({ error: 'Deal not found' });
     await pool.query(
       'INSERT INTO deal_objects (deal_id, object_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
       [deal_id, req.params.id]
@@ -103,6 +114,9 @@ router.post('/:id/deals', async (req, res, next) => {
 
 router.delete('/:id/deals/:dealId', async (req, res, next) => {
   try {
+    const own = await ownsLink(req.workspaceId, req.params.id, 'deals', req.params.dealId);
+    if (!own.obj)    return res.status(404).json({ error: 'Not found' });
+    if (!own.linked) return res.status(404).json({ error: 'Deal not found' });
     await pool.query(
       'DELETE FROM deal_objects WHERE deal_id=$1 AND object_id=$2',
       [req.params.dealId, req.params.id]
@@ -128,6 +142,9 @@ router.post('/:id/contacts', async (req, res, next) => {
   try {
     const { contact_id } = req.body;
     if (!contact_id) return res.status(400).json({ error: 'contact_id required' });
+    const own = await ownsLink(req.workspaceId, req.params.id, 'contacts', contact_id);
+    if (!own.obj)    return res.status(404).json({ error: 'Not found' });
+    if (!own.linked) return res.status(404).json({ error: 'Contact not found' });
     await pool.query(
       'INSERT INTO object_contacts (object_id, contact_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
       [req.params.id, contact_id]
@@ -138,6 +155,9 @@ router.post('/:id/contacts', async (req, res, next) => {
 
 router.delete('/:id/contacts/:contactId', async (req, res, next) => {
   try {
+    const own = await ownsLink(req.workspaceId, req.params.id, 'contacts', req.params.contactId);
+    if (!own.obj)    return res.status(404).json({ error: 'Not found' });
+    if (!own.linked) return res.status(404).json({ error: 'Contact not found' });
     await pool.query(
       'DELETE FROM object_contacts WHERE object_id=$1 AND contact_id=$2',
       [req.params.id, req.params.contactId]
