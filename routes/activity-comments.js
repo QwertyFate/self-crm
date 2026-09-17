@@ -2,6 +2,7 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const { sanitizeNote } = require('../utils/sanitize-note');
 
 router.use(requireAuth);
 
@@ -27,9 +28,9 @@ async function notifyMentionsInComment(workspaceId, actorId, actorName, content,
     const { rows: [activity] } = await pool.query(`
       SELECT a.contact_id, c.name AS contact_name
       FROM activities a
-      LEFT JOIN contacts c ON c.id = a.contact_id
-      WHERE a.id = $1
-    `, [activityId]);
+      LEFT JOIN contacts c ON c.id = a.contact_id AND c.workspace_id = a.workspace_id
+      WHERE a.id = $1 AND a.workspace_id = $2
+    `, [activityId, workspaceId]);
 
     const preview = plain.replace(/@\w+/g, '').trim().slice(0, 100).replace(/\s+\S*$/, '') || 'a comment';
     const contactName = activity?.contact_name || 'a contact';
@@ -72,7 +73,7 @@ router.get('/', async (req, res, next) => {
     const { rows } = await pool.query(`
       SELECT ac.*, u.name AS created_by_name
       FROM activity_comments ac
-      LEFT JOIN users u ON u.id = ac.created_by
+      LEFT JOIN users u ON u.id = ac.created_by AND u.workspace_id = ac.workspace_id
       WHERE ac.activity_id = $1 AND ac.workspace_id = $2
       ORDER BY ac.created_at ASC
     `, [activityId, req.workspaceId]);
@@ -96,9 +97,12 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { activity_id, parent_id, content } = req.body;
+    const { activity_id, parent_id } = req.body;
     if (!activity_id) return res.status(400).json({ error: 'activity_id required' });
-    if (!content?.trim()) return res.status(400).json({ error: 'Content required' });
+    if (!req.body.content?.trim()) return res.status(400).json({ error: 'Content required' });
+    // Sanitised once; the INSERT and the mention pass both read this value.
+    const content = sanitizeNote(req.body.content).trim();
+    if (!content) return res.status(400).json({ error: 'Content required' });
 
     const { rows: [activity] } = await pool.query(
       'SELECT id FROM activities WHERE id=$1 AND workspace_id=$2',
@@ -109,7 +113,7 @@ router.post('/', async (req, res, next) => {
     const { rows: [row] } = await pool.query(
       `INSERT INTO activity_comments (activity_id, parent_id, workspace_id, content, created_by)
        VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [activity_id, parent_id || null, req.workspaceId, content.trim(), req.userId]
+      [activity_id, parent_id || null, req.workspaceId, content, req.userId]
     );
 
     const { rows: [actor] } = await pool.query('SELECT name FROM users WHERE id=$1', [req.userId]);
@@ -118,7 +122,7 @@ router.post('/', async (req, res, next) => {
     const { rows: [comment] } = await pool.query(`
       SELECT ac.*, u.name AS created_by_name
       FROM activity_comments ac
-      LEFT JOIN users u ON u.id = ac.created_by
+      LEFT JOIN users u ON u.id = ac.created_by AND u.workspace_id = ac.workspace_id
       WHERE ac.id = $1
     `, [row.id]);
 

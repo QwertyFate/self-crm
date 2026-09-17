@@ -2,6 +2,9 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+// Note HTML is sanitised to a small allow-list before it is stored or read by
+// mention detection (see utils/sanitize-note.js).
+const { sanitizeNote } = require('../utils/sanitize-note');
 
 router.use(requireAuth);
 
@@ -37,9 +40,9 @@ async function notifyMentions(workspaceId, actorId, actorName, content, activity
     const { rows: [activity] } = await pool.query(`
       SELECT a.contact_id, a.type, c.name AS contact_name
       FROM activities a
-      LEFT JOIN contacts c ON c.id = a.contact_id
-      WHERE a.id = $1
-    `, [activityId]);
+      LEFT JOIN contacts c ON c.id = a.contact_id AND c.workspace_id = a.workspace_id
+      WHERE a.id = $1 AND a.workspace_id = $2
+    `, [activityId, workspaceId]);
 
     const preview = plain.replace(/@\w+/g, '').trim().slice(0, 120).replace(/\s+\S*$/, '') || 'a note';
     const contactName = activity?.contact_name || 'a contact';
@@ -83,8 +86,8 @@ router.get('/', async (req, res, next) => {
              c.name AS contact_name,
              u.name AS logged_by_name, u.email AS logged_by_email
       FROM activities a
-      LEFT JOIN contacts c ON c.id = a.contact_id
-      LEFT JOIN users   u ON u.id = a.created_by
+      LEFT JOIN contacts c ON c.id = a.contact_id AND c.workspace_id = a.workspace_id
+      LEFT JOIN users   u ON u.id = a.created_by AND u.workspace_id = a.workspace_id
       WHERE a.workspace_id = $1
       ORDER BY a.created_at DESC LIMIT 200
     `, [req.workspaceId]);
@@ -94,8 +97,9 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { contact_id, type, content, event_date } = req.body;
-    if (!content) return res.status(400).json({ error: 'Content required' });
+    const { contact_id, type, event_date } = req.body;
+    const content = sanitizeNote(req.body.content);
+    if (!content?.trim()) return res.status(400).json({ error: 'Content required' });
     if (!['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
     const { rows: [row] } = await pool.query(
@@ -118,7 +122,7 @@ router.get('/:id', async (req, res, next) => {
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              u.name AS logged_by_name, u.email AS logged_by_email
       FROM activities a
-      LEFT JOIN users u ON u.id = a.created_by
+      LEFT JOIN users u ON u.id = a.created_by AND u.workspace_id = a.workspace_id
       WHERE a.id = $1 AND a.workspace_id = $2
     `, [req.params.id, req.workspaceId]);
     if (!row) return res.status(404).json({ error: 'Not found' });
@@ -128,7 +132,9 @@ router.get('/:id', async (req, res, next) => {
 
 router.patch('/:id', async (req, res, next) => {
   try {
-    const { type, content, event_date, completed } = req.body;
+    const { type, event_date, completed } = req.body;
+    // Absent stays absent (COALESCE keeps the old note); a supplied value is sanitised.
+    const content = req.body.content == null ? req.body.content : sanitizeNote(req.body.content);
 
     if (!content && completed === undefined && type === undefined && event_date === undefined) {
       return res.status(400).json({ error: 'Nothing to update' });

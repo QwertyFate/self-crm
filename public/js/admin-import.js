@@ -240,9 +240,12 @@ async function runImport() {
     defaultAssigneeId: assigneeId
   });
   btn.disabled = false; btn.textContent = 'Import contacts';
+  if (res.error) { alert(res.error); return; }   // 413 / 503 / 504 from the server — stay on the mapping step
   const dealsCreated = res.deals_created || 0;
   let message = `Successfully imported ${res.imported} contact${res.imported !== 1 ? 's' : ''}.`;
   if (dealsCreated > 0) message += ` Created ${dealsCreated} deal${dealsCreated !== 1 ? 's' : ''}.`;
+  if (res.skipped > 0) message += ` ${res.skipped} row${res.skipped !== 1 ? 's' : ''} skipped (no name).`;
+  if (res.unmatched > 0) message += ` ${res.unmatched} row${res.unmatched !== 1 ? 's' : ''} matched no contact and ${res.unmatched !== 1 ? 'were' : 'was'} skipped (deleted during import).`;
   document.getElementById('import-done-text').textContent = message;
   showImportStep('done'); invalidate();
 }

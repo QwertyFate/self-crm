@@ -196,6 +196,39 @@ function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// Render-side sanitiser for note HTML. Notes saved before the server started
+// sanitising are still raw in the database and are not rewritten, so every
+// place that puts note HTML into the page passes it through here first. Same
+// allow-list as utils/sanitize-note.js. DOMParser documents are inert: nothing
+// loads or runs while the untrusted markup is parsed.
+function sanitizeNoteHtml(html) {
+  if (html == null) return '';
+  // Self-contained on purpose: no dependence on anything else in this file
+  // having initialised first.
+  const NOTE_ALLOWED_TAGS = new Set(['B','I','U','STRONG','EM','A','BR','P','UL','OL','LI']);
+  const NOTE_DROP_TAGS    = new Set(['SCRIPT','STYLE','TEMPLATE','IFRAME','OBJECT','EMBED','NOSCRIPT']);
+  const doc = new DOMParser().parseFromString(String(html), 'text/html');
+  const walk = node => {
+    for (const child of [...node.childNodes]) {
+      if (child.nodeType !== 1) { if (child.nodeType !== 3) child.remove(); continue; }   // keep text, drop comments etc.
+      const tag = child.tagName.toUpperCase();
+      if (NOTE_DROP_TAGS.has(tag)) { child.remove(); continue; }                          // text inside goes too
+      walk(child);
+      if (tag === 'DIV') {                                                                 // editor line -> paragraph
+        const p = doc.createElement('p');
+        while (child.firstChild) p.appendChild(child.firstChild);
+        child.replaceWith(p); continue;
+      }
+      if (!NOTE_ALLOWED_TAGS.has(tag)) { child.replaceWith(...child.childNodes); continue; } // unwrap, keep children
+      const href = tag === 'A' ? child.getAttribute('href') : null;
+      for (const attr of [...child.attributes]) child.removeAttribute(attr.name);
+      if (href && /^\s*(https?:|mailto:)/i.test(href)) child.setAttribute('href', href);
+    }
+  };
+  walk(doc.body);
+  return doc.body.innerHTML;
+}
+
 function fmtDate(dt) {
   if (!dt) return '';
   return new Date(dt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });

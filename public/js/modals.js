@@ -221,7 +221,7 @@ async function openDealModalForContact(contactId) {
 
 function truncateActivityPreview(html, maxChars = 120, maxLines = 3) {
   const div = document.createElement('div');
-  div.innerHTML = html;
+  div.innerHTML = sanitizeNoteHtml(html);   // a detached div still loads <img onerror>; sanitise first
   let text = div.innerText;
 
   const lines = text.split('\n').slice(0, maxLines).join('\n');
@@ -370,7 +370,7 @@ async function editActivity(activityId) {
             <button type="button" class="fmt-btn" onclick="formatActivityNote('createLink')" title="Link">🔗 Link</button>
             <button type="button" class="fmt-btn" onclick="formatActivityNote('removeFormat')" title="Clear">✕ Clear</button>
           </div>
-          <div id="act-content-edit" class="note-editor" contenteditable="true">${activity.content}</div>
+          <div id="act-content-edit" class="note-editor" contenteditable="true">${sanitizeNoteHtml(activity.content)}</div>
         </div>
         <div style="color:var(--muted);font-size:12px;margin-top:12px">
           Logged by ${esc(activity.logged_by_name || 'Unknown')} on ${fmtDate(activity.created_at)}
@@ -416,7 +416,7 @@ function showActivityEditModal(activity) {
             <button type="button" class="fmt-btn" onclick="formatActivityNote('createLink')" title="Link">🔗 Link</button>
             <button type="button" class="fmt-btn" onclick="formatActivityNote('removeFormat')" title="Clear">✕ Clear</button>
           </div>
-          <div id="act-content-edit" class="note-editor" contenteditable="true" style="min-height:200px;padding:12px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text)">${activity.content}</div>
+          <div id="act-content-edit" class="note-editor" contenteditable="true" style="min-height:200px;padding:12px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text)">${sanitizeNoteHtml(activity.content)}</div>
         </div>
         <div style="color:var(--muted);font-size:12px;margin-top:12px">
           Logged by ${esc(activity.logged_by_name || 'Unknown')} on ${fmtDate(activity.created_at)}
@@ -820,7 +820,7 @@ function renderTimelineItem(a, options = {}) {
           <span class="deal-timeline-date">${fmtEventDate(String(a.created_at).split('T')[0].split(' ')[0])}</span>
         </div>
         ${a.event_date ? `<div class="deal-event-date-badge">📅 ${fmtEventDate(a.event_date)}</div>` : ''}
-        <div class="deal-timeline-content ${shouldCollapse ? 'collapsed' : ''}">${a.content}</div>
+        <div class="deal-timeline-content ${shouldCollapse ? 'collapsed' : ''}">${sanitizeNoteHtml(a.content)}</div>
         ${shouldCollapse ? '<button type="button" class="deal-note-expand-btn" onclick="event.stopPropagation();toggleDealNoteExpand(this)">Show more</button>' : ''}
         ${a.logged_by_name ? `<div class="deal-timeline-author">${t('logged_by')} ${esc(a.logged_by_name)}</div>` : ''}
         <div class="deal-comment-section" onclick="event.stopPropagation()">
@@ -934,7 +934,7 @@ async function inlineEditDealNote(activityId, el) {
         <button type="button" class="fmt-btn" onclick="event.stopPropagation();document.execCommand('underline',false,null)" title="Underline"><u>U</u></button>
       </div>
       <div class="note-editor inline-edit-content" contenteditable="true" style="min-height:60px;font-size:13px"
-        onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();saveInlineEdit(this.closest('.deal-timeline-item'));}">${activity.content}</div>
+        onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();saveInlineEdit(this.closest('.deal-timeline-item'));}">${sanitizeNoteHtml(activity.content)}</div>
       <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end">
         <button class="btn btn-sm" onclick="event.stopPropagation();cancelInlineEdit()">Cancel</button>
         <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteInlineEdit()">Delete</button>

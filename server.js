@@ -116,6 +116,12 @@ const chatIpLimiter = rateLimit({
 // never parses a body, never touches the session store, never queries auth.
 app.post('/api/chat/messages', chatIpLimiter);
 
+// Contact import bodies pass the global 100 kB default at roughly 500 rows,
+// well under the route's own 2000-row cap. Parse this one route with a larger
+// limit; body-parser skips an already-parsed body, so the global parser below
+// leaves it alone. Nothing else gets the larger limit.
+app.post('/api/contacts/import', express.json({ limit: '2mb' }));
+
 app.use(express.json());
 
 const sessionMiddleware = session({

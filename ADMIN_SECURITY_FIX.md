@@ -1357,3 +1357,1093 @@ socket.timeout(CHAT_ACK_TIMEOUT_MS).emit('chat_message', content, (err, reply) =
 | `public/js/chat.js` | 387–424 | `restoreChatInput`, `showChatNotice`, `beginChatCooldown` replace `handleChatRateLimited` |
 
 `routes/chat.js`, `utils/chat-rate-limit.js`, `public/index.html`, `public/style.css` and `private/admin.html` are unchanged since Part 12. Part 13 totals: `server.js` +26 / −4, `public/js/chat.js` +49 / −40.
+
+---
+---
+
+# Part 14 — Contacts import: batched queries, same writes, no schema change
+
+## Your constraints, and how each is met
+
+| Constraint | How it is honoured | Proof |
+|---|---|---|
+| **No DDL, no new columns, no index, no migration** | `db.js` not touched; the route contains no `CREATE`/`ALTER`/`DROP` | `git diff --quiet db.js` passes; diff grep for DDL = 0 |
+| **Schema is fixed** | Writes hit the same four statements' tables — `contacts` (insert + update), `custom_fields`, `deals` — with the identical 8-column `contacts` list and the same value expressions | T2 asserts every array element equals what the per-row statement received; column list regex matches verbatim |
+| **Logic is fixed** | Same rows inserted or updated by the same rule (email found → update, else insert); nameless rows skipped; `imported` counts every processed row; deals for new/updated under the same flags; title `'Deal: ' + trimmed name`; stage `defaultStageId \|\| null` | T1b, T3, T4, T6 |
+| **Response identical** | Exactly `{ imported, deals_created }` | T11 |
+
+## The bottleneck
+
+`POST /api/contacts/import` looped row by row inside one transaction: an email `SELECT`, then `INSERT` or `UPDATE`, then optionally a deal `INSERT` — 1–3 sequential round trips per row on one of the pool's 10 connections (`pg` default), with no timeout. Measured against the pre-edit route with a query-counting fake pool:
+
+```
+1000 rows, deals on:   2753 DB round trips
+2001 rows:             accepted — no cap — 4004 round trips
+any failure:           500
+```
+
+One finding that gated the request: `express.json()`'s default **100 kB** body limit already rejected imports above ~500 rows at the parser, and the client then displayed "Successfully imported undefined contacts" because `runImport` never checked `res.error`.
+
+## Changes
+
+### `routes/contacts.js:32–237` — the import, batched
+
+- **Cap (47):** `> 2000` rows → **413** before any DB work. `IMPORT_CHUNK = 500`.
+- **Classify (55–65), no DB:** the loop's own rules. Rows whose email appears **more than once in the file** are set aside for the original per-row path — the only way to keep today's insert-then-update-and-count-each behaviour exactly. Everything else is batched.
+- **Transaction limits (74–76):** `SET LOCAL statement_timeout='30s'`, `idle_in_transaction_session_timeout='15s'`, `lock_timeout='5s'`. Transaction-scoped: reset on COMMIT/ROLLBACK, cannot leak to the next user of the pooled connection. Ordinary-role GUCs, nothing persisted.
+- **`newFields` (85):** one `INSERT … SELECT FROM unnest(…) ON CONFLICT DO NOTHING` — positions `m + 1 + i` as before.
+- **One prefetch (110)** replaces N lookups: `SELECT id, email FROM contacts WHERE workspace_id=$1 AND email = ANY($2::text[])`. Same predicate.
+- **Partition (117–121):** email found → update, else insert.
+- **Multi-row update / insert via `unnest` (126–169), chunked at 500.** Column lists and value expressions are the per-row statements' own: `name.trim()`, `email.toLowerCase().trim()`, `phone||null`, `company||null`, `stage_id||null`, update `assigned_to = row.assigned_to||req.userId`, insert `assigned_to = defaultAssigneeId||req.userId`, `JSON.stringify(custom_data||{})`. Arrays keep the parameter count constant per statement.
+- **Deals in one statement (172–184):** `INSERT INTO deals … SELECT $1, c.id, $2, $3, 'Deal: ' || c.name FROM contacts c WHERE c.workspace_id=$1 AND c.id = ANY($4::int[])` — the title comes from the row just written, so there is no reliance on `RETURNING` order.
+- **In-file duplicates (187–222):** the original loop body, unchanged.
+- **Error mapping (230–232):** pg `57014` → **504** "Import timed out"; `55P03` → **503** "Database busy"; anything else still `next(e)` → 500. `ROLLBACK` + `release()` on every failure path, as before.
+
+### `server.js:123` — larger body for this one route
+
+`app.post('/api/contacts/import', express.json({ limit: '2mb' }));` mounted above the global parser (125) and the session middleware (134). body-parser skips an already-parsed body, so nothing else gets the larger limit.
+
+### `public/js/admin-import.js:243` — one guard
+
+`if (res.error) { alert(res.error); return; }` before `res.imported` is read, so 413/503/504 are visible instead of "imported undefined".
+
+## Verification
+
+No Postgres is reachable from a harness and the live Supabase DB is off-limits, so the **real** `routes/contacts.js` runs against a **fake pool injected through `require.cache`** (`chat-import-batch-test.js`). The fake pattern-matches SQL, returns canned rows, and records every query — the round-trip count is directly observable. Baseline ran first against a pre-edit copy of the route.
+
+| # | Assertion | Before | After |
+|---|---|---|---|
+| T1 | 1000 rows with deals — DB round trips | **2753** | **11** |
+| T1b | `imported` = 1000, `deals_created` = 750 | ok | ok |
+| T2 | Update/insert arrays carry exactly today's values; column lists unchanged | per-row scalars | ok |
+| T3 | Three rows sharing one email → three legacy lookups; `imported` counts all five | (no prefetch) | ok |
+| T4 | 2 existing → one `UPDATE` of 2 ids; 2 new + 2 no-email → one `INSERT` of 4 | per-row | ok |
+| T5 | 1200 inserts → chunks 500 / 500 / 200 | 1200 × 1 | ok |
+| T6 | Deals: one statement; correct ids for new / updated / both / none; title `'Deal: ' \|\| c.name` | per-row | ok |
+| T7 | `BEGIN` → three `SET LOCAL` → first write | **no SET LOCAL** | ok |
+| T8 | `57014` → 504 + ROLLBACK + release; `55P03` → 503 | **500 / 500** | ok |
+| T9 | 2001 rows → 413, zero queries; 2000 → 201 | **201, 4004 queries** | ok |
+| T10 | 714 kB body: route parser accepts; global-only rejects 413 | ok | ok |
+| T11 | Response is exactly `{ imported, deals_created }` | ok | ok |
+
+Also asserted: `db.js` unchanged; zero DDL in the diff; the route writes only `contacts`, `custom_fields`, `deals`; the `contacts` insert column list is the same eight as before; the route parser sits above the global one in `server.js`; the client guard is present. `node --check` on all three files. Every earlier harness (Parts 2, 7, 10–13, admin) still passes.
+
+**Not provable here:** the `unnest` statements against real Postgres. They are standard SQL, but the first real import should be a **small CSV** — a few rows, one existing contact, one no-email row — with the counts checked before a large file.
+
+## Flagged, deliberately not done (your constraints)
+
+- **No index on `contacts (workspace_id, email)`** — the prefetch is one query but still a sequential scan (audit P-01). One-line `CREATE INDEX IF NOT EXISTS` when DDL is acceptable.
+- **Referenced ids unvalidated** (`stage_id`, `assigned_to`, `pipelineId`, `stageId`, `defaultAssigneeId`) — as today; a bad FK still fails the transaction.
+- **Pool `connectionTimeoutMillis`** — a saturated pool still queues rather than failing fast; a `db.js` option.
+- **True upsert via unique partial index** — the end state and the fix for the concurrent-import race; needs DDL and a data-cleanliness check first (`PUT /contacts/:id` stores email un-lowercased).
+
+## Part 14 — files and lines
+
+| File | Lines | What changed |
+|---|---|---|
+| `routes/contacts.js` | 32–41 | `MAX_IMPORT_ROWS`, `IMPORT_CHUNK`, `importErrorStatus()` |
+| `routes/contacts.js` | 43–237 | Import handler: cap, classify, `SET LOCAL`, prefetch, partition, chunked `unnest` writes, single deals statement, legacy path for in-file duplicates, error mapping |
+| `server.js` | 118–123 | Route-specific `express.json({ limit: '2mb' })` above the global parser |
+| `public/js/admin-import.js` | 243 | `res.error` guard |
+
+`db.js` untouched. Part 14 totals: `routes/contacts.js` +146 / −34, `server.js` +6 / −0, `public/js/admin-import.js` +1 / −0.
+
+---
+---
+
+# Part 15 — Email matching is case-insensitive on both sides
+
+## The bug
+
+Incoming emails were already normalised (`toLowerCase().trim()`) before every lookup and insert, but the **stored** side of each compare was not. Postgres `=` on `text` is case-sensitive, so a row saved as `John@Example.com` never matched an incoming `john@example.com`. Mixed-case rows exist because `PUT /contacts/:id` stored `email||null` exactly as typed.
+
+Reproduced against pre-edit copies of both routes, with a fake pool that stores DB emails as-is and compares case-sensitively unless the SQL says `LOWER(email)`:
+
+```
+FAIL  L1. import: DB "John@Example.com", row "john@example.com"  — inserts=1   (duplicate contact)
+FAIL  L3. legacy path against "Dup@X.com"                         — ids=[1000]  (updated the fresh duplicate, not the real row)
+FAIL  L4. three mixed-case rows                                   — inserts=1
+FAIL  L5. POST /contacts when DB has "John@X.com"                 — status=201 (should be 409)
+FAIL  L6. PUT /contacts/:id "  John@X.com "                       — stored="  John@X.com "
+FAIL  L7. webhook when DB has "Lead@Co.com"                       — inserts=1   (duplicate contact)
+```
+
+Every write path was creating duplicates for the same person whenever the stored spelling differed in case.
+
+## The fix — match in lowercase, key the lookup by the lowercased value
+
+Constraints honoured: **`db.js` and `routes/deals.js` untouched** (asserted with `git diff --quiet`). No DDL. The `UPDATE` statements never touch the `email` column, so a matched mixed-case row keeps its stored spelling — this is matching, not rewriting.
+
+### `routes/contacts.js`
+
+| Line | Was | Now |
+|---|---|---|
+| 112 | `AND email = ANY($2::text[])` — import prefetch | `AND LOWER(email) = ANY($2::text[])` |
+| 117 | `existingByEmail.set(f.email, f.id)` | `existingByEmail.set(f.email.toLowerCase(), f.id)` — **the lookup is keyed by the lowercased stored value**, so `get()` by the lowercased incoming value hits |
+| 195 | `AND email=$2` — legacy per-row lookup | `AND LOWER(email)=$2` |
+| 280 | `AND email=$2` — `POST /contacts` duplicate check | `AND LOWER(email)=$2` |
+| 306 | `email\|\|null` — `PUT /contacts/:id` write | `email ? email.toLowerCase().trim() : null` — same rule as `POST` (288); stops new mixed-case rows at the source |
+
+### `routes/integrations.js`
+
+| Line | Was | Now |
+|---|---|---|
+| 164 | `AND email=$2` — webhook `/receive/:key` lookup | `AND LOWER(email)=$2` |
+
+Six lines of logic; the incoming side needed no change since it was already lowercased at every site. Zero plain `email =` compares remain in either file (asserted by grep).
+
+**Performance note:** `LOWER(email)` cannot use an index on `email`. There is no index on `email` today (audit P-01, DDL not permitted), so nothing regresses; a functional index on `LOWER(email)` is the eventual fix.
+
+## Verification
+
+`chat-import-lowercase-test.js` — the **real** `routes/contacts.js` and `routes/integrations.js` against the `require.cache`-injected fake pool from Part 14, extended so stored emails keep their case and the compare mode is read from the SQL. Baseline first (1/7), then live (**7/7**):
+
+| # | Scenario | Before | After |
+|---|---|---|---|
+| L1 | Import: DB `John@Example.com`, row `john@example.com` | INSERT (dup) | UPDATE id 500 |
+| L2 | Import: DB `john@example.com`, row `JOHN@Example.COM` | UPDATE | UPDATE (sanity) |
+| L3 | Legacy in-file-dup path against `Dup@X.com` | INSERT then update the dup | both UPDATE id 500 |
+| L4 | Three mixed-case rows, three incoming → all resolve via the lowercased map key | 1 INSERT | ids 501, 502, 503 updated |
+| L5 | `POST /contacts` `john@x.com` when DB has `John@X.com` | 201 | **409** |
+| L6 | `PUT /contacts/:id` `"  John@X.com "` → stored value | as typed | `john@x.com` |
+| L7 | Webhook: DB `Lead@Co.com`, payload `lead@co.com` | INSERT (dup) | 200, `contact_id: 500`, UPDATE, no INSERT |
+
+Also asserted: `db.js` and `routes/deals.js` unchanged; `LOWER(email)` at all four compare sites; no plain compares left; `node --check` on both files. Part 14's import harness needed a one-line regex relaxation (its T3 grepped the literal `AND email=$2`) and is back to **12/12**; every other harness (Parts 2, 7, 10–13, admin) unchanged.
+
+**Not provable here:** `LOWER()` on real Postgres — standard, but the first real import against a known mixed-case contact should confirm it updates rather than duplicates.
+
+## Flagged, not done
+
+- **Whitespace** in stored emails: `PUT` also never trimmed before this part, so a row saved as `" john@x.com"` still misses. `LOWER(TRIM(email))` is a one-token extension.
+- **Pre-existing case-duplicates**: two rows differing only by case now both match; the map keeps the last, so the update lands on one of them. Needs a data pass and, when DDL is allowed, a unique functional index.
+- **Functional index** `ON contacts (workspace_id, LOWER(email))` — DDL, not now.
+
+## Part 15 — files and lines
+
+| File | Lines | What changed |
+|---|---|---|
+| `routes/contacts.js` | 110–112 | Prefetch compares `LOWER(email)` |
+| `routes/contacts.js` | 115–117 | Map keyed by `f.email.toLowerCase()` |
+| `routes/contacts.js` | 195 | Legacy lookup compares `LOWER(email)` |
+| `routes/contacts.js` | 280 | `POST` duplicate check compares `LOWER(email)` |
+| `routes/contacts.js` | 306 | `PUT` normalises the stored email |
+| `routes/integrations.js` | 164 | Webhook lookup compares `LOWER(email)` |
+
+`db.js`, `routes/deals.js`, `server.js`, `public/*`, `private/*` unchanged since Part 14. Part 15 totals: `routes/contacts.js` +9 / −5 (four of the additions are comments), `routes/integrations.js` +1 / −1.
+
+---
+---
+
+# Part 16 — Cross-workspace references rejected; read-side joins scoped (data exposure #1)
+
+## The exposure
+
+Foreign keys are global. A `stage_id`, `assigned_to`, `pipelineId`, `stageId` or `defaultAssigneeId` that belongs to **another workspace** is a real row, so every write path accepted it. Worse, `GET /contacts` and `GET /contacts/:id` joined `stages` and `users` on the raw id, so the foreign row was rendered straight back: a member could write a guessed `assigned_to` and read another workspace's user **name and email** from their own contact list, or a guessed `stage_id` and read its stage names. An id oracle, one write and one read per guess.
+
+This was flagged as "deliberately not done" in Part 14 under the logic-is-fixed constraint. It is now done on request.
+
+Baseline against a pre-edit copy of the route (4/17):
+
+```
+FAIL  R1/R2  GET joins unscoped
+FAIL  R3/R4  POST /contacts with foreign stage_id / assigned_to     -> 201, written
+FAIL  R7–R9  PUT and PATCH with foreign ids                         -> 200, written
+FAIL  R11–R15  import with foreign row ids / defaultAssigneeId / pipelineId / stageId -> 201, written
+FAIL  R17  import default-stage lookup unscoped (any pipeline's first stage)
+```
+
+## Changes — `routes/contacts.js` only; `db.js` and `routes/deals.js` untouched (asserted)
+
+### Lines 9–38 — one guard, shared by every write path
+
+- `workspaceRefs(q, workspaceId)` (15–26): **one** query — `SELECT 'stage', id FROM stages … UNION ALL SELECT 'user', id FROM users …`, both `WHERE workspace_id=$1` — returning the sets of stage ids and member ids that belong to the caller's workspace.
+- `refCheck(refs, { stage_id, assigned_to })` (29–34): returns a message or `null`. Mirrors the write sites' `|| null` semantics: a falsy id means "not provided" and is never validated, so today's optional-field behaviour is unchanged.
+- `ImportRejected` (36–38): `Error` with `status = 400`, so a rejection inside the import transaction rolls back and returns 400 rather than 500.
+
+### Read side — the leak itself
+
+| Lines | Change |
+|---|---|
+| 51–52 (`GET /`) | `LEFT JOIN stages … AND s.workspace_id = c.workspace_id`; `LEFT JOIN users … AND u.workspace_id = c.workspace_id` |
+| 307–308 (`GET /:id`) | same two joins scoped |
+| 319 (`GET /:id` activities) | author join scoped: `AND u.workspace_id = a.workspace_id` |
+
+A foreign id now renders as unassigned / no stage instead of the foreign row. This also closes the leak for **rows poisoned before this part** — validation alone would not have.
+
+### Write side — reject before any write
+
+| Route | Lines | Check |
+|---|---|---|
+| `POST /contacts` | 332–333 | `refCheck` on `stage_id`, `assigned_to` → 400 |
+| `PUT /contacts/:id` | 364–365 | same |
+| `PATCH /contacts/:id/stage` | 377–378 | `refCheck` on `stage_id` → 400 |
+| Import | 114–133 | Inside the transaction, after `SET LOCAL`, **before any write**: `workspaceRefs` once; `defaultAssigneeId` must be a member; `pipelineId` must be the workspace's (120); `stageId` must be in that pipeline and workspace (125); every row's `stage_id` / `assigned_to` via `refCheck`, rejected as `Row N: …` (133). Any failure → `ImportRejected` → `ROLLBACK` → 400. |
+| Import default stage | 157 | `… WHERE pipeline_id=$1 AND workspace_id=$2` (was unscoped) |
+
+`importErrorStatus` (69) maps `ImportRejected` to 400 ahead of the timeout codes.
+
+**Cost:** one extra query per `POST`/`PUT`/`PATCH`; the import adds one prefetch plus at most two ownership lookups — the batching from Part 14 is intact (Part 14's harness still 12/12).
+
+## Verification
+
+`contacts-refs-test.js` — the **real** `routes/contacts.js` against a fake pool that knows which ids workspace 7 owns (stages 10, 11; users 1, 2; pipeline 9; pipeline_stage 55) and treats everything else as another workspace's real row. Baseline first (4/17), then live (**17/17**):
+
+| # | Assertion |
+|---|---|
+| R1, R2 | `GET /` and `GET /:id` emit workspace-scoped joins (contact stage, contact user, activity author) |
+| R3, R4 | `POST` with foreign `stage_id` 99 / `assigned_to` 77 → **400, zero writes** |
+| R5, R6 | `POST` with own ids → 201; with no refs → 201 |
+| R7–R9 | `PUT` and `PATCH /stage` with foreign ids → **400, zero writes** |
+| R10 | `PATCH /stage` with own stage → 200 |
+| R11 | Import, row 2 foreign `stage_id` → **400 "Row 2: stage_id does not belong to this workspace", ROLLBACK issued, zero writes** |
+| R12–R15 | Import with foreign `assigned_to` / `defaultAssigneeId` / `pipelineId` 8 / `stageId` 12 (not in pipeline 9) → 400, zero writes |
+| R16 | Import with all own refs → 201, contact and deal written |
+| R17 | Default-stage lookup carries `AND workspace_id=$2` with the caller's workspace |
+
+Also asserted: `db.js` and `routes/deals.js` unchanged; zero DDL; `node --check`. Regression: Part 14 12/12 and Part 15 7/7 (their fakes taught the new prefetch and ownership queries — lenient there, since those harnesses are not about references), Parts 2, 7, 10–13 and all admin harnesses unchanged.
+
+**Not provable here:** the `UNION ALL` prefetch and the scoped joins against real Postgres — standard SQL. A quick real check: assign a contact to a member, list contacts, confirm the name still renders; then try `PUT` with a `stage_id` from another workspace and confirm the 400.
+
+## Flagged, not done — the next "one by one" candidates
+
+- **`routes/deals.js`** has the same class of gap: `contact_id`, `pipeline_id`, `stage_id`, `assigned_to` on deal writes, and its reads join `contacts`/`users` for names. Untouched here per the earlier instruction; same `workspaceRefs` / scoped-join pattern applies.
+- **Tasks and activities** (`assigned_to`, `created_by` displays; `deal_id`/`contact_id` links) — tasks already validate `deal_id`/`contact_id` on write but not `assigned_to`.
+- **Rows poisoned before this part** are now hidden by the scoped joins but still hold the foreign id. A one-off `UPDATE … SET assigned_to=NULL WHERE assigned_to NOT IN (workspace's users)` cleans them; data change, not code, so left for you.
+
+## Part 16 — files and lines
+
+| File | Lines | What changed |
+|---|---|---|
+| `routes/contacts.js` | 9–38 | `workspaceRefs`, `refCheck`, `ImportRejected` |
+| `routes/contacts.js` | 51–52, 307–308, 319 | Joins scoped to the row's workspace |
+| `routes/contacts.js` | 69 | `ImportRejected` → 400 in `importErrorStatus` |
+| `routes/contacts.js` | 114–133 | Import: prefetch + top-level and per-row reference checks, before any write |
+| `routes/contacts.js` | 157 | Default-stage lookup scoped |
+| `routes/contacts.js` | 332–333, 364–365, 377–378 | `POST`, `PUT`, `PATCH /stage` guards |
+
+`db.js`, `routes/deals.js`, `routes/integrations.js`, `server.js`, `public/*`, `private/*` unchanged since Part 15. Part 16 totals: `routes/contacts.js` +67 / −7.
+
+---
+---
+
+# Part 17 — Import counts and deal ids come from the database, not the input
+
+## The bug (introduced in Part 14)
+
+After each batched write, the import took its counters from the **input chunk** rather than from the write's result: `count += c.length` and `updatedIds.push(x.id)` after the `UPDATE … FROM unnest`, `count += c.length` after the `INSERT`, and `count++` after the legacy single-row `UPDATE` with `rowCount` never read.
+
+The transaction runs at READ COMMITTED, so the prefetch and the later `UPDATE` see different snapshots. A contact deleted in between — or any id the `UPDATE`'s own `AND c.workspace_id=$1` excludes — matches **zero rows**, yet was counted as imported and its id handed to the deals statement. The deals statement itself was safe (it `SELECT`s from `contacts`, so a dead id yields no deal), but the legacy path had no such guard and created a deal for a contact its update never touched.
+
+Reproduced against a pre-edit copy of the route, with a fake pool that returns a row from the prefetch but makes the `UPDATE` match nothing for it — the READ COMMITTED window exactly:
+
+```
+FAIL  K1. prefetch finds 500,501; 501 deleted before UPDATE  — imported=2 dealIds=[500,501]
+FAIL  K3. legacy path: UPDATE matched 0                      — imported=2 legacyDeals=2 deals_created=2
+FAIL  K4. insert count reads RETURNING (fake returns 2 of 3) — imported=3
+```
+
+## The fix — `routes/contacts.js` only, +14 / −6
+
+Principle: every count and every id list is read back from the statement that did the work.
+
+| Lines | Change |
+|---|---|
+| 194–201 | Batch `UPDATE … FROM unnest` gains `RETURNING c.id`; result captured as `matched` |
+| 211–212 | `updatedIds` and `count` come from `matched`, not the input chunk |
+| 233 | Insert counter reads `inserted.length` (the `RETURNING` rows), not `c.length` |
+| 263–270 | Legacy `UPDATE` result captured; `if (upd.rowCount === 0) continue;` — a vanished row is neither counted nor allowed to reach the deal block |
+
+The deals statement is unchanged: `dealIds` now contains only ids the writes actually touched, and `dealsCreated += result.rowCount` already read the result. No new queries. Response shape unchanged — `imported` is now **true** rather than differently shaped. `db.js` and `routes/deals.js` untouched (asserted).
+
+## Verification
+
+`contacts-counts-test.js` — the real route via `require.cache`, baseline first (1/6), then live (**6/6**):
+
+| # | Scenario | Before | After |
+|---|---|---|---|
+| K1 | Prefetch finds 500, 501; 501 deleted before the `UPDATE`; deals for updated | `imported: 2`, deal ids `[500, 501]` | `imported: 1`, `[500]` |
+| K2 | Same, no deals | 2 | 1 |
+| K3 | Legacy path (in-file dup): lookup finds 500, `UPDATE` matches 0 | `imported: 2`, **2 legacy deals** | `imported: 0`, no deal |
+| K4 | Insert count reads `RETURNING` (fake returns 2 of 3) | 3 | 2 |
+| K5 | Nothing deleted: 3 updates + 2 inserts → `imported: 5`, deal ids all five | ok | ok |
+| K6 | Batch `UPDATE` SQL ends with `RETURNING c.id` | — | ok |
+
+Regression: Parts 14 (12/12), 15 (7/7), 16 (17/17) — their fakes now echo ids for `RETURNING c.id` — plus Parts 2, 7, 10–13 and all admin harnesses unchanged. `node --check`.
+
+**Not provable here:** `RETURNING c.id` on `UPDATE … FROM` against real Postgres — standard and supported. A real check: import a small file over existing contacts and confirm `imported` equals the number of rows.
+
+## Flagged, not done
+
+- The prefetch → write window is inherent to READ COMMITTED. This makes the counts honest; it does not close the window. `SELECT … FOR UPDATE` on the prefetch would pin the rows but hold locks for the whole import — not worth it on a shared free-plan DB for a cosmetic race.
+
+## Part 17 — files and lines
+
+| File | Lines | What changed |
+|---|---|---|
+| `routes/contacts.js` | 194–201, 211–212 | Batch update: `RETURNING c.id`; ids and count from the result |
+| `routes/contacts.js` | 233 | Insert count from the result |
+| `routes/contacts.js` | 263–270 | Legacy update: `rowCount` checked; vanished row skipped before the deal block |
+
+Everything else unchanged since Part 16. Part 17 totals: `routes/contacts.js` +14 / −6.
+
+---
+---
+
+# Part 18 — Import response reports dropped rows; `imported` split into `created` / `updated`
+
+## Where the claim stands, and what was actually wrong
+
+The final Part 14 plan and its change-log entry promised exactly `{ imported, deals_created }`, and harness T11 asserted exactly those two keys, so harness and code agreed. The extra fields (`created`, `updated`, `skipped`, `duplicates_in_file`) were in the *first* Part 14 draft, rejected under "response identical" and never implemented.
+
+What was a bug regardless: nameless rows were dropped at the classification loop with **no count returned**. An import that silently discarded 50 rows returned the same body as a clean one. `imported` itself was correct — updates + inserts + legacy rows, matching the old loop.
+
+Baseline against a pre-edit copy of the route:
+
+```
+FAIL  S1. 50 nameless rows + 3 named   — skipped=undefined imported=3
+FAIL  S5. response keys                — deals_created,imported
+```
+
+This part **revises the Part 14 contract at the user's request**: the two original keys keep their names and meaning; three additive keys join them.
+
+## Changes
+
+### `routes/contacts.js`, +12 / −6
+
+| Lines | Change |
+|---|---|
+| 94, 96 | `let skipped = 0;` — the silent `continue` for a nameless (or non-object) row now counts it |
+| 154 | `let created = 0, updated = 0;` beside the existing counters |
+| 215, 237 | Batch update / insert: `updated` / `created` advanced from the same DB results Part 17 made `count` read |
+| 277, 287 | Legacy update / insert: `updated++` / `created++` beside the existing `count++` |
+| 303 | Response: `{ imported, deals_created, created, updated, skipped }` |
+
+`count` is untouched, so `imported` cannot drift; the invariant `imported === created + updated` holds at every site by construction and is asserted.
+
+### `public/js/admin-import.js:247`
+
+After the deal sentence: `if (res.skipped > 0) message += ` ${res.skipped} row(s) skipped (no name).`` — the user-facing half of the fix. An import that drops rows now says so.
+
+`duplicates_in_file` is deliberately **not** added: the legacy path already handles in-file duplicates faithfully, and "extra occurrences" would need its own definition.
+
+## Verification
+
+`contacts-response-test.js` — real route via `require.cache`, Part 17's fake (echoes `RETURNING c.id`, can simulate a vanished row). Baseline 2/6, live **6/6**:
+
+| # | Scenario | Before | After |
+|---|---|---|---|
+| S1 | 50 nameless rows (missing name, whitespace name, `null` row) + 3 named → `skipped: 50`, `imported: 3` | no `skipped` | ok |
+| S2 | Nameless rows never reach the DB (insert array length 3) | ok | ok |
+| S3 | 2 existing + 3 new + a legacy pair both updating → `created: 3`, `updated: 4`, `imported: 7` | no keys | ok |
+| S4 | `imported === created + updated` in S3 and with a vanished row (`updated: 1`, `imported: 1`) | — | ok |
+| S5 | Keys are exactly `imported, deals_created, created, updated, skipped` | two keys | ok |
+| S6 | Client appends the skipped sentence when `res.skipped > 0` | — | ok |
+
+Part 14's T11 was updated from "exactly two keys" to the five — a deliberate contract change, recorded here — and Part 14 is 12/12. Parts 15, 16, 17 read only the two original keys and pass unchanged (7/7, 17/17, 6/6). Parts 2, 7, 10–13 and all admin harnesses unchanged. `node --check` on both files; `db.js` and `routes/deals.js` untouched (asserted).
+
+## Flagged, not done
+
+- The client now knows *how many* rows were skipped, not *which*. Returning row indices is a larger response change.
+
+## Part 18 — files and lines
+
+| File | Lines | What changed |
+|---|---|---|
+| `routes/contacts.js` | 94, 96 | `skipped` counted at the classification drop |
+| `routes/contacts.js` | 154, 215, 237, 277, 287 | `created` / `updated` counters at the four DB-result sites |
+| `routes/contacts.js` | 303 | Three additive response keys |
+| `public/js/admin-import.js` | 247 | Skipped-rows sentence in the completion message |
+
+`db.js`, `routes/deals.js`, `routes/integrations.js`, `server.js`, `private/*` unchanged since Part 17. Part 18 totals: `routes/contacts.js` +12 / −6, `public/js/admin-import.js` +1 / −0.
+
+---
+---
+
+# Part 19 — Legacy in-file-duplicate path vs the Part 16 guard: covered, now pinned
+
+## The concern
+
+The legacy (in-file-duplicate) path still reads the raw `row.stage_id` / `row.assigned_to` at 269 and 283, so it looked as though the Part 16 cross-workspace fix might have been applied to the batch path only.
+
+## What the check found — no route change needed
+
+Part 16's guard is not on either write path. It is a single loop over **every input row**, inside the transaction, before any write (`routes/contacts.js:131–134`):
+
+```js
+for (let i = 0; i < rows.length; i++) {
+  const bad = rows[i] && refCheck(refs, rows[i]);
+  if (bad) throw new ImportRejected(`Row ${i + 1}: ${bad}`);
+}
+```
+
+`rows` is the raw request array, so duplicate-email rows are validated identically to batch rows and up front. Both paths then pass the raw values through the same way — batch `x.row.stage_id||null` (209, 231), legacy `row.stage_id||null` (269, 283) — which is the Part 14 "logic is fixed" pass-through, safe because anything foreign was already rejected. Probed against the live route before touching anything:
+
+```
+legacy row w/ foreign stage_id    -> 400 "Row 2: stage_id does not belong to this workspace"  writes=0
+legacy row w/ foreign assigned_to -> 400 "Row 1: assigned_to is not a member of this workspace" writes=0
+legacy rows w/ own stage 10       -> 201  writes=2
+```
+
+What was genuinely missing was **evidence**: Part 16's harness only ever sent foreign ids on batch rows (R11, R12), so the legacy path's protection was never pinned and could have regressed silently.
+
+## Changes
+
+### `contacts-refs-test.js` (scratchpad) — three assertions, mirroring R11/R12 on the other path
+
+| # | Assertion | Part 16 pre-edit snapshot | Live |
+|---|---|---|---|
+| R18 | Duplicate-email row 2 with foreign `stage_id` → 400 naming the row, `ROLLBACK`, zero writes | **201, 2 writes** | ok |
+| R19 | Duplicate-email row 1 with foreign `assigned_to` → 400, zero writes | **201, 2 writes** | ok |
+| R20 | Duplicate-email rows with own ids → 201, both written by the per-row `INSERT … VALUES` (proves they took the legacy path) | ok | ok |
+
+Run first against Part 16's pre-edit snapshot: R18 and R19 fail there with a foreign id written, which is the proof the assertions detect an unprotected legacy path rather than passing vacuously. Live: **20/20**.
+
+### `routes/contacts.js:257–259` — comment only
+
+The legacy loop's header now states that its rows were validated by the reference loop above alongside the batch rows, so the raw reads below are safe. Zero behaviour change; exists so the next reader does not have to re-derive it.
+
+### Deliberately not done
+
+A shared `writeValues(row)` helper for structural symmetry between the paths. The two intentionally differ on `assigned_to` (update: `row.assigned_to||req.userId`; insert: `defaultAssigneeId||req.userId`, both preserved from the original loop), the values are already validated, and the refactor would be churn under the logic-is-fixed constraint.
+
+## Verification
+
+Refs harness 20/20 live, R18/R19 failing at the Part 16 baseline as required. `node --check routes/contacts.js`. `db.js` and `routes/deals.js` unchanged (asserted). Parts 14, 15, 17, 18 and everything earlier unchanged.
+
+## Part 19 — files and lines
+
+| File | Lines | What changed |
+|---|---|---|
+| `routes/contacts.js` | 257–259 | Comment on the legacy loop; no logic |
+| `contacts-refs-test.js` (scratchpad) | R18–R20 | Legacy-path coverage of the Part 16 guard |
+
+Everything else unchanged since Part 18. Part 19 totals: `routes/contacts.js` +3 / −1, comment only.
+
+---
+---
+
+# Part 20 — SR-1: analytics SQL injection parameterised
+
+## The vulnerability
+
+`routes/analytics.js` built the deal "value" SQL fragment by raw interpolation of a stored config value:
+```js
+valExpr = `(custom_data->>'${valueField}')::numeric`;   // and a d.-prefixed twin
+```
+`value_field` is written by any authenticated member via `PATCH /api/analytics/config` (no validation, no owner check) and interpolated at four query sites in `/summary` and `/trend`. It was the only user-controlled value in the codebase reaching SQL unparameterised. The queries bind a parameter array so they are single-statement (no `DROP`), but a payload such as `x')::numeric,(SELECT …)--` enables **error-based extraction** — coercing a subquery to `numeric` raises an error carrying the value — a cross-workspace read of any table, including other workspaces' password hashes. First reported in `CODE_AUDIT.md` as C1 / SR-1.
+
+Baseline (pre-edit copy, fake pool recording every `{sql, params}`):
+```
+FAIL A1  payload "x')::numeric,(SELECT 1)--" appears in query TEXT
+FAIL A2  custom field interpolated as ->>'revenue', key not bound
+FAIL A3  PATCH /config accepts any value_field (all 200)
+```
+
+## The fix — `routes/analytics.js` only
+
+### One resolver (`:13`)
+```js
+function valueSql(valueField, { prefix = '', paramIndex } = {}) {
+  const col = `${prefix}custom_data`;
+  if (valueField === 'value') return { expr: `${prefix}value`, params: [] };
+  if (valueField) return {
+    expr: `CASE WHEN jsonb_typeof(${col} -> $${paramIndex}) = 'number' `
+        + `THEN (${col} ->> $${paramIndex})::numeric ELSE NULL END`,
+    params: [valueField],
+  };
+  return { expr: 'NULL::numeric', params: [] };
+}
+```
+The field key is **bound**, never interpolated (Postgres accepts a text bind on `->`/`->>`), and the `::numeric` cast runs only when the JSON value is actually a number, so a text field yields NULL instead of the 500 it throws today.
+
+### Four call sites, each binding the key as `$2` (every query already binds only `wid=$1`)
+- `:43` summary deals-by-stage `SUM`
+- `:64` summary `AVG` + `WHERE … IS NOT NULL` (the fragment appears twice, both read `$2`, one param)
+- `:89` summary by-pipeline `SUM` (`prefix: 'd.'`)
+- `:190` trend value series `SUM`
+
+Each interpolates `v.expr` and passes `[wid, ...v.params]`. The three inline `valExpr`/`pipelineValExpr` definitions are gone; **zero** `custom_data->>'…'` interpolation sites remain (asserted by grep).
+
+### Write-side allowlist (`:218`)
+`PATCH /config` now rejects a `value_field` that is neither `'value'` nor a `field_key` in this workspace's `deal_fields`, with 400. Defense in depth — the parameterisation is the real protection, so any bad-config row already stored is inert (it binds as a key that matches no JSON path → NULL).
+
+**Behaviour note:** the `jsonb_typeof = 'number'` guard returns NULL for a value stored as a JSON *string* (`"1000"`), where the old bare cast would have parsed it. Correct per the fix and the intended cure for the text-field 500, but if deal custom numerics are stored as strings, value sums read 0 — confirm against real data.
+
+## Verification
+
+`analytics-sqli-test.js` — real route via a `require.cache` fake pool that records `{sql, params}`; the injection enters through the persisted config exactly as in production. Baseline 2/5, live **5/5**:
+
+| # | Assertion | Before | After |
+|---|---|---|---|
+| A1 | Payload never in query text; travels as a bound param | in text | bound param |
+| A2 | Custom field → `CASE WHEN jsonb_typeof(… -> $2) = 'number'`, key bound, no `->>'key'` literal | literal | 4 guarded queries, key bound |
+| A3 | `PATCH /config`: bad field → 400; `value` / valid key / null → 200 | all 200 | 400 / 200 / 200 / 200 |
+| A4 | `/summary` + `/trend` response key sets unchanged; builtin `value` still works | ok | ok |
+| A5 | No unguarded `(custom_data ->> $2)::numeric` anywhere | (n/a) | ok |
+
+**Not runnable here:** that a *text* deal field returns 200 with a null value rather than a 500 (also broken today) — asserted structurally via the guarded CASE; confirm against the live DB.
+
+Regression: full suite green — Parts 14–19 (12/12, 7/7, 20/20, 6/6, 6/6), Parts 7/10/13, admin 26/26. `node --check routes/analytics.js`. `db.js` unchanged (asserted); response shapes unchanged (A4).
+
+## Part 20 — files and lines
+
+| File | Lines | What changed |
+|---|---|---|
+| `routes/analytics.js` | 13–24 | `valueSql` resolver — bound key, guarded cast |
+| `routes/analytics.js` | 43, 64, 89, 190 | Four value-expression sites use the resolver + `[wid, ...params]` |
+| `routes/analytics.js` | 218–223 | `PATCH /config` allowlist against `deal_fields` |
+
+`db.js`, `routes/contacts.js`, `routes/deals.js`, `server.js`, `public/*`, `private/*` unchanged since Part 19. Part 20 totals: `routes/analytics.js` +34 / −21.
+
+---
+
+## Part 21 — Analytics page TypeError (stale element id) + SR-1 follow-ups
+
+**Reported:** after Part 20 the analytics page failed with
+`Unhandled Promise Rejection: TypeError: null is not an object (evaluating 'section.style')` at `switchPage (auth.js:385)`.
+
+### Root cause — pre-existing, not Part 20
+
+`auth.js:385` is only the `await loadAnalytics()` frame. The throw was in `public/js/analytics.js` `renderWinLoss`:
+
+```js
+const section = document.getElementById('analytics-winloss-section');   // no such id
+const total   = d.won_deals + d.lost_deals + d.open_deals;
+section.style.display = '';                                             // null.style
+```
+
+`index.html:508` has `id="analytics-sec-winloss"`. `git log -S` history: `analytics-winloss-section` was the id in **740e8a1** ("add analytics"); **330d40b** ("fixe analytics customization") renamed the markup and `renderWinLoss` was never updated. The line runs unconditionally after every successful `/summary` fetch, so the page has thrown on every visit since that rename. That it reached the render at all also confirms the Part 20 parameterised `/summary` returned 200 against real Postgres. A sweep of every `getElementById('analytics-…')` in the client (12 ids) found no other stale id — asserted as W4 below.
+
+### Two SR-1 follow-ups carried in the same part
+
+1. **String-stored numerics (regression from Part 20).** The deal form writes custom values as `el.value` (`public/js/modals.js:49`, `:1095`), i.e. JSON *strings*. Part 20's `jsonb_typeof(...) = 'number'` guard therefore mapped every custom numeric to NULL — value sums 0, `avg_value` null. The resolver now has a second branch: `jsonb_typeof = 'string'` **and** the text matches `'^\s*-?\d+(\.\d+)?\s*$'` → cast; anything else → NULL. A free-text field still cannot reach a bare `::numeric` (no 500).
+2. **Typed bind.** The key is bound as `$n::text` at both `->` and `->>` rather than relying on unknown-type resolution.
+
+Still one resolver, the same four call sites, the key bound and never interpolated. Response shapes unchanged. `db.js` untouched.
+
+### What changed
+
+`public/js/analytics.js` (`renderWinLoss`):
+```js
+const section = document.getElementById('analytics-sec-winloss');
+if (!section) return;     // markup missing: skip the section, don't throw
+```
+The bar and legend live inside that section, so the early return also covers the two `innerHTML` writes below it.
+
+`routes/analytics.js` (`valueSql`) — emitted expression for a custom field:
+```sql
+CASE WHEN jsonb_typeof(custom_data -> $2::text) = 'number' THEN (custom_data ->> $2::text)::numeric
+     WHEN jsonb_typeof(custom_data -> $2::text) = 'string'
+      AND (custom_data ->> $2::text) ~ '^\s*-?\d+(\.\d+)?\s*$' THEN (custom_data ->> $2::text)::numeric
+     ELSE NULL END
+```
+
+### Verification
+
+**Client — `analytics-winloss-test.js`** (jsdom, the real `public/js/analytics.js`, DOM shaped like `index.html`). Baseline is the file at git HEAD (it was unmodified before this part).
+
+```
+BASELINE (git HEAD)                                      LIVE
+  FAIL W1 zero deals -> no throw        TypeError …'style'   ok  legend "No deal outcomes yet"
+  FAIL W2 4 deals -> 3 segments, 50.0%  TypeError …'style'   ok  rendered
+  FAIL W3 section absent -> no throw    TypeError …'style'   ok  skipped cleanly
+  ok   W4 every analytics-* id exists in index.html (12)     ok
+  1/4                                                        4/4
+```
+
+**Server — `analytics-sqli-test.js` + new A6.** Baseline is a mirror of the Part 20 file (`analytics-p21-baseline/`). A2/A5 regexes were relaxed to `\$2(::text)?\)` — a harness literal-match update, not a logic change.
+
+```
+BASELINE (Part 20 mirror)                                LIVE
+  ok  A1–A5 (payload only in params, allowlist 400, shapes, no bare cast)   ok  A1–A5
+  FAIL A6 bind is $2::text + 'string' branch  typed=false stringBranch=false  ok  typed=true stringBranch=true
+  5/6                                                       6/6
+```
+
+**Regression sweep** (all scratchpad harnesses): admin-console-path 26/26, admin-invites-console 12/12, admin-logout 5/5, admin-session 7/7, analytics-sqli 6/6, analytics-winloss 4/4, chat-ack-client 10/10, chat-ack-server 14/14, chat-http-limit 17/17, chat-import-batch 12/12, chat-import-lowercase 7/7, chat-ip-backstop 10/10, chat-quota-order 10/10, chat-ratelimit 10/10, chat-spam 8/8, contacts-counts 6/6, contacts-refs 20/20, contacts-response 6/6, type-confusion 9/9. `ratelimit-bypass-test.js` shows its Part 2 control columns (A1 `trust proxy = 1`, B1 "WITHOUT global backstop") failing as designed; `server.js` is unchanged in this part. `chat-client-ratelimit-test.js` / `chat-pending-invariant-test.js` are the harnesses retired in Part 13 (fake socket predates acks) — unchanged status.
+
+`node --check` passes on both files. `git diff --quiet db.js` and `routes/deals.js`: untouched.
+
+**Not runnable here (real Postgres):** with a custom `number` deal field whose values are stored as strings, `/summary` should now return non-zero `pipeline_value`/`won_value` and a numeric `avg_value`; with a text field, 200 with nulls; `/trend` `value_trend` non-zero.
+
+### Files and lines
+
+| File | Lines | Change |
+|---|---|---|
+| `public/js/analytics.js` | 205–209 | `renderWinLoss`: id `analytics-winloss-section` → `analytics-sec-winloss`; `if (!section) return;` guard |
+| `routes/analytics.js` | 8–15 | Resolver comment: typed bind, string-stored values |
+| `routes/analytics.js` | 18 | `const key = \`$${paramIndex}::text\`` |
+| `routes/analytics.js` | 21–23 | CASE gains the `'string'` + numeric-regex branch; all binds via `key` |
+
+`db.js`, `routes/contacts.js`, `routes/deals.js`, `server.js`, `private/*`, `public/index.html` unchanged since Part 20. Part 21 totals: `routes/analytics.js` +10 / −5 (vs the Part 20 file); `public/js/analytics.js` +5 / −1.
+
+---
+
+## Part 22 — SR-3 / C2: deals leak and accept cross-workspace ids
+
+**Hole.** `routes/deals.js` joined `contacts` (as contact and as supplier), `pipeline_stages` and `users` on raw ids with no workspace check (list `:30–33`, detail `:50–53`), and POST / PUT / `PATCH /:id/stage` wrote `contact_id`, `supplier_id`, `pipeline_id`, `stage_id`, `assigned_to` straight from the body. Foreign keys are global, so a member could point a deal at another workspace's contact and read that contact's name, email and phone back from their own deal list (likewise another workspace's stage name/colour and user name). Two fixes: scope the joins (closes the read), validate the ids before any write (closes the write).
+
+### Design
+
+- **Reuse, not a second copy.** Part 16's `workspaceRefs`/`refCheck` moved from `routes/contacts.js:15–34` into a new `utils/workspace-refs.js`; both routes import from there. `workspaceRefs` (whole-workspace prefetch of contact `stages` + `users`, right for the import loop) is byte-for-byte the same SQL, so the Part 16 harness's literal match is unchanged. `ImportRejected` is import-specific and stays in `contacts.js`.
+- **`dealRefs(q, workspaceId, ids)`** — new, for a single deal write: one round trip bound only to the ids actually supplied (`WHERE workspace_id=$1 AND id = ANY($n::int[])` over `contacts`, `pipelines`, `pipeline_stages`, `users`), so saving a deal never prefetches every contact in the workspace (Supabase free plan). Skipped entirely when no id is supplied. A non-integer id is not looked up, so it is rejected with 400 instead of the INSERT failing with 500.
+- **`refCheck(refs, ids)`** — generalised: each of `contact_id`, `supplier_id`, `pipeline_id`, `stage_id`, `assigned_to` is checked only when the field is truthy **and** `refs` carries the matching set. The contacts path passes `{stages, members}` and so validates exactly what it did before, with the same two messages; the import loop passes whole rows and any deal-ish keys on them are ignored because the contacts refs carry no such set.
+- **Joins.** `pipeline_stages` has its own `workspace_id` column, set by every insert site (`routes/pipelines.js:46,96`, `routes/auth.js:254`, `routes/workspace.js:78`), so the stage join scopes on `ps.workspace_id = d.workspace_id` directly rather than through `pipelines` — same guarantee, no fifth join on the hot list query. `users.workspace_id` exists (one user, one workspace), so `assigned_to` scopes directly too. Column lists unchanged → a foreign id now yields NULL name/email/phone instead of the leak.
+- **Writes.** POST and PUT validate all five ids before the INSERT/UPDATE; `PATCH /:id/stage` validates `stage_id` — the same hole in one more place, listed here so it is not a silent widening. The POST default assignee (`req.userId`) comes from the session, not the body, and is not validated. PUT order is validate → UPDATE → existing 404, so a foreign id on a nonexistent deal gets 400; nothing is written either way.
+- **Not touched:** the `deal_objects` endpoints (`objects` cross-workspace is M2, its own part), urgency, delete, `db.js`, response shapes.
+
+### Verification — `deals-refs-test.js`
+
+Real `routes/deals.js` behind a fake pool recording every `{sql, params}`; fixture: workspace 7 owns contact 10 / pipeline 20 / stage 30 / user 1, workspace 8 owns 11 / 21 / 31 / 2; caller is user 1 in workspace 7. Baseline is a mirror of the pre-edit `deals.js` + `contacts.js` (`deals-baseline/`, no `utils/workspace-refs.js`).
+
+```
+BASELINE (pre-edit)                                                      LIVE
+  FAIL D1 GET /   all four joins scoped               scoped=[]           ok  scoped=[c,s,ps,u]
+  FAIL D2 GET /:id all four joins scoped              scoped=[]           ok  scoped=[c,s,ps,u]
+  FAIL D3 POST foreign contact_id -> 400, no INSERT   201, 1 write        ok  400 "contact_id does not belong to this workspace", 0 writes
+  FAIL D4 foreign supplier/pipeline/stage/assignee    7/7 accepted        ok  7/7 rejected, 0 writes
+          on POST, PUT, PATCH /stage -> 400           (201/200, 1 write each)
+  ok   D5 own ids -> 201/200; INSERT/UPDATE params byte-identical;        ok
+          omitted ids still written as null
+  FAIL D6 one lookup bound to supplied ids only       no lookup           ok  [7,[],[20],[],[]]; none when nothing supplied
+          ([7,[],[20],[],[]]); skipped when none
+  ok   D7 list rows / detail {...deal, objects} / {id} / {success:true}   ok
+  2/7                                                                     7/7
+```
+
+D5 and D7 pass on both sides by design: they are the parity assertions (same params, same shapes).
+
+**Regression:** `contacts-refs-test.js` 20/20 with the moved helpers (query text and messages unchanged). Full sweep: admin-console-path 26/26, admin-invites-console 12/12, admin-logout 5/5, admin-session 7/7, analytics-sqli 6/6, analytics-winloss 4/4, chat-ack-client 10/10, chat-ack-server 14/14, chat-http-limit 17/17, chat-import-batch 12/12, chat-import-lowercase 7/7, chat-ip-backstop 10/10, chat-quota-order 10/10, chat-ratelimit 10/10, chat-spam 8/8, contacts-counts 6/6, contacts-refs 20/20, contacts-response 6/6, deals-refs 7/7, type-confusion 9/9. `ratelimit-bypass-test.js` A1/B1 are the Part 2 control columns; `chat-client-ratelimit` / `chat-pending-invariant` are the harnesses retired in Part 13 — both unchanged status. `node --check` passes on the three files. `git diff --quiet db.js`: untouched.
+
+**Not runnable here (real Postgres):** a deal already pointing at another workspace's contact now lists with `contact_name/contact_email/contact_phone` NULL; editing it to keep that id returns 400.
+
+### Files and lines
+
+| File | Lines | Change |
+|---|---|---|
+| `utils/workspace-refs.js` | 1–70 (new) | `workspaceRefs` (moved verbatim, 12–22), `dealRefs` (29–52), `REF_FIELDS` + generalised `refCheck` (55–68) |
+| `routes/contacts.js` | 6–8 | Inline helpers (old 9–34) replaced by `require('../utils/workspace-refs')` |
+| `routes/deals.js` | 6–9 | Import `dealRefs`, `refCheck` |
+| `routes/deals.js` | 13–16 | `foreignRef(workspaceId, ids)` — lookup + check, returns message or null |
+| `routes/deals.js` | 39–42, 59–62 | List and detail joins: `AND <alias>.workspace_id = d.workspace_id` on `c`, `s`, `ps`, `u` |
+| `routes/deals.js` | 79–80 | POST: 400 on a foreign id before the INSERT |
+| `routes/deals.js` | 100–101 | PUT: 400 on a foreign id before the UPDATE |
+| `routes/deals.js` | 118–119 | `PATCH /:id/stage`: 400 on a foreign `stage_id` |
+
+`db.js`, `server.js`, `routes/analytics.js`, `public/*`, `private/*` unchanged since Part 21. Part 22 totals: `routes/deals.js` +23 / −8; `routes/contacts.js` +3 / −27; `utils/workspace-refs.js` +70 (new).
+
+---
+
+## Part 23 — Analytics page: sections destroyed on every load (corrects Part 21's diagnosis)
+
+**Reported:** after Part 21, `Unhandled Promise Rejection: TypeError: null is not an object (evaluating 'el.innerHTML = d.by_pipeline.map(…'` at `switchPage (auth.js:385)`.
+
+### Root cause
+
+`public/js/analytics.js` `loadAnalytics()` began with
+
+```js
+const mainSections = document.getElementById('analytics-main-sections');
+if (mainSections) mainSections.innerHTML = '';     // "Clear UI immediately to prevent showing stale data"
+```
+
+added in **6d197a7** ("fix data cache", 2026-07-20). The four analytics sections (`analytics-sec-stats`, `-winloss`, `-pipeline`, `-trends`) are static children of that container in `index.html:500–529`. Emptying it **destroys them**. `renderAllSections` (from **330d40b**, 2026-05-25) then reorders by `getElementById('analytics-sec-…')` + `appendChild`, finds nothing, appends nothing, and every later lookup inside those sections returns null. `renderAnalyticsCards` guarded (`if (!el) return`), `renderWinLoss` threw, `renderByPipeline` threw.
+
+**Correction to Part 21.** The stale id in `renderWinLoss` was real (git shows the rename), but it was not the whole story: with the correct id the node was still gone, because this line had already destroyed it. Part 21's `if (!section) return` guard therefore let the page proceed to the *next* unguarded lookup, which is this report. Part 21's inference that "the render only runs after a successful fetch, so `/summary` returned 200" still holds. The clearing was intended to avoid showing stale numbers during a fetch; that need is met anyway because every render overwrites the dynamic content when the new data lands.
+
+### What changed — `public/js/analytics.js` only
+
+1. **Removed the clearing** (old `:31–32`). Sections are moved by `appendChild`, which relocates an existing node and never duplicates, so the reorder is idempotent and the markup survives.
+2. **`renderByPipeline`**: `if (!el) return;` — same degrade-don't-throw guard the other renders have.
+3. **`initSectionDragDrop`**: bind once per section (`data-dnd-bound`). Section nodes now persist across visits; a second set of listeners would apply every drop twice (`splice` twice → the move reverts). Card and trend listeners are unaffected: those nodes are rebuilt via `innerHTML` on every render.
+
+### Verification — `analytics-sections-test.js`
+
+jsdom, the **real `index.html`** (17 script tags not executed) and the real `analytics.js`; `api.get` stubbed per URL with a summary fixture (1 pipeline, 2/1/1 won/lost/open, `value_field` set) and a 7-point trend; `loadAnalytics()` awaited, then a tick to catch the un-awaited `loadTrend`, with `unhandledRejection` captured. Baseline is the Part 21 file (`analytics-sections-baseline.js`).
+
+```
+BASELINE (Part 21 file)                                                LIVE
+  FAIL S1 loadAnalytics() resolves, no unhandled rejection   TypeError    ok  clean
+  FAIL S2 4 sections present; 1 pipeline row, 3 wl segments, sections=[]  ok  [stats,winloss,pipeline,trends]
+          6 stat cards rendered                              0/0/0            rows=1 segments=3 cards=6
+  FAIL S3 second load: still 4 sections, re-rendered         TypeError    ok  clean, 4 sections
+  FAIL S4 stored section_order -> DOM order                  TypeError    ok  [trends,pipeline,stats,winloss]
+  FAIL S5 after 2 loads, one drop stats→winloss moves once   sections     ok  winloss,stats,pipeline,trends
+          (listeners bound once)                             missing
+  0/5                                                                     5/5
+```
+
+S5's assertion reads the DOM order after the drop (a harness change from an initial `sectionOrder` read, which jsdom's eval scope does not expose — a harness fix, not a code change). Part 21's `analytics-winloss-test.js` still 4/4. Full sweep: admin-console-path 26/26, admin-invites-console 12/12, admin-logout 5/5, admin-session 7/7, analytics-sections 5/5, analytics-sqli 6/6, analytics-winloss 4/4, chat-ack-client 10/10, chat-ack-server 14/14, chat-http-limit 17/17, chat-import-batch 12/12, chat-import-lowercase 7/7, chat-ip-backstop 10/10, chat-quota-order 10/10, chat-ratelimit 10/10, chat-spam 8/8, contacts-counts 6/6, contacts-refs 20/20, contacts-response 6/6, deals-refs 7/7, type-confusion 9/9; `ratelimit-bypass` A1/B1 are the Part 2 control columns and the two Part 13-retired chat harnesses are unchanged. `node --check` passes. `db.js` untouched.
+
+**Not runnable here:** in the browser, the analytics page should now show all four sections on first visit and after navigating away and back, and section drag-reorder should move a section exactly once per drop.
+
+### Files and lines
+
+| File | Lines | Change |
+|---|---|---|
+| `public/js/analytics.js` | 31–35 | Clearing of `#analytics-main-sections` removed; comment explains why |
+| `public/js/analytics.js` | 161–162 | `initSectionDragDrop`: bind listeners once per section (`dataset.dndBound`) |
+| `public/js/analytics.js` | 245 | `renderByPipeline`: `if (!el) return;` |
+
+`db.js`, `server.js`, `routes/*`, `private/*`, `public/index.html` unchanged since Part 22. Part 23 totals: `public/js/analytics.js` +9 / −3 (vs the Part 21 file).
+
+---
+
+## Part 24 — M2: object link endpoints detach/attach without ownership checks
+
+**Hole.** In `routes/objects.js`, `DELETE /:id/deals/:dealId` (old `:104`) and `DELETE /:id/contacts/:contactId` (old `:139`) deleted link rows by the two ids alone, and `POST /:id/contacts` (old `:127`) inserted by the two ids alone. None checked that the object in the URL belongs to the caller's workspace, nor that the linked deal/contact does, so a member could detach or attach another workspace's links by guessing ids. `POST /:id/deals` (old `:87`) checked the **deal's** workspace but not the **object's** — a member could still link their own deal to a foreign object. Foreign keys are global, so every one of these ids can be another workspace's real row.
+
+### Design
+
+One helper, `ownsLink(workspaceId, objectId, table, linkedId)`, does the check the request asked for in a single round trip (Supabase free plan):
+
+```sql
+SELECT EXISTS (SELECT 1 FROM objects   WHERE id=$1 AND workspace_id=$3) AS obj,
+       EXISTS (SELECT 1 FROM <table>   WHERE id=$2 AND workspace_id=$3) AS linked
+```
+
+`<table>` is an internal literal (`'deals'` | `'contacts'`) chosen by the route, never request input. All four link endpoints call it before their write and return **404** — `Not found` when the object is foreign, `Deal not found` / `Contact not found` when the linked row is — so nothing is inserted or deleted on a mismatch. The deal POST keeps its `Deal not found` message; the object-side check it lacked is added. Write SQL, params and `{success:true}` responses are unchanged. Body validation (`deal_id`/`contact_id required` → 400) still runs first. `db.js` untouched.
+
+### Verification — `objects-links-test.js`
+
+Real `routes/objects.js` behind a fake pool recording every `{sql, params}`; fixture: workspace 7 owns object 40 / deal 50 / contact 60, workspace 8 owns 41 / 51 / 61; caller is workspace 7. Baseline is a mirror of the pre-edit file (`objects-baseline/`).
+
+```
+BASELINE (pre-edit)                                                          LIVE
+  FAIL O1 DELETE /40/deals/51      foreign deal on own object      200, 1 write  ok  404 Deal not found, 0 writes
+  FAIL O2 DELETE /41/deals/50      foreign object, own deal        200, 1 write  ok  404 Not found
+  FAIL O3 DELETE /40/contacts/61   foreign contact on own object   200, 1 write  ok  404 Contact not found
+  FAIL O4 DELETE /41/contacts/60   foreign object, own contact     200, 1 write  ok  404 Not found
+  FAIL O5 POST /40/contacts {61}   foreign contact                 201, 1 write  ok  404 Contact not found
+  FAIL O6 POST /41/contacts {60}   link to foreign object          201, 1 write  ok  404 Not found
+  FAIL O7 POST /41/deals {50}      own deal to foreign object      201, 1 write  ok  404 Not found
+  ok   O8 POST /40/deals {51}      foreign deal (already handled)  404           ok  404 Deal not found
+  ok   O9 own/own on all four: 201/200, write SQL+params and {success:true} unchanged   ok  4/4
+  ok   O10 missing deal_id / contact_id -> 400 before any query                          ok
+  3/10                                                                          10/10
+```
+
+O8–O10 pass on both sides by design: O8 is the one case the old code already handled, O9/O10 are the parity assertions.
+
+**Regression sweep:** admin-console-path 26/26, admin-invites-console 12/12, admin-logout 5/5, admin-session 7/7, analytics-sections 5/5, analytics-sqli 6/6, analytics-winloss 4/4, chat-ack-client 10/10, chat-ack-server 14/14, chat-http-limit 17/17, chat-import-batch 12/12, chat-import-lowercase 7/7, chat-ip-backstop 10/10, chat-quota-order 10/10, chat-ratelimit 10/10, chat-spam 8/8, contacts-counts 6/6, contacts-refs 20/20, contacts-response 6/6, deals-refs 7/7, objects-links 10/10, type-confusion 9/9; `ratelimit-bypass` A1/B1 are the Part 2 control columns and the two Part 13-retired chat harnesses are unchanged. `node --check` passes. `git diff --quiet db.js`: untouched.
+
+**Not runnable here (real Postgres):** `EXISTS` returns a real boolean; a non-integer id in the URL still surfaces as the pre-existing 500 that every `/:id` route in this file has (out of scope here).
+
+### Files and lines
+
+| File | Lines | Change |
+|---|---|---|
+| `routes/objects.js` | 8–19 | `ownsLink(workspaceId, objectId, table, linkedId)` — one-query two-sided ownership probe |
+| `routes/objects.js` | 104–106 | `POST /:id/deals`: object check added (deal check kept, now via the helper) |
+| `routes/objects.js` | 117–119 | `DELETE /:id/deals/:dealId`: 404 on either side before the DELETE |
+| `routes/objects.js` | 145–147 | `POST /:id/contacts`: 404 on either side before the INSERT |
+| `routes/objects.js` | 158–160 | `DELETE /:id/contacts/:contactId`: 404 on either side before the DELETE |
+
+`db.js`, `server.js`, other `routes/*`, `public/*`, `private/*` unchanged since Part 23. Part 24 totals: `routes/objects.js` +25 / −5.
+
+---
+
+## Part 25 — C3b / S-02: stored XSS in notes and comments
+
+**Hole.** Notes are HTML from a `contenteditable` editor, stored verbatim (`routes/activities.js` POST/PATCH, `routes/activity-comments.js` POST) and put back with `innerHTML` in `public/js/modals.js` (`:373`, `:419` edit modals; `:823` deal timeline; `:937` inline editor). A planted `<img onerror>` runs in every colleague's session that opens the contact. No sanitizer existed; `esc()` is used for comments and chat but not notes, because notes legitimately carry formatting. Two more sinks of the same class: `truncateActivityPreview` (`modals.js:222`) and calendar's `stripHtml` (`calendar.js:82`) both did `div.innerHTML = html` on a *detached* element — `<img onerror>` still loads and fires there.
+
+### Dependency added
+
+**`sanitize-html@2.17.7`** — `package.json` `"sanitize-html": "^2.17.7"`, `package-lock.json` +232 lines. Transitive: `htmlparser2`, `postcss`, `deepmerge`, `launder`, `parse-srcset`, `is-plain-object`, `escape-string-regexp`. **No jsdom** (that was the reason to avoid isomorphic-dompurify). Engines: **node ≥ 22.12.0** — local is 22.19.0; the host must be at least 22.12.
+
+### The two decisions asked for
+
+1. **Rows saved before the fix are not rewritten.** Per your note that existing notes are already HTML and must stay, there is no SQL cleanup. Instead the client sanitises again at render time with the same allow-list: every place that puts note HTML into the page passes it through `sanitizeNoteHtml()` first, so an old poisoned row is neutralised the moment it is displayed and keeps its bold/lists/links. Write-side sanitising stops new poison from being stored at all.
+2. **CSP.** `server.js:44–46` enables helmet's CSP only when `NODE_ENV === 'production'`. Nothing in the repo sets it: `.env` has no `NODE_ENV` line, `.env.example` none, the start script is `node --env-file=.env server.js`, and there are no deploy manifests. I cannot see the host. **Unless the host's own environment sets `NODE_ENV=production`, there is no CSP today.** Setting it there (or in `.env`) is a config change on your side; nothing in this part changes `server.js`.
+
+### Design
+
+**Server — `utils/sanitize-note.js` (new).** `sanitizeNote(html)` = sanitize-html with `allowedTags: b, i, u, strong, em, a, br, p, ul, ol, li`, `allowedAttributes: { a: ['href'] }`, `allowedSchemes: http, https, mailto`, `allowProtocolRelative: false`, and `transformTags: { div: 'p' }`. The last is deliberate: the editor emits `<div>` for every Enter (`_countNoteLines` counts `</div>` as a line break); discarding `div` would keep the text but merge every line of every note into one paragraph. Mapping it onto the allowed `<p>` keeps line structure without widening the allow-list. Everything else — `img`, `script`, `style`, `span`, event-handler attributes, `javascript:` hrefs — is dropped; text inside `script`/`style` goes with the tag. Known cosmetic effect: Safari's bold is `<span style="font-weight:bold">`, which becomes plain text.
+
+- `routes/activities.js` POST: content sanitised before both the INSERT and mention detection; a note that sanitises to nothing (e.g. only a `<script>`) is the existing 400 `Content required`. PATCH: absent stays absent (COALESCE keeps the old note); a supplied value is sanitised; the pre-existing behaviour for an empty string is unchanged.
+- `routes/activity-comments.js` POST: same, sanitised once, used by the INSERT and the mention pass. Comments already render through `esc()`; this is defence in depth as requested.
+- Mention detection (`activities.js:11`, `activity-comments.js:10`) is untouched; it strips tags before matching, and sanitising first only removes tags it would have stripped anyway (X5 proves it still fires).
+
+**Client — `public/js/core.js` `sanitizeNoteHtml(html)`** next to `esc()`. DOMParser-based — the parsed document is inert, nothing loads or runs while untrusted markup is parsed — same allow-list; disallowed elements are unwrapped (children kept) except `script`, `style`, `template`, `iframe`, `object`, `embed`, `noscript`, removed whole; `div` → `p`; every attribute dropped except `a[href]` with an `http(s):`/`mailto:` scheme; SVG/MathML tag names are upper-cased before the check so `<svg><script>` cannot slip past. Self-contained (its sets live inside the function) so it does not depend on load order. Used at the four `modals.js` sites and in `truncateActivityPreview`; calendar's `stripHtml` parses with DOMParser. The editor save paths (`innerHTML.trim()`) are unchanged — the server sanitises what they send.
+
+Not touched: `db.js`, response shapes, the editor toolbar, `server.js`.
+
+### Verification — the exact checks requested
+
+**Posting the payload** `<p>Hi <b>bold</b> <a href="https://ok.test">ok</a> <a href="javascript:alert(1)">bad</a><img src=x onerror=alert(1)><script>alert(1)</script></p>` — the value bound to the INSERT/UPDATE is:
+
+```
+<p>Hi <b>bold</b> <a href="https://ok.test">ok</a> <a>bad</a></p>
+```
+
+`onerror`, `<img>`, `<script>` and the `javascript:` href are gone; bold, the https link and the paragraph survive. `<img src=x onerror=alert(1)>` alone becomes `""` → 400. `<div>line1</div><div>line2</div>` → `<p>line1</p><p>line2</p>`.
+
+**`notes-xss-test.js`** (real routes, fake pool records `{sql, params}`; baseline mirror `notes-baseline/`):
+```
+BASELINE                                                        LIVE
+  FAIL X1 POST note stored clean, formatting kept   raw stored    ok
+  FAIL X2 PATCH note                                 raw stored    ok
+  FAIL X3 POST comment                               raw stored    ok
+  FAIL X4 <div> lines -> <p>                         raw           ok  <p>line1</p><p>line2</p>
+  ok   X5 @mention in <b>@justin</b> still notifies user 2         ok
+  FAIL X6 script-only note -> 400, nothing inserted  201, stored   ok  400
+  ok   X7 shapes {id} / {success,id} / comment row                 ok
+  2/7                                                              7/7
+```
+
+**Re-rendering a note saved before the fix — `note-render-xss-test.js`** (jsdom with scripts enabled, real `core.js`; old row = `<b>bold</b><img src=x onerror="window.pwned=2"><a href="javascript:window.pwned=3">link</a><script>window.pwned=1</script><div>line</div>`; the img `error` event is dispatched by hand, as a browser does for `src=x`):
+```
+BASELINE (pre-edit client)                                                   LIVE
+  ok   R1 control: raw innerHTML of the old row runs onerror -> pwned=2      ok  (the sink is real)
+  FAIL R2 sanitizeNoteHtml(old row): nothing runs, <b>/link text/line kept   ok  out="<b>bold</b><a>link</a><p>line</p>", pwned undefined
+  FAIL R3 modals.js 0 raw ${…content} sites / 4 wrapped; preview+stripHtml   ok  raw=0 wrapped=4
+          no longer parse through a live div                 raw=4 wrapped=0
+  1/3                                                                         3/3
+```
+
+Full sweep: all previously green harnesses unchanged (admin ×4, analytics ×3, chat ×9 live, contacts ×3, deals-refs 7/7, objects-links 10/10, type-confusion 9/9) plus notes-xss 7/7 and note-render-xss 3/3; `ratelimit-bypass` A1/B1 are the Part 2 controls and the two Part 13-retired chat harnesses are unchanged. `node --check` passes on all six files. `git diff --quiet db.js`: untouched.
+
+**Not runnable here:** a real browser fires `error` for `src=x` itself; jsdom needed the dispatch. And the Safari `<span>` bold → plain-text effect above is worth a glance if your team uses Safari.
+
+### Files and lines
+
+| File | Lines | Change |
+|---|---|---|
+| `package.json`, `package-lock.json` | — | `sanitize-html@2.17.7` |
+| `utils/sanitize-note.js` | 1–25 (new) | `sanitizeNote()` allow-list, `div→p` |
+| `routes/activities.js` | 5–7 | require |
+| `routes/activities.js` | 100–102 | POST: sanitise before INSERT + mentions; empty after sanitising → 400 |
+| `routes/activities.js` | 135–137 | PATCH: sanitise a supplied value, absent stays absent |
+| `routes/activity-comments.js` | 5 | require |
+| `routes/activity-comments.js` | 101–105 | POST: sanitise once; used by INSERT and mention pass |
+| `public/js/core.js` | 198–230 | `sanitizeNoteHtml()` (DOMParser, inert, same allow-list) |
+| `public/js/modals.js` | 224 | `truncateActivityPreview` parses sanitised HTML |
+| `public/js/modals.js` | 373, 419, 823, 937 | `${sanitizeNoteHtml(…content)}` at every render site |
+| `public/js/calendar.js` | 82–85 | `stripHtml` via DOMParser |
+
+`db.js`, `server.js`, other `routes/*`, `private/*` unchanged since Part 24. Part 25 totals: `routes/activities.js` +9 / −3; `routes/activity-comments.js` +7 / −3; `public/js/core.js` +33 / −0; `public/js/modals.js` +5 / −5; `public/js/calendar.js` +2 / −3; `utils/sanitize-note.js` +25 (new); `package.json` +1; `package-lock.json` +232.
+
+---
+
+## Part 26 — M1/M3 (SR-4): tasks, objects, activities, comments, calendar — unscoped joins, unvalidated refs, unvalidated status/priority
+
+**Hole.** Same class as Part 22, in four more files. `routes/tasks.js` joined `users`/`deals`/`contacts` on raw ids (list, detail, subtasks), the subtask query was `WHERE t.parent_id=$1` with no workspace filter, the two `subtask_count`/`subtask_done` subqueries counted across workspaces, POST/PUT validated `deal_id`/`contact_id` but wrote `parent_id`, `project_id`, `list_id`, `assigned_to` straight from the body, and `status`/`priority` were written unvalidated (PUT, `PATCH /:id/status`). `objects.js`, `activities.js`, `activity-comments.js`, `calendar.js` had the same unscoped `users`/`contacts` joins. FKs are global, so a `parent_id` pointing across workspaces rendered a foreign task inside my subtask list — shown live below.
+
+### Findings that shaped it
+
+- **Valid status is not only `workspaces.task_statuses`.** The client (`public/js/tasks.js:19–22`) uses the task's *project* statuses (`task_project_statuses`) when the project has any, else a hard-coded default list identical to the column default (`todo, in_progress, in_review, done`). Validating against the column alone would 400 every task in a project with custom statuses. So valid = column keys ∪ the task's project keys ∪ the four built-ins, in one query (`allowedTaskStatuses`). PUT uses the body's `project_id` (after it passes the refs check); PATCH uses the task's stored `project_id`.
+- **Priority allow-list:** `low, medium, high, urgent` — the exact `<option>` values in `index.html:468–471`, `:1409–1412`.
+- `objects.js:55` / `:132` (`JOIN contacts … WHERE … c.workspace_id = $2`) were already scoped in the WHERE and are left as they are. `objects.js:46–48` also joined `pipeline_stages`/`pipelines` unscoped — same class, scoped in passing.
+
+### Design
+
+**`utils/workspace-refs.js`** (extended; `dealRefs` and `workspaceRefs` untouched — `deals-refs-test` 7/7 and `contacts-refs-test` 20/20 unchanged prove it):
+- `taskRefs(q, wid, { parent_id, project_id, list_id, assigned_to, deal_id, contact_id })` — one round trip, only supplied ids, `= ANY($n::int[])` over `tasks`, `task_projects`, `task_lists`, `users`, `deals`, `contacts`. Non-integer ids are not looked up → 400 (the old `parseInt('12abc')→12` leniency for deal/contact is gone).
+- `REF_FIELDS` gains `parent_id`, `project_id`, `list_id`, `deal_id` with `"<field> does not belong to this workspace"`. `refCheck` still checks a field only when `refs` carries that set, so the contacts and deals paths are unchanged.
+- `allowedTaskStatuses(q, wid, projectId)`, `TASK_PRIORITIES`.
+
+**`routes/tasks.js`:** every join scoped (`AND x.workspace_id = t.workspace_id` on `u`, `cu`, `dl`, `ct`); both count subqueries `AND s.workspace_id = t.workspace_id`; subtasks `WHERE t.parent_id = $1 AND t.workspace_id = $2`. POST/PUT: one `taskRefs` + `refCheck` covering all six ids → 400 before the write (replaces the two per-field deal/contact queries — one round trip instead of up to two; messages become the shared text, `{error}` shape unchanged). Status/priority: POST defaults `todo`/`medium` then validates; PUT requires a valid `status` (a missing one used to be a 500 from NOT NULL) and defaults `priority` to `medium`; `PATCH /:id/status` looks up the task's own `project_id` (404 if not mine) and validates against it. `Invalid status` / `Invalid priority` → 400.
+
+**Join predicates elsewhere** (`AND <alias>.workspace_id = <base>.workspace_id`): `objects.js:46–48` (`ps`, `c`, `p`); `activities.js:43, 89–90, 125`; `activity-comments.js:31, 76, 125`; `calendar.js:19, 44`. The two mention lookups (`activities.js:44`, `activity-comments.js:32`) additionally take `AND a.workspace_id = $2`.
+
+Not touched: `db.js`, response shapes, `task-projects.js`, the client.
+
+### Verification — real Postgres, baseline first
+
+**`tasks-scope-pg-test.js`** runs the **real router against a real local PostgreSQL 16** (Homebrew, `localhost:5432`): a throwaway database `crm_verify_p26` built by the project's own `initDb()` with `DATABASE_URL` overridden for the harness process only (`DATABASE_SSL=false`, local server has no SSL). Supabase was never touched; the database was dropped afterwards. Fixture: workspace 7 (user 1, task 100 in project 20 which has a custom status `qa`, list 30, deal 50, contact 60); workspace 8 (user 2, **task 101 with `parent_id = 100`** — cross-workspace, FK-valid — project 21, list 31, deal 51, contact 61). Caller is user 1 / workspace 7.
+
+```
+BASELINE (pre-edit tasks.js)                                                     LIVE
+  FAIL T1 GET /100: foreign task 101 among subtasks        subtasks=[101]       ok  subtasks=[]
+  FAIL T2 GET /: subtask_count for 100                     1                    ok  0
+  FAIL T3 foreign assigned_to / parent_id / project_id /   POST 201 + row       ok  11/11 -> 400, nothing written
+          list_id / deal_id / contact_id on POST and PUT   PUT 200 + WROTE
+  FAIL T4 status 'bogus' on PUT / PATCH; priority 'asap'   200 / 200 / 200      ok  400 / 400 / 400
+          project key 'qa' and built-in 'in_review'        row = todo/asap          'qa' 200, 'in_review' 200, row = in_review/medium
+  ok   T5 own ids 201/200; {id}, {success:true}, {...task, subtasks}, list row keys unchanged   ok
+  1/5                                                                             5/5
+```
+
+**EXPLAIN (COSTS OFF)** of the SQL exactly as shipped in `routes/tasks.js` (extracted from the file, run by the real planner):
+
+Subtask query — before:
+```
+Sort
+  Sort Key: t.created_at
+  ->  Hash Right Join
+        Hash Cond: (u.id = t.assigned_to)
+        ->  Seq Scan on users u
+        ->  Hash
+              ->  Seq Scan on tasks t
+                    Filter: (parent_id = 100)
+```
+Subtask query — after:
+```
+Sort
+  Sort Key: t.created_at
+  ->  Nested Loop Left Join
+        Join Filter: (u.id = t.assigned_to)
+        ->  Seq Scan on tasks t
+              Filter: ((parent_id = 100) AND (workspace_id = 7))
+        ->  Index Scan using users_workspace_id_email_key on users u
+              Index Cond: (workspace_id = 7)
+```
+List query — after (the two count subplans; before, both read `Filter: (parent_id = t.id)` only):
+```
+SubPlan 1
+  ->  Aggregate
+        ->  Seq Scan on tasks s
+              Filter: ((parent_id = t.id) AND (workspace_id = t.workspace_id))
+SubPlan 2
+  ->  Aggregate
+        ->  Seq Scan on tasks s_1
+              Filter: ((parent_id = t.id) AND (workspace_id = t.workspace_id) AND (status = 'done'::text))
+```
+and every join in the list plan now carries `workspace_id = 7` on `users u`, `users cu`, `deals dl`, `contacts ct` (the planner pushed the join predicate into each scan). The full plans are in the harness output.
+
+**`scope-joins-test.js`** (static): all 20 `users`/`contacts`/`pipeline_stages`/`pipelines` joins across the five routes carry a workspace predicate (on the JOIN or in the enclosing WHERE); subtask query and both count subqueries scoped. Baseline 0/2 (18 unscoped joins listed), live 2/2.
+
+**Regression sweep:** every earlier harness unchanged — including deals-refs 7/7 and contacts-refs 20/20 (shared helper untouched for them), objects-links 10/10, notes-xss 7/7, note-render-xss 3/3; `ratelimit-bypass` A1/B1 are the Part 2 controls and the two Part 13-retired chat harnesses are unchanged. `node --check` passes on all six files. `git diff --quiet db.js`: untouched.
+
+### Files and lines
+
+| File | Lines | Change |
+|---|---|---|
+| `utils/workspace-refs.js` | 51–76 | `taskRefs()` — six-table single lookup |
+| `utils/workspace-refs.js` | 77–92 | `TASK_PRIORITIES`, `BUILTIN_TASK_STATUSES`, `allowedTaskStatuses()` |
+| `utils/workspace-refs.js` | 105–108, 118 | `REF_FIELDS` + exports |
+| `routes/tasks.js` | 6–8 | require |
+| `routes/tasks.js` | 25–31 | list: scoped count subqueries and four joins |
+| `routes/tasks.js` | 45–47 | detail: three joins scoped |
+| `routes/tasks.js` | 55–58 | subtasks: join scoped, `AND t.workspace_id = $2` |
+| `routes/tasks.js` | 67–76 | POST: refs check, status/priority validation |
+| `routes/tasks.js` | 99–110 | PUT: refs check, status required + validated, priority validated |
+| `routes/tasks.js` | 127–131 | PATCH /status: task's project resolved, status validated |
+| `routes/objects.js` | 46–48 | `ps`, `c`, `p` joins scoped |
+| `routes/activities.js` | 43–44, 89–90, 125 | joins scoped; mention lookup takes workspace |
+| `routes/activity-comments.js` | 31–32, 76, 125 | joins scoped; mention lookup takes workspace |
+| `routes/calendar.js` | 19, 44 | contacts joins scoped |
+
+`db.js`, `server.js`, `public/*`, `private/*` unchanged since Part 25. Part 26 totals: `routes/tasks.js` +40 / −32; `routes/objects.js` +3 / −3; `routes/activities.js` +6 / −6; `routes/activity-comments.js` +5 / −5; `routes/calendar.js` +2 / −2; `utils/workspace-refs.js` +49 / −1.
+
+---
+
+## Part 27 — Tasks page ignored the workspace's own task statuses (follow-up to Part 26)
+
+**Finding (from Part 26).** `public/js/tasks.js` `getActiveTaskStatuses()` used the current project's statuses when the project had any, otherwise a hard-coded default list. It never read `currentWorkspace.task_statuses` — the list a workspace owner edits in Settings (`settings.js` reads and saves that column). So workspace-level custom statuses were saved but never offered on the tasks page, and the server's Part 26 rule (workspace column ∪ project statuses ∪ built-ins) validated keys the client could not produce.
+
+### Change — `public/js/tasks.js` only
+
+`getActiveTaskStatuses()` precedence is now: the project's statuses when the project has any → the workspace's `task_statuses` when non-empty → the built-in four. Same precedence the server validates against. Guarded so it cannot throw if `currentWorkspace` is not yet loaded.
+
+### Verification — `task-status-fallback-test.js` (jsdom, real `tasks.js`; baseline from git HEAD, the file was unmodified before this part)
+
+```
+BASELINE                                                              LIVE
+  FAIL P1 no project: workspace Settings list used   todo,in_progress,…   ok  backlog,shipped
+  ok   P2 project's own statuses win                 qa                   ok  qa
+  FAIL P3 project with empty list -> workspace list  todo,in_progress,…   ok  backlog,shipped
+  ok   P4 no project, empty workspace list -> built-ins                   ok
+  ok   P5 nothing loaded -> built-ins, no throw                           ok
+  3/5                                                                     5/5
+```
+
+`node --check` passes. `db.js` untouched. Server unchanged (Part 26's `allowedTaskStatuses` already accepts these keys — T4 in Part 26 proved a project key and a built-in; the workspace column is part of the same union).
+
+### Files and lines
+
+| File | Lines | Change |
+|---|---|---|
+| `public/js/tasks.js` | 19–27 | `getActiveTaskStatuses()`: project → workspace `task_statuses` → defaults |
+
+Everything else unchanged since Part 26. Part 27 totals: `public/js/tasks.js` +7 / −2.
+
+---
+
+## Part 28 — Contacts import: `unmatched` counter so the numbers reconcile
+
+**Gap.** A contact deleted between the prefetch and the batch `UPDATE … RETURNING c.id` (the READ COMMITTED window Part 17 closed for correctness) was rightly not counted as imported — but it was counted nowhere, so `submitted ≠ imported + skipped`. Same for the legacy per-row path's `rowCount === 0` branch. A row vanishing mid-import is worth telling the user about.
+
+### Changes
+
+**`routes/contacts.js`** — new `unmatched` counter, appended to the response (`{ imported, deals_created, created, updated, skipped, unmatched }`; the five existing keys and their order unchanged):
+- batch UPDATE loop: `unmatched += c.length - matched.length`;
+- batch INSERT loop: `unmatched += c.length - inserted.length` — an `INSERT … RETURNING` cannot really come up short, but counting it makes `submitted === imported + skipped + unmatched` an exact identity rather than "true unless the DB misbehaves" (and the Part 17 K4 harness case, whose fake returns 2 of 3 inserted rows, now reconciles instead of contradicting the invariant);
+- legacy path: `if (upd.rowCount === 0) { unmatched++; continue; }`.
+
+**`public/js/admin-import.js`** — summary gains, only when `unmatched > 0`: "*N row(s) matched no contact and was/were skipped (deleted during import).*" Same `textContent` sink, no HTML; an older server response without the field leaves the message unchanged.
+
+### Verification — baseline first
+
+**`contacts-counts-test.js`** (Part 17's harness, extended): an `identities(id, body, submitted)` assertion — `submitted === imported + skipped + unmatched` and `imported === created + updated` — added to every existing case, plus K7 (mixed run with a row deleted mid-import) and K8 (key set). Baseline mirror `counts-baseline/`.
+
+```
+BASELINE (pre-edit)                                                          LIVE
+  ok   K1–K5 (Part 17 assertions)                                           ok
+  FAIL K1i–K5i identities (unmatched undefined -> reconcile fails)           ok
+  FAIL K7 5 submitted, contact 501 deleted mid-import                        ok  imported 3 (1 updated + 2 created), skipped 1, unmatched 1
+  FAIL K8 keys                                                               ok  imported,deals_created,created,updated,skipped,unmatched; unmatched 0 when nothing vanished
+  6/14                                                                        14/14
+```
+
+The three identities, shown with a row deleted mid-import (live K7i):
+```
+5 submitted = 3 imported + 1 skipped + 1 unmatched
+3 imported  = 2 created  + 1 updated
+```
+and in the legacy path (K3i): `2 submitted = 0 imported + 0 skipped + 2 unmatched`; batch UPDATE with one deleted (K1i/K2i): `2 = 1 + 0 + 1`; nothing deleted (K5i): `5 = 5 + 0 + 0`.
+
+**`admin-import-summary-test.js`** — the message-building lines sliced out of the shipped file and evaluated on server responses: U1 `unmatched 1` → "1 row matched no contact and was skipped (deleted during import)."; U2 `unmatched 0` → no such sentence, existing wording intact; U3 plural; U4 old response without the field → unchanged, no throw. Baseline 2/4 (U1, U3 fail), live 4/4.
+
+**Harness literal-match updates (not logic):** Part 18's `chat-import-batch-test.js` T11 and Part 19's `contacts-response-test.js` S5 assert the exact key set; both now include `unmatched`. Full sweep otherwise unchanged (all earlier harnesses green; `ratelimit-bypass` A1/B1 Part 2 controls; two Part 13-retired chat harnesses). `node --check` passes. `db.js` untouched.
+
+### Files and lines
+
+| File | Lines | Change |
+|---|---|---|
+| `routes/contacts.js` | 131–132 | `let unmatched = 0` |
+| `routes/contacts.js` | 194 | batch UPDATE: `unmatched += c.length - matched.length` |
+| `routes/contacts.js` | 217 | batch INSERT: shortfall counted (identity kept exact) |
+| `routes/contacts.js` | 256 | legacy path: `rowCount === 0` → `unmatched++` |
+| `routes/contacts.js` | 283–286 | response: `unmatched` appended |
+| `public/js/admin-import.js` | 248 | summary sentence when `unmatched > 0` |
+
+Everything else unchanged since Part 27. Part 28 totals: `routes/contacts.js` +12 / −7; `public/js/admin-import.js` +1 / −0.
+
+---
+
+## Part 29 — Test suite moved into the repository (`tests/`)
+
+**Why.** The 31 harnesses that proved Parts 1–28 lived in a temporary scratchpad and would have been lost. They are now a proper suite in `tests/`, runnable with `npm test`, using Node 22's built-in `node:test` runner. **No dependency was added** to `package.json`; the only change there is the `test` script. `express` (already a dependency) is reused for the route tests; the browser-side tests skip themselves with a printed reason unless `jsdom` is installed as a dev dependency (`npm i -D jsdom`), which was verified to work by borrowing jsdom from the scratchpad without installing it in the repo.
+
+### Layout
+
+```
+tests/README.md                 — plain-language explanation: what a test is, the three kinds, how the fake pool and require.cache swap work, reading output, adding a test, gotchas
+tests/helpers/fake-pool.js      — records every SQL + params; answers from regex rules
+tests/helpers/load-route.js     — loads a REAL route with db / auth / notifications swapped; serves it on a random port with a request() helper
+tests/helpers/dom.js            — optional jsdom; exports skipOpts for describe()
+tests/unit/       sanitize-note, workspace-refs, chat-rate-limit, admin-console
+tests/routes/     deals, objects, analytics, activities, contacts-import, tasks
+tests/client/     analytics-page, note-sanitizer, task-statuses   (skip without jsdom)
+```
+
+### Result
+
+```
+npm test                    tests 85  pass 85  fail 0   (3 client suites: # SKIP jsdom is not installed …)
+client with jsdom present   tests 11  pass 11  fail 0
+```
+
+Coverage mirrors the session's harnesses: sanitiser allow-list and `div→p`; `refCheck`/`dealRefs`/`taskRefs` bind shapes and skip-when-empty; chat limiter window/per-user/middleware order; console-path rules; deals and tasks scoped joins + foreign-id rejection with no write + identical write parameters; object-link two-sided ownership; analytics payload-only-in-params + typed guard + allow-list + key sets; notes sanitised on write with mentions intact; import counts from `RETURNING` with both identities on every case and the 2 001-row 413; analytics page load/revisit/order/drop-once; render-side sanitiser with the executing control; task status precedence.
+
+One runner quirk found and documented: `describe(name, { skip: null })` still skips in Node's runner — the helper now passes `{}` when jsdom is present.
+
+### Files
+
+| File | Change |
+|---|---|
+| `package.json` | `"test": "node --test \"tests/**/*.test.js\""` (scripts only) |
+| `tests/**` | 17 new files (3 helpers, 13 test files, README) |
+
+`db.js`, `server.js`, `routes/*`, `utils/*`, `public/*`, `private/*` unchanged since Part 28.
