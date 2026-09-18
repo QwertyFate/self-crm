@@ -116,6 +116,13 @@ const chatIpLimiter = rateLimit({
 // never parses a body, never touches the session store, never queries auth.
 app.post('/api/chat/messages', chatIpLimiter);
 
+// Onboarding Engine API: 300 requests per minute per IP (Cloudflare trust list).
+const engineApiLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 300,
+  message: { fehler: { code: 'zu_viele_anfragen', nachricht: 'Zu viele Anfragen. Bitte später erneut versuchen.' } },
+  standardHeaders: true, legacyHeaders: false,
+});
+
 // Contact import bodies pass the global 100 kB default at roughly 500 rows,
 // well under the route's own 2000-row cap. Parse this one route with a larger
 // limit; body-parser skips an already-parsed body, so the global parser below
@@ -158,6 +165,7 @@ app.use('/api/activity-comments',  require('./routes/activity-comments'));
 app.use('/api/calendar',           require('./routes/calendar'));
 app.use('/api/invites',       require('./routes/invites'));
 app.use('/api/workspace',     require('./routes/workspace'));
+app.use('/api/engine-settings', require('./routes/engine-settings'));   // Onboarding Engine webhook + API keys (owner only)
 app.use('/api/pipelines',     require('./routes/pipelines'));
 app.use('/api/deals',         require('./routes/deals'));
 app.use('/api/deal-fields',   require('./routes/deal-fields'));
@@ -168,6 +176,8 @@ app.use('/api/task-fields',   require('./routes/task-fields'));
 app.use('/api/task-projects', require('./routes/task-projects'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/chat',          require('./routes/chat'));
+app.use('/api/kunden',        engineApiLimiter);
+app.use('/api/kunden',        require('./routes/engine-api'));   // Onboarding Engine API (API-key auth, no session)
 app.use('/api/analytics',     require('./routes/analytics'));
 app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
@@ -306,4 +316,5 @@ io.on('connection', async (socket) => {
 
 initDb()
   .then(() => httpServer.listen(PORT, () => console.log(`CRM running at http://localhost:${PORT}`)))
+  .then(() => require('./utils/engine-webhook').startEngineWebhookWorker())   // retries failed engine webhooks every 30 s
   .catch(err => { console.error('Database init failed:', err); process.exit(1); });

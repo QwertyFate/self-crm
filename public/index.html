@@ -944,6 +944,53 @@
             <div id="intg-logs"><p class="settings-hint">No activity yet.</p></div>
           </div>
 
+          <!-- ── Onboarding Engine: outgoing webhook ── -->
+          <div class="settings-card" id="eng-webhook-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="eng_webhook_title">Onboarding Engine — Outgoing Webhooks</h2>
+              <label class="intg-toggle-label"><input type="checkbox" id="eng-active"> <span data-i18n="eng_active">Active</span></label>
+            </div>
+            <p class="settings-hint" data-i18n="eng_webhook_hint"></p>
+            <p class="settings-hint hidden" id="eng-owner-hint" data-i18n="eng_owner_only"></p>
+            <div class="intg-row"><label class="intg-label" data-i18n="eng_url">Target URL</label><input type="url" id="eng-url" class="form-control" placeholder="https://engine.example.de/webhooks/crm" /></div>
+            <div class="intg-row" style="margin-top:8px"><label class="intg-label" data-i18n="eng_description">Description</label><input type="text" id="eng-description" class="form-control" /></div>
+            <div class="intg-section-title" style="margin-top:16px" data-i18n="eng_events">Events</div>
+            <div id="eng-events" class="intg-row" style="display:flex;gap:16px;flex-wrap:wrap"></div>
+            <div class="intg-section-title" style="margin-top:16px" data-i18n="eng_secret">Signing secret</div>
+            <div class="intg-url-row">
+              <div class="intg-url-box">
+                <input type="text" id="eng-secret-display" readonly class="intg-url-input" />
+                <button class="btn btn-sm" id="eng-rotate-btn" onclick="engRotateSecret()" data-i18n="eng_rotate">Rotate secret</button>
+              </div>
+            </div>
+            <div id="eng-secret-reveal" class="hidden" style="margin-top:8px;padding:10px;border:1px solid var(--warning);border-radius:6px;background:var(--warning-wash)">
+              <div style="font-size:12px;font-weight:600;margin-bottom:6px" data-i18n="eng_shown_once"></div>
+              <div class="intg-url-box"><input type="text" id="eng-secret-value" readonly class="intg-url-input" /><button class="btn btn-sm" onclick="engCopy('eng-secret-value', this)" data-i18n="eng_copy">Copy</button></div>
+            </div>
+            <div style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" id="eng-save-btn" onclick="engSaveWebhook()" data-i18n="eng_save">Save</button>
+              <button class="btn btn-sm" id="eng-test-btn" onclick="engSendTest()" data-i18n="eng_send_test">Send test event</button>
+              <span id="eng-msg" class="workspace-name-msg hidden"></span>
+            </div>
+            <div class="settings-card-header" style="margin-top:20px"><h3 style="margin:0" data-i18n="eng_deliveries">Delivery log</h3><button class="btn btn-sm" onclick="engLoadDeliveries()" data-i18n="eng_refresh">Refresh</button></div>
+            <div id="eng-deliveries"><p class="settings-hint" data-i18n="eng_no_deliveries">No deliveries yet.</p></div>
+          </div>
+
+          <!-- ── Onboarding Engine: API keys ── -->
+          <div class="settings-card" id="eng-keys-card">
+            <div class="settings-card-header"><h2 data-i18n="eng_keys_title">API Keys</h2></div>
+            <p class="settings-hint" data-i18n="eng_keys_hint"></p>
+            <div class="intg-url-box" style="max-width:520px">
+              <input type="text" id="eng-key-name" class="intg-url-input" data-i18n-ph="eng_key_name" placeholder="Key name" maxlength="100" />
+              <button class="btn btn-primary btn-sm" id="eng-create-key-btn" onclick="engCreateKey()" data-i18n="eng_create_key">Create API key</button>
+            </div>
+            <div id="eng-key-reveal" class="hidden" style="margin-top:8px;padding:10px;border:1px solid var(--warning);border-radius:6px;background:var(--warning-wash)">
+              <div style="font-size:12px;font-weight:600;margin-bottom:6px" data-i18n="eng_shown_once"></div>
+              <div class="intg-url-box"><input type="text" id="eng-key-value" readonly class="intg-url-input" /><button class="btn btn-sm" onclick="engCopy('eng-key-value', this)" data-i18n="eng_copy">Copy</button></div>
+            </div>
+            <div id="eng-keys" style="margin-top:12px"><p class="settings-hint" data-i18n="eng_no_keys">No API keys yet.</p></div>
+          </div>
+
         </div>
       </section>
 

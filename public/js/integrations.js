@@ -247,6 +247,146 @@ async function loadIntegrations() {
   renderIntgPlatforms();
   if (!activeGuideId) showIntgGuide('make');
   loadIntgLogs();
+  loadEngineSettings();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Onboarding Engine — outgoing webhook + API keys (owner-only on the server;
+// members see the cards read-only). Secrets and keys are shown once.
+// ═══════════════════════════════════════════════════════════════════════════
+let engAvailableEvents = [];
+const engIsOwner = () => currentUser?.role === 'owner';
+const $e = id => document.getElementById(id);
+
+function engMsg(text, isError = false) {
+  const el = $e('eng-msg'); if (!el) return;
+  el.textContent = text; el.classList.toggle('error', !!isError); el.classList.remove('hidden');
+  clearTimeout(engMsg._t); engMsg._t = setTimeout(() => el.classList.add('hidden'), 3000);
+}
+function engStatusBadge(status) {
+  const color = { delivered: '#22c55e', failed: '#f59e0b', dead: '#ef4444', pending: '#94a3b8' }[status] || '#94a3b8';
+  return `<span class="stage-badge"><span class="stage-badge-dot" style="background:${color}"></span>${esc(status)}</span>`;
+}
+
+async function loadEngineSettings() {
+  if (!$e('eng-webhook-card')) return;
+  const owner = engIsOwner();
+  $e('eng-owner-hint').classList.toggle('hidden', owner);
+  ['eng-url', 'eng-description', 'eng-active', 'eng-key-name'].forEach(id => { const el = $e(id); if (el) el.disabled = !owner; });
+  ['eng-save-btn', 'eng-test-btn', 'eng-rotate-btn', 'eng-create-key-btn'].forEach(id => { const el = $e(id); if (el) el.disabled = !owner; });
+  $e('eng-secret-reveal').classList.add('hidden'); $e('eng-key-reveal').classList.add('hidden');
+
+  const data = await api.get('/api/engine-settings/webhook');
+  if (data.error) { engMsg(data.error, true); return; }
+  engAvailableEvents = data.available_events || [];
+  const w = data.webhook;
+  $e('eng-url').value         = w?.url || '';
+  $e('eng-description').value = w?.description || '';
+  $e('eng-active').checked    = w ? !!w.active : true;
+  $e('eng-secret-display').value = w?.secret_hint ? `${'•'.repeat(28)} ${t('eng_secret_hint')} ${w.secret_hint}` : t('eng_secret_none');
+  $e('eng-rotate-btn').disabled = !owner || !w;
+  $e('eng-test-btn').disabled   = !owner || !w;
+  engRenderEvents(w?.events || []);
+  await Promise.all([engLoadDeliveries(), engLoadKeys()]);
+}
+
+function engRenderEvents(selected) {
+  const all = selected.includes('*');
+  const box = ev => `<label class="intg-toggle-label"><input type="checkbox" class="eng-event" value="${esc(ev)}" ${selected.includes(ev) || all ? 'checked' : ''} ${engIsOwner() ? '' : 'disabled'}> ${esc(ev)}</label>`;
+  $e('eng-events').innerHTML =
+    `<label class="intg-toggle-label"><input type="checkbox" id="eng-event-all" ${all ? 'checked' : ''} ${engIsOwner() ? '' : 'disabled'} onchange="engRenderEvents(this.checked ? ['*'] : [])"> ${t('eng_all_events')}</label>` +
+    engAvailableEvents.map(box).join('');
+}
+function engSelectedEvents() {
+  if ($e('eng-event-all')?.checked) return ['*'];
+  return [...document.querySelectorAll('.eng-event:checked')].map(i => i.value);
+}
+
+async function engSaveWebhook() {
+  const res = await api.put('/api/engine-settings/webhook', {
+    url: $e('eng-url').value.trim(), description: $e('eng-description').value.trim(),
+    events: engSelectedEvents(), active: $e('eng-active').checked,
+  });
+  if (res.error) { engMsg(res.error, true); return; }
+  if (res.secret) { $e('eng-secret-value').value = res.secret; $e('eng-secret-reveal').classList.remove('hidden'); }
+  engMsg(t('eng_saved'));
+  const w = res.webhook;
+  $e('eng-secret-display').value = w?.secret_hint ? `${'•'.repeat(28)} ${t('eng_secret_hint')} ${w.secret_hint}` : t('eng_secret_none');
+  $e('eng-rotate-btn').disabled = false; $e('eng-test-btn').disabled = false;
+}
+
+async function engRotateSecret() {
+  if (!confirm(t('eng_rotate') + '?')) return;
+  const res = await api.post('/api/engine-settings/webhook/rotate-secret', {});
+  if (res.error) { engMsg(res.error, true); return; }
+  $e('eng-secret-value').value = res.secret; $e('eng-secret-reveal').classList.remove('hidden');
+  $e('eng-secret-display').value = `${'•'.repeat(28)} ${t('eng_secret_hint')} ${res.webhook.secret_hint}`;
+}
+
+async function engSendTest() {
+  const res = await api.post('/api/engine-settings/webhook/test', {});
+  if (res.error) { engMsg(res.error, true); return; }
+  const d = res.deliveries?.[0];
+  engMsg(`${t('eng_test_sent')} — ${d ? d.status + (d.response_status ? ` (HTTP ${d.response_status})` : '') + (d.error ? `: ${d.error}` : '') : ''}`, d?.status !== 'delivered');
+  engLoadDeliveries();
+}
+
+async function engLoadDeliveries() {
+  const el = $e('eng-deliveries'); if (!el) return;
+  const rows = await api.get('/api/engine-settings/webhook/deliveries?limit=50');
+  if (!Array.isArray(rows)) { el.innerHTML = `<p class="settings-hint">${esc(rows?.error || '')}</p>`; return; }
+  if (!rows.length) { el.innerHTML = `<p class="settings-hint">${t('eng_no_deliveries')}</p>`; return; }
+  el.innerHTML = `<table class="data-table" style="width:100%"><thead><tr>
+      <th>${t('eng_col_event')}</th><th>${t('eng_col_status')}</th><th>${t('eng_col_attempts')}</th><th>${t('eng_col_response')}</th><th>${t('eng_col_time')}</th><th></th>
+    </tr></thead><tbody>${rows.map(r => `<tr>
+      <td>${esc(r.event)}</td><td>${engStatusBadge(r.status)}</td><td>${r.attempts}</td>
+      <td title="${esc(r.error || '')}">${r.response_status ? `HTTP ${r.response_status}` : ''}${r.error ? ` ${esc(String(r.error).slice(0, 60))}` : ''}</td>
+      <td title="${esc(String(r.last_attempt_at || r.created_at || ''))}">${fmtDate(r.last_attempt_at || r.created_at)}</td>
+      <td>${engIsOwner() && (r.status === 'failed' || r.status === 'dead') ? `<button class="btn btn-sm" onclick="engRetryDelivery(${Number(r.id)})">${t('eng_retry')}</button>` : ''}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+async function engRetryDelivery(id) {
+  const res = await api.post(`/api/engine-settings/webhook/deliveries/${id}/retry`, {});
+  if (res.error) { engMsg(res.error, true); return; }
+  engMsg(`${t('eng_retry')}: ${res.status}${res.error ? ` — ${res.error}` : ''}`, res.status !== 'delivered');
+  engLoadDeliveries();
+}
+
+async function engLoadKeys() {
+  const el = $e('eng-keys'); if (!el) return;
+  const rows = await api.get('/api/engine-settings/api-keys');
+  if (!Array.isArray(rows)) { el.innerHTML = `<p class="settings-hint">${esc(rows?.error || '')}</p>`; return; }
+  if (!rows.length) { el.innerHTML = `<p class="settings-hint">${t('eng_no_keys')}</p>`; return; }
+  el.innerHTML = `<table class="data-table" style="width:100%"><thead><tr>
+      <th>${t('eng_col_name')}</th><th>${t('eng_col_prefix')}</th><th>${t('eng_col_created')}</th><th>${t('eng_col_last_used')}</th><th></th>
+    </tr></thead><tbody>${rows.map(k => `<tr style="${k.revoked_at ? 'opacity:.5' : ''}">
+      <td>${esc(k.name)}${k.revoked_at ? ` <em>(${t('eng_revoked')})</em>` : ''}</td><td><code>${esc(k.key_prefix)}…</code></td>
+      <td>${fmtDate(k.created_at)}</td><td>${k.last_used_at ? fmtDate(k.last_used_at) : t('eng_never')}</td>
+      <td>${engIsOwner() && !k.revoked_at ? `<button class="btn btn-sm btn-danger" onclick="engRevokeKey(${Number(k.id)})">${t('eng_revoke')}</button>` : ''}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
+
+async function engCreateKey() {
+  const name = $e('eng-key-name').value.trim();
+  if (!name) { $e('eng-key-name').focus(); return; }
+  const res = await api.post('/api/engine-settings/api-keys', { name });
+  if (res.error) { engMsg(res.error, true); return; }
+  $e('eng-key-value').value = res.key; $e('eng-key-reveal').classList.remove('hidden');
+  $e('eng-key-name').value = '';
+  engLoadKeys();
+}
+
+async function engRevokeKey(id) {
+  if (!confirm(t('eng_revoke_confirm'))) return;
+  const res = await api.del(`/api/engine-settings/api-keys/${id}`);
+  if (res.error) { engMsg(res.error, true); return; }
+  engLoadKeys();
+}
+
+function engCopy(inputId, btn) {
+  const v = $e(inputId)?.value; if (!v) return;
+  navigator.clipboard.writeText(v).then(() => { const orig = btn.textContent; btn.textContent = t('eng_copied'); setTimeout(() => { btn.textContent = orig; }, 1500); });
 }
 
 let activeCustomKeys = [];

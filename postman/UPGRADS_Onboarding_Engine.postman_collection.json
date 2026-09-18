@@ -1,0 +1,311 @@
+{
+  "info": {
+    "name": "UPGRADS Onboarding Engine — CRM endpoints",
+    "description": "Every endpoint the CRM exposes for the Onboarding Engine integration, in run order. Folder 0 logs in (Postman keeps the session cookie). Folder 1 configures the webhook and creates an API key — their test scripts save the secret and the key into collection variables. Folder 2 calls the engine-facing API with that key. Folder 3 triggers onboarding from the CRM side. Folder 4 shows the error shapes. Set `base_url` and `contact_id` before running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000" },
+    { "key": "owner_email", "value": "owner@example.de" },
+    { "key": "owner_password", "value": "changeme" },
+    { "key": "contact_id", "value": "1" },
+    { "key": "webhook_url", "value": "https://webhook.site/REPLACE-ME" },
+    { "key": "api_key", "value": "" },
+    { "key": "key_id", "value": "" },
+    { "key": "webhook_secret", "value": "" },
+    { "key": "delivery_id", "value": "" },
+    { "key": "idempotency_key", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0 Login (session cookie)",
+      "item": [
+        {
+          "name": "POST /api/auth/login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api", "auth", "login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{owner_email}}\",\n  \"password\": \"{{owner_password}}\"\n}" },
+            "description": "Logs in as the workspace OWNER. Postman stores the session cookie automatically; every request in folders 1 and 3 uses it. The settings routes are owner-only, so this must be an owner account."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('logged in as owner', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().user.role).to.eql('owner'); });"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "1 Settings — webhook + API keys (owner, session)",
+      "item": [
+        {
+          "name": "GET /api/engine-settings/webhook",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/engine-settings/webhook", "host": ["{{base_url}}"], "path": ["api", "engine-settings", "webhook"] },
+            "description": "Purpose in the engine: shows whether the CRM knows where to send events. `webhook` is null until PUT creates it; `available_events` lists what the CRM can emit. Never returns the secret — only its last 4 characters as `secret_hint`."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 with available_events', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().available_events).to.include('vertrag.unterschrieben'); });"
+          ] } }]
+        },
+        {
+          "name": "PUT /api/engine-settings/webhook (create — secret shown once)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/engine-settings/webhook", "host": ["{{base_url}}"], "path": ["api", "engine-settings", "webhook"] },
+            "body": { "mode": "raw", "raw": "{\n  \"url\": \"{{webhook_url}}\",\n  \"events\": [\"*\"],\n  \"description\": \"Onboarding Engine (dev)\",\n  \"active\": true\n}" },
+            "description": "Purpose in the engine: registers the engine's inbound endpoint. The CRM will POST signed events (HMAC-SHA256 with this secret) to `url` whenever onboarding starts. `events: [\"*\"]` = every event; or list names from `available_events`. First call → 201 and the plain `secret` (copied into {{webhook_secret}} by the test script — the engine needs it to verify signatures). Later calls → 200, update only, no secret."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const j = pm.response.json();",
+            "pm.test('created (201, secret shown once) or updated (200)', () => pm.expect([200, 201]).to.include(pm.response.code));",
+            "if (j.secret) { pm.collectionVariables.set('webhook_secret', j.secret); pm.test('secret is 64 hex', () => pm.expect(j.secret).to.match(/^[0-9a-f]{64}$/)); }",
+            "pm.test('secret_hint only in webhook view', () => pm.expect(j.webhook).to.have.property('secret_hint').and.not.have.property('secret'));"
+          ] } }]
+        },
+        {
+          "name": "POST /api/engine-settings/webhook/rotate-secret",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{base_url}}/api/engine-settings/webhook/rotate-secret", "host": ["{{base_url}}"], "path": ["api", "engine-settings", "webhook", "rotate-secret"] },
+            "description": "Purpose in the engine: credential rotation. Issues a new signing secret (shown once, stored into {{webhook_secret}}); the old one stops validating immediately, so update the engine's config right after."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('rotated', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().secret).to.match(/^[0-9a-f]{64}$/); });",
+            "pm.collectionVariables.set('webhook_secret', pm.response.json().secret);"
+          ] } }]
+        },
+        {
+          "name": "POST /api/engine-settings/webhook/test (send test.ereignis)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{base_url}}/api/engine-settings/webhook/test", "host": ["{{base_url}}"], "path": ["api", "engine-settings", "webhook", "test"] },
+            "description": "Purpose in the engine: connectivity check. Emits `test.ereignis` synchronously and reports the delivery outcome, so you can confirm URL, TLS and signature handling on the engine before real events flow. Check your receiver for headers X-Upgrads-Event / X-Upgrads-Signature."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('test event dispatched', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().event_id).to.match(/^evt_/); });",
+            "const d = pm.response.json().deliveries[0]; if (d) pm.collectionVariables.set('delivery_id', d.id);",
+            "console.log('delivery status:', d && d.status, d && d.error);"
+          ] } }]
+        },
+        {
+          "name": "GET /api/engine-settings/webhook/deliveries?limit=20",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/engine-settings/webhook/deliveries?limit=20", "host": ["{{base_url}}"], "path": ["api", "engine-settings", "webhook", "deliveries"], "query": [{ "key": "limit", "value": "20" }] },
+            "description": "Purpose in the engine: the audit/ops log of every event the CRM tried to send — status (pending/delivered/failed/dead), attempts, HTTP response, error, timestamps. This is where an operator sees that the engine did (or did not) receive `vertrag.unterschrieben`."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('array of deliveries', () => { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.be.an('array'); });",
+            "const failed = pm.response.json().find(d => d.status === 'failed' || d.status === 'dead'); if (failed) pm.collectionVariables.set('delivery_id', failed.id);"
+          ] } }]
+        },
+        {
+          "name": "POST /api/engine-settings/webhook/deliveries/:id/retry",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{base_url}}/api/engine-settings/webhook/deliveries/{{delivery_id}}/retry", "host": ["{{base_url}}"], "path": ["api", "engine-settings", "webhook", "deliveries", "{{delivery_id}}", "retry"] },
+            "description": "Purpose in the engine: operator recovery. Re-sends a failed or dead delivery right now (a dead one gets exactly one more attempt). 404 if the delivery is already delivered or belongs to another workspace. Run the deliveries request first with the receiver stopped to get a failed id."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('retried (200) or not retryable (404)', () => pm.expect([200, 404]).to.include(pm.response.code));"
+          ] } }]
+        },
+        {
+          "name": "POST /api/engine-settings/api-keys (create — key shown once)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/engine-settings/api-keys", "host": ["{{base_url}}"], "path": ["api", "engine-settings", "api-keys"] },
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Onboarding Engine (dev)\"\n}" },
+            "description": "Purpose in the engine: the credential the ENGINE uses to call the CRM (folder 2). Returned once as `key` (upg_live_…); the CRM stores only a SHA-256 hash. The test script saves it into {{api_key}} for folder 2 — in production, paste it into the engine's config."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "const j = pm.response.json();",
+            "pm.test('201 with a upg_live_ key', () => { pm.response.to.have.status(201); pm.expect(j.key).to.match(/^upg_live_[0-9a-f]{32}$/); });",
+            "pm.collectionVariables.set('api_key', j.key); pm.collectionVariables.set('key_id', j.id);"
+          ] } }]
+        },
+        {
+          "name": "GET /api/engine-settings/api-keys",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/engine-settings/api-keys", "host": ["{{base_url}}"], "path": ["api", "engine-settings", "api-keys"] },
+            "description": "Purpose in the engine: inventory of issued keys — name, prefix, created, last used (updated by the engine's calls, throttled to once a minute), revoked. Never the key or its hash."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('no key material in the list', () => { pm.response.to.have.status(200); pm.response.json().forEach(k => { pm.expect(k).to.not.have.property('key'); pm.expect(k).to.not.have.property('key_hash'); }); });"
+          ] } }]
+        },
+        {
+          "name": "DELETE /api/engine-settings/api-keys/:id (revoke) — run LAST",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{base_url}}/api/engine-settings/api-keys/{{key_id}}", "host": ["{{base_url}}"], "path": ["api", "engine-settings", "api-keys", "{{key_id}}"] },
+            "description": "Purpose in the engine: cut off a leaked or retired key. Immediate: the next call with it gets 401. Run this after folder 2, otherwise folder 2 fails with 401."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('revoked', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "2 Engine API — what the ENGINE calls (API key)",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_key}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "GET /api/kunden/:id (Stammdaten)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/kunden/{{contact_id}}", "host": ["{{base_url}}"], "path": ["api", "kunden", "{{contact_id}}"] },
+            "description": "Purpose in the engine: after receiving `vertrag.unterschrieben` (which carries `kunde_id`), the engine fetches the client's master data — Firma, Ansprechpartner, E-Mail, Telefon, Adresse, Rechtsform, USt-ID, Handelsregisternummer, Webseite, Quelle — to pre-fill the onboarding form, create the Drive folder and the Akte. Always 17 German keys; empty fields are null. Contacts of other workspaces are 404."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 with the German view', () => { pm.response.to.have.status(200); const j = pm.response.json(); pm.expect(Object.keys(j)).to.have.lengthOf(17); pm.expect(j).to.have.nested.property('adresse.plz'); pm.expect(j.kunde_id).to.eql(Number(pm.collectionVariables.get('contact_id'))); });"
+          ] } }]
+        },
+        {
+          "name": "PATCH /api/kunden/:id/status (progress report, idempotent)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotency_key}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/kunden/{{contact_id}}/status", "host": ["{{base_url}}"], "path": ["api", "kunden", "{{contact_id}}", "status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"onboarding_status\": \"formular_ausgefuellt\",\n  \"drive_ordner_id\": \"1AbCdEfGhIjKlMnOpQrStUvWxYz\"\n}" },
+            "description": "Purpose in the engine: how the engine reports progress back to the CRM at each step of its pipeline — formular_ausgefuellt when the client submits the form, termin_gebucht when the appointment is booked, call_erfolgt when the recording exists, briefing_fertig when briefing.md is created, onboarding_abgeschlossen when all open questions are resolved. `drive_ordner_id` (optional) stores the Google Drive folder the engine created; send null to clear, omit to leave unchanged. The pre-request script sets a fresh Idempotency-Key; send the SAME key again to see the replay (same body, header Idempotent-Replayed: true, no second write). The CRM does NOT emit a webhook for this change — that is the loop guard."
+          },
+          "event": [
+            { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [
+              "// A new key per logical request. To test the replay, comment this line and send twice.",
+              "pm.collectionVariables.set('idempotency_key', pm.variables.replaceIn('{{$guid}}'));"
+            ] } },
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('200 with updated status', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().onboarding_status).to.eql('formular_ausgefuellt'); });",
+              "console.log('Idempotent-Replayed:', pm.response.headers.get('Idempotent-Replayed') || 'no (first request)');"
+            ] } }
+          ]
+        },
+        {
+          "name": "PATCH /api/kunden/:id/status — replay with the SAME key",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotency_key}}" }
+            ],
+            "url": { "raw": "{{base_url}}/api/kunden/{{contact_id}}/status", "host": ["{{base_url}}"], "path": ["api", "kunden", "{{contact_id}}", "status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"onboarding_status\": \"formular_ausgefuellt\",\n  \"drive_ordner_id\": \"1AbCdEfGhIjKlMnOpQrStUvWxYz\"\n}" },
+            "description": "Purpose in the engine: proves a retried request is applied once. Same key and body as the previous request → the stored response is replayed, no second UPDATE. Run right after the request above."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('replayed', () => { pm.response.to.have.status(200); pm.expect(pm.response.headers.get('Idempotent-Replayed')).to.eql('true'); });"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "3 Manual trigger — what the CRM USER does (session)",
+      "item": [
+        {
+          "name": "POST /api/contacts/:id/onboarding/start",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/contacts/{{contact_id}}/onboarding/start", "host": ["{{base_url}}"], "path": ["api", "contacts", "{{contact_id}}", "onboarding", "start"] },
+            "body": { "mode": "raw", "raw": "{}" },
+            "description": "Purpose in the engine: THE START SIGNAL. A CRM user marks the contract as signed. The CRM sets the contact to formular_versendet and emits `vertrag.unterschrieben` to the webhook with fallback contract data (vertrag_id manuell_<id>_<ts>, quelle manuell, the client's name/email/firma). The engine's pipeline begins here: it should GET /api/kunden/:id for the full master data, send the form, and report each later step with PATCH …/status. `deliveries` is how many webhook rows were created (0 = no active webhook configured; the status still changes)."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('201 formular_versendet', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().onboarding_status).to.eql('formular_versendet'); });",
+            "console.log('event_id:', pm.response.json().event_id, 'deliveries:', pm.response.json().deliveries);"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "4 Negative cases (error shapes)",
+      "item": [
+        {
+          "name": "GET /api/kunden/:id without a key → 401",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/kunden/{{contact_id}}", "host": ["{{base_url}}"], "path": ["api", "kunden", "{{contact_id}}"] },
+            "description": "Shows the engine error shape and that nothing is enumerable: missing, unknown, revoked and expired keys all get the same body."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401 nicht_authentifiziert', () => { pm.response.to.have.status(401); pm.expect(pm.response.json().fehler.code).to.eql('nicht_authentifiziert'); pm.expect(pm.response.headers.get('WWW-Authenticate')).to.eql('Bearer'); });"
+          ] } }]
+        },
+        {
+          "name": "PATCH status without Idempotency-Key → 400",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_key}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/kunden/{{contact_id}}/status", "host": ["{{base_url}}"], "path": ["api", "kunden", "{{contact_id}}", "status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"onboarding_status\": \"termin_gebucht\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400 idempotency_key_fehlt', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().fehler.code).to.eql('idempotency_key_fehlt'); });"
+          ] } }]
+        },
+        {
+          "name": "PATCH status with an unknown status → 422",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_key}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Idempotency-Key", "value": "{{$guid}}" }],
+            "url": { "raw": "{{base_url}}/api/kunden/{{contact_id}}/status", "host": ["{{base_url}}"], "path": ["api", "kunden", "{{contact_id}}", "status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"onboarding_status\": \"bogus\"\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422 ungueltiger_status listing the seven values', () => { pm.response.to.have.status(422); const f = pm.response.json().fehler; pm.expect(f.code).to.eql('ungueltiger_status'); pm.expect(f.nachricht).to.include('onboarding_abgeschlossen'); });"
+          ] } }]
+        },
+        {
+          "name": "PATCH status: same key, different body → 422 konflikt",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_key}}", "type": "string" }] },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Idempotency-Key", "value": "{{idempotency_key}}" }],
+            "url": { "raw": "{{base_url}}/api/kunden/{{contact_id}}/status", "host": ["{{base_url}}"], "path": ["api", "kunden", "{{contact_id}}", "status"] },
+            "body": { "mode": "raw", "raw": "{\n  \"onboarding_status\": \"call_erfolgt\"\n}" },
+            "description": "Reuses the {{idempotency_key}} from folder 2 with a different payload."
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422 idempotency_key_konflikt', () => { pm.response.to.have.status(422); pm.expect(pm.response.json().fehler.code).to.eql('idempotency_key_konflikt'); });"
+          ] } }]
+        },
+        {
+          "name": "GET /api/kunden/abc → 400 ungueltige_id",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{api_key}}", "type": "string" }] },
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/kunden/abc", "host": ["{{base_url}}"], "path": ["api", "kunden", "abc"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400 ungueltige_id', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().fehler.code).to.eql('ungueltige_id'); });"
+          ] } }]
+        },
+        {
+          "name": "PUT webhook with a bad URL → 400 (session, owner)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/api/engine-settings/webhook", "host": ["{{base_url}}"], "path": ["api", "engine-settings", "webhook"] },
+            "body": { "mode": "raw", "raw": "{\n  \"url\": \"ftp://not-allowed\",\n  \"events\": []\n}" }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('400 url must be http(s)', () => { pm.response.to.have.status(400); pm.expect(pm.response.json().error).to.include('http'); });"
+          ] } }]
+        }
+      ]
+    }
+  ]
+}

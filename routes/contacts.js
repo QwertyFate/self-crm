@@ -6,6 +6,9 @@ const { notify }  = require('../notifications');
 // Cross-workspace reference guard (stages + members prefetch, per-row check).
 // Shared with routes/deals.js; see utils/workspace-refs.js.
 const { workspaceRefs, refCheck } = require('../utils/workspace-refs');
+// Outbound events to the Onboarding Engine are emitted from CRM-user actions
+// here — never from routes/engine-api.js, which would loop.
+const { emitEngineEvent } = require('../utils/engine-webhook');
 
 router.use(requireAuth);
 
@@ -405,6 +408,50 @@ router.post('/bulk/delete', async (req, res, next) => {
       [req.workspaceId, ...contactIds]
     );
     res.json({ deleted: result.rowCount });
+  } catch (e) { next(e); }
+});
+
+// Manual onboarding trigger: a CRM user marks the contract as signed. Moves the
+// contact to formular_versendet and emits vertrag.unterschrieben to the engine
+// with fallback contract data (there is no e-signature system feeding this yet).
+// The status change is the source of truth: a webhook-table failure is logged
+// and reported as deliveries: 0, never rolled back into a 500.
+router.post('/:id/onboarding/start', async (req, res, next) => {
+  try {
+    if (!/^\d+$/.test(String(req.params.id))) return res.status(400).json({ error: 'Invalid id' });
+    const id = Number(req.params.id);
+
+    const { rows: [c] } = await pool.query(
+      `UPDATE contacts SET onboarding_status = 'formular_versendet', updated_at = NOW()
+        WHERE id = $1 AND workspace_id = $2
+        RETURNING id, name, email, company, onboarding_status`,
+      [id, req.workspaceId]
+    );
+    if (!c) return res.status(404).json({ error: 'Not found' });
+
+    let event_id = null, deliveries = 0;
+    try {
+      const r = await emitEngineEvent(req.workspaceId, 'vertrag.unterschrieben', {
+        kundeId: id,
+        daten: {
+          vertrag_id:        `manuell_${id}_${Date.now()}`,
+          quelle:            'manuell',
+          ausgeloest_von:    req.userId,
+          onboarding_status: c.onboarding_status,
+          kunde:             { name: c.name, email: c.email, firma: c.company },
+        },
+      });
+      event_id = r.eventId; deliveries = r.deliveryIds.length;
+    } catch (e) {
+      console.error('vertrag.unterschrieben emit failed:', e.message);
+    }
+
+    notify(req.workspaceId, req.userId, {
+      type: 'contact_updated', category: 'contacts',
+      title: `Onboarding gestartet: ${c.name}`,
+      entityType: 'contact', entityId: id,
+    });
+    res.status(201).json({ success: true, onboarding_status: c.onboarding_status, event_id, deliveries });
   } catch (e) { next(e); }
 });
 

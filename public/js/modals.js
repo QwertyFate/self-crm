@@ -94,6 +94,7 @@ function buildDetailHTML(c, contactDeals, id) {
     ['Phone',    c.phone ? `${esc(c.phone)}${waLink(c.phone, c) ? ` <a class="wa-detail-link" href="${waLink(c.phone, c)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG} WhatsApp</a>` : ''}` : null],
     ['Stage',    stageField],
     ['Assignee', c.assigned_to_name],
+    [t('lbl_onboarding'), onboardingBadge(c.onboarding_status)],
     ...fields.map(f => {
       const val = c.custom_data?.[f.field_key]; if (!val) return [f.name, null];
       if (f.type === 'url')   return [f.name, `<a href="${esc(val)}" target="_blank" rel="noopener">${esc(val)}</a>`];
@@ -163,6 +164,7 @@ function buildDetailHTML(c, contactDeals, id) {
     <div class="detail-actions">
       <button class="btn btn-danger btn-sm" onclick="deleteContact(${id})">${t('btn_delete')}</button>
       <button class="btn btn-sm" onclick="closeSidePanel();closeModal('detail-modal');openContactModal(${id})">${t('btn_edit')}</button>
+      <button class="btn btn-primary btn-sm" onclick="startOnboarding(${id}, '${esc(c.onboarding_status || 'kein_onboarding')}')">${t('btn_start_onboarding')}</button>
     </div>`;
 }
 

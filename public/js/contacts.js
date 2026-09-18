@@ -63,6 +63,7 @@ function effectiveContactColumns() {
     { key: 'stage_id',    label: () => t('col_stage'),      type: 'stage',    show: false },
     { key: 'assigned_to', label: () => t('col_assignee'),   type: 'assignee', show: true  },
     { key: 'created_at',  label: () => t('col_created_at'), type: 'date',     show: false },
+    { key: 'onboarding_status', label: () => t('col_onboarding'), type: 'onboarding', show: false },
   ];
   const ALL = [
     ...BUILTIN,
@@ -96,6 +97,36 @@ function getSortValue(c, key) {
   if (f?.type === 'number') return parseFloat(v) || 0;
   if (f?.type === 'date')   return v ? new Date(v).getTime() : 0;
   return (v || '').toString().toLowerCase();
+}
+
+// ---- Onboarding Engine: status badge + manual trigger ----------------------
+// Labels are German in every UI language (business terms); colours follow the
+// stage-badge convention. Keys mirror the CHECK constraint on contacts.onboarding_status.
+const ONBOARDING_STATUS_META = {
+  kein_onboarding:          { color: '#94a3b8' },
+  formular_versendet:       { color: '#3b82f6' },
+  formular_ausgefuellt:     { color: '#6366f1' },
+  termin_gebucht:           { color: '#8b5cf6' },
+  call_erfolgt:             { color: '#f59e0b' },
+  briefing_fertig:          { color: '#10b981' },
+  onboarding_abgeschlossen: { color: '#22c55e' },
+};
+function onboardingLabel(status) {
+  return ONBOARDING_STATUS_META[status] ? t(`onb_${status}`) : (status || t('onb_kein_onboarding'));
+}
+function onboardingBadge(status) {
+  const key  = ONBOARDING_STATUS_META[status] ? status : 'kein_onboarding';
+  const meta = ONBOARDING_STATUS_META[key];
+  return `<span class="stage-badge" title="${esc(key)}"><span class="stage-badge-dot" style="background:${meta.color}"></span>${esc(onboardingLabel(key))}</span>`;
+}
+async function startOnboarding(id, currentStatus) {
+  const msg = currentStatus && currentStatus !== 'kein_onboarding' ? t('onb_confirm_reset') : t('onb_confirm');
+  if (!confirm(msg)) return;
+  const res = await api.post(`/api/contacts/${id}/onboarding/start`, {});
+  if (res.error) { alert(res.error); return; }
+  invalidate();
+  await loadContacts();
+  await openDetail(id);
 }
 
 function sortContacts(list) {
@@ -156,6 +187,8 @@ function renderContactsTable(list) {
         return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'assigned_to','assignee')" title="${esc(c.assigned_to_name||'')}">${esc(c.assigned_to_name||'')||dash}</td>`;
       if (col.key === 'created_at')
         return `<td title="${esc(String(c.created_at||''))}">${fmtDate(c.created_at)||dash}</td>`;
+      if (col.key === 'onboarding_status')
+        return `<td>${onboardingBadge(c.onboarding_status)}</td>`;
       const v = c.custom_data?.[col.key] ?? '';
       return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${col.key}','${col.type}')" title="${esc(v)}">${esc(v)||dash}</td>`;
     }).join('');
