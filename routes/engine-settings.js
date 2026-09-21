@@ -16,7 +16,8 @@ const { emitEngineEvent, attemptDeliveries } = require('../utils/engine-webhook'
 router.use(requireAuth);
 router.use((req, res, next) => (req.userRole === 'owner' ? next() : res.status(403).json({ error: 'Owner only' })));
 
-const AVAILABLE_EVENTS = ['vertrag.unterschrieben', 'test.ereignis'];
+// onboarding.status_geaendert: a CRM user changed the status by hand (routes/contacts.js).
+const AVAILABLE_EVENTS = ['vertrag.unterschrieben', 'onboarding.status_geaendert', 'test.ereignis'];
 const WEBHOOK_COLS = 'id, url, events, description, active, RIGHT(secret, 4) AS secret_hint, created_at, updated_at';
 const newSecret = () => crypto.randomBytes(32).toString('hex');
 const hint = s => (s ? s.slice(-4) : null);

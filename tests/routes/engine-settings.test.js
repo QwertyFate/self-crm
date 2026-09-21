@@ -12,14 +12,14 @@ let pool, owner, member;
 
 before(async () => {
   pool = createFakePool([
-    { match: /AS secret_hint, created_at, updated_at FROM engine_webhook WHERE workspace_id=\$1 ORDER BY id LIMIT 1/, reply: p => { const w = [...hooks.values()].find(h => h.workspace_id === p[0]); return { rows: w ? [view(w)] : [] }; } },
+    { match: /AS secret_hint[\s\S]*FROM engine_webhook WHERE workspace_id=\$1/, reply: p => { const w = [...hooks.values()].find(h => h.workspace_id === p[0]); return { rows: w ? [view(w)] : [] }; } },   // the GET view
     { match: /^SELECT id FROM engine_webhook WHERE workspace_id=\$1/, reply: p => { const w = [...hooks.values()].find(h => h.workspace_id === p[0]); return { rows: w ? [{ id: w.id }] : [] }; } },
     { match: /^INSERT INTO engine_webhook \(/, reply: p => { const w = { id: nextId++, workspace_id: p[0], url: p[1], secret: p[2], events: JSON.parse(p[3]), description: p[4], active: p[5] }; hooks.set(w.id, w); return { rows: [view(w)] }; } },
     { match: /^UPDATE engine_webhook SET url=/, reply: p => { const w = hooks.get(p[4]); if (!w || w.workspace_id !== p[5]) return { rows: [] }; Object.assign(w, { url: p[0], events: JSON.parse(p[1]), description: p[2], active: p[3] }); return { rows: [view(w)] }; } },
     { match: /^UPDATE engine_webhook SET secret=/, reply: p => { const w = [...hooks.values()].find(h => h.workspace_id === p[1]); if (!w) return { rows: [] }; w.secret = p[0]; return { rows: [view(w)] }; } },
     { match: /^SELECT id, status, response_status, error FROM engine_webhook_deliveries/, reply: p => ({ rows: p[1].map(id => deliveries.get(id)).filter(Boolean) }) },
     { match: /FROM engine_webhook_deliveries WHERE workspace_id=\$1 ORDER BY created_at DESC LIMIT \$2/, reply: p => ({ rows: [...deliveries.values()].filter(d => d.workspace_id === p[0]).slice(0, p[1]) }) },
-    { match: /^UPDATE engine_webhook_deliveries SET status='failed', next_attempt_at=NOW\(\), attempts=LEAST\(attempts, 6\)/, reply: p => { const d = deliveries.get(p[0]); if (!d || d.workspace_id !== p[1] || !['failed', 'dead'].includes(d.status)) return { rowCount: 0 }; d.status = 'failed'; d.attempts = Math.min(d.attempts, 6); return { rowCount: 1 }; } },
+    { match: /^UPDATE engine_webhook_deliveries SET status='failed'/, reply: p => { const d = deliveries.get(p[0]); if (!d || d.workspace_id !== p[1] || !['failed', 'dead'].includes(d.status)) return { rowCount: 0 }; d.status = 'failed'; d.attempts = Math.min(d.attempts, 6); return { rowCount: 1 }; } },
     { match: /FROM api_keys WHERE workspace_id=\$1 ORDER BY/, reply: p => ({ rows: [...keys.values()].filter(k => k.workspace_id === p[0]).map(pub) }) },
     { match: /^INSERT INTO api_keys/, reply: p => { const k = { id: nextId++, workspace_id: p[0], name: p[1], key_prefix: p[2], key_hash: p[3], scopes: [], created_at: 'now', last_used_at: null, expires_at: null, revoked_at: null }; keys.set(k.id, k); return { rows: [pub(k)] }; } },
     { match: /^UPDATE api_keys SET revoked_at=NOW\(\)/, reply: p => { const k = keys.get(p[0]); if (!k || k.workspace_id !== p[1] || k.revoked_at) return { rowCount: 0 }; k.revoked_at = 'now'; return { rowCount: 1 }; } },
@@ -47,7 +47,7 @@ test('every route is owner-only: a member gets 403 and nothing is queried', asyn
 describe('webhook', () => {
   test('GET with nothing configured -> null + available events', async () => {
     const r = await owner.request('GET', '/api/engine-settings/webhook');
-    assert.deepEqual(r.body, { webhook: null, available_events: ['vertrag.unterschrieben', 'test.ereignis'] });
+    assert.deepEqual(r.body, { webhook: null, available_events: ['vertrag.unterschrieben', 'onboarding.status_geaendert', 'test.ereignis'] });
   });
   test('PUT creates the webhook with a 64-hex secret returned once; the next GET shows only a hint', async () => {
     const r = await owner.request('PUT', '/api/engine-settings/webhook', { url: 'https://engine.test/hook', events: ['vertrag.unterschrieben'], description: 'd', active: true });
@@ -56,8 +56,9 @@ describe('webhook', () => {
     assert.equal(r.body.webhook.secret_hint, r.body.secret.slice(-4));
     assert.equal(pool.find(/^INSERT INTO engine_webhook \(/).params[2], r.body.secret);
     const g = await owner.request('GET', '/api/engine-settings/webhook');
-    assert.equal(g.body.secret, undefined); assert.equal(g.body.webhook.secret_hint, r.body.secret.slice(-4));
-    assert.ok(!('secret' in g.body.webhook));
+    assert.ok(!('secret' in g.body), 'GET never returns the secret');
+    assert.ok(!('secret' in g.body.webhook), 'nor inside the webhook view');
+    assert.equal(g.body.webhook.secret_hint, r.body.secret.slice(-4));
   });
   test('PUT again updates in place (no new secret); bad url / unknown event -> 400', async () => {
     await owner.request('PUT', '/api/engine-settings/webhook', { url: 'https://a', events: [] });
@@ -86,8 +87,11 @@ describe('webhook', () => {
     const l = await owner.request('GET', '/api/engine-settings/webhook/deliveries?limit=10');
     assert.deepEqual(l.body.map(d => d.id), [50]); assert.deepEqual(pool.find(/ORDER BY created_at DESC LIMIT \$2/).params, [7, 10]);
     const r = await owner.request('POST', '/api/engine-settings/webhook/deliveries/50/retry', {});
-    assert.equal(r.status, 200); assert.equal(r.body.status, 'delivered');
-    assert.equal(deliveries.get(50).attempts, 6); assert.deepEqual(attempts, [[50]]);
+    assert.equal(r.status, 200);
+    assert.equal(r.body.status, 'delivered');
+    assert.match(pool.find(/^UPDATE engine_webhook_deliveries SET status='failed'/).sql, /attempts=LEAST\(attempts, 6\)/, 'the re-arm clamps attempts in SQL');
+    assert.equal(deliveries.get(50).attempts, 6);
+    assert.deepEqual(attempts, [[50]], 'attempted exactly once');
     assert.equal((await owner.request('POST', '/api/engine-settings/webhook/deliveries/51/retry', {})).status, 404);
   });
 });
@@ -102,7 +106,10 @@ describe('API keys', () => {
     assert.equal(ins[3], crypto.createHash('sha256').update(r.body.key).digest('hex'));
     assert.equal(pool.log.some(e => e.params.includes(r.body.key)), false);
     const g = await owner.request('GET', '/api/engine-settings/api-keys');
-    assert.equal(g.body.length, 1); assert.equal(g.body[0].key, undefined); assert.equal(g.body[0].key_hash, undefined); assert.equal(g.body[0].key_prefix, r.body.key.slice(0, 12));
+    assert.equal(g.body.length, 1);
+    assert.ok(!('key' in g.body[0]), 'the list never carries the key');
+    assert.ok(!('key_hash' in g.body[0]), 'nor its hash');
+    assert.equal(g.body[0].key_prefix, r.body.key.slice(0, 12));
   });
   test('missing name -> 400; revoke sets revoked_at; second revoke / foreign id -> 404', async () => {
     assert.equal((await owner.request('POST', '/api/engine-settings/api-keys', {})).status, 400);

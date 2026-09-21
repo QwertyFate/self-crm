@@ -196,6 +196,7 @@
         <ul class="sidebar-nav">
           <li><a href="#" data-page="deals" class="active"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="11" rx="1.5"/></svg><span data-i18n="nav_deals">Deals</span></a></li>
           <li><a href="#" data-page="contacts"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span data-i18n="nav_contacts">Contacts</span></a></li>
+          <li><a href="#" data-page="onboarding"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg><span data-i18n="nav_onboarding">Onboarding</span></a></li>
           <li><a href="#" data-page="suppliers" id="nav-suppliers-link"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a2 2 0 0 0-.42-1.23l-2.1-2.7A2 2 0 0 0 17.9 9H14v8h2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg><span id="nav-suppliers-label">Suppliers</span></a></li>
           <li><a href="#" data-page="tasks"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Tasks</span></a></li>
         </ul>
@@ -346,6 +347,38 @@
             <button class="close-btn" onclick="closeSidePanel()">×</button>
           </div>
           <div id="side-panel-body" class="side-panel-body"></div>
+        </div>
+      </section>
+
+      <!-- ── Onboarding: every contact in onboarding and its current step ── -->
+      <section id="page-onboarding" class="page">
+        <div class="page-header">
+          <div>
+            <h1><span data-i18n="page_onboarding">Onboarding</span> <span class="onb-count" id="onb-count"></span></h1>
+            <p class="onb-hint" data-i18n="onb_page_hint">Contacts in onboarding and their current step</p>
+          </div>
+        </div>
+        <div class="toolbar">
+          <input type="text" id="onb-search" data-i18n-ph="onb_search_ph" placeholder="Search name, company, email…" oninput="filterOnboarding()" />
+        </div>
+        <div class="stage-pills" id="onb-pills"></div>
+        <div class="table-wrap" id="onb-table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th data-i18n="onb_col_contact">Contact</th>
+              <th data-i18n="onb_col_company">Company</th>
+              <th data-i18n="onb_col_status">Status</th>
+              <th data-i18n="onb_col_progress">Progress</th>
+              <th data-i18n="onb_col_assignee">Assignee</th>
+              <th data-i18n="onb_col_updated">Last update</th>
+            </tr></thead>
+            <tbody id="onb-tbody"></tbody>
+          </table>
+        </div>
+        <div class="empty-state hidden" id="onb-empty">
+          <div class="empty-state-art"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg></div>
+          <h2 data-i18n="onb_empty_title">No contact is in onboarding yet</h2>
+          <p data-i18n="onb_empty_hint">Start it from a contact or a deal.</p>
         </div>
       </section>
 
@@ -718,6 +751,18 @@
                 </div>
                 <p class="settings-hint" data-i18n="hint_pipelines">Each pipeline has its own stages. Deals belong to one pipeline.</p>
                 <div id="pipelines-list"></div>
+              </div>
+
+              <div class="settings-card hidden" id="onboarding-trigger-card" style="grid-column:1/-1">
+                <div class="settings-card-header">
+                  <h2 data-i18n="set_onboarding_trigger">Onboarding trigger</h2>
+                </div>
+                <p class="settings-hint" data-i18n="hint_onboarding_trigger">When a deal reaches one of these stages, the CRM asks whether to start onboarding for its contact.</p>
+                <div id="onboarding-trigger-stages"></div>
+                <div style="padding:8px 0 4px;display:flex;align-items:center;gap:10px">
+                  <button id="save-onboarding-trigger-btn" class="btn btn-primary btn-sm" onclick="saveOnboardingTrigger()" data-i18n="btn_save">Save</button>
+                  <span id="onboarding-trigger-msg" class="workspace-name-msg hidden"></span>
+                </div>
               </div>
 
               <div class="settings-card">
@@ -1319,7 +1364,8 @@
       <div class="modal-header">
         <h2 id="deal-modal-title">Add Deal</h2>
         <div class="hstack" style="gap:8px">
-          <button type="button" class="btn btn-sm" id="deal-add-task-btn" onclick="addTaskFromDeal()" style="display:none">＋ Task</button>
+          <button type="button" class="btn btn-sm" id="deal-onboarding-btn" onclick="startOnboardingFromDeal()" style="display:none" data-i18n="btn_start_onboarding">Start Onboarding</button>
+        <button type="button" class="btn btn-sm" id="deal-add-task-btn" onclick="addTaskFromDeal()" style="display:none">＋ Task</button>
           <button class="close-btn" onclick="closeModal('deal-modal')">&times;</button>
         </div>
       </div>
@@ -1675,6 +1721,9 @@
         <button class="close-btn" onclick="closeModal('import-modal')">&times;</button>
       </div>
 
+      <!-- Scrolling body: the box is max-height + overflow:hidden, so the steps
+           live in .modal-body and the action bars are siblings of it (below). -->
+      <div class="modal-body">
       <!-- Step 1: Upload -->
       <div id="import-step-upload">
         <div class="import-upload-area" onclick="document.getElementById('import-file-input').click()"
@@ -1742,10 +1791,6 @@
           <span>Maps to CRM field</span>
         </div>
         <div id="import-map-rows" class="import-map-rows"></div>
-        <div class="modal-actions">
-          <button class="btn" onclick="importBack()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back</span></button>
-          <button class="btn btn-primary" id="import-run-btn" onclick="runImport()">Import contacts</button>
-        </div>
       </div>
 
       <!-- Step 3: Done -->
@@ -1754,9 +1799,16 @@
           <div class="import-done-icon"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
           <p id="import-done-text"></p>
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-primary" onclick="closeModal('import-modal');loadContacts()">Done</button>
-        </div>
+      </div>
+      </div><!-- /.modal-body -->
+
+      <!-- Per-step action bars, toggled by showImportStep() together with the step -->
+      <div id="import-footer-map" class="modal-actions hidden">
+        <button class="btn" onclick="importBack()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back</span></button>
+        <button class="btn btn-primary" id="import-run-btn" onclick="runImport()">Import contacts</button>
+      </div>
+      <div id="import-footer-done" class="modal-actions hidden">
+        <button class="btn btn-primary" onclick="closeModal('import-modal');loadContacts()">Done</button>
       </div>
     </div>
   </div>
@@ -1765,6 +1817,7 @@
   <script src="js/auth.js"></script>
   <script src="js/deals.js"></script>
   <script src="js/contacts.js"></script>
+  <script src="js/onboarding.js"></script>
   <script src="js/objects.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/modals.js"></script>

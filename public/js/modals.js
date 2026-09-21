@@ -94,7 +94,7 @@ function buildDetailHTML(c, contactDeals, id) {
     ['Phone',    c.phone ? `${esc(c.phone)}${waLink(c.phone, c) ? ` <a class="wa-detail-link" href="${waLink(c.phone, c)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG} WhatsApp</a>` : ''}` : null],
     ['Stage',    stageField],
     ['Assignee', c.assigned_to_name],
-    [t('lbl_onboarding'), onboardingBadge(c.onboarding_status)],
+    [t('lbl_onboarding'), onboardingBadge(c.onboarding_status) + onboardingStatusSelect(id, c.onboarding_status, 'detail')],
     ...fields.map(f => {
       const val = c.custom_data?.[f.field_key]; if (!val) return [f.name, null];
       if (f.type === 'url')   return [f.name, `<a href="${esc(val)}" target="_blank" rel="noopener">${esc(val)}</a>`];
@@ -594,6 +594,7 @@ async function renderContactPanelReadOnly(contact) {
     }
     return { label: col.label(), value };
   });
+  rows.unshift({ label: t('lbl_onboarding'), value: onboardingBadge(full.onboarding_status) + onboardingStatusSelect(full.id, full.onboarding_status, 'deal') });   // current step + picker, always shown
 
   panel.innerHTML = `
     <div class="contact-panel-top">
@@ -608,6 +609,19 @@ async function renderContactPanelReadOnly(contact) {
         ${rows.map(r => `<div class="contact-panel-row"><label>${esc(r.label)}</label><span>${r.value}</span></div>`).join('')}
       </div>
     </div>`;
+}
+
+// Start onboarding for the deal's linked contact (header button). Reads the
+// live selection so it also works for a contact chosen but not yet saved.
+// The deal modal stays open; only the contact panel is re-rendered.
+async function startOnboardingFromDeal() {
+  const contactId = parseInt(document.getElementById('df-contact').value) || null;
+  if (!contactId) { alert(t('onb_link_contact_first')); return; }
+  const full = await api.get(`/api/contacts/${contactId}`);
+  if (full.error) { alert(full.error); return; }
+  if (!(await requestOnboardingStart(contactId, full.onboarding_status))) return;
+  await ensureContacts();                                  // requestOnboardingStart cleared the cache
+  await renderContactPanelReadOnly({ id: contactId });
 }
 
 function formatContactNote(cmd) {
@@ -1141,6 +1155,8 @@ async function openDealModal(id) {
   document.getElementById('deal-delete-btn').style.display = id ? '' : 'none';
   const addTaskBtn = document.getElementById('deal-add-task-btn');
   if (addTaskBtn) addTaskBtn.style.display = id ? '' : 'none';
+  const onbBtn = document.getElementById('deal-onboarding-btn');
+  if (onbBtn) onbBtn.style.display = id ? '' : 'none';
   updateUrgencyDot();
 
   const [, , , , pipelinesRes, dealFieldsRes, allContacts, allSuppliers, dealDataRes, objectsRes, objectFieldsRes] = await Promise.all([
@@ -1309,10 +1325,12 @@ async function saveDeal(e) {
     urgency:     document.getElementById('df-urgency').value || 0,
     custom_data: Object.fromEntries(dealFields.map(f => [f.field_key, document.getElementById(`dfield-${f.field_key}`)?.value || ''])),
   };
-  if (id) await api.put(`/api/deals/${id}`, payload); else await api.post('/api/deals', payload);
+  const prevStageId = id ? (deals.find(d => d.id === Number(id))?.stage_id ?? null) : null;   // pre-edit stage, for the onboarding prompt
+  const saved = id ? await api.put(`/api/deals/${id}`, payload) : await api.post('/api/deals', payload);
   closeModal('deal-modal');
   deals = await api.get(`/api/deals?pipeline_id=${currentPipelineId}`);
   if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
+  if (!saved?.error) await maybePromptOnboarding({ contact_id: Number(payload.contact_id) || null, title: payload.title }, prevStageId, Number(payload.stage_id) || null);
 }
 
 async function deleteDeal(id) {

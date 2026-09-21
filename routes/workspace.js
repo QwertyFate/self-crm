@@ -162,8 +162,15 @@ router.delete('/', async (req, res, next) => {
   try {
     if (req.userRole !== 'owner') return res.status(403).json({ error: 'Owner only' });
 
+    // A person has one `users` row PER workspace (UNIQUE(workspace_id, email)),
+    // so counting memberships by req.userId always gives 1 and the guard below
+    // used to fire for everyone. Count by the person's identity — the email —
+    // across all of their user rows instead.
     const { rows: userWorkspaces } = await pool.query(
-      'SELECT COUNT(*) as count FROM user_workspaces WHERE user_id=$1',
+      `SELECT COUNT(*) AS count
+         FROM user_workspaces uw
+         JOIN users u ON u.id = uw.user_id
+        WHERE u.email = (SELECT email FROM users WHERE id = $1)`,
       [req.userId]
     );
     if (parseInt(userWorkspaces[0].count) <= 1) {
@@ -212,6 +219,27 @@ router.patch('/supplier-name', async (req, res, next) => {
     if (!name?.trim()) return res.status(400).json({ error: 'Name required' });
     await pool.query('UPDATE workspaces SET supplier_name=$1 WHERE id=$2', [name.trim(), req.workspaceId]);
     res.json({ success: true, name: name.trim() });
+  } catch (e) { next(e); }
+});
+
+// Onboarding trigger: the pipeline stages that make the UI ask whether to
+// onboard a deal's contact when a deal enters one of them. Owner-only; every
+// id must be a pipeline stage of THIS workspace (stored as a JSONB id list).
+router.patch('/onboarding-trigger', async (req, res, next) => {
+  try {
+    if (req.userRole !== 'owner') return res.status(403).json({ error: 'Owner only' });
+    const { stage_ids } = req.body || {};
+    if (!Array.isArray(stage_ids) || !stage_ids.every(n => Number.isInteger(n) && n > 0)) {
+      return res.status(400).json({ error: 'stage_ids must be an array of stage ids' });
+    }
+    const ids = [...new Set(stage_ids)].sort((a, b) => a - b);
+    if (ids.length) {
+      const { rows } = await pool.query(
+        'SELECT id FROM pipeline_stages WHERE workspace_id=$1 AND id = ANY($2::int[])', [req.workspaceId, ids]);
+      if (rows.length !== ids.length) return res.status(400).json({ error: 'stage_ids contains a stage of another workspace' });
+    }
+    await pool.query('UPDATE workspaces SET onboarding_trigger_stage_ids=$1 WHERE id=$2', [JSON.stringify(ids), req.workspaceId]);
+    res.json({ success: true, stage_ids: ids });
   } catch (e) { next(e); }
 });
 

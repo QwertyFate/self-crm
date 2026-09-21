@@ -26,6 +26,7 @@ before(async () => {
     { match: /^INSERT INTO tasks/,             reply: () => ({ rows: [{ id: 99 }] }) },
     { match: /^UPDATE tasks SET/,              reply: () => ({ rows: [], rowCount: 1 }) },
     { match: /SELECT project_id FROM tasks WHERE id=\$1 AND workspace_id=\$2/, reply: () => ({ rows: [{ project_id: 20 }] }) },
+    { match: /WHERE t\.parent_id = \$1/,       reply: () => ({ rows: [{ ...ROW, id: 101, parent_id: 100, title: 'child' }] }) },   // subtasks of 100
     { match: /FROM tasks t/,                   reply: () => ({ rows: [ROW] }) },
   ]);
   server = await serve({ '/api/tasks': loadRoute('tasks.js', { pool }) });
@@ -49,7 +50,7 @@ describe('read side', () => {
     const sub = pool.find(/WHERE t\.parent_id = \$1 AND t\.workspace_id = \$2/);
     assert.ok(sub, 'subtask query is scoped');
     assert.deepEqual(sub.params, ['100', 7]);
-    assert.ok(Array.isArray(r.body.subtasks));
+    assert.deepEqual(r.body.subtasks.map(t => t.id), [101], 'the scoped subtask query feeds the detail');
   });
 });
 

@@ -25,6 +25,7 @@ async function loadSettings() {
     if (nameCard) { nameCard.classList.remove('hidden'); document.getElementById('object-name-input').value = currentWorkspace?.object_name || 'Listings'; }
     const supCard = document.getElementById('supplier-name-card');
     if (supCard) { supCard.classList.remove('hidden'); document.getElementById('supplier-name-input').value = currentWorkspace?.supplier_name || 'Suppliers'; }
+    document.getElementById('onboarding-trigger-card')?.classList.remove('hidden');
   }
   pipelines  = await api.get('/api/pipelines');
   dealFields = await api.get('/api/deal-fields');
@@ -67,7 +68,34 @@ async function saveWorkspaceName() {
   setTimeout(() => msgEl.classList.add('hidden'), 2500);
 }
 
+// Onboarding trigger card (Deals pane, owner-only): one checkbox per pipeline
+// stage; the ticked ones make the UI ask "start onboarding?" when a deal
+// enters them. Rendered together with the pipelines list so edits to stages
+// are reflected immediately.
+function renderOnboardingTriggerSettings() {
+  const el = document.getElementById('onboarding-trigger-stages'); if (!el) return;
+  const picked = (currentWorkspace?.onboarding_trigger_stage_ids || []).map(Number);
+  if (!pipelines.length) { el.innerHTML = `<p style="color:var(--muted);font-size:13px;padding:8px 0">${esc(t('onb_trigger_none'))}</p>`; return; }
+  el.innerHTML = pipelines.map(p => `
+    <div class="onb-trigger-pipeline">
+      <div class="row-label" style="font-weight:600;margin:6px 0 2px">${esc(p.name)}</div>
+      ${(p.stages || []).map(s => `<label class="onb-trigger-stage"><input type="checkbox" data-id="${s.id}"${picked.includes(s.id) ? ' checked' : ''} /> <span class="row-dot" style="background:${s.color}"></span> ${esc(s.name)}</label>`).join('')}
+    </div>`).join('');
+}
+async function saveOnboardingTrigger() {
+  const btn = document.getElementById('save-onboarding-trigger-btn'), msgEl = document.getElementById('onboarding-trigger-msg');
+  const stage_ids = [...document.querySelectorAll('#onboarding-trigger-stages input[data-id]:checked')].map(el => parseInt(el.dataset.id));
+  if (btn) { btn.disabled = true; btn.textContent = '…'; } msgEl?.classList.add('hidden');
+  const res = await api.patch('/api/workspace/onboarding-trigger', { stage_ids });
+  if (btn) { btn.disabled = false; btn.textContent = t('btn_save'); }
+  if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
+  currentWorkspace.onboarding_trigger_stage_ids = res.stage_ids;
+  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  setTimeout(() => msgEl?.classList.add('hidden'), 2500);
+}
+
 function renderPipelinesSettings() {
+  renderOnboardingTriggerSettings();                        // the trigger card lists the same stages
   const el = document.getElementById('pipelines-list'); if (!el) return;
   if (!pipelines.length) { el.innerHTML = `<p style="color:var(--muted);font-size:13px;padding:8px 0">No pipelines yet.</p>`; return; }
   el.innerHTML = pipelines.map(p => `

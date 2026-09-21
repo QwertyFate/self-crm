@@ -11,7 +11,7 @@ let pool, server;
 
 before(async () => {
   pool = createFakePool([
-    { match: /EXISTS \(SELECT 1 FROM objects WHERE id=\$1 AND workspace_id=\$3\) AS obj, EXISTS \(SELECT 1 FROM (deals|contacts) WHERE id=\$2 AND workspace_id=\$3\) AS linked/,
+    { match: /EXISTS \(SELECT 1 FROM objects WHERE id=\$1 AND workspace_id=\$3\) AS obj/,   // the two-sided ownership probe
       reply: (p, sql) => {
         const table = /FROM (deals|contacts) WHERE id=\$2/.exec(sql)[1];
         return { rows: [{ obj: OWNER.objects[p[0]] === p[2], linked: OWNER[table][p[1]] === p[2] }] };

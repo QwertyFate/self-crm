@@ -111,7 +111,11 @@ function updateImportStages() {
     pipeline.stages.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
 }
 function showImportStep(step) {
-  ['upload','map','done'].forEach(s => document.getElementById(`import-step-${s}`).classList.toggle('hidden', s !== step));
+  ['upload','map','done'].forEach(s => {
+    document.getElementById(`import-step-${s}`).classList.toggle('hidden', s !== step);
+    const footer = document.getElementById(`import-footer-${s}`);   // the step's action bar (upload has none)
+    if (footer) footer.classList.toggle('hidden', s !== step);
+  });
 }
 function handleImportDrop(e) { e.preventDefault(); const file = e.dataTransfer.files?.[0]; if (file) processImportFile(file); }
 function handleImportFile(e) { const file = e.target.files?.[0]; if (file) processImportFile(file); }

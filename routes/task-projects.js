@@ -148,11 +148,22 @@ router.delete('/lists/:listId', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// task_project_statuses has no workspace_id of its own; the project decides.
+// Resolve the project in the caller's workspace first, or a member of another
+// workspace could read — or with PUT, wipe and replace — this workspace's list.
+async function ownProjectId(req) {
+  if (!/^\d+$/.test(String(req.params.id))) return null;
+  const { rows: [p] } = await pool.query('SELECT id FROM task_projects WHERE id=$1 AND workspace_id=$2', [Number(req.params.id), req.workspaceId]);
+  return p ? p.id : null;
+}
+
 router.get('/:id/statuses', async (req, res, next) => {
   try {
+    const projectId = await ownProjectId(req);
+    if (projectId === null) return res.status(404).json({ error: 'Not found' });
     const { rows } = await pool.query(
       'SELECT * FROM task_project_statuses WHERE project_id=$1 ORDER BY position, id',
-      [req.params.id]
+      [projectId]
     );
     res.json(rows.length ? rows : DEFAULT_STATUSES);
   } catch (e) { next(e); }
@@ -162,12 +173,14 @@ router.put('/:id/statuses', async (req, res, next) => {
   try {
     const { statuses } = req.body;
     if (!Array.isArray(statuses)) return res.status(400).json({ error: 'statuses array required' });
-    await pool.query('DELETE FROM task_project_statuses WHERE project_id=$1', [req.params.id]);
+    const projectId = await ownProjectId(req);
+    if (projectId === null) return res.status(404).json({ error: 'Not found' });
+    await pool.query('DELETE FROM task_project_statuses WHERE project_id=$1', [projectId]);
     for (let i = 0; i < statuses.length; i++) {
       const s = statuses[i];
       await pool.query(
         'INSERT INTO task_project_statuses (project_id, key, label, color, position) VALUES ($1,$2,$3,$4,$5)',
-        [req.params.id, s.key, s.label, s.color, i]
+        [projectId, s.key, s.label, s.color, i]
       );
     }
     res.json({ success: true });

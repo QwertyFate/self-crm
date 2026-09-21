@@ -386,6 +386,7 @@ async function switchPage(page) {
   if (page === 'integrations') await loadIntegrations();
   if (page === 'workspaces')   await loadWorkspacesPage();
   if (page === 'chat')         await loadChatPage();
+  if (page === 'onboarding')   await loadOnboarding();
 }
 
 function invalidate() { contacts = []; stages = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }

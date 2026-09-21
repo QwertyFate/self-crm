@@ -38,7 +38,7 @@ function makeFetch() {
     calls.push({ url, init });
     const n = script.next;
     if (n instanceof Error) throw n;
-    if (n.hang) return new Promise(() => {});                       // never resolves (overlap-guard test)
+    if (n.hang) return new Promise(resolve => { script.release = () => resolve({ ok: true, status: 200, text: async () => '' }); });   // held until the test releases it (overlap-guard test)
     return { ok: n.status >= 200 && n.status < 300, status: n.status, text: async () => n.body ?? '' };
   };
   return { fetch, calls, script };
@@ -143,8 +143,7 @@ describe('delivery outcomes', () => {
       if (n < MAX_ATTEMPTS) { assert.equal(d.status, 'failed'); assert.equal(d.retryInMinutes, BACKOFF_MINUTES[n - 1], `delay after failure ${n}`); }
       else { assert.equal(d.status, 'dead'); assert.equal(d.next_attempt_at, null); }
     }
-    assert.deepEqual(BACKOFF_MINUTES, [1, 5, 30, 120, 360, 720]);
-    assert.equal(BACKOFF_MINUTES.reduce((a, b) => a + b, 0) / 60, 20.6);   // ≈ 21 h across 7 attempts
+    assert.deepEqual(BACKOFF_MINUTES, [1, 5, 30, 120, 360, 720]);   // ≈ 21 h across 7 attempts
   });
   test('a webhook deactivated before delivery -> dead, "Webhook inaktiv", no fetch', async () => {
     const { engine, calls } = build();
@@ -192,7 +191,9 @@ describe('claim and worker', () => {
     await new Promise(r => setTimeout(r, 5));
     assert.equal(engine.isRunning(), true);
     assert.deepEqual(await engine.runWorkerOnce(), { skipped: true });
-    void first;
+    script.release();                                           // let the first tick finish
+    await first;
+    assert.equal(engine.isRunning(), false);
   });
   test('startEngineWebhookWorker returns stop/runWorkerOnce, unrefs its interval, and is idempotent', () => {
     const { engine } = build();

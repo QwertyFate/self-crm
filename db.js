@@ -212,6 +212,8 @@ async function initDb() {
     )
   `);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS analytics_config JSONB NOT NULL DEFAULT '{"won_stage_ids":[],"lost_stage_ids":[]}'`);
+  // Pipeline stages that make the UI ask "start onboarding?" when a deal enters one of them (routes/workspace.js /onboarding-trigger).
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS onboarding_trigger_stage_ids JSONB NOT NULL DEFAULT '[]'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS task_statuses  JSONB NOT NULL DEFAULT '[{"key":"todo","label":"Todo","color":"#94a3b8"},{"key":"in_progress","label":"In Progress","color":"#3b82f6"},{"key":"in_review","label":"In Review","color":"#f59e0b"},{"key":"done","label":"Done","color":"#22c55e"}]'`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_fields (
@@ -464,6 +466,24 @@ async function initDb() {
       created_at   TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+
+  // A database first started from the earlier outgoingendpoints/apiEndpoints
+  // branches has an engine_webhook of a different shape (one row per workspace:
+  // event TEXT, target_url, api_key, …). CREATE TABLE IF NOT EXISTS keeps it and
+  // every engine query then fails with 42703 (column "events" does not exist).
+  // Recognise that shape by its api_key column, keep its rows as a plain copy
+  // (engine_webhook_legacy, no constraints) and let the block below create the
+  // current table. A database built by this file never has api_key here, so
+  // this runs at most once.
+  const { rows: legacyShape } = await pool.query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'engine_webhook' AND column_name = 'api_key'`);
+  if (legacyShape.length) {
+    await pool.query(`CREATE TABLE IF NOT EXISTS engine_webhook_legacy AS SELECT * FROM engine_webhook`);
+    await pool.query(`DROP TABLE IF EXISTS engine_webhook_deliveries`);   // created against the old table; cannot hold rows
+    await pool.query(`DROP TABLE engine_webhook`);
+    console.log('engine_webhook: old-branch table replaced; its rows are kept in engine_webhook_legacy');
+  }
 
   // Outgoing webhooks to the engine (the inbound lead hook is workspace_webhook).
   // `secret` signs outgoing payloads (HMAC); `events` lists subscribed event names.

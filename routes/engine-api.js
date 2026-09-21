@@ -18,10 +18,8 @@ const { runIdempotent } = require('../utils/idempotency');
 
 router.use(engineAuth);
 
-const ONBOARDING_STATUSES = [
-  'kein_onboarding', 'formular_versendet', 'formular_ausgefuellt', 'termin_gebucht',
-  'call_erfolgt', 'briefing_fertig', 'onboarding_abgeschlossen',
-];
+// Shared with routes/contacts.js (manual change) — one list, see utils/onboarding-statuses.js.
+const { ONBOARDING_STATUSES } = require('../utils/onboarding-statuses');
 const MAX_DRIVE_ID = 255;
 
 const fehler = (res, status, code, nachricht) => res.status(status).json({ fehler: { code, nachricht } });

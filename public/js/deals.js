@@ -268,11 +268,13 @@ async function dealDrop(e, stageId) {
   if (!dragDealId) return;
   const deal = deals.find(d => d.id === dragDealId);
   if (!deal || deal.stage_id === stageId) return;
+  const prevStageId = deal.stage_id;                        // remembered before the optimistic update (onboarding prompt)
   deal.stage_id = stageId;
   const stage = (pipelines.find(p => p.id === currentPipelineId)?.stages || []).find(s => s.id === stageId);
   deal.stage_name  = stage?.name  || null;
   deal.stage_color = stage?.color || null;
   if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
-  await api.patch(`/api/deals/${dragDealId}/stage`, { stage_id: stageId });
+  const res = await api.patch(`/api/deals/${dragDealId}/stage`, { stage_id: stageId });
   dragDealId = null;
+  if (!res?.error) await maybePromptOnboarding(deal, prevStageId, stageId);
 }

@@ -3,13 +3,13 @@
 // deleted between the prefetch and the write (ids in `db.deleted` are returned
 // by the prefetch but match nothing in the batch UPDATE) — exactly the
 // READ COMMITTED window the real database has.
-const { test, before, after, beforeEach } = require('node:test');
+const { test, describe, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { createFakePool } = require('../helpers/fake-pool');
 const { loadRoute, serve } = require('../helpers/load-route');
 
 const db = { existing: new Map(), deleted: new Set(), insertShort: 0, nextId: 1000 };
-const reset = o => Object.assign(db, { existing: new Map(), deleted: new Set(), insertShort: 0, nextId: 1000 }, o);
+const resetDb = o => Object.assign(db, { existing: new Map(), deleted: new Set(), insertShort: 0, nextId: 1000 }, o);
 let pool, server;
 
 before(async () => {
@@ -39,10 +39,10 @@ before(async () => {
   server = await serve({ '/api/contacts': loadRoute('contacts.js', { pool }) });
 });
 after(() => server.close());
-beforeEach(() => { pool.reset(); reset(); });
+beforeEach(() => { pool.reset(); resetDb(); });
 
 const imp = body => server.request('POST', '/api/contacts/import', body);
-const dealIds = () => (pool.find(/^INSERT INTO deals .* SELECT/)?.params[3] || []).slice().sort();
+const dealIds = () => (pool.find(/^INSERT INTO deals .* SELECT/)?.params[3] || []).slice().sort((a, b) => a - b);
 
 // The two identities every response must satisfy.
 function assertIdentities(body, submitted) {
@@ -50,53 +50,55 @@ function assertIdentities(body, submitted) {
   assert.equal(body.imported, body.created + body.updated, `imported = created + updated (${JSON.stringify(body)})`);
 }
 
-test('a contact deleted between prefetch and UPDATE is not imported, not handed to the deals statement, and is counted as unmatched', async () => {
-  reset({ existing: new Map([['a@x.com', 500], ['b@x.com', 501]]), deleted: new Set([501]) });
-  const r = await imp({ contacts: [{ name: 'A', email: 'a@x.com' }, { name: 'B', email: 'b@x.com' }], createDealsForUpdated: true, pipelineId: 9 });
-  assert.equal(r.status, 201);
-  assert.equal(r.body.imported, 1);
-  assert.equal(r.body.unmatched, 1);
-  assert.deepEqual(dealIds(), [500]);
-  assertIdentities(r.body, 2);
-});
+describe('counts come from the database, not the input', () => {
+  test('a contact deleted between prefetch and UPDATE is not imported, not handed to the deals statement, and is counted as unmatched', async () => {
+    resetDb({ existing: new Map([['a@x.com', 500], ['b@x.com', 501]]), deleted: new Set([501]) });
+    const r = await imp({ contacts: [{ name: 'A', email: 'a@x.com' }, { name: 'B', email: 'b@x.com' }], createDealsForUpdated: true, pipelineId: 9 });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.imported, 1);
+    assert.equal(r.body.unmatched, 1);
+    assert.deepEqual(dealIds(), [500]);
+    assertIdentities(r.body, 2);
+  });
 
-test('legacy path (duplicate email in the file): UPDATE matched 0 -> not imported, no legacy deal INSERT', async () => {
-  reset({ existing: new Map([['d@x.com', 500]]), deleted: new Set([500]) });
-  const r = await imp({ contacts: [{ name: 'D1', email: 'd@x.com' }, { name: 'D2', email: 'd@x.com' }], createDealsForUpdated: true, pipelineId: 9 });
-  assert.equal(r.body.imported, 0);
-  assert.equal(r.body.deals_created, 0);
-  assert.equal(pool.filter(/^INSERT INTO deals .* VALUES/).length, 0);
-  assertIdentities(r.body, 2);
-});
+  test('legacy path (duplicate email in the file): UPDATE matched 0 -> not imported, no legacy deal INSERT', async () => {
+    resetDb({ existing: new Map([['d@x.com', 500]]), deleted: new Set([500]) });
+    const r = await imp({ contacts: [{ name: 'D1', email: 'd@x.com' }, { name: 'D2', email: 'd@x.com' }], createDealsForUpdated: true, pipelineId: 9 });
+    assert.equal(r.body.imported, 0);
+    assert.equal(r.body.deals_created, 0);
+    assert.equal(pool.filter(/^INSERT INTO deals .* VALUES/).length, 0);
+    assertIdentities(r.body, 2);
+  });
 
-test('the insert count is what RETURNING gave back, not what was sent', async () => {
-  reset({ insertShort: 1 });
-  const r = await imp({ contacts: [{ name: 'n1' }, { name: 'n2' }, { name: 'n3' }] });
-  assert.equal(r.body.imported, 2);
-  assertIdentities(r.body, 3);
-});
+  test('the insert count is what RETURNING gave back, not what was sent', async () => {
+    resetDb({ insertShort: 1 });
+    const r = await imp({ contacts: [{ name: 'n1' }, { name: 'n2' }, { name: 'n3' }] });
+    assert.equal(r.body.imported, 2);
+    assertIdentities(r.body, 3);
+  });
 
-test('nothing deleted: 3 updates + 2 inserts -> imported 5, deals for all five, unmatched 0', async () => {
-  reset({ existing: new Map([['a@x.com', 500], ['b@x.com', 501], ['c@x.com', 502]]) });
-  const r = await imp({ contacts: [{ name: 'A', email: 'a@x.com' }, { name: 'B', email: 'b@x.com' }, { name: 'C', email: 'c@x.com' }, { name: 'N1' }, { name: 'N2' }], createDealsForNew: true, createDealsForUpdated: true, pipelineId: 9 });
-  assert.equal(r.body.imported, 5);
-  assert.equal(r.body.deals_created, 5);
-  assert.deepEqual(dealIds(), [1000, 1001, 500, 501, 502]);
-  assert.deepEqual(Object.keys(r.body), ['imported', 'deals_created', 'created', 'updated', 'skipped', 'unmatched']);
-  assert.equal(r.body.unmatched, 0);
-  assertIdentities(r.body, 5);
-});
+  test('nothing deleted: 3 updates + 2 inserts -> imported 5, deals for all five, unmatched 0, key set unchanged', async () => {
+    resetDb({ existing: new Map([['a@x.com', 500], ['b@x.com', 501], ['c@x.com', 502]]) });
+    const r = await imp({ contacts: [{ name: 'A', email: 'a@x.com' }, { name: 'B', email: 'b@x.com' }, { name: 'C', email: 'c@x.com' }, { name: 'N1' }, { name: 'N2' }], createDealsForNew: true, createDealsForUpdated: true, pipelineId: 9 });
+    assert.equal(r.body.imported, 5);
+    assert.equal(r.body.deals_created, 5);
+    assert.deepEqual(dealIds(), [500, 501, 502, 1000, 1001]);
+    assert.deepEqual(Object.keys(r.body), ['imported', 'deals_created', 'created', 'updated', 'skipped', 'unmatched']);
+    assert.equal(r.body.unmatched, 0);
+    assertIdentities(r.body, 5);
+  });
 
-test('mixed run: 5 submitted, one deleted mid-import, one nameless -> every number accounted for', async () => {
-  reset({ existing: new Map([['a@x.com', 500], ['b@x.com', 501]]), deleted: new Set([501]) });
-  const r = await imp({ contacts: [{ name: 'A', email: 'a@x.com' }, { name: 'B', email: 'b@x.com' }, { name: 'N1' }, { name: 'N2' }, { email: 'noname@x.com' }] });
-  assert.deepEqual({ imported: r.body.imported, created: r.body.created, updated: r.body.updated, skipped: r.body.skipped, unmatched: r.body.unmatched },
-                   { imported: 3, created: 2, updated: 1, skipped: 1, unmatched: 1 });
-  assertIdentities(r.body, 5);
-});
+  test('mixed run: 5 submitted, one deleted mid-import, one nameless -> every number accounted for', async () => {
+    resetDb({ existing: new Map([['a@x.com', 500], ['b@x.com', 501]]), deleted: new Set([501]) });
+    const r = await imp({ contacts: [{ name: 'A', email: 'a@x.com' }, { name: 'B', email: 'b@x.com' }, { name: 'N1' }, { name: 'N2' }, { email: 'noname@x.com' }] });
+    assert.deepEqual({ imported: r.body.imported, created: r.body.created, updated: r.body.updated, skipped: r.body.skipped, unmatched: r.body.unmatched },
+                     { imported: 3, created: 2, updated: 1, skipped: 1, unmatched: 1 });
+    assertIdentities(r.body, 5);
+  });
 
-test('more than 2000 rows -> 413 before any query', async () => {
-  const r = await imp({ contacts: Array.from({ length: 2001 }, (_, i) => ({ name: `n${i}` })) });
-  assert.equal(r.status, 413);
-  assert.equal(pool.log.length, 0);
+  test('more than 2000 rows -> 413 before any query', async () => {
+    const r = await imp({ contacts: Array.from({ length: 2001 }, (_, i) => ({ name: `n${i}` })) });
+    assert.equal(r.status, 413);
+    assert.equal(pool.log.length, 0);
+  });
 });

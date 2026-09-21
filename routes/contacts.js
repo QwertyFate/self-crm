@@ -9,6 +9,7 @@ const { workspaceRefs, refCheck } = require('../utils/workspace-refs');
 // Outbound events to the Onboarding Engine are emitted from CRM-user actions
 // here — never from routes/engine-api.js, which would loop.
 const { emitEngineEvent } = require('../utils/engine-webhook');
+const { ONBOARDING_STATUSES } = require('../utils/onboarding-statuses');
 
 router.use(requireAuth);
 
@@ -452,6 +453,59 @@ router.post('/:id/onboarding/start', async (req, res, next) => {
       entityType: 'contact', entityId: id,
     });
     res.status(201).json({ success: true, onboarding_status: c.onboarding_status, event_id, deliveries });
+  } catch (e) { next(e); }
+});
+
+// Manual status change by a CRM user (contact detail, deal editor, Onboarding
+// page). Validated against the same seven values as the CHECK constraint and
+// the engine API. Pushed to the engine as onboarding.status_geaendert with the
+// previous value; a change made BY the engine (routes/engine-api.js) is never
+// echoed back, so the two systems cannot loop. Unchanged value: 200, no event.
+router.patch('/:id/onboarding-status', async (req, res, next) => {
+  try {
+    if (!/^\d+$/.test(String(req.params.id))) return res.status(400).json({ error: 'Invalid id' });
+    const id = Number(req.params.id);
+    const status = req.body?.onboarding_status;
+    if (typeof status !== 'string' || !ONBOARDING_STATUSES.includes(status)) {
+      return res.status(400).json({ error: `onboarding_status must be one of ${ONBOARDING_STATUSES.join(', ')}` });
+    }
+
+    const { rows: [before] } = await pool.query(
+      'SELECT onboarding_status FROM contacts WHERE id=$1 AND workspace_id=$2', [id, req.workspaceId]);
+    if (!before) return res.status(404).json({ error: 'Not found' });
+    const vorher = before.onboarding_status;
+
+    const { rows: [c] } = await pool.query(
+      `UPDATE contacts SET onboarding_status=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3
+       RETURNING id, name, email, company, onboarding_status`,
+      [status, id, req.workspaceId]
+    );
+    if (!c) return res.status(404).json({ error: 'Not found' });
+
+    let event_id = null, deliveries = 0;
+    if (vorher !== status) {
+      try {
+        const r = await emitEngineEvent(req.workspaceId, 'onboarding.status_geaendert', {
+          kundeId: id,
+          daten: {
+            onboarding_status: status,
+            vorher,
+            quelle:            'manuell',
+            ausgeloest_von:    req.userId,
+            kunde:             { name: c.name, email: c.email, firma: c.company },
+          },
+        });
+        event_id = r.eventId; deliveries = r.deliveryIds.length;
+      } catch (e) {
+        console.error('onboarding.status_geaendert emit failed:', e.message);
+      }
+      notify(req.workspaceId, req.userId, {
+        type: 'contact_updated', category: 'contacts',
+        title: `Onboarding-Status geändert: ${c.name} → ${status}`,
+        entityType: 'contact', entityId: id,
+      });
+    }
+    res.json({ success: true, onboarding_status: c.onboarding_status, vorher, event_id, deliveries });
   } catch (e) { next(e); }
 });
 

@@ -16,20 +16,32 @@
  * sanitiser — is the genuine module. So the code being tested is the exact
  * code that ships; only the database, the login check and notifications are
  * stand-ins.
+ *
+ * `loadRoute` re-injects all three on every call, so two servers with
+ * different users can be built from the same file (see engine-settings.test.js).
  */
 const path    = require('path');
 const express = require('express');
 
-const ROOT = path.resolve(__dirname, '..', '..');   // the app root (the parent of tests/)
+// The app root (the parent of tests/). TEST_APP_ROOT points the same tests at a
+// mirror of the app — used to run a test against a pre-fix copy of a route
+// ("baseline first"): TEST_APP_ROOT=<mirror> NODE_PATH=<app>/node_modules node --test <file>
+const ROOT = process.env.TEST_APP_ROOT ? path.resolve(process.env.TEST_APP_ROOT) : path.resolve(__dirname, '..', '..');
 
+// Put `exportsObject` in the module cache under `relativeFile`. Returns a
+// function that restores whatever was there before.
 function inject(relativeFile, exportsObject) {
   const abs = path.join(ROOT, relativeFile);
+  const previous = require.cache[abs];
   require.cache[abs] = { id: abs, filename: abs, loaded: true, exports: exportsObject, children: [], paths: [] };
+  return () => { if (previous) require.cache[abs] = previous; else delete require.cache[abs]; };
 }
 
-function loadRoute(routeFile, { pool, user = { id: 1, workspaceId: 7, role: 'owner' }, notify = () => {} } = {}) {
+// `notifications`: pass a whole module object to use instead of the no-op stub
+// (e.g. the REAL notifications.js bound to the fake pool, to test notifySystem).
+function loadRoute(routeFile, { pool, user = { id: 1, workspaceId: 7, role: 'owner' }, notify = () => {}, notifications } = {}) {
   inject('db.js', { pool });
-  inject('notifications.js', { notify });
+  inject('notifications.js', notifications || { notify });
   inject('middleware/auth.js', (req, _res, next) => {
     req.userId = user.id; req.workspaceId = user.workspaceId; req.userRole = user.role; next();
   });
@@ -43,6 +55,10 @@ function loadRoute(routeFile, { pool, user = { id: 1, workspaceId: 7, role: 'own
  * and return a tiny HTTP client. Tests then drive the route exactly as the
  * browser would: a real HTTP request, real JSON body parsing, real status
  * codes — the only thing replaced is what sits behind `require('../db')`.
+ *
+ *   const server = await serve({ '/api/deals': loadRoute('deals.js', { pool }) });
+ *   const r = await server.request('POST', '/api/deals', { title: 'T' }, { 'Idempotency-Key': 'k' });
+ *   // r = { status, body, headers }
  */
 async function serve(mounts) {
   const app = express();
@@ -53,18 +69,21 @@ async function serve(mounts) {
   const server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
 
-  async function request(method, urlPath, body) {
+  async function request(method, urlPath, body, headers = {}) {
     const res = await fetch(base + urlPath, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     let json = null;
     try { json = await res.json(); } catch { /* body was not JSON */ }
-    return { status: res.status, body: json };
+    return { status: res.status, body: json, headers: res.headers };
   }
 
-  return { base, request, close: () => new Promise(resolve => server.close(resolve)) };
+  return {
+    base, request,
+    close: () => new Promise(resolve => { server.closeAllConnections?.(); server.close(resolve); }),
+  };
 }
 
 module.exports = { loadRoute, serve, inject, ROOT };

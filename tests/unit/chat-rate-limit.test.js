@@ -3,6 +3,7 @@
 // `t` forward and ask the limiter what it thinks.
 const { test, describe, after } = require('node:test');
 const assert = require('node:assert/strict');
+const { fakeReq, fakeRes } = require('../helpers/fake-http');
 const { createChatRateLimiter, chatRateLimitMiddleware, CHAT_LIMIT, CHAT_MAX_LENGTH, chatLimiter } = require('../../utils/chat-rate-limit');
 
 describe('createChatRateLimiter — sliding window per user', () => {
@@ -14,7 +15,7 @@ describe('createChatRateLimiter — sliding window per user', () => {
     for (let i = 1; i <= 6; i++) assert.equal(limiter.check('alice').allowed, true, `message ${i}`);
     const seventh = limiter.check('alice');
     assert.equal(seventh.allowed, false);
-    assert.equal(seventh.retryAfterMs, 10_000);        // the oldest stamp is still fully inside the window
+    assert.equal(seventh.retryAfterMs, 10_000, 'the oldest stamp is still fully inside the window');
   });
 
   test('the window slides: once the oldest message ages out, one more is allowed', () => {
@@ -36,20 +37,18 @@ describe('createChatRateLimiter — sliding window per user', () => {
 });
 
 describe('chatRateLimitMiddleware — validation first, then the shared bucket', () => {
-  // A minimal fake of Express's req/res: enough for the middleware to call
-  // res.status(...).json(...) or next().
   function run(body, userId) {
-    const res = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; } };
+    const res = fakeRes();
     let nextCalled = false;
-    chatRateLimitMiddleware({ body, userId }, res, () => { nextCalled = true; });
+    chatRateLimitMiddleware(fakeReq({ body, userId }), res, () => { nextCalled = true; });
     return { code: res.code, body: res.body, nextCalled };
   }
   after(() => chatLimiter.stop());
 
   test('non-string or empty content -> 400 before any quota is spent', () => {
-    assert.equal(run({ content: 12345 }, 'u-400').code, 400);
-    assert.equal(run({ content: '   ' }, 'u-400').code, 400);
-    assert.equal(run({}, 'u-400').code, 400);
+    assert.equal(run({ content: 12345 }, 'u-400').code, 400, 'number');
+    assert.equal(run({ content: '   ' }, 'u-400').code, 400, 'blank');
+    assert.equal(run({}, 'u-400').code, 400, 'missing');
   });
 
   test('over 1100 characters -> 413; 1001–1100 -> 400 with the business-rule message', () => {
@@ -59,11 +58,12 @@ describe('chatRateLimitMiddleware — validation first, then the shared bucket',
     assert.match(r.body.error, /Maximum 1000 characters/);
   });
 
-  test('valid messages pass through; the seventh in ten seconds -> 429 with retryAfterMs', () => {
-    for (let i = 0; i < CHAT_LIMIT.max; i++) assert.equal(run({ content: 'hi' }, 'u-429').nextCalled, true);
+  test('valid messages pass through; the seventh in ten seconds -> 429 with the window and limit', () => {
+    for (let i = 0; i < CHAT_LIMIT.max; i++) assert.equal(run({ content: 'hi' }, 'u-429').nextCalled, true, `message ${i + 1}`);
     const r = run({ content: 'hi' }, 'u-429');
     assert.equal(r.code, 429);
-    assert.equal(typeof r.body.retryAfterMs, 'number');
+    assert.ok(r.body.retryAfterMs > 0 && r.body.retryAfterMs <= CHAT_LIMIT.windowMs, `retryAfterMs within the window (${r.body.retryAfterMs})`);
     assert.equal(r.body.limit, CHAT_LIMIT.max);
+    assert.equal(r.body.windowMs, CHAT_LIMIT.windowMs);
   });
 });

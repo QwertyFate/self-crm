@@ -340,3 +340,26 @@ npm test   tests 175  pass 175  fail 0
 **To go live:** an owner opens Integrations, saves the webhook URL (copies the secret to the engine), creates an API key (copies it to the engine), sends a test event, then starts onboarding on a contact.
 
 **Still open (small):** scope enforcement on API keys (`req.apiScopes` is set, not checked); pruning of old delivery and idempotency rows (indexes exist; a cron); an `akte_version` bump policy; a `test.ereignis` handler on the engine side.
+
+---
+
+## UI: Onboarding page and deal button (Part 41)
+
+- **Sidebar → Onboarding**: every contact whose `onboarding_status` is not `kein_onboarding`, with the stage badge, a six-segment progress bar (`n/6` in the order `formular_versendet → … → onboarding_abgeschlossen`), assignee and the last change (`contacts.updated_at`). Pills filter by step, the search box matches name / company / email, the name opens the contact detail (which has the *Start Onboarding* button). Data comes from `GET /api/contacts`; there is no extra endpoint. Code: `public/js/onboarding.js`.
+- **Deal editor → Start Onboarding** (header, next to "＋ Task", existing deals only): starts onboarding for the contact currently selected in the deal; the deal's contact panel shows the stage badge and updates in place. Same confirm and the same `POST /api/contacts/:id/onboarding/start` as the contact detail, via the shared `requestOnboardingStart()` in `public/js/contacts.js`.
+
+---
+
+## Manual status change and stage trigger (Part 42)
+
+**`PATCH /api/contacts/:id/onboarding-status`** (session, any member) `{ "onboarding_status": "<one of the seven>" }` → `200 { success, onboarding_status, vorher, event_id, deliveries }`. Used by the status dropdown next to the badge in the contact detail, the deal editor's contact panel and the Onboarding page. When the value changes, the engine receives:
+
+```json
+{ "event_id": "evt_…", "event": "onboarding.status_geaendert", "workspace_id": 1, "kunde_id": 60,
+  "daten": { "onboarding_status": "termin_gebucht", "vorher": "formular_versendet", "quelle": "manuell", "ausgeloest_von": 1,
+             "kunde": { "name": "…", "email": "…", "firma": "…" } },
+  "zeitpunkt": "…" }
+```
+`AVAILABLE_EVENTS` is now `vertrag.unterschrieben`, `onboarding.status_geaendert`, `test.ereignis`. A status set **by** the engine (`PATCH /api/kunden/:id/status`) is never echoed back. The seven statuses live once in `utils/onboarding-statuses.js`.
+
+**Stage trigger.** `workspaces.onboarding_trigger_stage_ids` (JSONB list of `pipeline_stages.id`), set by the owner in Settings → Deals → *Onboarding trigger* via `PATCH /api/workspace/onboarding-trigger { stage_ids }`. When a deal **enters** one of those stages (kanban drop or deal form) and its contact is not yet in onboarding, the CRM asks whether to start onboarding; yes → the same `POST /api/contacts/:id/onboarding/start` as the button (one confirm only). Moving between two trigger stages, re-saving the same stage or an already-onboarded contact never asks.

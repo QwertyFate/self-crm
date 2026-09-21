@@ -26,7 +26,7 @@ before(async () => {
     { match: /^INSERT INTO deals/,      reply: () => ({ rows: [{ id: 99 }], rowCount: 1 }) },
     { match: /^UPDATE deals SET/,       reply: () => ({ rows: [], rowCount: 1 }) },
     { match: /SELECT title FROM deals/, reply: () => ({ rows: [{ title: 'T' }] }) },
-    { match: /FROM deal_objects/,       reply: () => ({ rows: [] }) },
+    { match: /FROM deal_objects/,       reply: () => ({ rows: [{ id: 9, name: 'Objekt', custom_data: {} }] }) },
     { match: /FROM deals d/,            reply: () => ({ rows: [LIST_ROW] }) },
   ]);
   server = await serve({ '/api/deals': loadRoute('deals.js', { pool }) });
@@ -47,7 +47,7 @@ describe("read side: every join is scoped to the deal's workspace", () => {
     const r = await server.request('GET', '/api/deals/5');
     assert.equal(r.status, 200);
     assert.deepEqual(scopedAliases(pool.find(/FROM deals d/).sql), ['c', 's', 'ps', 'u']);
-    assert.ok(Array.isArray(r.body.objects));
+    assert.deepEqual(r.body.objects, [{ id: 9, name: 'Objekt', custom_data: {} }], 'linked objects come back on the detail');
   });
 });
 

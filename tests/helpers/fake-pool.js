@@ -23,6 +23,8 @@
  *
  * `reply` receives (params, sqlText) so a rule can answer based on what was
  * bound (e.g. "return the rows whose id is in the array the route passed").
+ * Keep `match` anchored to the stable prefix of a statement (`/^INSERT INTO x/`,
+ * `/FROM x WHERE workspace_id/`), not to a whole clause — see README §3.4.
  */
 function createFakePool(rules = []) {
   const log = [];
@@ -43,10 +45,12 @@ function createFakePool(rules = []) {
     query,
     connect: async () => client,
     log,
-    reset()    { log.length = 0; },                 // call between tests to clear the recording
-    find(re)   { return log.find(e => re.test(e.sql)); },   // first matching statement, or undefined
-    some(re)   { return log.some(e => re.test(e.sql)); },   // was any statement like this run?
-    filter(re) { return log.filter(e => re.test(e.sql)); }, // all matching statements
+    reset()          { log.length = 0; },                                    // call between tests to clear the recording
+    find(re)         { return log.find(e => re.test(e.sql)); },              // first matching statement, or undefined
+    some(re)         { return log.some(e => re.test(e.sql)); },              // was any statement like this run?
+    filter(re)       { return log.filter(e => re.test(e.sql)); },            // all matching statements
+    writes(re = /^(INSERT INTO|UPDATE|DELETE FROM)\b/) { return log.filter(e => re.test(e.sql)); },   // every write (or those matching re)
+    someParam(pred)  { return log.some(e => e.params.some(pred)); },        // was a value like this ever bound?
   };
 }
 

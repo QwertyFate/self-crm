@@ -6,7 +6,7 @@ const { notify }  = require('../notifications');
 // Foreign keys are global: a contact/pipeline/stage/user id from another
 // workspace is a real row. Every body id is checked against req.workspaceId
 // before a write, and every read-side join is scoped to the deal's workspace.
-const { dealRefs, refCheck } = require('../utils/workspace-refs');
+const { dealRefs, refCheck, ownsPair } = require('../utils/workspace-refs');
 
 router.use(requireAuth);
 
@@ -155,11 +155,21 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Deal <-> object links. deal_objects carries no workspace_id: BOTH the deal
+// and the object must belong to the caller's workspace (same rule as the
+// object-side endpoints in routes/objects.js). Foreign ids are 404, never written.
+const isId = v => /^\d+$/.test(String(v));
+
 router.get('/:id/objects', async (req, res, next) => {
   try {
+    if (!isId(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+    const { rows: [deal] } = await pool.query('SELECT 1 FROM deals WHERE id=$1 AND workspace_id=$2', [Number(req.params.id), req.workspaceId]);
+    if (!deal) return res.status(404).json({ error: 'Not found' });
     const { rows } = await pool.query(
-      'SELECT o.* FROM deal_objects dobj JOIN objects o ON o.id=dobj.object_id WHERE dobj.deal_id=$1',
-      [req.params.id]
+      `SELECT o.* FROM deal_objects dobj
+         JOIN objects o ON o.id = dobj.object_id AND o.workspace_id = $2
+        WHERE dobj.deal_id = $1`,
+      [Number(req.params.id), req.workspaceId]
     );
     res.json(rows);
   } catch (e) { next(e); }
@@ -169,9 +179,13 @@ router.post('/:id/objects', async (req, res, next) => {
   try {
     const { object_id } = req.body;
     if (!object_id) return res.status(400).json({ error: 'object_id required' });
+    if (!isId(req.params.id) || !isId(object_id)) return res.status(400).json({ error: 'Invalid id' });
+    const own = await ownsPair(pool, req.workspaceId, ['deals', Number(req.params.id)], ['objects', Number(object_id)]);
+    if (!own.a) return res.status(404).json({ error: 'Not found' });
+    if (!own.b) return res.status(404).json({ error: 'Object not found' });
     await pool.query(
       'INSERT INTO deal_objects (deal_id, object_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
-      [req.params.id, object_id]
+      [Number(req.params.id), Number(object_id)]
     );
     res.status(201).json({ success: true });
   } catch (e) { next(e); }
@@ -179,9 +193,13 @@ router.post('/:id/objects', async (req, res, next) => {
 
 router.delete('/:id/objects/:objectId', async (req, res, next) => {
   try {
+    if (!isId(req.params.id) || !isId(req.params.objectId)) return res.status(400).json({ error: 'Invalid id' });
+    const own = await ownsPair(pool, req.workspaceId, ['deals', Number(req.params.id)], ['objects', Number(req.params.objectId)]);
+    if (!own.a) return res.status(404).json({ error: 'Not found' });
+    if (!own.b) return res.status(404).json({ error: 'Object not found' });
     await pool.query(
       'DELETE FROM deal_objects WHERE deal_id=$1 AND object_id=$2',
-      [req.params.id, req.params.objectId]
+      [Number(req.params.id), Number(req.params.objectId)]
     );
     res.json({ success: true });
   } catch (e) { next(e); }

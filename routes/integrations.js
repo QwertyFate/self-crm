@@ -3,6 +3,7 @@ const router      = express.Router();
 const crypto      = require('crypto');
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const { dealRefs, refCheck } = require('../utils/workspace-refs');
 
 router.use('/settings', requireAuth);
 router.use('/logs',     requireAuth);
@@ -52,6 +53,19 @@ router.get('/settings', async (req, res, next) => {
 router.patch('/settings', async (req, res, next) => {
   try {
     const { field_map, create_deal, pipeline_id, stage_id, default_assignee_id, active } = req.body;
+    // These ids are applied to every lead the PUBLIC webhook receives later, so
+    // a foreign pipeline/stage/assignee here would route leads into another
+    // workspace or assign them to its users. Same shared guard as deals.
+    const ids = { pipeline_id, stage_id, assigned_to: default_assignee_id };
+    const bad = refCheck(await dealRefs(pool, req.workspaceId, ids), ids);
+    if (bad) return res.status(400).json({ error: bad.replace('assigned_to', 'default_assignee_id') });
+    if (pipeline_id && stage_id) {
+      const { rows: [ps] } = await pool.query(
+        'SELECT 1 FROM pipeline_stages WHERE id=$1 AND pipeline_id=$2 AND workspace_id=$3',
+        [Number(stage_id), Number(pipeline_id), req.workspaceId]
+      );
+      if (!ps) return res.status(400).json({ error: 'stage_id does not belong to pipeline_id' });
+    }
     await pool.query(
       `UPDATE workspace_webhook
        SET field_map=$1, create_deal=$2, pipeline_id=$3, stage_id=$4, default_assignee_id=$5, active=$6

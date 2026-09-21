@@ -16,7 +16,7 @@ router.get('/me', async (req, res, next) => {
     );
     if (user) { user.column_widths = user.column_widths || {}; user.deal_columns = user.deal_columns || []; user.timezone = user.timezone || 'Europe/Berlin'; }
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id = $1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id = $1',
       [req.session.workspaceId]
     );
 
@@ -81,7 +81,7 @@ router.post('/login', async (req, res, next) => {
     req.session.userRole    = memberships[0].role;
 
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id = $1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id = $1',
       [activeWsId]
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
@@ -112,7 +112,7 @@ router.post('/select-workspace', async (req, res, next) => {
     req.session.userRole    = user.role;
 
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id=$1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id=$1',
       [workspace_id]
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
@@ -143,7 +143,7 @@ router.post('/switch-workspace', async (req, res, next) => {
     req.session.userRole    = targetUser.role;
 
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id=$1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id=$1',
       [workspace_id]
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
@@ -458,7 +458,7 @@ router.post('/create-workspace', async (req, res, next) => {
       req.session.userRole    = 'owner';
 
       const { rows: [workspace] } = await pool.query(
-        'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id=$1',
+        'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id=$1',
         [ws.id]
       );
       workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
@@ -513,7 +513,7 @@ router.post('/join-workspace', async (req, res, next) => {
     req.session.userRole    = 'member';
 
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id=$1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id=$1',
       [invite.workspace_id]
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];

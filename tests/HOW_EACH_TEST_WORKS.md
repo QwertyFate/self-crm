@@ -1,6 +1,6 @@
 # How each test works — file by file, test by test
 
-`README.md` explains the ideas. This document walks through the actual code: for every file in `tests/`, what the setup does, and for every test, **what it feeds in**, **what the application code does with it**, **what is asserted**, and **why that assertion matters**. Read it next to the source; line references are to the test files as written.
+`README.md` explains the ideas. This document walks through the actual code: for each test file, what the setup does, and for each test, **what it feeds in**, **what the application code does with it**, **what is asserted**, and **why that assertion matters**. Parts A–D cover the first thirteen files in full; Part F covers the helpers and files added later, more briefly. Read it next to the source.
 
 ---
 
@@ -32,12 +32,7 @@ function createFakePool(rules = []) {
 - `reply` receives the bound parameters, which is how a rule can answer "return only the ids the route asked about" (see the deals test).
 - If no rule matches, the reply is an empty result. That is deliberate: most statements a route runs (a `SELECT name FROM users`, a `COUNT(*)`) do not matter to a given test, and the empty default keeps rules short.
 
-```js
-  const client = { query, release() {} };
-  return { query, connect: async () => client, log, reset(), find(re), some(re), filter(re) };
-```
-- `connect()` returns a "client" with the same `query` — routes that open a transaction (`const client = await pool.connect()`) get the same recorder. `release()` does nothing.
-- `find/some/filter` search the log by regex on the SQL text. `reset()` empties it; route tests call it before every test so each test sees only its own statements.
+The returned object (sketch, not verbatim) offers `query`, `connect()` (a "client" with the same `query`, so routes that open a transaction get the same recorder; `release()` does nothing), the `log`, and search helpers: `find/some/filter` search the log by regex on the SQL text; `writes()` returns every INSERT/UPDATE/DELETE; `someParam(pred)` asks whether a value was ever bound; `reset()` empties the log, and route tests call it before every test so each test sees only its own statements.
 
 ### A.2 `helpers/load-route.js`
 
@@ -99,7 +94,7 @@ The function under test is the server-side note sanitiser (`utils/sanitize-note.
 |---|---|---|---|---|
 | strips script/img/handlers, keeps formatting | the exact payload from the security report: a `<p>` with `<b>`, a good link, a `javascript:` link, `<img onerror>`, `<script>` | Walks the HTML; drops `img` and `script` (and the script's text); drops the `href` on the `javascript:` link but keeps the `<a>`; keeps `<p>`, `<b>`, the https link | `assert.equal` against the exact expected string, then a `doesNotMatch` for `onerror|<img|<script|javascript:` | Two independent ways of saying "the dangerous parts are gone and the safe parts are intact". The exact-string check would also catch an accidental change to the allow-list. |
 | `<div>` lines survive as paragraphs | `<div>line1</div><div>line2</div>` | `transformTags: { div: 'p' }` renames each `div` | equals `<p>line1</p><p>line2</p>` | The editor emits a `div` per Enter; without this transform every note would collapse into one paragraph. |
-| lists kept; `span` reduced to text | a `ul/li/i/u`, a styled `span`, `strong`, `em`, `br` | allowed tags kept; `span` is not in the list so the tag is removed and its text kept; `<br>` is serialised as `<br />` | exact string | Pins the boundary of the allow-list. |
+| lists kept; `span` reduced to text | a `ul/li/i`, a styled `span`, `strong`, `em`, `br` | allowed tags kept; `span` is not in the list so the tag is removed and its text kept; `<br>` is serialised as `<br />` | exact string | Pins the boundary of the allow-list. |
 | only http/https/mailto keep `href` | `mailto:` link; `ftp:` link; protocol-relative `//evil.test` | `allowedSchemes` + `allowProtocolRelative:false` | `mailto` keeps its href; the other two become bare `<a>` | Protocol-relative URLs are a classic bypass; this proves it is closed. |
 | only-markup → empty string | just an `<img onerror>`; just a `<script>` | everything is removed | `''` | The route treats an empty result as "no content" and returns 400; this is the function-level half of that behaviour. |
 | null/undefined pass through | `null`, `undefined` | the guard `if (html == null) return html` | returned unchanged | The PATCH route needs to tell "not supplied" from "supplied and empty"; the sanitiser must not turn `undefined` into `''`. |
@@ -261,7 +256,7 @@ The most involved fake, because the import runs inside a transaction and issues 
 
 ```js
 { match: /^UPDATE contacts c SET/,
-  reply: (p, sql) => { const alive = p[1].filter(id => !db.deleted.has(id)); return { rows: alive.map(id => ({ id })), rowCount: alive.length }; } },
+  reply: (p, sql) => { const alive = p[1].filter(id => !db.deleted.has(id)); return { rows: /RETURNING c\.id/.test(sql) ? alive.map(id => ({ id })) : [], rowCount: alive.length }; } },
 ```
 - The **batch UPDATE**. `p[1]` is the array of ids the route wants to update. Ids in `db.deleted` are dropped — this is the READ COMMITTED window: the prefetch saw the row, but by the time of the write it is gone, so `RETURNING c.id` does not include it. The route counts only what came back.
 
@@ -305,9 +300,9 @@ The ownership rule is the six-slot version of the deals one; a small `kinds` tab
 
 ---
 
-## Part D — client tests (need jsdom)
+## Part D — client tests (D.1–D.3 need jsdom; D.4 does not)
 
-All three follow one pattern: read the real file from `public/js/`, create a jsdom `window`, define the few globals the file expects (`api`, `esc`, sometimes `currentWorkspace`), evaluate the file's source inside that window with `w.eval(source)`, then call its functions.
+D.1–D.3 follow one pattern: read the real file from `public/js/`, create a jsdom `window`, define the few globals the file expects (`api`, `esc`, sometimes `currentWorkspace`), evaluate the file's source inside that window with `w.eval(source)`, then call its functions.
 
 ### D.1 `client/analytics-page.test.js`
 
@@ -344,6 +339,17 @@ All three follow one pattern: read the real file from `public/js/`, create a jsd
 | empty project list falls back | project with `statuses: []` | `backlog,shipped` | An empty list is "none", not "override with nothing". |
 | nothing configured | `null, null` | `todo,in_progress,in_review,done` | Built-ins, and no throw when `currentWorkspace` is null. |
 
+### D.4 Pure browser helpers without jsdom — `helpers/client-fn.js`
+
+Seven files (`client/csv-import`, `core-helpers`, `contacts-helpers`, `analytics-helpers`, `tasks-helpers`, `i18n`, `field-key`) test browser functions that never touch `document` or `window`. They do not need a fake browser, only the function text.
+
+- `loadFns(file, ['a', 'b'], { state, extra })` reads the real file, finds `function a(` and `function b(` (each must occur exactly once), slices each to its matching closing brace, and evaluates all of them in **one** `new Function` body. The body starts with `let name = <value>;` for every key in `state` and any `extra` source (for example the `STAT_CARD_DEFS` constant, obtained with `sliceConst(file, 'STAT_CARD_DEFS')`). It returns `{ a, b, __set }`.
+- **Why one body:** the browser files keep their state in file-scope `let`s (`fields`, `sortKey`, `currentWorkspace`, …). Those are not properties of `window`, so a function evaluated on its own could not see a value set from outside. Declaring the `let`s in the same script the functions are evaluated in — the same idea as D.3 — makes them shared, and `__set('sortKey', '_name')` assigns the shared binding.
+- **Failure modes are loud:** a renamed function → `function X found 0 times`; a slice that is not valid JavaScript → `SyntaxError` from `new Function`. Nothing is stubbed, so if a helper starts reading the DOM the test throws `ReferenceError: document is not defined` instead of passing.
+- **Baseline check that was run:** a scratchpad copy of `public/` + `private/` with four deliberate breakages (`parseCSV` without quote handling, `buildPageNumbers` without the ellipsis, `sortContacts` ignoring `sortDir`, `de.nav_deals` removed) run with `TEST_APP_ROOT=<copy>` → 6 red, 30 green; the real files → 36 green.
+
+Two `test.todo` entries record known divergences without fixing them: the admin console's `generateFieldKey` deletes punctuation while the app's `toFieldKey` replaces it, and `buildStatOrder` accepts inherited property names such as `constructor` as card ids.
+
 ---
 
 ## Part E — reading a red run
@@ -352,3 +358,38 @@ All three follow one pattern: read the real file from `public/js/`, create a jsd
 2. If the failing assertion is about `pool.find(...)` being `undefined`, a rule regex no longer matches the SQL — open the route, copy the current statement's stable prefix into the rule.
 3. If the failing assertion is a status code, read `body.detail`: the `serve()` error handler puts the thrown error message there.
 4. Run just that test with `--test-name-pattern` while fixing; run `npm test` before you finish.
+
+---
+
+## Part F — helpers and files added after the first version
+
+### F.1 Helpers
+- **`helpers/load-db.js`** — `loadDb(source, pool)` evaluates a `db.js` *source string* as a CommonJS module with `require('pg')` replaced by `{ Pool: () => pool }`. That is how one function can build the schema with a fake pool (to capture DDL), with a real pool (to migrate a throwaway database), and from either the current `db.js` or the fixture `tests/fixtures/db.pre-stage1.js`.
+- **`helpers/fake-tables.js`** — `idempotencyTable()` returns an in-memory `Map` plus the four fake-pool rules that make it behave like `idempotency_keys` (including the `23505` on a duplicate INSERT); `apiKeyRules(KEY)` returns the two rules `middleware/engine-auth.js` needs (lookup by SHA-256 of `KEY`, usage stamp) and the `row` object a test may mutate.
+- **`helpers/fake-http.js`** — `fakeReq()` / `fakeRes()` for unit-testing middleware without HTTP (case-insensitive `req.get`, chainable `res.status().json()`, `res.sent`).
+- **`helpers/schema-constants.js`** — the seven onboarding statuses, the eleven contact columns, the four engine tables, the pre-Stage-1 table list and the engine indexes, so four tests share one definition.
+- **`helpers/skip.js`** — `skipUnless(cond, reason)` → `{}` or `{ skip: reason }` (Node skips on the *presence* of the key, so `{ skip: null }` would still skip).
+
+### F.2 `unit/db-migrations.test.js`
+Loads `db.js` (or `DB_FILE`) with a fake pool and calls `initDb()`; every statement is captured. Four "additive" guards (no destructive statement, only `DROP CONSTRAINT IF EXISTS`, every CREATE/ADD guarded, every pre-Stage-1 table still created) and eleven Stage 1 assertions (columns, types, CHECK order, indexes, the four tables' key columns). `must(re, what)` asserts a statement exists before matching on it, so a missing statement fails with a message rather than a regex mismatch on an empty string. `npm run test:baseline` runs it against the fixture: the four guards pass, the eleven fail — that is the proof the assertions bite.
+
+### F.3 `db/onboarding-schema.test.js`
+Real Postgres. Refuses to run unless `TEST_DATABASE_URL` is local **and** `ALLOW_DESTRUCTIVE_DB_TEST=1`, because it drops the schema. Builds the pre-Stage-1 schema from the fixture, asserts it really lacks `onboarding_status`, inserts two contacts, runs the current `initDb()`, then checks: rows intact with defaults; second run idempotent; catalog contains the columns/tables/CHECK/indexes; the CHECK rejects `bogus` (23514); the two UNIQUEs reject duplicates (23505); a delivery row defaults to `pending`.
+
+### F.4 `unit/engine-auth.test.js` and `unit/idempotency.test.js`
+Middleware/util tests with `fakeReq`/`fakeRes`. `engine-auth`: the four rejection shapes (no key, unknown, non-Bearer scheme, and the SQL's revoked/expiry clauses), the success fields, the throttled usage stamp (a failing stamp does not fail the request), and a DB error going to `next(err)`. `idempotency`: header validation, first request → reserve/run/store, identical retry replayed with the header, 4xx replayed, different body → 422, in-flight → 409, INSERT race → 409, handler throw releases the reservation, expired row reruns, returned `{status, body}` captured, and `requestHash` stable under key order.
+
+### F.5 `unit/engine-webhook.test.js`
+The engine is built through its factory with a fake pool that models both webhook tables, a scriptable `fetch`, a fixed clock and fixed randomness. Covers the HMAC signature, fan-out to subscribed hooks with the payload contract, every delivery outcome (2xx, 5xx, network error, timeout), the full backoff table across seven attempts ending in `dead`, a deactivated hook, the atomic claim's SQL (`FOR UPDATE SKIP LOCKED`, due predicate, lease bump, id filter), `runWorkerOnce` processing only due rows, the overlap guard (the hanging fetch is released at the end so no promise is left dangling), and start/stop.
+
+### F.6 `unit/server-wiring.test.js`
+Static regexes over `server.js`: the engine limiter's numbers and German message; the limiter `app.use` precedes the single engine-router mount; the worker starts inside the `initDb().then` chain after `listen`. Each lookup asserts the match exists first.
+
+### F.7 `routes/engine-api.test.js`, `routes/engine-middleware.test.js`, `routes/engine-settings.test.js`
+Route tests behind the real `engineAuth` + `runIdempotent`, using the shared table models. `engine-api`: 401 without key; the exact 17-key German view; foreign workspace → 404; every PATCH validation and the `drive_ordner_id` semantics (asserted on the SET clause and params of the specific UPDATE); replay with exactly one write; a stored 404 replays; the source never requires the webhook engine. `engine-middleware`: the two composed on a hand-built app over HTTP. `engine-settings`: a loop asserting all nine routes return 403 for a member with zero SQL; secret and key shown once and absent from later reads (`in` checks); rotate; test event with `sync`; deliveries scoped; retry re-arms a dead row (the clamp asserted on the SQL text); hash-only key storage (the plain key is never bound).
+
+### F.8 `routes/contacts-onboarding.test.js`
+The webhook engine is swapped for a recording stub. Own contact → 201 + UPDATE binds + one emit with the exact event/kundeId/daten + notification; foreign → 404 and no emit; `/abc` → 400 and no query; an emit failure still returns 201 with `deliveries: 0` and the status change kept.
+
+### F.9 `client/ui-onboarding.test.js`
+Static: the twenty `eng-*` ids; every `data-i18n` key the two cards use exists in **both** dictionaries (the expected keys are listed, so the check cannot pass vacuously); every `eng*` handler the markup calls is defined; the seven labels are German in both languages; badge/meta/column/trigger present in `contacts.js` and `modals.js`. With jsdom: the badge renders the label and colour and falls back safely.

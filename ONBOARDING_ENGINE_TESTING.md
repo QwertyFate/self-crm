@@ -264,3 +264,43 @@ Everything above is also covered by the test suite without a server or database:
 | 2.2 | GET | `/api/kunden/:id` | API key | `:id` |
 | 2.3 | PATCH | `/api/kunden/:id/status` | API key + `Idempotency-Key` | `onboarding_status, drive_ordner_id?` |
 | 3 | POST | `/api/contacts/:id/onboarding/start` | session | `:id` |
+
+---
+
+## Troubleshooting: `column "events" does not exist` on *Send test event*
+
+**Cause.** The database was first started from the older `outgoingendpoints` / `apiEndpoints` branches, which created an `engine_webhook` table of a different shape (`event`, `target_url`, `api_key`, one row per workspace). `CREATE TABLE IF NOT EXISTS` kept that table, so every engine query that expects `events JSONB` failed with PostgreSQL error 42703.
+
+**Fix (automatic since Part 40 in `ADMIN_SECURITY_FIX.md`).** On start, `initDb()` in `db.js` recognises the old shape by its `api_key` column, copies its rows to `engine_webhook_legacy`, drops the old table (and the empty `engine_webhook_deliveries` created against it), and creates the current tables. The log prints once:
+```
+engine_webhook: old-branch table replaced; its rows are kept in engine_webhook_legacy
+```
+After that restart, §1.2 (`PUT /webhook`), §1.4 (test event) and §3 work. Inspect or drop the copy when you like:
+```sql
+SELECT * FROM engine_webhook_legacy;
+DROP TABLE engine_webhook_legacy;   -- nothing in the code reads it
+```
+
+---
+
+## 8. Manual status change and the stage trigger (Part 42)
+
+### 8.1 `PATCH /api/contacts/:id/onboarding-status` — set the step by hand (session, any member)
+| Field | Type | Rules |
+|---|---|---|
+| `onboarding_status` | string | required; one of the seven statuses |
+```bash
+curl -s -b cookies.txt -X PATCH -H 'Content-Type: application/json' \
+  -d '{"onboarding_status":"termin_gebucht"}' $BASE/api/contacts/<contact id>/onboarding-status
+```
+Expected: `200 { "success": true, "onboarding_status": "termin_gebucht", "vorher": "formular_versendet", "event_id": "evt_…", "deliveries": 1 }`; the receiver gets `X-Upgrads-Event: onboarding.status_geaendert` with `daten.vorher`. Same value again → `200` with `event_id: null, deliveries: 0`. Negative: `bogus` → `400` listing the seven; `/abc/` → `400 Invalid id`; another workspace's id → `404`.
+
+### 8.2 `PATCH /api/workspace/onboarding-trigger` — pick the trigger stages (session, **owner only**)
+```bash
+curl -s -b cookies.txt -X PATCH -H 'Content-Type: application/json' \
+  -d '{"stage_ids":[<pipeline stage id>]}' $BASE/api/workspace/onboarding-trigger
+```
+Expected: `200 { "success": true, "stage_ids": [ … ] }` (deduplicated, sorted). Stage ids come from `GET /api/pipelines` (`stages[].id`). Negative: member → `403`; `["3"]` or `[0]` → `400`; a stage of another workspace → `400 … another workspace`; `[]` switches the prompt off.
+
+### 8.3 See it in the UI
+Settings → Deals → *Onboarding trigger* → tick a stage → Save. Drag a deal whose contact is still *Kein Onboarding* into that stage → the CRM asks → OK → the contact appears under *Onboarding* at 1/6 and the receiver gets `vertrag.unterschrieben`.

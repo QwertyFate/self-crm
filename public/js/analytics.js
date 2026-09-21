@@ -53,7 +53,7 @@ function buildStatOrder(savedOrder, hiddenIds, d) {
   const base = savedOrder.length ? savedOrder : [...DEFAULT_STAT_ORDER];
   return base
     .filter(id => {
-      const def = STAT_CARD_DEFS[id];
+      const def = Object.hasOwn(STAT_CARD_DEFS, id) ? STAT_CARD_DEFS[id] : null;   // own keys only: a saved "constructor" is not a card
       if (!def) return false;
       if (def.requiresValue && !hasValue) return false;
       return true;
@@ -99,7 +99,7 @@ function renderAnalyticsCards(d) {
   const visible = statCardOrder.filter(c => !c.hidden);
 
   el.innerHTML = visible.map(({ id }) => {
-    const def     = STAT_CARD_DEFS[id];
+    const def     = Object.hasOwn(STAT_CARD_DEFS, id) ? STAT_CARD_DEFS[id] : null;
     const content = getStatCardContent(id, d);
     return `
     <div class="analytics-card" draggable="true" data-stat-id="${id}">

@@ -74,6 +74,18 @@ async function taskRefs(q, workspaceId, ids = {}) {
   return refs;
 }
 
+// Both ends of a link (e.g. a deal and an object) must belong to the
+// workspace. One round trip; `tableA`/`tableB` are internal literals chosen by
+// the route, never request input. Returns { a, b } booleans.
+async function ownsPair(q, workspaceId, [tableA, idA], [tableB, idB]) {
+  const { rows: [r] } = await q.query(
+    `SELECT EXISTS (SELECT 1 FROM ${tableA} WHERE id=$1 AND workspace_id=$3) AS a,
+            EXISTS (SELECT 1 FROM ${tableB} WHERE id=$2 AND workspace_id=$3) AS b`,
+    [idA, idB, workspaceId]
+  );
+  return { a: !!r?.a, b: !!r?.b };
+}
+
 // Task status / priority allow-lists. A task may carry: a key from the
 // workspace's task_statuses column, a key from its project's own statuses
 // (the client prefers those when the project has any), or one of the four
@@ -115,4 +127,4 @@ function refCheck(refs, ids = {}) {
   return null;
 }
 
-module.exports = { workspaceRefs, dealRefs, taskRefs, refCheck, allowedTaskStatuses, TASK_PRIORITIES };
+module.exports = { workspaceRefs, dealRefs, taskRefs, refCheck, ownsPair, allowedTaskStatuses, TASK_PRIORITIES };

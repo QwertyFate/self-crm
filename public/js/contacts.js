@@ -120,13 +120,36 @@ function onboardingBadge(status) {
   return `<span class="stage-badge" title="${esc(key)}"><span class="stage-badge-dot" style="background:${meta.color}"></span>${esc(onboardingLabel(key))}</span>`;
 }
 async function startOnboarding(id, currentStatus) {
+  if (!(await requestOnboardingStart(id, currentStatus))) return;
+  const page = document.querySelector('.sidebar-nav a.active')?.dataset.page;
+  if (page === 'onboarding') await loadOnboarding(); else await loadContacts();
+  await openDetail(id);
+}
+// Confirm → POST → report. Shared by the contact detail, the deal editor and
+// the Onboarding page. Resolves true when the status was changed.
+async function requestOnboardingStart(id, currentStatus, { confirmed = false } = {}) {
   const msg = currentStatus && currentStatus !== 'kein_onboarding' ? t('onb_confirm_reset') : t('onb_confirm');
-  if (!confirm(msg)) return;
+  if (!confirmed && !confirm(msg)) return false;          // confirmed: the caller already asked (stage prompt)
   const res = await api.post(`/api/contacts/${id}/onboarding/start`, {});
+  if (res.error) { alert(res.error); return false; }
+  invalidate();
+  return true;
+}
+// Inline status picker shown next to the badge (contact detail, deal editor,
+// Onboarding page). ctx decides what is re-rendered after the change.
+function onboardingStatusSelect(contactId, status, ctx) {
+  const opts = Object.keys(ONBOARDING_STATUS_META)
+    .map(k => `<option value="${k}"${k === status ? ' selected' : ''}>${esc(onboardingLabel(k))}</option>`).join('');
+  return `<select class="onb-status-select" title="${esc(t('onb_status_select_title'))}" onchange="changeOnboardingStatus(${contactId}, this.value, '${ctx}')">${opts}</select>`;
+}
+async function changeOnboardingStatus(id, status, ctx) {
+  const res = await api.patch(`/api/contacts/${id}/onboarding-status`, { onboarding_status: status });
   if (res.error) { alert(res.error); return; }
   invalidate();
-  await loadContacts();
-  await openDetail(id);
+  if (ctx === 'deal')      await renderContactPanelReadOnly({ id });
+  else if (ctx === 'page') await loadOnboarding();
+  else                     await openDetail(id);
+  if (document.querySelector('.sidebar-nav a.active')?.dataset.page === 'contacts') loadContacts();   // keep the optional column current
 }
 
 function sortContacts(list) {

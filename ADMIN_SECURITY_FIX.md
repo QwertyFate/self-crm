@@ -2447,3 +2447,410 @@ One runner quirk found and documented: `describe(name, { skip: null })` still sk
 | `tests/**` | 17 new files (3 helpers, 13 test files, README) |
 
 `db.js`, `server.js`, `routes/*`, `utils/*`, `public/*`, `private/*` unchanged since Part 28.
+
+---
+
+## Part 36 — Test-suite consistency pass (no application code changed)
+
+**Why.** A read-only audit of `tests/` (24 files) found fixtures copied between files, three real defects in tests, a migration "baseline" that no longer proved anything, a database test that would wipe whatever `TEST_DATABASE_URL` pointed at, and docs that had drifted. Parts 30–35 (the six bug fixes found by the same review) follow separately. Numbering: 30–35 are reserved for those; this pass is 36.
+
+### Shared helpers (new)
+| File | Replaces |
+|---|---|
+| `tests/helpers/fake-tables.js` — `idempotencyTable()`, `apiKeyRules(KEY)` | three copies of the in-memory `idempotency_keys` model (one with a wrong reply shape) and three copies of the `api_keys` lookup rule |
+| `tests/helpers/fake-http.js` — `fakeReq()`, `fakeRes()` | three differently-shaped hand-rolled req/res objects |
+| `tests/helpers/schema-constants.js` | the seven statuses, eleven columns, four tables, pre-Stage-1 table list, indexes — hard-coded in five places |
+| `tests/helpers/skip.js` — `skipUnless(cond, reason)` | two hand-rolled `skipOpts` |
+| `fake-pool.js` `writes()`, `someParam()`; `load-route.js` `request(method, path, body, headers)`, `closeAllConnections()`, `inject()` returns `restore()` | per-file `writes()`, a local `fetchJson`, a hand-built server, unrestored cache entries |
+
+### Defects fixed in tests
+- `routes/engine-api.test.js`: an assertion sat inside a `//` comment and never ran (the "untouched when absent" half of the `drive_ordner_id` test). Now on its own line, and the UPDATE is located by content instead of log index.
+- `routes/contacts-import.test.js`: deal ids compared after a **lexicographic** `.sort()` — passed only because of digit counts. Numeric sort, expectation reordered.
+- `unit/db-migrations.test.js`: `find(...) || ''` turned a missing statement into a confusing regex diff → `must(re, what)`; `/plz TEXT$/` end anchor → `\b`; DROP/ADD adjacency → ordering only; the destructive-keyword scan scoped to `ALTER TABLE`/`DROP TABLE`.
+- `unit/server-wiring.test.js`: `exec(src)[0]` threw a bare `TypeError` on a non-match → asserts the match first.
+- `client/ui-onboarding.test.js` (moved from `unit/`, it needs jsdom for one block): the handler loop could pass with zero iterations; a `> 15` magic threshold → the explicit list of keys the cards must carry.
+- `routes/deals.test.js` / `routes/tasks.test.js`: `Array.isArray` checks that could not fail → canned linked-object / subtask rows with asserted contents (the subtask row now comes from the scoped `parent_id` query).
+- `unit/engine-webhook.test.js`: a never-settling promise left behind by the overlap-guard test is now released and awaited; a float `20.6` restatement dropped.
+- `routes/engine-settings.test.js` / `routes/objects.test.js`: full-clause fake-pool regexes → stable prefixes (README §3.4); the retry clamp is now asserted on the SQL text rather than on the fake; `x === undefined` on possibly-absent objects → `in` checks.
+- `unit/engine-auth.test.js`: `setTimeout(5)` replaced by polling for the stamp; the plain key is checked via `pool.someParam`.
+
+### Baseline made real
+The migration test's "before" was `HEAD:db.js`, which already contained Stage 1 — it proved nothing. `tests/fixtures/db.pre-stage1.js` (= `git show 5e9d187:db.js`, 481 lines, no `onboarding_status`) is now the baseline for both `npm run test:baseline` and the real-Postgres test, which additionally asserts the fixture lacks the column before migrating.
+```
+test:baseline   4 additive/regression guards pass, 11 Stage 1 assertions fail — as designed
+```
+
+### Database test safety
+`tests/db/onboarding-schema.pg.test.js` → `tests/db/onboarding-schema.test.js`. It drops the public schema, so it now runs only when `TEST_DATABASE_URL` is local (`localhost`/`127.0.0.1`/`::1`) **and** `ALLOW_DESTRUCTIVE_DB_TEST=1`; otherwise it skips with the exact reason. Verified: remote host → refused; local without opt-in → refused; local with opt-in on a throwaway `crm_stage1` → 6/6, database dropped afterwards. (A constant named `URL` had shadowed the global `URL` class — caught by this verification and fixed.)
+
+### Scripts / engines
+`package.json`: `test:unit`, `test:routes`, `test:client`, `test:db`, `test:baseline`, `test:serial` (`--test-concurrency=1`); `"engines": { "node": ">=22" }` (the `--test` glob needs Node 22).
+
+### Conventions applied to touched files
+`describe` when > 4 tests; one assertion per line; a message on bare status checks; `// <KIND> tests for <subject>` headers.
+
+### Docs
+`tests/README.md` rewritten: four kinds incl. `db/`, the scripts, `TEST_DATABASE_URL` / `ALLOW_DESTRUCTIVE_DB_TEST` / `DB_FILE`, nested name-pattern note, house rules, coverage table regenerated from the files (24), concrete counts removed from the sample. `tests/HOW_EACH_TEST_WORKS.md`: Part F for the helpers and the eleven files it did not cover; three misquotes corrected.
+
+```
+npm test   tests 176  pass 176  fail 0   (was 175: the loop-prevention test split into two)
+```
+`routes/*`, `utils/*`, `middleware/*`, `db.js`, `server.js`, `public/*`: unchanged in this part (`git status` shows only `tests/` and `package.json`).
+
+---
+
+## Part 30 — Task-project statuses readable and replaceable across workspaces
+
+**Hole.** `routes/task-projects.js` `GET /:id/statuses` and `PUT /:id/statuses` ran `SELECT … WHERE project_id=$1` and `DELETE FROM task_project_statuses WHERE project_id=$1` + inserts with **no workspace check**. `task_project_statuses` has no `workspace_id` of its own; the project decides. Any member of any workspace who guessed a project id could read that workspace's status list, and with PUT wipe it and replace it with their own.
+
+**Fix.** `ownProjectId(req)` (line 154): `:id` must be all digits, then `SELECT id FROM task_projects WHERE id=$1 AND workspace_id=$2`; no row → `404 Not found` before any read or write. Every statement is keyed on the verified id. Body validation (`statuses` must be an array → 400) still runs first.
+
+**Verification — `tests/routes/task-projects-statuses.test.js`** (fake pool; baseline = pre-fix mirror via `TEST_APP_ROOT`):
+```
+BASELINE                                                              LIVE
+  FAIL GET foreign project -> 404, statuses never read      200 leak   ok
+  ok   GET own project -> its statuses                                 ok
+  FAIL GET /abc -> 404 without a query                                 ok
+  FAIL PUT foreign project -> 404, zero writes, their list intact      ok   (baseline: 200, DELETE+INSERT on their project)
+  FAIL PUT own -> DELETE + INSERTs keyed on the verified id, in order  ok
+  ok   PUT non-array -> 400 before any lookup                          ok
+  2/6                                                                  6/6
+```
+Files: `routes/task-projects.js` +16 / −3 (lines 150–188).
+
+---
+
+## Part 31 — Deal ↔ object links unchecked on either end
+
+**Hole.** `routes/deals.js` `GET/POST/DELETE /:id/objects[/:objectId]` wrote `deal_objects (deal_id, object_id)` straight from the request and read linked objects by deal id alone. `deal_objects` carries no `workspace_id`, and neither the deal nor the object was checked, so a member could attach any object anywhere, detach other workspaces' links, and read another workspace's object rows through their own deal. The object-side twins in `routes/objects.js` were fixed in Part 24; the deal side was not.
+
+**Fix.** New shared `ownsPair(q, wid, ['deals', id], ['objects', id])` in `utils/workspace-refs.js` (line 80): one `EXISTS`/`EXISTS` round trip, table names are route-chosen literals. POST/DELETE: deal foreign → `404 Not found`, object foreign → `404 Object not found`, nothing written. GET: the deal is resolved in the workspace first (404 otherwise) and objects are joined with `o.workspace_id = $2`. Non-numeric ids → 400 (previously a Postgres error → 500). `objects.js` keeps its local `ownsLink` (same idea, different aliases) so Part 24's tests are unchanged.
+
+**Verification — `tests/routes/deals-objects.test.js`:**
+```
+BASELINE                                                              LIVE
+  FAIL GET foreign deal -> 404, objects never read       200 + their object row   ok
+  FAIL GET own deal -> rows via o.workspace_id = $2 join                          ok
+  FAIL POST foreign deal / own object -> 404, no write   201 + INSERT             ok
+  FAIL POST own deal / foreign object -> 404, no write   201 + INSERT             ok
+  FAIL DELETE foreign deal -> 404, no write              200 + DELETE             ok
+  FAIL DELETE foreign object -> 404, no write            200 + DELETE             ok
+  FAIL own + own -> 201 / 200 with the original params   (ids bound as strings)   ok
+  FAIL missing / non-numeric ids -> 400, no query        500 / written            ok
+  0/8                                                                             8/8
+```
+Files: `routes/deals.js` +23 / −5 (lines 158–205); `utils/workspace-refs.js` +13 / −1 (`ownsPair`, exported).
+
+---
+
+## Part 32 — Stages could be added to another workspace's pipeline
+
+**Hole.** `routes/pipelines.js` `POST /:id/stages` inserted a stage with the caller's `workspace_id` but the `pipeline_id` from the URL, never checking the pipeline was theirs; the `MAX(position)` probe read the foreign pipeline's positions. Result: a stage row of workspace A inside workspace B's pipeline.
+
+**Fix.** `:id` must be digits (400); `SELECT id FROM pipelines WHERE id=$1 AND workspace_id=$2` → `404 Not found` before the probe; the probe gains `AND workspace_id=$2`; the INSERT binds the verified id (a first pass still bound the raw URL string — caught by the test's exact-params assertion and corrected).
+
+**Verification — `tests/routes/pipelines-stages.test.js`:**
+```
+BASELINE                                                                  LIVE
+  FAIL foreign pipeline -> 404, no INSERT, no probe     201 + INSERT       ok
+  FAIL own -> 201, probe scoped [5, 7], INSERT [7, 5, 'Angebot', '#123', 3]  ok
+  FAIL missing name / non-numeric id -> 400, no query   (500 on /abc)      ok
+  0/3                                                                      3/3
+```
+Files: `routes/pipelines.js` +8 / −3 (lines 91–103).
+
+---
+
+## Part 33 — Inbound-webhook settings accepted foreign pipeline, stage and assignee
+
+**Hole.** `routes/integrations.js` `PATCH /settings` stored `pipeline_id`, `stage_id` and `default_assignee_id` from the body unchecked. Every lead that later arrives on the **public** `POST /receive/:key` is written using those ids — into another workspace's pipeline, or assigned to a user of another workspace. This is the class of bug `utils/workspace-refs.js` exists for, and the route did not use it.
+
+**Fix.** The existing `dealRefs` + `refCheck` guard (line 60) → `400 "<field> does not belong to this workspace"` (the `assigned_to` wording rewritten to `default_assignee_id`), no UPDATE; when both are given, `stage_id` must belong to `pipeline_id` in this workspace (`SELECT 1 FROM pipeline_stages WHERE id=$1 AND pipeline_id=$2 AND workspace_id=$3`) → 400. Nulls skip the lookup entirely.
+
+**Verification — `tests/routes/integrations-settings.test.js`:**
+```
+BASELINE                                                                LIVE
+  FAIL foreign pipeline_id -> 400 naming it, no UPDATE     200 stored     ok
+  FAIL foreign default_assignee_id -> 400 naming it        200 stored     ok
+  FAIL stage of another pipeline -> 400, no UPDATE         200 stored     ok
+  ok   own pipeline/stage/user -> 200, UPDATE binds 7 values              ok
+  ok   all null -> 200 with no ownership lookup                           ok
+  2/5                                                                     5/5
+```
+Files: `routes/integrations.js` +14 / −0 (lines 6, 54–68).
+
+**Test support (Parts 30–33).** `tests/helpers/load-route.js`: `TEST_APP_ROOT=<mirror> NODE_PATH=<app>/node_modules node --test <file>` runs any route test against a copy of the app — the "baseline first" runs above used a scratchpad mirror of the four pre-fix routes. Whole suite after Parts 30–33: **198 tests, 198 pass** (176 + 22 new). `db.js`, `server.js`, `public/*` unchanged. Still to do in Part 3: `notifySystem` placeholder mismatch (34) and the workspace-delete guard (35).
+
+---
+
+## Part 34 — System announcements silently reached nobody
+
+**Bug.** `notifications.js` `notifySystem` built one value tuple per user with placeholders stepping by **six** (`$1,$2,…,$7,$8,…`) but bound only **four** values per user. With exactly one user the numbers line up; with two or more the INSERT references `$7` upward, Postgres rejects the statement, and the surrounding `catch` only logs to the console. `POST /api/notifications/announce` returned `{ success: true }` while no notification row was written.
+
+**Fix.** Placeholders step by four to match the four bound values (`($1,$2,NULL,'system','system',$3,$4)`, `($5,$6,…,$7,$8)`, …). Nothing else changed.
+
+**Verification — `tests/unit/notify-system.test.js`** (the real `notifications.js` bound to a fake pool that, like Postgres, rejects a statement whose highest `$n` exceeds the bound values; `console.error` captured):
+```
+BASELINE                                                                           LIVE
+  FAIL notifySystem, 3 users -> one INSERT, placeholders = bound values,           ok   12 values, $12 max,
+       one tuple per user, nothing swallowed          $18 referenced, error swallowed     3 tuples, no error
+  ok   no users -> no INSERT                                                       ok
+  ok   POST /announce as member -> 403, no query                                   ok
+  FAIL POST /announce as owner -> 200 and a row per member  200 but INSERT failed  ok
+  ok   missing title -> 400                                                        ok
+  3/5                                                                              5/5
+```
+`tests/helpers/load-route.js` gained a `notifications` option so a route test can use the real module instead of the no-op stub. Files: `notifications.js` +6 / −2 (line 48).
+
+---
+
+## Part 35 — A workspace could never be deleted
+
+**Bug.** `routes/workspace.js` `DELETE /` guards against deleting your last workspace by counting `user_workspaces` rows for `req.userId`. In this schema a person has one `users` row **per workspace** (`UNIQUE(workspace_id, email)`), so that count is always exactly one and the endpoint always answered `400 Cannot delete your only workspace` — even for an owner of several workspaces.
+
+**Fix.** Count memberships by the person's identity: `SELECT COUNT(*) FROM user_workspaces uw JOIN users u ON u.id = uw.user_id WHERE u.email = (SELECT email FROM users WHERE id = $1)`. The transactional delete that follows is unchanged (every statement scoped to `req.workspaceId`).
+
+**Verification — `tests/routes/workspace-delete.test.js`** (fixture: `owner@x` has user rows in workspaces 7 and 9; `solo@x` only in 11):
+```
+BASELINE                                                                 LIVE
+  FAIL owner of two -> 200, every DELETE bound to [7], COMMIT   400        ok
+  ok   owner of one -> 400, nothing deleted                                ok
+  ok   member -> 403, no query                                             ok
+  2/3                                                                      3/3
+```
+Files: `routes/workspace.js` +8 / −1 (lines 165–174).
+
+Whole suite after Parts 34–35: **206 tests, 206 pass**. `db.js`, `server.js`, `public/*` unchanged. Not touched by decision: the password-reset token in the response (no SMTP yet). Next: Part 4 (new server coverage) and Part 5 (client pure-function coverage).
+
+---
+
+## Part 37 — New server coverage (test-consolidation Part 4 of 5)
+
+**Scope.** Tests only. No application file changed in this part (`git status`: only `tests/` and `tests/README.md`). The goal was to put the untested, high-risk server paths under the same fake-pool / real-HTTP harness the rest of the suite uses, so a future regression in tenant isolation or the session gate fails a test instead of shipping.
+
+**What was uncovered before this part.** The session gate itself (`middleware/auth.js`) was stubbed out by every route test and never exercised; the two endpoints that move a session between workspaces; member removal; plain contact CRUD and bulk delete; the field-definition factory behind four routers (16 endpoints); the public inbound-lead webhook; the chat and notification HTTP routes; the reorder helper; the admin login (previously only proven in scratchpad harnesses in Parts 1/3/4).
+
+**New files (10, 53 tests):**
+
+| File | Proves |
+|---|---|
+| `tests/unit/require-auth.test.js` | Real middleware: no session → 401 without touching the DB; a session whose user is not a member of its workspace → 401 **and** `session.destroy()`; a member gets `req.userId` from the session and `req.workspaceId` / `req.userRole` from the membership row (params `[userId, workspaceId]`); DB error → `next(err)`, nothing sent |
+| `tests/routes/auth-workspace-switch.test.js` | `POST /select-workspace` and `/switch-workspace`: no session → 401 with no query; workspace with no `users` row for the caller's **email** → 403 and the session object unchanged (lookup is by the session user's email, never by anything in the body); own → session rebound to that workspace's user row and its role (owner in ws 7 becomes member in ws 9, no carry-over) |
+| `tests/routes/workspace-members.test.js` | `DELETE /members/:id`: member → 403; self → 400; user id from another workspace → 404 with the lookup bound `[id, workspaceId]` and zero writes; own member → `UPDATE contacts SET assigned_to=NULL` and `DELETE FROM users` both bound `[id, 7]` inside BEGIN/COMMIT |
+| `tests/routes/contacts-crud.test.js` | List joins carry `s.workspace_id = c.workspace_id` / `u.workspace_id = c.workspace_id`; foreign `stage_id` / `assigned_to` → 400 naming the field, no INSERT; duplicate email in any case → 409; own POST lower-cases the email and defaults the assignee to the caller; PUT / `PATCH /:id/stage` / `DELETE /:id` on a foreign contact → 404 with the scoped statement; bulk delete of `[10,11,12,13]` where only 10 and 12 are ours → `{deleted: 2}` via `id IN (...) AND workspace_id=$1`; empty / non-array → 400 with no query |
+| `tests/routes/field-crud.test.js` | `createFieldRouter('deal_fields')`: list bound to the workspace; type outside the allow-list → 400; missing key → 400; `23505` → 400; valid → 201 with `position = MAX+1`; PUT / DELETE on another workspace's field → 404 (`AND workspace_id=$n` on the statement). Static check: the factory is called exactly four times, with the literal table names `custom_fields`, `deal_fields`, `object_fields`, `task_fields` (the name is interpolated into SQL, so it must never come from input) |
+| `tests/routes/integrations-receive.test.js` | Public `POST /receive/:key`: unknown or inactive key → 404 with zero writes; neither name nor email after mapping → 422 with a `webhook_logs` error row; new lead → contact inserted in the **key's** workspace (never the payload's), email lower-cased, `data.budget` captured through the dot-path map into `custom_data`, assignee from the hook, deal in the hook's pipeline/stage, response `{success, contact_id, deal_id}`; existing email → scoped UPDATE `[..., 55, 7]` and no INSERT |
+| `tests/routes/chat-http.test.js` | `GET /messages` bound `[workspaceId, before]`, returned oldest-first; `GET /unread` bound `[workspaceId, userId]`; non-string or blank content → 400 with no INSERT; valid → 201 `{id, created_at}`, stored trimmed as `[7, 42, 'hallo']` and the read cursor upserted; `PATCH /read` upserts on `(user_id, workspace_id)` |
+| `tests/routes/notifications.test.js` | list / `:id/read` / `read-all` / `clear` / `preferences` are all bound to the caller's `user_id`; unread count computed; preferences must be an object |
+| `tests/unit/reorder.test.js` | `reorderItems` writes positions 0..n-1 in the given order, every UPDATE carrying the caller's WHERE clause and params, inside BEGIN/COMMIT; a failure mid-way → ROLLBACK, no COMMIT, error rethrown |
+| `tests/routes/admin-login.test.js` | Ports the Part 1/3/4 scratchpad harnesses into the suite: `{secret: [SECRET]}` → 401 (no string coercion); wrong / empty → 401 and no regeneration; correct → `session.regenerate()` runs **before** `isAdmin` is set, so state planted in the pre-login session is gone; `ADMIN_SECRET` unset → 503; invite endpoints → 401 without `isAdmin` and no query; logout destroys the session. No secret is printed anywhere; the test uses its own constant |
+
+**Harness notes.** Two tests needed the existing session-aware pattern (a `withSession` middleware in front of the real router) instead of the `user` stub, because the code under test is the code that *sets* `req.session`. `require-auth` and `field-crud` load their module directly with `inject('db.js', …)` rather than through `loadRoute`, since neither is a route file. Three test-side mistakes were caught and fixed on the first run (`pool.find` returns the *first* matching query, so tests that issue several requests reset the log before the one they assert on; the receive route answers 200, not 201; the contacts INSERT binds `custom_data` at `$6` and `assigned_to` at `$7`). No route was changed to make a test pass.
+
+**Result.** Suite before this part: 206 tests. After: **259 tests, 259 pass, 0 skipped** (`npm test`). `tests/README.md` §6 coverage table gained rows for the Part 2–3 tests (`task-projects-statuses`, `deals-objects`, `pipelines-stages`, `integrations-settings`, `notify-system`, `workspace-delete`) that were missing, plus the ten above.
+
+Files: `tests/unit/require-auth.test.js` (new), `tests/unit/reorder.test.js` (new), `tests/routes/auth-workspace-switch.test.js` (new), `tests/routes/workspace-members.test.js` (new), `tests/routes/contacts-crud.test.js` (new), `tests/routes/field-crud.test.js` (new), `tests/routes/integrations-receive.test.js` (new), `tests/routes/chat-http.test.js` (new), `tests/routes/notifications.test.js` (new), `tests/routes/admin-login.test.js` (new), `tests/README.md` (+16 rows in §6). Next: Part 5 (client pure-function coverage).
+
+---
+
+## Part 38 — Client pure-function coverage (test-consolidation Part 5 of 5)
+
+**Scope.** Tests only. No file under `public/`, `private/`, `routes/`, `utils/`, `middleware/` or the root changed (`git status`: only `tests/`, the two test docs and this log).
+
+**Why.** Every browser test in the suite needed `jsdom`, which is deliberately not installed (zero-dependency rule). So all four `tests/client/*` files skipped and **no line of `public/js/` was executed by `npm test`**. Fifteen browser helpers are pure or read only file-scope state, and can run under `node:test` without a fake browser.
+
+**Helper — `tests/helpers/client-fn.js` (new, zero deps).** `loadFns(file, [names], { state, extra })` reads the real browser file, finds `function NAME(` (asserting exactly one occurrence), slices to the matching brace, and evaluates all requested functions in **one** `new Function` body together with `let` declarations for the state they read (`fields`, `contactColumns`, `sortKey`, `sortDir`, `currentWorkspace`, `currentLang`). Those are file-scope `let`s in the browser, not `window` properties, so one shared script is the only way to reach them; `__set(name, value)` assigns them from the test. `sliceConst(file, NAME)` extracts a top-level `const NAME = {…}|[…];` (used for `STAT_CARD_DEFS`, `DEFAULT_STAT_ORDER`, `TRANSLATIONS`). Works with `TEST_APP_ROOT`, so a mirror run needs no extra harness. Renamed or removed function → "found 0 times", never a silent pass.
+
+**New files (7, 38 tests incl. 2 todo):**
+
+| File | Functions (source) | Proves |
+|---|---|---|
+| `tests/client/csv-import.test.js` | `detectDelimiter`, `parseCSV`, `toFieldKey`, `autoMapHeader` (`public/js/admin-import.js`) | tab wins only when it beats both others, `;` beats `,` only when strictly more, ties fall to `,`; the first non-blank line decides; quoted field with embedded delimiter and `""` escape; CRLF; blank lines dropped; trailing empty field kept; custom delimiter; slug rules (`Vor- und Nachname` → `vor_und_nachname`, `Straße` → `stra_e`); one English and one German alias per built-in column, whitespace collapsed; custom field by name or by key → `custom:<key>`; unknown → `skip` |
+| `tests/client/core-helpers.test.js` | `buildPageNumbers`, `waLink`, `esc`, `fmtDate` (`public/js/core.js`) | ≤ 7 pages → all; `(1,10)`, `(3,10)`, `(5,10)`, `(8,10)`, `(10,10)` windows with the U+2026 gap; `waLink`: null / < 6 digits → `null`, digits-only URL, default `Hi {{name}}, ` encoded, workspace template with `{{company}}` via `__set`, string contact; `esc` escapes `& < > "` and **not** `'` (pinned), null → `''`; `fmtDate` falsy → `''`, `Mar 5, 2026` |
+| `tests/client/contacts-helpers.test.js` | `effectiveContactColumns`, `getSortValue`, `sortContacts` (`public/js/contacts.js`) | no saved layout → 7 built-ins + custom fields with default visibility, labels through `t()`; saved layout sets order and visibility, drops unknown keys, appends new columns with defaults; no sort key → **same array reference**; case-insensitive text; input not mutated; `desc` flips; stage/assignee use joined names; `created_at` numeric; custom number field via `parseFloat` (`'9'` before `'12'`), custom date by time, missing value as `''` |
+| `tests/client/analytics-helpers.test.js` | `fmt`, `fmtCurrency`, `buildStatOrder` (+ `STAT_CARD_DEFS`, `DEFAULT_STAT_ORDER`) (`public/js/analytics.js`) | `—` for null, rounding, `K`/`M` thresholds and decimals; default six cards; the two value cards dropped when `config.value_field` is null; saved order kept, unknown ids dropped, hidden flags; **pinned:** `['constructor']` is currently accepted because the lookup is a plain-object property read (`test.todo` to use `hasOwnProperty`) |
+| `tests/client/tasks-helpers.test.js` | `buildSubtaskMap`, `fmtSize` (`public/js/tasks.js`) | children grouped under `parent_id` in list order, roots not keys, empty → `{}`; `0 B`, `1023 B`, `1.0 KB`, `1.5 KB`, `1.0 MB`, `5.5 MB` |
+| `tests/client/i18n.test.js` | `TRANSLATIONS`, `t` (`public/js/core.js`), `public/index.html` | exactly `en` and `de`, every value a non-empty string; key parity in both directions; every `data-i18n` / `data-i18n-ph` key in the **whole** page (121 attributes) exists in both dictionaries (the earlier check in `ui-onboarding.test.js` only covered the Integrations section); `t()` falls back current → `en` → key, unknown language → `en` |
+| `tests/client/field-key.test.js` | `generateFieldKey` (`private/admin.html` inline script), `toFieldKey` (`public/js/admin-import.js`), static scan of `settings.js` / `objects.js` | both agree on words, digits and whitespace; **pinned divergence:** the admin console deletes punctuation and the app replaces it (`Ust-ID` → `ustid` vs `ust_id`, `E-Mail` → `email` vs `e_mail`) with a `test.todo` to unify; the five inline slugifiers in the app (`settings.js` ×4, `objects.js` ×1) use exactly the `toFieldKey` rule, so the app side is self-consistent |
+
+**Two facts pinned, not fixed** (both are behaviour, not security; left for a deliberate decision): the `generateFieldKey` / `toFieldKey` divergence, and the plain-object card lookup in `buildStatOrder`. Each has a `test.todo` naming the change.
+
+**Verification — mirror with deliberate breakage** (`TEST_APP_ROOT=<scratchpad copy of public/ + private/>`; `parseCSV` quote handling removed, both `'…'` pushes removed from `buildPageNumbers`, `sortContacts` returns `cmp` regardless of `sortDir`, `de.nav_deals` deleted from `TRANSLATIONS`):
+```
+BASELINE (broken mirror)                                                        LIVE
+  FAIL parseCSV: quoted fields keep the delimiter and unescape ""                 ok
+  FAIL buildPageNumbers: windows … with a single-character ellipsis              ok
+  FAIL sortContacts: text keys sort case-insensitively; … desc flips             ok
+  FAIL i18n: key parity                                                          ok
+  FAIL i18n: every data-i18n key in index.html exists in both dictionaries       ok
+  FAIL t(): current language, then English, then the key   (de.nav_deals gone)   ok
+  30/36                                                                          36/36
+```
+Every other test stayed green on the mirror, so the failures are specific to the mutated bodies.
+
+**Result.** Suite before this part: 259 tests. After: **297 tests, 295 pass, 2 todo, 0 fail, 0 skipped** (`npm test`; the jsdom-gated and DB-gated files are unchanged). `npm run test:client` runs the seven new files without `jsdom`.
+
+**Docs.** `tests/README.md` §2 (`client/` row), §6 (+7 rows), §8 (slicing gotcha). `tests/HOW_EACH_TEST_WORKS.md` new §D.4 for `client-fn.js`.
+
+Files: `tests/helpers/client-fn.js` (new), `tests/client/csv-import.test.js`, `tests/client/core-helpers.test.js`, `tests/client/contacts-helpers.test.js`, `tests/client/analytics-helpers.test.js`, `tests/client/tasks-helpers.test.js`, `tests/client/i18n.test.js`, `tests/client/field-key.test.js` (all new), `tests/README.md`, `tests/HOW_EACH_TEST_WORKS.md`.
+
+**Test-consolidation plan (Parts 1–5) complete.** Parts 36–38 in this log. Still open and not requested: password-reset token in the response (waits for SMTP), engine scope enforcement, delivery-row pruning.
+
+---
+
+## Part 39 — Import-CSV modal: "Import contacts" button clipped after ticking "Create deals during import"
+
+**Symptom.** In Contacts → Import CSV, on the column-mapping step, ticking *Create deals during import* reveals the pipeline/stage controls and pushes the *Back* / *Import contacts* bar below the bottom edge of the dialog. There is no scrollbar, so the button cannot be reached.
+
+**Cause.** `.modal` is `display:flex; flex-direction:column; max-height:min(88vh,860px); overflow:hidden` (`public/style.css:1180–1189`). Every other capped modal puts its content in `.modal-body` (`flex:1; min-height:0; overflow-y:auto`, `style.css:1203`) with the footer as a `flex-shrink:0` sibling (`style.css:1205–1210`). The import modal was the one exception: its three step `<div>`s were dropped straight into `.modal` with no scroll container, and each step's `.modal-actions` bar was **inside** the step. A flex item's `min-height` is `auto`, so `#import-step-map` could not shrink below its content; once `#import-deal-options` (~200 px) was shown the step exceeded the cap and `overflow:hidden` clipped its tail — the action bar.
+
+**Fix (markup + one function, no CSS change).**
+- `public/index.html` `#import-modal`: the three steps now sit inside one `<div class="modal-body">`; the two action bars were lifted out to be direct children of `.modal` as `#import-footer-map` (Back + `#import-run-btn`) and `#import-footer-done` (Done), both `hidden` by default. Button ids, labels and `onclick`s are unchanged.
+- `public/js/admin-import.js` `showImportStep(step)`: besides toggling `import-step-<s>`, it now toggles `import-footer-<s>` when that element exists (the upload step has no footer). All four call sites (`openImportModal`, after `renderImportMapping`, `importBack`, end of `runImport`) go through this function, so nothing else changed.
+Result: the body scrolls when the step is taller than the box, and the action bar stays pinned at the bottom like every other modal.
+
+**Verification — `tests/client/import-modal-layout.test.js`** (static, no jsdom; the real `showImportStep` is run against a five-element fake `document`):
+```
+BASELINE (pre-fix mirror)                                                    LIVE
+  FAIL exactly one .modal-body, all three steps inside it                     ok
+  FAIL no action bar inside any step div                                      ok
+  FAIL map/done footers are siblings of the body, hidden, with the buttons    ok
+  FAIL showImportStep shows the step AND its footer, hides the others         ok
+  0/4                                                                         4/4
+```
+Whole suite: **301 tests, 299 pass, 2 todo, 0 fail**. `node --check public/js/admin-import.js` clean.
+
+Manual check for the developer (app not started here): Contacts → Import CSV → drop a CSV → tick *Create deals during import* → the mapping area scrolls and *Back* / *Import contacts* stay visible at the bottom; run the import → the *Done* bar replaces them; *Back* returns to the upload step, which has no bar.
+
+Files: `public/index.html` (+13 / −7, lines 1677–1780 region), `public/js/admin-import.js` `showImportStep` (+5 / −1, lines 113–119), `tests/client/import-modal-layout.test.js` (new), `tests/README.md` (+1 row).
+
+---
+
+## Part 40 — Engine webhook: `column "events" does not exist` (stale `engine_webhook` table from an older branch)
+
+**Symptom.** Integrations → Engine → *Send test event* (and any outgoing engine event) fails with PostgreSQL error 42703:
+```
+error: column "events" does not exist
+    at emitEngineEvent (utils/engine-webhook.js:164)      hint: Perhaps you meant "engine_webhook.event"
+```
+
+**Root cause — not a code inconsistency, a stale table.** The current `db.js` (commit `d35a8f3`, Stage 1) defines `engine_webhook (id, workspace_id, url, secret, events JSONB, description, active, created_by, …)`, and every file and doc uses `events` (`utils/engine-webhook.js:167`, `routes/engine-settings.js:20,49,57`, `ONBOARDING_ENGINE.md:33,143`). The live database, however, was first started from the earlier `outgoingendpoints` / `apiEndpoints` branches, whose `db.js` created a **different** `engine_webhook`: one row per workspace with `event TEXT`, `target_url`, `api_key TEXT NOT NULL UNIQUE`, `stage_ids`, `payload_map`. `CREATE TABLE IF NOT EXISTS` sees a table of that name and does nothing, so the old shape survives every restart. Against it the subscriber lookup fails on `events`, and the settings `PUT` would fail too (`url`, `description`, `created_by` missing; `api_key NOT NULL` without a default). `main` and `dealcontacttasksync` never defined this table; the two old branches did (verified with `git show <branch>:db.js`). Neither old branch created anything that references `engine_webhook` (`engine_delivery_logs` and `documents` have no FK to it), so they are left alone.
+
+**Fix — `db.js` lines 468–484, a guarded one-time fix-up in front of the Stage 1 `engine_webhook` CREATE.** It probes `information_schema.columns` for `engine_webhook.api_key` (only the old shape has it). If present: `CREATE TABLE IF NOT EXISTS engine_webhook_legacy AS SELECT * FROM engine_webhook` (plain copy, keeps every old row), `DROP TABLE IF EXISTS engine_webhook_deliveries` (created by the current file against the old table; it can hold no rows because every emit failed before its INSERT), `DROP TABLE engine_webhook` (no CASCADE: an unexpected dependent makes the start fail loudly rather than being dropped), then a console line. The unchanged Stage 1 block then creates `engine_webhook` and `engine_webhook_deliveries` in the current shape. On a database built by the current file the probe finds nothing and no statement runs. Decisions by the user: self-healing migration rather than manual SQL; old rows kept.
+
+**Verification.**
+- `tests/unit/db-migrations.test.js` (fake pool): the probe runs before the CREATE and, on a normal database, no `DROP TABLE` / `legacy` statement is issued (the existing "additive" guard stays green); when the fake pool answers the probe with a row, the statements are exactly `CREATE … engine_webhook_legacy AS SELECT` → `DROP TABLE IF EXISTS engine_webhook_deliveries` → `DROP TABLE engine_webhook` → `CREATE TABLE IF NOT EXISTS engine_webhook (` → `… engine_webhook_deliveries (`, in that order, and nothing else is dropped. `npm run test:baseline` (pre-Stage-1 fixture): the two new assertions fail there together with the other Stage 1 ones (13 failures instead of 11), as designed.
+- `tests/db/onboarding-schema.test.js` (real PostgreSQL 16, local throwaway `crm_stage1`, then dropped): builds the pre-Stage-1 schema, creates the old-branch table **verbatim** with a row (`api_key 'old-key'`), then runs the current `initDb()`:
+```
+BASELINE (db.js without the fix-up, DB_FILE=<copy>)                            LIVE
+  FAIL engine_webhook has the current shape, none of the old columns   'url'   ok
+  FAIL the old rows are kept in engine_webhook_legacy       relation missing   ok
+  ok   deliveries FK targets a table named engine_webhook (trivially, the old one)   ok  (the new one)
+  FAIL the subscriber query from emitEngineEvent runs        42703 on "url"    ok
+  FAIL second initDb() leaves legacy copy + new table alone  relation missing  ok
+  Stage 1 describe: 6/6                                                        6/6
+  7/11                                                                         11/11
+```
+- Whole suite: **303 tests, 301 pass, 2 todo, 0 fail**. `node --check db.js` clean.
+
+**What the developer will see.** On the next start against the affected database the log prints `engine_webhook: old-branch table replaced; its rows are kept in engine_webhook_legacy`, once. Afterwards `Send test event`, `PUT /api/engine-settings/webhook` and the outgoing `vertrag.unterschrieben` event work. To inspect or discard the copy later (Supabase SQL editor):
+```sql
+SELECT * FROM engine_webhook_legacy;        -- the old per-workspace rows (api_key, target_url, …)
+DROP TABLE engine_webhook_legacy;           -- when no longer needed; nothing in the code reads it
+```
+
+Files: `db.js` (+17, lines 468–484), `tests/unit/db-migrations.test.js` (+37), `tests/db/onboarding-schema.test.js` (+64, plus `DB_FILE` support for baseline runs), `ONBOARDING_ENGINE_TESTING.md` (troubleshooting section appended), `tests/README.md` (§6 two rows).
+
+---
+
+## Part 41 — Onboarding from the deal editor + an "Onboarding" sidebar page
+
+**Request.** A button in the deal edit view to start onboarding for the deal's contact, and a new left-sidebar page that lists onboarded contacts and shows where each one is in the process.
+
+**No server or schema change.** `GET /api/contacts` already returns `onboarding_status`, `updated_at`, `drive_ordner_id` and the assignee name; the trigger `POST /api/contacts/:id/onboarding/start` already exists. Everything below is browser code plus i18n.
+
+**A. Deal editor — "Start Onboarding" button.**
+- `public/index.html` deal modal header: `#deal-onboarding-btn` next to the "＋ Task" button, hidden for a new deal exactly like that button (`openDealModal` toggles it with `id ? '' : 'none'`, `public/js/modals.js`).
+- `startOnboardingFromDeal()` (`modals.js`, new): reads the **live** contact selection from `#df-contact` (so it works for a contact chosen but not yet saved); no contact → alert "Link a contact to this deal first"; fetches the contact's current status, confirms, posts, then re-renders only the deal's contact panel — the deal modal stays open.
+- The deal's contact panel (`renderContactPanelReadOnly`) now shows an "Onboarding" row with the stage badge at the top.
+- `public/js/contacts.js`: the confirm → POST → `invalidate()` part of `startOnboarding` moved into a shared `requestOnboardingStart(id, currentStatus)` (returns true when the status changed). `startOnboarding` keeps its declaration and the contact-detail button is unchanged; after a start it reloads whichever page is active (Onboarding page or contacts table) and opens the detail.
+
+**B. "Onboarding" page.**
+- Sidebar: new *Workspace* item after Contacts (`data-page="onboarding"`, label `nav_onboarding`); `switchPage` (`public/js/auth.js`) calls `loadOnboarding()`; `setLanguage` (`public/js/core.js`) re-renders it.
+- `public/index.html` `#page-onboarding`: header with count, search box, one pill per active step with counts (`.stage-pills`, existing style) plus "All", table (Contact, Company, Status, Progress, Assignee, Last update), and an empty state.
+- `public/js/onboarding.js` (new, loaded after `contacts.js`): four **pure** helpers — `onboardingSteps()` (the six active steps in `ONBOARDING_STATUS_META` order), `onboardingProgress(status)` → `{step, total: 6, pct}`, `filterOnboardingRows(rows, {status, q})` (drops `kein_onboarding` and unknown statuses, pill filter, case-insensitive name/company/email search, newest change first, no mutation), `onboardingCounts(rows)` — plus the render code. Progress is a six-segment bar coloured with the step's colour and an `n/6` label; the contact name opens the existing detail modal (`openDetail` falls back to `#detail-modal` off the contacts page), whose footer has the Start-Onboarding button.
+- `public/style.css`: `.onb-*` rules only (count, hint, sub-line, pill count, progress bar). German labels stay German in both languages as before; 14 new i18n keys in both dictionaries (`nav_onboarding`, `page_onboarding`, `onb_page_hint`, `onb_filter_all`, `onb_col_*` ×6, `onb_empty_title`, `onb_empty_hint`, `onb_link_contact_first`, `onb_search_ph`).
+- `public/js/guide.js`: the sidebar step's prose now mentions Onboarding; no new step.
+
+**Verification.**
+- `tests/client/onboarding-page.test.js`: the four pure helpers (order, 0/6 – 6/6, filtering, search over null fields, sorting, counts, no mutation) and the wiring (nav item, section ids, script order, `switchPage` and `setLanguage` branches).
+- `tests/client/deal-onboarding.test.js`: header button attributes, visibility toggle in `openDealModal`, `startOnboardingFromDeal` reads `#df-contact` / refuses without a contact / delegates / never closes the modal, badge in the contact panel, `startOnboarding` delegates and the POST literal exists exactly once in `contacts.js`.
+- Existing guards untouched and green: `ui-onboarding` (declaration and POST literal pinned), `i18n` (all new `data-i18n` keys in both dictionaries, parity), `contacts-helpers` (no new built-in column), `contacts-onboarding` (route untouched).
+```
+BASELINE (pre-change mirror of public/)          LIVE
+  deal-onboarding: 0/6                            6/6
+  onboarding-page: file fails (no onboarding.js)  8/8
+```
+Whole suite: **317 tests, 315 pass, 2 todo, 0 fail**. `node --check` clean on the six edited/new scripts.
+- Test helper fix found on the way: `tests/helpers/client-fn.js` `sliceFn` took the first `{` after the function name, which broke on a destructured parameter (`function f(rows, { status } = {})`); it now skips the parameter list first.
+
+**Manual check for the developer.** Open a deal that has a contact → header shows *Start Onboarding* and the contact panel shows the stage badge → click, confirm → badge reads "Formular versendet", modal stays open. Sidebar → *Onboarding* lists that contact with 1/6; pills and search filter; clicking the name opens the detail modal. Switch to German: labels translate, status names stay German.
+
+Files: `public/index.html` (nav item, `#page-onboarding`, deal header button, script tag), `public/js/onboarding.js` (new), `public/js/contacts.js` (`startOnboarding` / `requestOnboardingStart`), `public/js/modals.js` (`openDealModal`, `renderContactPanelReadOnly`, `startOnboardingFromDeal`), `public/js/auth.js` (`switchPage`), `public/js/core.js` (14 keys ×2, `setLanguage`), `public/js/guide.js` (one word), `public/style.css` (`.onb-*`), `tests/client/onboarding-page.test.js` (new), `tests/client/deal-onboarding.test.js` (new), `tests/helpers/client-fn.js` (slicer fix), `ONBOARDING_ENGINE.md` (UI section appended), `tests/README.md` (§6 two rows).
+
+---
+
+## Part 42 — Manual onboarding status change + stage-triggered onboarding prompt
+
+**Request.** (1) Let a CRM user change a contact's onboarding status by hand, on the deal and on the contact. (2) In Settings, let the owner pick pipeline stages; when a deal reaches one of them the CRM asks whether to onboard the deal's contact. Decision by the user: a manual change is pushed to the engine as a new event `onboarding.status_geaendert`.
+
+**Server.**
+- `utils/onboarding-statuses.js` (new): the seven statuses, one list. `routes/engine-api.js` takes it from there (still re-exports it); `routes/contacts.js` uses it without loading the engine router.
+- `routes/contacts.js` **`PATCH /:id/onboarding-status`** `{ onboarding_status }`: digits-only id (400), value must be one of the seven (400 naming them), contact must be in the caller's workspace (404), scoped UPDATE bumping `updated_at`. When the value actually changes: `emitEngineEvent('onboarding.status_geaendert', { kundeId, daten: { onboarding_status, vorher, quelle: 'manuell', ausgeloest_von, kunde } })` (a webhook-table failure is logged and reported as `deliveries: 0`, never a 500) and an in-app notification. Same value again: 200, no event. Response `{ success, onboarding_status, vorher, event_id, deliveries }`. Changes made **by** the engine (`routes/engine-api.js`) are still never echoed back, so no loop.
+- `routes/engine-settings.js`: `AVAILABLE_EVENTS` now `vertrag.unterschrieben`, `onboarding.status_geaendert`, `test.ereignis` (webhook `events` validation and the list returned by `GET /webhook`).
+- `db.js`: `ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS onboarding_trigger_stage_ids JSONB NOT NULL DEFAULT '[]'` (additive, next to `analytics_config`). `routes/auth.js`: the six workspace SELECTs list the column so `currentWorkspace` carries it.
+- `routes/workspace.js` **`PATCH /onboarding-trigger`** `{ stage_ids }`: owner-only (403); array of positive integers (400); every id must be a `pipeline_stages` row of this workspace (`… WHERE workspace_id=$1 AND id = ANY($2::int[])`, mismatch → 400, no UPDATE); stored deduplicated and sorted; response `{ success, stage_ids }`.
+
+**Client.**
+- `public/js/contacts.js`: `onboardingStatusSelect(contactId, status, ctx)` (seven options in process order, current selected) and `changeOnboardingStatus(id, status, ctx)` (PATCH, then re-render the calling context: deal contact panel / Onboarding page / contact detail; the contacts table is refreshed when visible). `requestOnboardingStart(id, status, { confirmed })` can skip its own confirm when the caller already asked.
+- Shown next to the badge in the contact detail (`buildDetailHTML`), the deal editor's contact panel (`renderContactPanelReadOnly`) and the Onboarding page rows.
+- Settings → Deals → **Onboarding trigger** card (owner-only): one checkbox per pipeline stage, grouped by pipeline, saved with `PATCH /api/workspace/onboarding-trigger`; rendered together with the pipelines list so stage edits show immediately.
+- `public/js/onboarding.js`: `shouldPromptOnboarding(prev, next, triggerIds)` — true only when a deal **enters** the trigger set (not when moving between two trigger stages, re-saving the same stage, or clearing the stage); `maybePromptOnboarding(deal, prev, next)` — fetches the contact, never asks for a contact already in onboarding, `confirm`s, then starts without a second confirm and refreshes the Onboarding page if open.
+- Hooked into both stage-change paths: kanban drop (`public/js/deals.js` `dealDrop`, previous stage captured before the optimistic update, prompt only after the server accepted the move) and the deal form (`public/js/modals.js` `saveDeal`, pre-edit stage from the loaded deal; a new deal created directly in a trigger stage also asks).
+- i18n (both dictionaries): `onb_status_select_title`, `set_onboarding_trigger`, `hint_onboarding_trigger`, `onb_trigger_none`, `onb_stage_prompt`. CSS: `.onb-status-select`, `.onb-trigger-stage`.
+
+**Verification.**
+- `tests/routes/contacts-onboarding-status.test.js` (7): 400 on bad id / unknown status with no query; foreign → 404 no UPDATE; own → 200 body, UPDATE bound `[status, 60, 7]`, one event with `vorher` / `quelle: 'manuell'` / `kunde`, notification; emit failure → 200 with `deliveries: 0`; unchanged → no event, no notification; back to `kein_onboarding` allowed.
+- `tests/routes/workspace-onboarding-trigger.test.js` (5): member → 403; non-array / non-integer / ≤ 0 → 400 with no query; foreign stage → 400 and no UPDATE, lookup bound `[7, ids]`; own → deduplicated, sorted, `['[30,32]', 7]`; empty list → no lookup.
+- `tests/unit/onboarding-statuses.test.js` (3): shared list equals the schema constant; both routes require it, engine-api re-exports, contacts.js does not load the engine router; all **six** workspace SELECTs in `routes/auth.js` carry the column (caught that four of them spell `WHERE id=$1` without spaces and were missed by the first replace).
+- `tests/unit/db-migrations.test.js`: the new column statement. `tests/routes/engine-settings.test.js`: `available_events` expectation updated to the three events (deliberate).
+- `tests/client/onboarding-trigger.test.js` (7): the pure decision table (enter → ask; between trigger stages / same stage / leaving / cleared → no; string ids; no config → never) and the wiring (card, save, `dealDrop` order, `saveDeal`, no re-ask, confirmed start).
+- `tests/client/onboarding-status-select.test.js` (4): seven options in order with one selected and the handler; unknown status selects nothing; used in the three places; `changeOnboardingStatus` endpoint and per-context refresh.
+```
+BASELINE (pre-change mirror of routes/ utils/ public/)   LIVE
+  1 / 17 (the foreign-404 passes trivially: route absent)  26 / 26
+```
+Whole suite: **344 tests, 342 pass, 2 todo, 0 fail**. `npm run test:baseline` (pre-Stage-1 fixture): 14 expected failures (13 + the new column). `node --check` clean on all thirteen edited/new scripts. Existing pins untouched and green (`ui-onboarding`, `deal-onboarding`, `contacts-onboarding`, `deals`, `i18n`, `field-key`).
+
+**Manual check for the developer.** Contact detail → pick a status in the dropdown → badge updates, the receiver gets `onboarding.status_geaendert` with `vorher`. Same from a deal's contact panel and from the Onboarding page. Settings → Deals → Onboarding trigger → tick a stage → Save. Drag a deal whose contact is not onboarded into that stage → prompt → OK → contact shows on the Onboarding page at 1/6. Drag it to another ticked stage: no prompt. A deal whose contact is already in onboarding: no prompt.
+
+Files: `utils/onboarding-statuses.js` (new), `routes/contacts.js`, `routes/workspace.js`, `routes/auth.js` (6 SELECTs), `routes/engine-api.js`, `routes/engine-settings.js`, `db.js` (+2), `public/index.html` (settings card), `public/style.css`, `public/js/{contacts,modals,deals,settings,onboarding,core}.js`, five new test files, `tests/unit/db-migrations.test.js`, `tests/routes/engine-settings.test.js`, `ONBOARDING_ENGINE.md`, `ONBOARDING_ENGINE_TESTING.md`, `tests/README.md`.
+
+---
+
+## Part 43 — The two `test.todo` entries from Part 38 resolved
+
+**1. Stat-card lookup accepted inherited property names.** `public/js/analytics.js` read `STAT_CARD_DEFS[id]` on a plain object in `buildStatOrder` (line 56) and in the card renderer (line 102), so a saved layout id such as `"constructor"` resolved to `Object.prototype.constructor` and survived as a "card". Both lookups now use `Object.hasOwn(STAT_CARD_DEFS, id)`; anything that is not an own key is dropped. `tests/client/analytics-helpers.test.js`: the "currently accepted" pin and the todo are replaced by one test — `['constructor', 'deals']` → only `deals`; `['__proto__', 'toString', 'hasOwnProperty']` → `[]`.
+
+**2. Admin-console field-key slug differed from the app.** `private/admin.html` `generateFieldKey` deleted punctuation (`Ust-ID` → `ustid`) while the app's `toFieldKey` (`public/js/admin-import.js`) and the five inline copies in `settings.js` / `objects.js` replace runs of non-alphanumerics with one underscore (`ust_id`). The admin console now uses the app rule (six call sites vs one; keys already stored are untouched — only newly generated keys change). `tests/client/field-key.test.js`: the "pinned divergence" test and the todo are replaced by "agree on punctuation too" (`Ust-ID`, `E-Mail`, `Straße`, `a--b__c`, `(Preis)` identical in both), and the rule-count test now covers all seven copies including `admin.html` and asserts the old delete-punctuation regex is gone.
+
+```
+BASELINE (pre-change copies of analytics.js + admin.html)      LIVE
+  FAIL inherited property names are not card ids                ok
+  FAIL agree on punctuation too                                  ok
+  FAIL every slugifier uses the same rule (admin.html count 0)   ok
+  6/9                                                            9/9
+```
+Whole suite: **342 tests, 342 pass, 0 todo, 0 fail** (two fewer than Part 42: each todo and its "pinned" companion became one real test). `node --check public/js/analytics.js` clean.
+
+Files: `public/js/analytics.js` (2 lines), `private/admin.html` (`generateFieldKey`), `tests/client/analytics-helpers.test.js`, `tests/client/field-key.test.js`, `tests/README.md` (two rows).
