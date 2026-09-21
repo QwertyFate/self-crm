@@ -212,6 +212,8 @@ async function initDb() {
     )
   `);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS analytics_config JSONB NOT NULL DEFAULT '{"won_stage_ids":[],"lost_stage_ids":[]}'`);
+  // Pipeline stages that make the UI ask "start onboarding?" when a deal enters one of them (routes/workspace.js /onboarding-trigger).
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS onboarding_trigger_stage_ids JSONB NOT NULL DEFAULT '[]'`);
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS task_statuses  JSONB NOT NULL DEFAULT '[{"key":"todo","label":"Todo","color":"#94a3b8"},{"key":"in_progress","label":"In Progress","color":"#3b82f6"},{"key":"in_review","label":"In Review","color":"#f59e0b"},{"key":"done","label":"Done","color":"#22c55e"}]'`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_fields (
@@ -417,6 +419,127 @@ async function initDb() {
   } catch (e) {
     if (e.code !== '42710') throw e;
   }
+
+  // ---------------------------------------------------------------------------
+  // Onboarding Engine — Stage 1. Everything here is additive (IF NOT EXISTS),
+  // so an existing database keeps every row and this block is safe to re-run.
+  // Contact master-data columns carry German names (the users are German);
+  // the engine tables use English like the rest of the schema.
+  // ---------------------------------------------------------------------------
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS onboarding_status     TEXT NOT NULL DEFAULT 'kein_onboarding'`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS drive_ordner_id       TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS akte_version          INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS rechtsform            TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS ust_id                TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS handelsregisternummer TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS webseite              TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS quelle                TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS strasse               TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS plz                   TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS ort                   TEXT`);
+  // Re-declared the same way as activities_type_check so the list can grow.
+  // Existing rows already hold the default, so validation passes on a populated table.
+  try {
+    await pool.query(`ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_onboarding_status_check`);
+    await pool.query(`ALTER TABLE contacts ADD CONSTRAINT contacts_onboarding_status_check CHECK(onboarding_status IN (
+      'kein_onboarding','formular_versendet','formular_ausgefuellt','termin_gebucht',
+      'call_erfolgt','briefing_fertig','onboarding_abgeschlossen'))`);
+  } catch (e) {
+    if (e.code !== '42710') throw e;
+  }
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_contacts_onboarding_status ON contacts (workspace_id, onboarding_status)`);
+
+  // Engine API authentication. The plain key is shown once at creation and only
+  // its SHA-256 hash is stored; key_prefix (first characters) is for display.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      key_prefix   TEXT NOT NULL,
+      key_hash     TEXT NOT NULL UNIQUE,
+      scopes       JSONB NOT NULL DEFAULT '[]',
+      created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      last_used_at TIMESTAMPTZ,
+      expires_at   TIMESTAMPTZ,
+      revoked_at   TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // A database first started from the earlier outgoingendpoints/apiEndpoints
+  // branches has an engine_webhook of a different shape (one row per workspace:
+  // event TEXT, target_url, api_key, …). CREATE TABLE IF NOT EXISTS keeps it and
+  // every engine query then fails with 42703 (column "events" does not exist).
+  // Recognise that shape by its api_key column, keep its rows as a plain copy
+  // (engine_webhook_legacy, no constraints) and let the block below create the
+  // current table. A database built by this file never has api_key here, so
+  // this runs at most once.
+  const { rows: legacyShape } = await pool.query(
+    `SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'engine_webhook' AND column_name = 'api_key'`);
+  if (legacyShape.length) {
+    await pool.query(`CREATE TABLE IF NOT EXISTS engine_webhook_legacy AS SELECT * FROM engine_webhook`);
+    await pool.query(`DROP TABLE IF EXISTS engine_webhook_deliveries`);   // created against the old table; cannot hold rows
+    await pool.query(`DROP TABLE engine_webhook`);
+    console.log('engine_webhook: old-branch table replaced; its rows are kept in engine_webhook_legacy');
+  }
+
+  // Outgoing webhooks to the engine (the inbound lead hook is workspace_webhook).
+  // `secret` signs outgoing payloads (HMAC); `events` lists subscribed event names.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS engine_webhook (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      url          TEXT NOT NULL,
+      secret       TEXT NOT NULL,
+      events       JSONB NOT NULL DEFAULT '[]',
+      description  TEXT,
+      active       BOOLEAN NOT NULL DEFAULT true,
+      created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // One row per delivery attempt series; the retry worker polls (status, next_attempt_at).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS engine_webhook_deliveries (
+      id              SERIAL PRIMARY KEY,
+      webhook_id      INTEGER NOT NULL REFERENCES engine_webhook(id) ON DELETE CASCADE,
+      workspace_id    INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      event           TEXT NOT NULL,
+      payload         JSONB NOT NULL,
+      contact_id      INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+      status          TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','delivered','failed','dead')),
+      attempts        INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TIMESTAMPTZ DEFAULT NOW(),
+      last_attempt_at TIMESTAMPTZ,
+      response_status INTEGER,
+      response_body   TEXT,
+      error           TEXT,
+      delivered_at    TIMESTAMPTZ,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_engine_webhook_deliveries_retry ON engine_webhook_deliveries (status, next_attempt_at)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_engine_webhook_deliveries_ws    ON engine_webhook_deliveries (workspace_id, created_at DESC)`);
+
+  // Request idempotency for the engine API: same (workspace, key) replays the stored response.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      id              SERIAL PRIMARY KEY,
+      workspace_id    INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      key             TEXT NOT NULL,
+      request_hash    TEXT NOT NULL,
+      response_status INTEGER,
+      response_body   JSONB,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      expires_at      TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '24 hours',
+      UNIQUE (workspace_id, key)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_idempotency_keys_expires ON idempotency_keys (expires_at)`);
 
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');

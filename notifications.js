@@ -40,10 +40,14 @@ async function notifySystem(title, body, workspaceId = null) {
 
     if (users.length === 0) return;
 
+    // Four bound values per user, so the placeholders step by 4. (They used to
+    // step by 6 against 4 values: with two or more users the INSERT referenced
+    // $7.., Postgres rejected it, and the catch below swallowed the error —
+    // announcements silently reached nobody.)
     const values = users.map((_, i) =>
-      `($${i*6+1},$${i*6+2},NULL,'system','system',$${i*6+3},$${i*6+4})`
+      `($${i*4+1},$${i*4+2},NULL,'system','system',$${i*4+3},$${i*4+4})`
     ).join(',');
-    const params2 = users.flatMap((user, i) => [
+    const params2 = users.flatMap(user => [
       user.workspace_id, user.id, title, body
     ]);
 

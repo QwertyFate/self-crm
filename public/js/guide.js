@@ -9,7 +9,7 @@ const GUIDE_STEPS = [
   },
   {
     title: 'Sidebar Navigation',
-    body:  'The sidebar is how you move around. <strong>Workspace</strong> contains your core data — Deals, Contacts, Suppliers, and Tasks. <strong>Tools</strong> has Activities, Listings, Board, and Analytics.',
+    body:  'The sidebar is how you move around. <strong>Workspace</strong> contains your core data — Deals, Contacts, Onboarding, Suppliers, and Tasks. <strong>Tools</strong> has Activities, Listings, Board, and Analytics.',
     target: '.sidebar-main',
     pos: 'right',
   },

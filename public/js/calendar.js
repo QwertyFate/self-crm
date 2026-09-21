@@ -80,9 +80,8 @@ async function renderCalendar() {
 }
 
 function stripHtml(html) {
-  const div = document.createElement('div');
-  div.innerHTML = html || '';
-  return div.textContent || '';
+  // DOMParser is inert: a detached div.innerHTML would still load <img onerror>.
+  return new DOMParser().parseFromString(html || '', 'text/html').body.textContent || '';
 }
 
 async function openDayModal(dateStr) {

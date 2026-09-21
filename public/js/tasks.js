@@ -16,9 +16,14 @@ const DEFAULT_TASK_STATUSES = [
 
 const PRIORITY_LABELS = { urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low' };
 
+// Project statuses win when the project has any; otherwise the workspace's
+// own list (edited in Settings, previously ignored here); otherwise the
+// built-in four. Same precedence the server validates against.
 function getActiveTaskStatuses() {
-  const saved = currentProject?.statuses;
-  return (Array.isArray(saved) && saved.length) ? saved : DEFAULT_TASK_STATUSES;
+  const list = a => (Array.isArray(a) && a.length) ? a : null;
+  return list(currentProject?.statuses)
+      || list(typeof currentWorkspace !== 'undefined' ? currentWorkspace?.task_statuses : null)
+      || DEFAULT_TASK_STATUSES;
 }
 
 async function loadTasks() {

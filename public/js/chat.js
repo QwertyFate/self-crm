@@ -6,6 +6,17 @@ let chatLoadingMore  = false;
 let socket           = null;
 let onlineUsers      = [];
 
+// Send recovery. Each send carries a Socket.IO ack callback, so the closure
+// that emitted a message is the one that hears back about it — no queue is
+// needed to match replies to sends. The server answers every send with
+// { ok: true } or { ok: false, reason } (rate_limited | invalid | server_error),
+// and socket.timeout() turns "no answer at all" into an error.
+const CHAT_ACK_TIMEOUT_MS = 5000;
+let chatRateBlocked    = false;
+let chatRateDeadline   = 0;
+let chatRateTimer      = null;
+let chatNoticeTimer    = null;
+
 function chatAvatar(name) {
   return (name || '?')[0].toUpperCase();
 }
@@ -324,6 +335,8 @@ function scrollChatPageBottom() {
 }
 
 function sendChatMessageFromPage() {
+  if (chatRateBlocked) return;
+
   const input = document.getElementById('chat-page-input');
   const content = input.value.trim();
   if (!content) return;
@@ -334,5 +347,78 @@ function sendChatMessageFromPage() {
   }
 
   input.value = '';
-  socket.emit('chat_message', content);
+  // Request/response: the ack callback receives THIS send's outcome, so the
+  // text to restore is simply the closure's own `content`. A successful send
+  // is rendered from the new_message broadcast like everyone else's — the ack
+  // is only for restore and feedback.
+  socket.timeout(CHAT_ACK_TIMEOUT_MS).emit('chat_message', content, (err, reply) => {
+    if (!err && reply?.ok) return;
+    restoreChatInput(content);
+    if (!err && reply?.reason === 'rate_limited') return beginChatCooldown(reply);
+    showChatNotice(
+      err                           ? 'Message not sent — connection timed out. Try again.'
+      : reply?.reason === 'invalid' ? `Message must be 1–${reply.maxLength || 1000} characters.`
+      :                               'Message not sent. Try again.',
+      4000
+    );
+  });
+}
+
+function chatRateTick() {
+  const remainingMs = chatRateDeadline - Date.now();
+  const notice = document.getElementById('chat-rate-notice');
+
+  if (remainingMs <= 0) {
+    clearInterval(chatRateTimer);
+    chatRateTimer   = null;
+    chatRateBlocked = false;
+    const btn = document.getElementById('chat-page-send');
+    if (btn) btn.disabled = false;
+    if (notice) { notice.hidden = true; notice.textContent = ''; }
+    return;
+  }
+
+  if (notice) {
+    notice.textContent = `Slow down — wait ${Math.ceil(remainingMs / 1000)}s`;
+    notice.hidden = false;
+  }
+}
+
+function restoreChatInput(text) {
+  // Put the rejected text back unless the user has already typed something
+  // new — never clobber what is in the field.
+  const input = document.getElementById('chat-page-input');
+  if (input && text && !input.value.trim()) input.value = text;
+}
+
+function showChatNotice(text, ms) {
+  // Transient notice for invalid / timeout / server-error replies. The
+  // countdown owns the element while a cooldown is active, so stay out of it.
+  if (chatRateBlocked) return;
+  const notice = document.getElementById('chat-rate-notice');
+  if (!notice) return;
+  notice.textContent = text;
+  notice.hidden = false;
+  clearTimeout(chatNoticeTimer);
+  chatNoticeTimer = setTimeout(() => {
+    if (chatRateBlocked) return;        // a cooldown began meanwhile; it will hide it
+    notice.hidden = true;
+    notice.textContent = '';
+  }, ms);
+}
+
+function beginChatCooldown(reply) {
+  const retryAfterMs = Number(reply?.retryAfterMs) || 0;
+  clearTimeout(chatNoticeTimer);        // the countdown takes over the notice
+
+  chatRateBlocked  = true;
+  chatRateDeadline = Math.max(chatRateDeadline, Date.now() + retryAfterMs);
+
+  const btn = document.getElementById('chat-page-send');
+  if (btn) btn.disabled = true;
+
+  // A burst produces one rejection per message; they all share a single
+  // timer, each only pushing the deadline out.
+  if (!chatRateTimer) chatRateTimer = setInterval(chatRateTick, 1000);
+  chatRateTick();
 }

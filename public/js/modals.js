@@ -94,6 +94,7 @@ function buildDetailHTML(c, contactDeals, id) {
     ['Phone',    c.phone ? `${esc(c.phone)}${waLink(c.phone, c) ? ` <a class="wa-detail-link" href="${waLink(c.phone, c)}" target="_blank" rel="noopener" title="Open WhatsApp">${WA_SVG} WhatsApp</a>` : ''}` : null],
     ['Stage',    stageField],
     ['Assignee', c.assigned_to_name],
+    [t('lbl_onboarding'), onboardingBadge(c.onboarding_status) + onboardingStatusSelect(id, c.onboarding_status, 'detail')],
     ...fields.map(f => {
       const val = c.custom_data?.[f.field_key]; if (!val) return [f.name, null];
       if (f.type === 'url')   return [f.name, `<a href="${esc(val)}" target="_blank" rel="noopener">${esc(val)}</a>`];
@@ -163,6 +164,7 @@ function buildDetailHTML(c, contactDeals, id) {
     <div class="detail-actions">
       <button class="btn btn-danger btn-sm" onclick="deleteContact(${id})">${t('btn_delete')}</button>
       <button class="btn btn-sm" onclick="closeSidePanel();closeModal('detail-modal');openContactModal(${id})">${t('btn_edit')}</button>
+      <button class="btn btn-primary btn-sm" onclick="startOnboarding(${id}, '${esc(c.onboarding_status || 'kein_onboarding')}')">${t('btn_start_onboarding')}</button>
     </div>`;
 }
 
@@ -221,7 +223,7 @@ async function openDealModalForContact(contactId) {
 
 function truncateActivityPreview(html, maxChars = 120, maxLines = 3) {
   const div = document.createElement('div');
-  div.innerHTML = html;
+  div.innerHTML = sanitizeNoteHtml(html);   // a detached div still loads <img onerror>; sanitise first
   let text = div.innerText;
 
   const lines = text.split('\n').slice(0, maxLines).join('\n');
@@ -370,7 +372,7 @@ async function editActivity(activityId) {
             <button type="button" class="fmt-btn" onclick="formatActivityNote('createLink')" title="Link">🔗 Link</button>
             <button type="button" class="fmt-btn" onclick="formatActivityNote('removeFormat')" title="Clear">✕ Clear</button>
           </div>
-          <div id="act-content-edit" class="note-editor" contenteditable="true">${activity.content}</div>
+          <div id="act-content-edit" class="note-editor" contenteditable="true">${sanitizeNoteHtml(activity.content)}</div>
         </div>
         <div style="color:var(--muted);font-size:12px;margin-top:12px">
           Logged by ${esc(activity.logged_by_name || 'Unknown')} on ${fmtDate(activity.created_at)}
@@ -416,7 +418,7 @@ function showActivityEditModal(activity) {
             <button type="button" class="fmt-btn" onclick="formatActivityNote('createLink')" title="Link">🔗 Link</button>
             <button type="button" class="fmt-btn" onclick="formatActivityNote('removeFormat')" title="Clear">✕ Clear</button>
           </div>
-          <div id="act-content-edit" class="note-editor" contenteditable="true" style="min-height:200px;padding:12px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text)">${activity.content}</div>
+          <div id="act-content-edit" class="note-editor" contenteditable="true" style="min-height:200px;padding:12px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg);color:var(--text)">${sanitizeNoteHtml(activity.content)}</div>
         </div>
         <div style="color:var(--muted);font-size:12px;margin-top:12px">
           Logged by ${esc(activity.logged_by_name || 'Unknown')} on ${fmtDate(activity.created_at)}
@@ -592,6 +594,7 @@ async function renderContactPanelReadOnly(contact) {
     }
     return { label: col.label(), value };
   });
+  rows.unshift({ label: t('lbl_onboarding'), value: onboardingBadge(full.onboarding_status) + onboardingStatusSelect(full.id, full.onboarding_status, 'deal') });   // current step + picker, always shown
 
   panel.innerHTML = `
     <div class="contact-panel-top">
@@ -606,6 +609,19 @@ async function renderContactPanelReadOnly(contact) {
         ${rows.map(r => `<div class="contact-panel-row"><label>${esc(r.label)}</label><span>${r.value}</span></div>`).join('')}
       </div>
     </div>`;
+}
+
+// Start onboarding for the deal's linked contact (header button). Reads the
+// live selection so it also works for a contact chosen but not yet saved.
+// The deal modal stays open; only the contact panel is re-rendered.
+async function startOnboardingFromDeal() {
+  const contactId = parseInt(document.getElementById('df-contact').value) || null;
+  if (!contactId) { alert(t('onb_link_contact_first')); return; }
+  const full = await api.get(`/api/contacts/${contactId}`);
+  if (full.error) { alert(full.error); return; }
+  if (!(await requestOnboardingStart(contactId, full.onboarding_status))) return;
+  await ensureContacts();                                  // requestOnboardingStart cleared the cache
+  await renderContactPanelReadOnly({ id: contactId });
 }
 
 function formatContactNote(cmd) {
@@ -820,7 +836,7 @@ function renderTimelineItem(a, options = {}) {
           <span class="deal-timeline-date">${fmtEventDate(String(a.created_at).split('T')[0].split(' ')[0])}</span>
         </div>
         ${a.event_date ? `<div class="deal-event-date-badge">📅 ${fmtEventDate(a.event_date)}</div>` : ''}
-        <div class="deal-timeline-content ${shouldCollapse ? 'collapsed' : ''}">${a.content}</div>
+        <div class="deal-timeline-content ${shouldCollapse ? 'collapsed' : ''}">${sanitizeNoteHtml(a.content)}</div>
         ${shouldCollapse ? '<button type="button" class="deal-note-expand-btn" onclick="event.stopPropagation();toggleDealNoteExpand(this)">Show more</button>' : ''}
         ${a.logged_by_name ? `<div class="deal-timeline-author">${t('logged_by')} ${esc(a.logged_by_name)}</div>` : ''}
         <div class="deal-comment-section" onclick="event.stopPropagation()">
@@ -934,7 +950,7 @@ async function inlineEditDealNote(activityId, el) {
         <button type="button" class="fmt-btn" onclick="event.stopPropagation();document.execCommand('underline',false,null)" title="Underline"><u>U</u></button>
       </div>
       <div class="note-editor inline-edit-content" contenteditable="true" style="min-height:60px;font-size:13px"
-        onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();saveInlineEdit(this.closest('.deal-timeline-item'));}">${activity.content}</div>
+        onkeydown="if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();saveInlineEdit(this.closest('.deal-timeline-item'));}">${sanitizeNoteHtml(activity.content)}</div>
       <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-end">
         <button class="btn btn-sm" onclick="event.stopPropagation();cancelInlineEdit()">Cancel</button>
         <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteInlineEdit()">Delete</button>
@@ -1139,6 +1155,8 @@ async function openDealModal(id) {
   document.getElementById('deal-delete-btn').style.display = id ? '' : 'none';
   const addTaskBtn = document.getElementById('deal-add-task-btn');
   if (addTaskBtn) addTaskBtn.style.display = id ? '' : 'none';
+  const onbBtn = document.getElementById('deal-onboarding-btn');
+  if (onbBtn) onbBtn.style.display = id ? '' : 'none';
   updateUrgencyDot();
 
   const [, , , , pipelinesRes, dealFieldsRes, allContacts, allSuppliers, dealDataRes, objectsRes, objectFieldsRes] = await Promise.all([
@@ -1307,10 +1325,12 @@ async function saveDeal(e) {
     urgency:     document.getElementById('df-urgency').value || 0,
     custom_data: Object.fromEntries(dealFields.map(f => [f.field_key, document.getElementById(`dfield-${f.field_key}`)?.value || ''])),
   };
-  if (id) await api.put(`/api/deals/${id}`, payload); else await api.post('/api/deals', payload);
+  const prevStageId = id ? (deals.find(d => d.id === Number(id))?.stage_id ?? null) : null;   // pre-edit stage, for the onboarding prompt
+  const saved = id ? await api.put(`/api/deals/${id}`, payload) : await api.post('/api/deals', payload);
   closeModal('deal-modal');
   deals = await api.get(`/api/deals?pipeline_id=${currentPipelineId}`);
   if (dealViewMode === 'list') renderDealsList(); else renderDealsBoard();
+  if (!saved?.error) await maybePromptOnboarding({ contact_id: Number(payload.contact_id) || null, title: payload.title }, prevStageId, Number(payload.stage_id) || null);
 }
 
 async function deleteDeal(id) {

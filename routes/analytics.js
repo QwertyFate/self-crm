@@ -5,6 +5,27 @@ const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
 
+// Turn the configured value field into a SQL fragment. The field key is bound
+// as a typed parameter ($n::text) — never interpolated — and the ::numeric cast
+// is guarded so a non-numeric field yields NULL instead of erroring. Custom
+// values are stored as JSON strings by the deal form (modals.js writes
+// el.value), so a string that looks like a number is cast too; any other text
+// falls to NULL. `paramIndex` is the bind position; `prefix` qualifies the
+// column when the query aliases the table.
+// Returns { expr, params }; callers pass [wid, ...params].
+function valueSql(valueField, { prefix = '', paramIndex } = {}) {
+  const col = `${prefix}custom_data`;
+  const key = `$${paramIndex}::text`;
+  if (valueField === 'value') return { expr: `${prefix}value`, params: [] };
+  if (valueField) return {
+    expr: `CASE WHEN jsonb_typeof(${col} -> ${key}) = 'number' THEN (${col} ->> ${key})::numeric `
+        + `WHEN jsonb_typeof(${col} -> ${key}) = 'string' AND (${col} ->> ${key}) ~ '^\\s*-?\\d+(\\.\\d+)?\\s*$' `
+        + `THEN (${col} ->> ${key})::numeric ELSE NULL END`,
+    params: [valueField],
+  };
+  return { expr: 'NULL::numeric', params: [] };
+}
+
 router.get('/summary', async (req, res, next) => {
   try {
     const wid = req.workspaceId;
@@ -24,16 +45,11 @@ router.get('/summary', async (req, res, next) => {
       `SELECT COUNT(*) AS new_contacts FROM contacts WHERE workspace_id=$1 AND created_at >= date_trunc('month', NOW())`, [wid]
     );
 
-    let valExpr = 'NULL::numeric';
-    if (valueField === 'value') {
-      valExpr = 'value';
-    } else if (valueField) {
-      valExpr = `(custom_data->>'${valueField}')::numeric`;
-    }
+    const v = valueSql(valueField, { paramIndex: 2 });
 
     const { rows: dealRows } = await pool.query(
-      `SELECT stage_id, COUNT(*) AS cnt, COALESCE(SUM(${valExpr}),0) AS val
-       FROM deals WHERE workspace_id=$1 GROUP BY stage_id`, [wid]
+      `SELECT stage_id, COUNT(*) AS cnt, COALESCE(SUM(${v.expr}),0) AS val
+       FROM deals WHERE workspace_id=$1 GROUP BY stage_id`, [wid, ...v.params]
     );
 
     let open_deals = 0, won_deals = 0, lost_deals = 0;
@@ -62,7 +78,7 @@ router.get('/summary', async (req, res, next) => {
     let avg_value = null;
     if (valueField) {
       const { rows: [{ av }] } = await pool.query(
-        `SELECT AVG(${valExpr}) AS av FROM deals WHERE workspace_id=$1 AND ${valExpr} IS NOT NULL`, [wid]
+        `SELECT AVG(${v.expr}) AS av FROM deals WHERE workspace_id=$1 AND ${v.expr} IS NOT NULL`, [wid, ...v.params]
       );
       avg_value = av ? parseFloat(av) : null;
     }
@@ -75,20 +91,16 @@ router.get('/summary', async (req, res, next) => {
        FROM tasks WHERE workspace_id=$1`, [wid]
     );
 
-    const pipelineValExpr = valueField === 'value'
-      ? 'd.value'
-      : valueField
-        ? `(d.custom_data->>'${valueField}')::numeric`
-        : '0';
+    const vp = valueSql(valueField, { prefix: 'd.', paramIndex: 2 });
     const { rows: by_pipeline } = await pool.query(
       `SELECT p.name AS pipeline_name,
               COUNT(d.id) AS cnt,
-              COALESCE(SUM(${pipelineValExpr}),0) AS val
+              COALESCE(SUM(${vp.expr}),0) AS val
        FROM pipelines p
        LEFT JOIN deals d ON d.pipeline_id = p.id AND d.workspace_id = p.workspace_id
        WHERE p.workspace_id=$1
        GROUP BY p.id, p.name, p.position
-       ORDER BY p.position`, [wid]
+       ORDER BY p.position`, [wid, ...vp.params]
     );
 
     const { rows: all_stages } = await pool.query(
@@ -160,10 +172,6 @@ router.get('/trend', async (req, res, next) => {
     const config     = ws?.analytics_config || {};
     const valueField = config.value_field || null;
 
-    let valExpr = 'NULL::numeric';
-    if (valueField === 'value')  valExpr = 'value';
-    else if (valueField)         valExpr = `(custom_data->>'${valueField}')::numeric`;
-
     const seriesSQL = `
       SELECT gs.p::date AS period, COALESCE(t.cnt, 0) AS cnt
       FROM generate_series(
@@ -184,6 +192,7 @@ router.get('/trend', async (req, res, next) => {
 
     let value_trend = null;
     if (valueField) {
+      const vt = valueSql(valueField, { paramIndex: 2 });
       const { rows } = await pool.query(`
         SELECT gs.p::date AS period, COALESCE(t.val, 0) AS val
         FROM generate_series(
@@ -192,12 +201,12 @@ router.get('/trend', async (req, res, next) => {
           INTERVAL '${p.step}'
         ) AS gs(p)
         LEFT JOIN (
-          SELECT date_trunc('${p.trunc}', created_at) AS p, COALESCE(SUM(${valExpr}),0) AS val
+          SELECT date_trunc('${p.trunc}', created_at) AS p, COALESCE(SUM(${vt.expr}),0) AS val
           FROM deals WHERE workspace_id=$1
             AND created_at >= date_trunc('${p.trunc}', NOW() - INTERVAL '${p.interval}')
           GROUP BY 1
         ) t ON t.p = gs.p
-        ORDER BY gs.p`, [wid]);
+        ORDER BY gs.p`, [wid, ...vt.params]);
       value_trend = rows;
     }
 
@@ -208,6 +217,15 @@ router.get('/trend', async (req, res, next) => {
 router.patch('/config', async (req, res, next) => {
   try {
     const { won_stage_ids = [], lost_stage_ids = [], value_field = null } = req.body;
+    // Allowlist the value field. Parameterisation on the read side is the real
+    // protection; this rejects a bad field at the source so config stays clean.
+    if (value_field && value_field !== 'value') {
+      const { rowCount } = await pool.query(
+        'SELECT 1 FROM deal_fields WHERE workspace_id=$1 AND field_key=$2',
+        [req.workspaceId, value_field]
+      );
+      if (!rowCount) return res.status(400).json({ error: 'value_field must be "value" or a deal field key' });
+    }
     await pool.query(
       `UPDATE workspaces SET analytics_config = analytics_config || $1::jsonb WHERE id=$2`,
       [JSON.stringify({ won_stage_ids, lost_stage_ids, value_field }), req.workspaceId]

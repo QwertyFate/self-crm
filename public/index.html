@@ -27,50 +27,6 @@
   </div>
 
   <!-- ══════════════════════════════════════
-       ADMIN SCREEN
-  ══════════════════════════════════════ -->
-  <div id="admin-screen" class="hidden">
-    <div class="auth-wrap">
-      <div class="auth-card">
-        <div class="auth-logo">
-          <img src="/images/logo.png" alt="CRM Logo" />
-        </div>
-
-        <!-- ── Admin Login ── -->
-        <div id="admin-view-login">
-          <p class="admin-panel-title">Platform Admin</p>
-          <p class="admin-panel-sub">Enter your admin secret to manage platform invite codes.</p>
-          <form class="auth-form" onsubmit="handleAdminLogin(event)">
-            <div class="auth-field">
-              <label>Admin Secret</label>
-              <input type="password" id="admin-secret-input" required autocomplete="current-password" />
-            </div>
-            <div id="admin-login-error" class="auth-error hidden"></div>
-            <button type="submit" class="btn btn-primary auth-submit">Access panel</button>
-          </form>
-          <div class="auth-link-row" style="margin-top:16px">
-            <a href="/" onclick="location.href='/'"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back to app</span></a>
-          </div>
-        </div>
-
-        <!-- ── Admin Dashboard ── -->
-        <div id="admin-view-panel" class="hidden">
-          <div class="admin-panel-header">
-            <p class="admin-panel-title" style="margin:0">Platform Invites</p>
-            <button class="btn btn-primary btn-sm" onclick="adminGenerateCode()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Generate</span></button>
-          </div>
-          <p class="admin-panel-sub">One-time codes that allow someone to create a new workspace on signup.</p>
-          <div id="admin-invites-list" class="admin-invites-list"></div>
-          <div class="auth-link-row" style="margin-top:18px">
-            <a href="#" onclick="adminLogout(event)">Log out of admin</a>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-
-  <!-- ══════════════════════════════════════
        AUTH SCREEN
   ══════════════════════════════════════ -->
   <div id="auth-screen" class="hidden">
@@ -215,10 +171,6 @@
           </div>
         </div>
 
-        <div class="admin-link-row">
-          <a href="/?admin" class="admin-link"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Admin</span></a>
-        </div>
-
       </div>
     </div>
   </div>
@@ -244,6 +196,7 @@
         <ul class="sidebar-nav">
           <li><a href="#" data-page="deals" class="active"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="11" rx="1.5"/></svg><span data-i18n="nav_deals">Deals</span></a></li>
           <li><a href="#" data-page="contacts"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span data-i18n="nav_contacts">Contacts</span></a></li>
+          <li><a href="#" data-page="onboarding"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg><span data-i18n="nav_onboarding">Onboarding</span></a></li>
           <li><a href="#" data-page="suppliers" id="nav-suppliers-link"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a2 2 0 0 0-.42-1.23l-2.1-2.7A2 2 0 0 0 17.9 9H14v8h2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg><span id="nav-suppliers-label">Suppliers</span></a></li>
           <li><a href="#" data-page="tasks"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Tasks</span></a></li>
         </ul>
@@ -397,6 +350,38 @@
         </div>
       </section>
 
+      <!-- ── Onboarding: every contact in onboarding and its current step ── -->
+      <section id="page-onboarding" class="page">
+        <div class="page-header">
+          <div>
+            <h1><span data-i18n="page_onboarding">Onboarding</span> <span class="onb-count" id="onb-count"></span></h1>
+            <p class="onb-hint" data-i18n="onb_page_hint">Contacts in onboarding and their current step</p>
+          </div>
+        </div>
+        <div class="toolbar">
+          <input type="text" id="onb-search" data-i18n-ph="onb_search_ph" placeholder="Search name, company, email…" oninput="filterOnboarding()" />
+        </div>
+        <div class="stage-pills" id="onb-pills"></div>
+        <div class="table-wrap" id="onb-table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th data-i18n="onb_col_contact">Contact</th>
+              <th data-i18n="onb_col_company">Company</th>
+              <th data-i18n="onb_col_status">Status</th>
+              <th data-i18n="onb_col_progress">Progress</th>
+              <th data-i18n="onb_col_assignee">Assignee</th>
+              <th data-i18n="onb_col_updated">Last update</th>
+            </tr></thead>
+            <tbody id="onb-tbody"></tbody>
+          </table>
+        </div>
+        <div class="empty-state hidden" id="onb-empty">
+          <div class="empty-state-art"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg></div>
+          <h2 data-i18n="onb_empty_title">No contact is in onboarding yet</h2>
+          <p data-i18n="onb_empty_hint">Start it from a contact or a deal.</p>
+        </div>
+      </section>
+
       <!-- ── Team Chat ── -->
       <section id="page-chat" class="page page-chat-layout">
         <div class="chat-page-header">
@@ -410,9 +395,10 @@
         <div class="chat-composer">
           <input type="text" class="chat-input" id="chat-page-input" placeholder="Message your team..." autocomplete="off"
                  onkeydown="if(event.key==='Enter'){sendChatMessageFromPage();event.preventDefault()}" />
-          <button class="chat-send-btn" onclick="sendChatMessageFromPage()" title="Send" aria-label="Send message">
+          <button class="chat-send-btn" id="chat-page-send" onclick="sendChatMessageFromPage()" title="Send" aria-label="Send message">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
           </button>
+          <div class="chat-rate-notice" id="chat-rate-notice" role="status" aria-live="polite" hidden></div>
         </div>
       </section>
 
@@ -767,6 +753,18 @@
                 <div id="pipelines-list"></div>
               </div>
 
+              <div class="settings-card hidden" id="onboarding-trigger-card" style="grid-column:1/-1">
+                <div class="settings-card-header">
+                  <h2 data-i18n="set_onboarding_trigger">Onboarding trigger</h2>
+                </div>
+                <p class="settings-hint" data-i18n="hint_onboarding_trigger">When a deal reaches one of these stages, the CRM asks whether to start onboarding for its contact.</p>
+                <div id="onboarding-trigger-stages"></div>
+                <div style="padding:8px 0 4px;display:flex;align-items:center;gap:10px">
+                  <button id="save-onboarding-trigger-btn" class="btn btn-primary btn-sm" onclick="saveOnboardingTrigger()" data-i18n="btn_save">Save</button>
+                  <span id="onboarding-trigger-msg" class="workspace-name-msg hidden"></span>
+                </div>
+              </div>
+
               <div class="settings-card">
                 <div class="settings-card-header">
                   <h2 data-i18n="set_deal_fields">Deal Fields</h2>
@@ -991,6 +989,53 @@
             <div id="intg-logs"><p class="settings-hint">No activity yet.</p></div>
           </div>
 
+          <!-- ── Onboarding Engine: outgoing webhook ── -->
+          <div class="settings-card" id="eng-webhook-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="eng_webhook_title">Onboarding Engine — Outgoing Webhooks</h2>
+              <label class="intg-toggle-label"><input type="checkbox" id="eng-active"> <span data-i18n="eng_active">Active</span></label>
+            </div>
+            <p class="settings-hint" data-i18n="eng_webhook_hint"></p>
+            <p class="settings-hint hidden" id="eng-owner-hint" data-i18n="eng_owner_only"></p>
+            <div class="intg-row"><label class="intg-label" data-i18n="eng_url">Target URL</label><input type="url" id="eng-url" class="form-control" placeholder="https://engine.example.de/webhooks/crm" /></div>
+            <div class="intg-row" style="margin-top:8px"><label class="intg-label" data-i18n="eng_description">Description</label><input type="text" id="eng-description" class="form-control" /></div>
+            <div class="intg-section-title" style="margin-top:16px" data-i18n="eng_events">Events</div>
+            <div id="eng-events" class="intg-row" style="display:flex;gap:16px;flex-wrap:wrap"></div>
+            <div class="intg-section-title" style="margin-top:16px" data-i18n="eng_secret">Signing secret</div>
+            <div class="intg-url-row">
+              <div class="intg-url-box">
+                <input type="text" id="eng-secret-display" readonly class="intg-url-input" />
+                <button class="btn btn-sm" id="eng-rotate-btn" onclick="engRotateSecret()" data-i18n="eng_rotate">Rotate secret</button>
+              </div>
+            </div>
+            <div id="eng-secret-reveal" class="hidden" style="margin-top:8px;padding:10px;border:1px solid var(--warning);border-radius:6px;background:var(--warning-wash)">
+              <div style="font-size:12px;font-weight:600;margin-bottom:6px" data-i18n="eng_shown_once"></div>
+              <div class="intg-url-box"><input type="text" id="eng-secret-value" readonly class="intg-url-input" /><button class="btn btn-sm" onclick="engCopy('eng-secret-value', this)" data-i18n="eng_copy">Copy</button></div>
+            </div>
+            <div style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" id="eng-save-btn" onclick="engSaveWebhook()" data-i18n="eng_save">Save</button>
+              <button class="btn btn-sm" id="eng-test-btn" onclick="engSendTest()" data-i18n="eng_send_test">Send test event</button>
+              <span id="eng-msg" class="workspace-name-msg hidden"></span>
+            </div>
+            <div class="settings-card-header" style="margin-top:20px"><h3 style="margin:0" data-i18n="eng_deliveries">Delivery log</h3><button class="btn btn-sm" onclick="engLoadDeliveries()" data-i18n="eng_refresh">Refresh</button></div>
+            <div id="eng-deliveries"><p class="settings-hint" data-i18n="eng_no_deliveries">No deliveries yet.</p></div>
+          </div>
+
+          <!-- ── Onboarding Engine: API keys ── -->
+          <div class="settings-card" id="eng-keys-card">
+            <div class="settings-card-header"><h2 data-i18n="eng_keys_title">API Keys</h2></div>
+            <p class="settings-hint" data-i18n="eng_keys_hint"></p>
+            <div class="intg-url-box" style="max-width:520px">
+              <input type="text" id="eng-key-name" class="intg-url-input" data-i18n-ph="eng_key_name" placeholder="Key name" maxlength="100" />
+              <button class="btn btn-primary btn-sm" id="eng-create-key-btn" onclick="engCreateKey()" data-i18n="eng_create_key">Create API key</button>
+            </div>
+            <div id="eng-key-reveal" class="hidden" style="margin-top:8px;padding:10px;border:1px solid var(--warning);border-radius:6px;background:var(--warning-wash)">
+              <div style="font-size:12px;font-weight:600;margin-bottom:6px" data-i18n="eng_shown_once"></div>
+              <div class="intg-url-box"><input type="text" id="eng-key-value" readonly class="intg-url-input" /><button class="btn btn-sm" onclick="engCopy('eng-key-value', this)" data-i18n="eng_copy">Copy</button></div>
+            </div>
+            <div id="eng-keys" style="margin-top:12px"><p class="settings-hint" data-i18n="eng_no_keys">No API keys yet.</p></div>
+          </div>
+
         </div>
       </section>
 
@@ -1082,7 +1127,7 @@
         <div class="form-group">
           <label>Platform Invite Code <span class="req">*</span></label>
           <input type="text" id="cw-code" placeholder="Paste platform code here" autocomplete="off" />
-          <span class="text-xs text-muted">Get a code from the admin panel (yoursite.com/?admin)</span>
+          <span class="text-xs text-muted">Ask your platform administrator for a code.</span>
         </div>
         <div id="cw-error" class="auth-error hidden" style="margin:0 22px 10px"></div>
         <div class="modal-actions">
@@ -1319,7 +1364,8 @@
       <div class="modal-header">
         <h2 id="deal-modal-title">Add Deal</h2>
         <div class="hstack" style="gap:8px">
-          <button type="button" class="btn btn-sm" id="deal-add-task-btn" onclick="addTaskFromDeal()" style="display:none">＋ Task</button>
+          <button type="button" class="btn btn-sm" id="deal-onboarding-btn" onclick="startOnboardingFromDeal()" style="display:none" data-i18n="btn_start_onboarding">Start Onboarding</button>
+        <button type="button" class="btn btn-sm" id="deal-add-task-btn" onclick="addTaskFromDeal()" style="display:none">＋ Task</button>
           <button class="close-btn" onclick="closeModal('deal-modal')">&times;</button>
         </div>
       </div>
@@ -1675,6 +1721,9 @@
         <button class="close-btn" onclick="closeModal('import-modal')">&times;</button>
       </div>
 
+      <!-- Scrolling body: the box is max-height + overflow:hidden, so the steps
+           live in .modal-body and the action bars are siblings of it (below). -->
+      <div class="modal-body">
       <!-- Step 1: Upload -->
       <div id="import-step-upload">
         <div class="import-upload-area" onclick="document.getElementById('import-file-input').click()"
@@ -1742,10 +1791,6 @@
           <span>Maps to CRM field</span>
         </div>
         <div id="import-map-rows" class="import-map-rows"></div>
-        <div class="modal-actions">
-          <button class="btn" onclick="importBack()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back</span></button>
-          <button class="btn btn-primary" id="import-run-btn" onclick="runImport()">Import contacts</button>
-        </div>
       </div>
 
       <!-- Step 3: Done -->
@@ -1754,9 +1799,16 @@
           <div class="import-done-icon"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
           <p id="import-done-text"></p>
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-primary" onclick="closeModal('import-modal');loadContacts()">Done</button>
-        </div>
+      </div>
+      </div><!-- /.modal-body -->
+
+      <!-- Per-step action bars, toggled by showImportStep() together with the step -->
+      <div id="import-footer-map" class="modal-actions hidden">
+        <button class="btn" onclick="importBack()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back</span></button>
+        <button class="btn btn-primary" id="import-run-btn" onclick="runImport()">Import contacts</button>
+      </div>
+      <div id="import-footer-done" class="modal-actions hidden">
+        <button class="btn btn-primary" onclick="closeModal('import-modal');loadContacts()">Done</button>
       </div>
     </div>
   </div>
@@ -1765,6 +1817,7 @@
   <script src="js/auth.js"></script>
   <script src="js/deals.js"></script>
   <script src="js/contacts.js"></script>
+  <script src="js/onboarding.js"></script>
   <script src="js/objects.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/modals.js"></script>

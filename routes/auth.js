@@ -4,6 +4,7 @@ const bcrypt   = require('bcryptjs');
 const crypto   = require('crypto');
 const { pool, seedDefaultStages, seedDefaultPipeline } = require('../db');
 const { sendPasswordReset } = require('../utils/mailer');
+const { regenerateSession } = require('../utils/session');
 
 router.get('/me', async (req, res, next) => {
   try {
@@ -15,7 +16,7 @@ router.get('/me', async (req, res, next) => {
     );
     if (user) { user.column_widths = user.column_widths || {}; user.deal_columns = user.deal_columns || []; user.timezone = user.timezone || 'Europe/Berlin'; }
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id = $1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id = $1',
       [req.session.workspaceId]
     );
 
@@ -63,6 +64,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     if (memberships.length > 1) {
+      await regenerateSession(req);
       req.session.userId   = user.id;
       req.session.userRole = user.role;
       return res.json({
@@ -73,12 +75,13 @@ router.post('/login', async (req, res, next) => {
     }
 
     const activeWsId = memberships[0].id;
+    await regenerateSession(req);
     req.session.userId      = user.id;
     req.session.workspaceId = activeWsId;
     req.session.userRole    = memberships[0].role;
 
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id = $1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id = $1',
       [activeWsId]
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
@@ -109,7 +112,7 @@ router.post('/select-workspace', async (req, res, next) => {
     req.session.userRole    = user.role;
 
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id=$1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id=$1',
       [workspace_id]
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
@@ -140,7 +143,7 @@ router.post('/switch-workspace', async (req, res, next) => {
     req.session.userRole    = targetUser.role;
 
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id=$1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id=$1',
       [workspace_id]
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
@@ -267,6 +270,7 @@ router.post('/signup', async (req, res, next) => {
           [u.id, ws.id, 'owner']
         );
         await client.query('COMMIT');
+        await regenerateSession(req);
         req.session.userId      = u.id;
         req.session.workspaceId = ws.id;
         req.session.userRole    = 'owner';
@@ -305,6 +309,7 @@ router.post('/signup', async (req, res, next) => {
           [u.id, invite.workspace_id, 'member']
         );
         await client.query('COMMIT');
+        await regenerateSession(req);
         req.session.userId      = u.id;
         req.session.workspaceId = invite.workspace_id;
         req.session.userRole    = 'member';
@@ -453,7 +458,7 @@ router.post('/create-workspace', async (req, res, next) => {
       req.session.userRole    = 'owner';
 
       const { rows: [workspace] } = await pool.query(
-        'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id=$1',
+        'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id=$1',
         [ws.id]
       );
       workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
@@ -508,7 +513,7 @@ router.post('/join-workspace', async (req, res, next) => {
     req.session.userRole    = 'member';
 
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id=$1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, onboarding_trigger_stage_ids FROM workspaces WHERE id=$1',
       [invite.workspace_id]
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];

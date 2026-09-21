@@ -88,13 +88,18 @@ router.post('/:id/stages', async (req, res, next) => {
   try {
     const { name, color } = req.body;
     if (!name) return res.status(400).json({ error: 'Name required' });
+    // The pipeline must be this workspace's, or a stage carrying our
+    // workspace_id would land inside another workspace's pipeline.
+    if (!/^\d+$/.test(String(req.params.id))) return res.status(400).json({ error: 'Invalid id' });
+    const { rows: [pipeline] } = await pool.query('SELECT id FROM pipelines WHERE id=$1 AND workspace_id=$2', [Number(req.params.id), req.workspaceId]);
+    if (!pipeline) return res.status(404).json({ error: 'Not found' });
     const { rows: [{ m }] } = await pool.query(
-      'SELECT COALESCE(MAX(position),-1) AS m FROM pipeline_stages WHERE pipeline_id=$1',
-      [req.params.id]
+      'SELECT COALESCE(MAX(position),-1) AS m FROM pipeline_stages WHERE pipeline_id=$1 AND workspace_id=$2',
+      [pipeline.id, req.workspaceId]
     );
     const { rows: [row] } = await pool.query(
       'INSERT INTO pipeline_stages (workspace_id, pipeline_id, name, color, position) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-      [req.workspaceId, req.params.id, name, color || '#4f6ef7', m + 1]
+      [req.workspaceId, pipeline.id, name, color || '#4f6ef7', m + 1]
     );
     res.status(201).json({ id: row.id, name, color: color || '#4f6ef7', position: m + 1 });
   } catch (e) {

@@ -28,7 +28,9 @@
       "Bash(git commit -m ' *)",
       "Bash(node -c /Users/justincapuli/Documents/projects/new_projects/crm/routes/contacts.js)",
       "Bash(node -c /Users/justincapuli/Documents/projects/new_projects/crm/routes/auth.js)",
-      "Bash(node -c /Users/justincapuli/Documents/projects/new_projects/crm/public/js/admin-import.js)"
+      "Bash(node -c /Users/justincapuli/Documents/projects/new_projects/crm/public/js/admin-import.js)",
+      "Bash(NODE_PATH=__TRACKED_VAR__/node_modules node __TRACKED_VAR__/admin-session-test.js)",
+      "Bash(node --test tests/routes/integrations-receive.test.js)"
     ],
     "additionalDirectories": [
       "/tmp"

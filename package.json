@@ -5,7 +5,14 @@
   "main": "server.js",
   "scripts": {
     "start": "node --env-file=.env server.js",
-    "dev": "nodemon --exec 'node --env-file=.env' server.js"
+    "dev": "nodemon --exec 'node --env-file=.env' server.js",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "test:unit": "node --test \"tests/unit/*.test.js\"",
+    "test:routes": "node --test \"tests/routes/*.test.js\"",
+    "test:client": "node --test \"tests/client/*.test.js\"",
+    "test:db": "node --test \"tests/db/*.test.js\"",
+    "test:baseline": "DB_FILE=tests/fixtures/db.pre-stage1.js node --test tests/unit/db-migrations.test.js",
+    "test:serial": "node --test --test-concurrency=1 \"tests/**/*.test.js\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
@@ -19,9 +26,13 @@
     "multer": "^2.1.1",
     "nodemailer": "^8.0.5",
     "pg": "^8.20.0",
+    "sanitize-html": "^2.17.7",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

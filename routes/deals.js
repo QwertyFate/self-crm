@@ -3,8 +3,17 @@ const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
 const { notify }  = require('../notifications');
+// Foreign keys are global: a contact/pipeline/stage/user id from another
+// workspace is a real row. Every body id is checked against req.workspaceId
+// before a write, and every read-side join is scoped to the deal's workspace.
+const { dealRefs, refCheck, ownsPair } = require('../utils/workspace-refs');
 
 router.use(requireAuth);
+
+// 400 if any supplied id belongs to another workspace; null otherwise.
+async function foreignRef(workspaceId, ids) {
+  return refCheck(await dealRefs(pool, workspaceId, ids), ids);
+}
 
 function clampUrgency(v) {
   const n = parseInt(v, 10);
@@ -27,10 +36,10 @@ router.get('/', async (req, res, next) => {
              ps.name AS stage_name,    ps.color AS stage_color,
              u.name  AS assigned_to_name
       FROM deals d
-      LEFT JOIN contacts       c  ON c.id  = d.contact_id
-      LEFT JOIN contacts       s  ON s.id  = d.supplier_id
-      LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
-      LEFT JOIN users           u  ON u.id  = d.assigned_to
+      LEFT JOIN contacts       c  ON c.id  = d.contact_id  AND c.workspace_id  = d.workspace_id
+      LEFT JOIN contacts       s  ON s.id  = d.supplier_id AND s.workspace_id  = d.workspace_id
+      LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id    AND ps.workspace_id = d.workspace_id
+      LEFT JOIN users           u  ON u.id  = d.assigned_to AND u.workspace_id  = d.workspace_id
       WHERE d.workspace_id = $1 ${filter}
       ORDER BY d.created_at DESC
     `, params);
@@ -47,10 +56,10 @@ router.get('/:id', async (req, res, next) => {
              ps.name AS stage_name,    ps.color AS stage_color,
              u.name  AS assigned_to_name
       FROM deals d
-      LEFT JOIN contacts       c  ON c.id  = d.contact_id
-      LEFT JOIN contacts       s  ON s.id  = d.supplier_id
-      LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
-      LEFT JOIN users           u  ON u.id  = d.assigned_to
+      LEFT JOIN contacts       c  ON c.id  = d.contact_id  AND c.workspace_id  = d.workspace_id
+      LEFT JOIN contacts       s  ON s.id  = d.supplier_id AND s.workspace_id  = d.workspace_id
+      LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id    AND ps.workspace_id = d.workspace_id
+      LEFT JOIN users           u  ON u.id  = d.assigned_to AND u.workspace_id  = d.workspace_id
       WHERE d.id = $1 AND d.workspace_id = $2
     `, [req.params.id, req.workspaceId]);
     if (!deal) return res.status(404).json({ error: 'Not found' });
@@ -67,6 +76,8 @@ router.post('/', async (req, res, next) => {
     const { contact_id, supplier_id, pipeline_id, stage_id, title, value, assigned_to, custom_data, urgency } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
     if (!pipeline_id)   return res.status(400).json({ error: 'Pipeline required' });
+    const badRef = await foreignRef(req.workspaceId, { contact_id, supplier_id, pipeline_id, stage_id, assigned_to });
+    if (badRef) return res.status(400).json({ error: badRef });
     const assignee = assigned_to ? Number(assigned_to) : req.userId;
     const { rows: [row] } = await pool.query(
       'INSERT INTO deals (workspace_id,contact_id,supplier_id,pipeline_id,stage_id,title,value,assigned_to,urgency,custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id',
@@ -86,6 +97,8 @@ router.put('/:id', async (req, res, next) => {
   try {
     const { contact_id, supplier_id, pipeline_id, stage_id, title, value, assigned_to, custom_data, urgency } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
+    const badRef = await foreignRef(req.workspaceId, { contact_id, supplier_id, pipeline_id, stage_id, assigned_to });
+    if (badRef) return res.status(400).json({ error: badRef });
     const result = await pool.query(
       'UPDATE deals SET contact_id=$1,supplier_id=$2,pipeline_id=$3,stage_id=$4,title=$5,value=$6,assigned_to=$7,urgency=$8,custom_data=$9,updated_at=NOW() WHERE id=$10 AND workspace_id=$11',
       [contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assigned_to||null, clampUrgency(urgency), JSON.stringify(custom_data||{}), req.params.id, req.workspaceId]
@@ -102,6 +115,8 @@ router.put('/:id', async (req, res, next) => {
 
 router.patch('/:id/stage', async (req, res, next) => {
   try {
+    const badRef = await foreignRef(req.workspaceId, { stage_id: req.body.stage_id });
+    if (badRef) return res.status(400).json({ error: badRef });
     const result = await pool.query(
       'UPDATE deals SET stage_id=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3',
       [req.body.stage_id||null, req.params.id, req.workspaceId]
@@ -140,11 +155,21 @@ router.delete('/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Deal <-> object links. deal_objects carries no workspace_id: BOTH the deal
+// and the object must belong to the caller's workspace (same rule as the
+// object-side endpoints in routes/objects.js). Foreign ids are 404, never written.
+const isId = v => /^\d+$/.test(String(v));
+
 router.get('/:id/objects', async (req, res, next) => {
   try {
+    if (!isId(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+    const { rows: [deal] } = await pool.query('SELECT 1 FROM deals WHERE id=$1 AND workspace_id=$2', [Number(req.params.id), req.workspaceId]);
+    if (!deal) return res.status(404).json({ error: 'Not found' });
     const { rows } = await pool.query(
-      'SELECT o.* FROM deal_objects dobj JOIN objects o ON o.id=dobj.object_id WHERE dobj.deal_id=$1',
-      [req.params.id]
+      `SELECT o.* FROM deal_objects dobj
+         JOIN objects o ON o.id = dobj.object_id AND o.workspace_id = $2
+        WHERE dobj.deal_id = $1`,
+      [Number(req.params.id), req.workspaceId]
     );
     res.json(rows);
   } catch (e) { next(e); }
@@ -154,9 +179,13 @@ router.post('/:id/objects', async (req, res, next) => {
   try {
     const { object_id } = req.body;
     if (!object_id) return res.status(400).json({ error: 'object_id required' });
+    if (!isId(req.params.id) || !isId(object_id)) return res.status(400).json({ error: 'Invalid id' });
+    const own = await ownsPair(pool, req.workspaceId, ['deals', Number(req.params.id)], ['objects', Number(object_id)]);
+    if (!own.a) return res.status(404).json({ error: 'Not found' });
+    if (!own.b) return res.status(404).json({ error: 'Object not found' });
     await pool.query(
       'INSERT INTO deal_objects (deal_id, object_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
-      [req.params.id, object_id]
+      [Number(req.params.id), Number(object_id)]
     );
     res.status(201).json({ success: true });
   } catch (e) { next(e); }
@@ -164,9 +193,13 @@ router.post('/:id/objects', async (req, res, next) => {
 
 router.delete('/:id/objects/:objectId', async (req, res, next) => {
   try {
+    if (!isId(req.params.id) || !isId(req.params.objectId)) return res.status(400).json({ error: 'Invalid id' });
+    const own = await ownsPair(pool, req.workspaceId, ['deals', Number(req.params.id)], ['objects', Number(req.params.objectId)]);
+    if (!own.a) return res.status(404).json({ error: 'Not found' });
+    if (!own.b) return res.status(404).json({ error: 'Object not found' });
     await pool.query(
       'DELETE FROM deal_objects WHERE deal_id=$1 AND object_id=$2',
-      [req.params.id, req.params.objectId]
+      [Number(req.params.id), Number(req.params.objectId)]
     );
     res.json({ success: true });
   } catch (e) { next(e); }

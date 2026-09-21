@@ -41,6 +41,12 @@ let currentLang   = localStorage.getItem('lang') || 'en';
 const TRANSLATIONS = {
   en: {
     nav_deals:'Deals', nav_contacts:'Contacts', nav_activities:'Activities', nav_settings:'Settings', nav_board:'Board',
+    nav_onboarding:'Onboarding', page_onboarding:'Onboarding', onb_page_hint:'Contacts in onboarding and their current step', onb_filter_all:'All',
+    onb_col_contact:'Contact', onb_col_company:'Company', onb_col_status:'Status', onb_col_progress:'Progress', onb_col_assignee:'Assignee', onb_col_updated:'Last update',
+    onb_empty_title:'No contact is in onboarding yet', onb_empty_hint:'Start it from a contact or a deal.', onb_link_contact_first:'Link a contact to this deal first.', onb_search_ph:'Search name, company, email…',
+    onb_status_select_title:'Change status', set_onboarding_trigger:'Onboarding trigger', onb_trigger_none:'No pipelines yet.',
+    hint_onboarding_trigger:'When a deal reaches one of these stages, the CRM asks whether to start onboarding for its contact.',
+    onb_stage_prompt:'This deal reached an onboarding stage. Start onboarding for its contact?',
     set_miro:'Miro Board', hint_miro:'Paste the embed URL from Miro → Share → Embed.',
     add_deal:'+ Add Deal', lbl_deal_title:'Title', lbl_deal_value:'Value',
     tab_deals:'Deals', set_pipelines:'Pipelines', hint_pipelines:'Each pipeline has its own stages. Deals belong to one pipeline.',
@@ -52,6 +58,23 @@ const TRANSLATIONS = {
     add_contact:'+ Add Contact', log_activity:'+ Log Activity',
     import_csv:'⬆ Import CSV', export_csv:'⬇ Export CSV',
     col_name:'Name', col_company:'Company', col_email:'Email', col_phone:'Phone', col_stage:'Stage', col_assignee:'Assignee', col_created_at:'Date Added',
+    col_onboarding:'Onboarding', lbl_onboarding:'Onboarding', btn_start_onboarding:'Start Onboarding',
+    onb_confirm:'Mark the contract as signed and send the onboarding form? The engine will be notified.',
+    onb_confirm_reset:'This contact is already in onboarding. Starting again resets the status to "Formular versendet". Continue?',
+    onb_started:'Onboarding started.',
+    // Onboarding status labels are German in every UI language (business terms).
+    onb_kein_onboarding:'Kein Onboarding', onb_formular_versendet:'Formular versendet', onb_formular_ausgefuellt:'Formular ausgefüllt',
+    onb_termin_gebucht:'Termin gebucht', onb_call_erfolgt:'Call erfolgt', onb_briefing_fertig:'Briefing fertig', onb_onboarding_abgeschlossen:'Onboarding abgeschlossen',
+    eng_webhook_title:'Onboarding Engine — Outgoing Webhooks', eng_webhook_hint:'The CRM sends signed events (HMAC-SHA256) to this URL when onboarding is started. Failed deliveries are retried for about 21 hours.',
+    eng_url:'Target URL', eng_active:'Active', eng_description:'Description', eng_events:'Events', eng_all_events:'All events (*)',
+    eng_secret:'Signing secret', eng_secret_none:'No secret yet — save the webhook to generate one.', eng_secret_hint:'ends with', eng_rotate:'Rotate secret',
+    eng_shown_once:'Shown once — copy it now. It cannot be displayed again.', eng_copy:'Copy', eng_copied:'Copied', eng_save:'Save', eng_saved:'Saved.',
+    eng_send_test:'Send test event', eng_test_sent:'Test event sent', eng_deliveries:'Delivery log', eng_refresh:'Refresh', eng_retry:'Retry', eng_no_deliveries:'No deliveries yet.',
+    eng_col_event:'Event', eng_col_status:'Status', eng_col_attempts:'Attempts', eng_col_response:'Response', eng_col_time:'Time',
+    eng_keys_title:'API Keys', eng_keys_hint:'Keys let the Onboarding Engine call this CRM (GET /api/kunden/:id, PATCH …/status). The key is shown once and stored only as a hash.',
+    eng_key_name:'Key name', eng_create_key:'Create API key', eng_revoke:'Revoke', eng_revoke_confirm:'Revoke this key? Requests using it will be rejected immediately.',
+    eng_no_keys:'No API keys yet.', eng_col_name:'Name', eng_col_prefix:'Prefix', eng_col_created:'Created', eng_col_last_used:'Last used', eng_revoked:'revoked', eng_never:'never',
+    eng_owner_only:'Only the workspace owner can change these settings.',
     search_ph:'Search contacts…',
     no_activities:'No activities yet.', no_fields:'No custom fields yet.',
     drop_here:'Drop contacts here', unassigned:'Unassigned',
@@ -87,6 +110,12 @@ const TRANSLATIONS = {
   },
   de: {
     nav_deals:'Deals', nav_contacts:'Kontakte', nav_activities:'Aktivitäten', nav_settings:'Einstellungen', nav_board:'Board',
+    nav_onboarding:'Onboarding', page_onboarding:'Onboarding', onb_page_hint:'Kontakte im Onboarding und ihr aktueller Schritt', onb_filter_all:'Alle',
+    onb_col_contact:'Kontakt', onb_col_company:'Firma', onb_col_status:'Status', onb_col_progress:'Fortschritt', onb_col_assignee:'Zuständig', onb_col_updated:'Letzte Änderung',
+    onb_empty_title:'Noch kein Kontakt im Onboarding', onb_empty_hint:'Starte es aus einem Kontakt oder einem Deal.', onb_link_contact_first:'Verknüpfe zuerst einen Kontakt mit diesem Deal.', onb_search_ph:'Name, Firma, E-Mail suchen…',
+    onb_status_select_title:'Status ändern', set_onboarding_trigger:'Onboarding-Auslöser', onb_trigger_none:'Noch keine Pipelines.',
+    hint_onboarding_trigger:'Erreicht ein Deal eine dieser Phasen, fragt das CRM, ob das Onboarding für den Kontakt gestartet werden soll.',
+    onb_stage_prompt:'Dieser Deal hat eine Onboarding-Phase erreicht. Onboarding für den Kontakt starten?',
     set_miro:'Miro-Board', hint_miro:'Embed-URL aus Miro → Teilen → Einbetten einfügen.',
     add_deal:'+ Deal hinzufügen', lbl_deal_title:'Titel', lbl_deal_value:'Wert',
     tab_deals:'Deals', set_pipelines:'Pipelines', hint_pipelines:'Jede Pipeline hat eigene Phasen. Deals gehören zu einer Pipeline.',
@@ -98,6 +127,22 @@ const TRANSLATIONS = {
     add_contact:'+ Kontakt hinzufügen', log_activity:'+ Aktivität erfassen',
     import_csv:'⬆ CSV importieren', export_csv:'⬇ CSV exportieren',
     col_name:'Name', col_company:'Unternehmen', col_email:'E-Mail', col_phone:'Telefon', col_stage:'Phase', col_assignee:'Zuständig', col_created_at:'Hinzugefügt am',
+    col_onboarding:'Onboarding', lbl_onboarding:'Onboarding', btn_start_onboarding:'Onboarding starten',
+    onb_confirm:'Vertrag als unterschrieben markieren und das Onboarding-Formular versenden? Die Engine wird benachrichtigt.',
+    onb_confirm_reset:'Dieser Kontakt ist bereits im Onboarding. Ein Neustart setzt den Status auf „Formular versendet“ zurück. Fortfahren?',
+    onb_started:'Onboarding gestartet.',
+    onb_kein_onboarding:'Kein Onboarding', onb_formular_versendet:'Formular versendet', onb_formular_ausgefuellt:'Formular ausgefüllt',
+    onb_termin_gebucht:'Termin gebucht', onb_call_erfolgt:'Call erfolgt', onb_briefing_fertig:'Briefing fertig', onb_onboarding_abgeschlossen:'Onboarding abgeschlossen',
+    eng_webhook_title:'Onboarding Engine — Ausgehende Webhooks', eng_webhook_hint:'Das CRM sendet signierte Ereignisse (HMAC-SHA256) an diese URL, wenn ein Onboarding gestartet wird. Fehlgeschlagene Zustellungen werden etwa 21 Stunden lang wiederholt.',
+    eng_url:'Ziel-URL', eng_active:'Aktiv', eng_description:'Beschreibung', eng_events:'Ereignisse', eng_all_events:'Alle Ereignisse (*)',
+    eng_secret:'Signatur-Secret', eng_secret_none:'Noch kein Secret — Webhook speichern, um eines zu erzeugen.', eng_secret_hint:'endet auf', eng_rotate:'Secret rotieren',
+    eng_shown_once:'Wird nur einmal angezeigt — jetzt kopieren. Es kann später nicht mehr angezeigt werden.', eng_copy:'Kopieren', eng_copied:'Kopiert', eng_save:'Speichern', eng_saved:'Gespeichert.',
+    eng_send_test:'Test-Ereignis senden', eng_test_sent:'Test-Ereignis gesendet', eng_deliveries:'Zustellprotokoll', eng_refresh:'Aktualisieren', eng_retry:'Erneut senden', eng_no_deliveries:'Noch keine Zustellungen.',
+    eng_col_event:'Ereignis', eng_col_status:'Status', eng_col_attempts:'Versuche', eng_col_response:'Antwort', eng_col_time:'Zeit',
+    eng_keys_title:'API-Schlüssel', eng_keys_hint:'Mit einem Schlüssel ruft die Onboarding Engine dieses CRM auf (GET /api/kunden/:id, PATCH …/status). Der Schlüssel wird nur einmal angezeigt und nur als Hash gespeichert.',
+    eng_key_name:'Name des Schlüssels', eng_create_key:'API-Schlüssel erstellen', eng_revoke:'Widerrufen', eng_revoke_confirm:'Diesen Schlüssel widerrufen? Anfragen damit werden sofort abgelehnt.',
+    eng_no_keys:'Noch keine API-Schlüssel.', eng_col_name:'Name', eng_col_prefix:'Präfix', eng_col_created:'Erstellt', eng_col_last_used:'Zuletzt verwendet', eng_revoked:'widerrufen', eng_never:'nie',
+    eng_owner_only:'Nur der Workspace-Inhaber kann diese Einstellungen ändern.',
     search_ph:'Kontakte suchen…',
     no_activities:'Noch keine Aktivitäten.', no_fields:'Noch keine benutzerdefinierten Felder.',
     drop_here:'Kontakte hierher ziehen', unassigned:'Nicht zugewiesen',
@@ -157,6 +202,7 @@ function setLanguage(lang) {
   if (page === 'settings')   loadSettings();
   if (page === 'objects')    loadObjects();
   if (page === 'board')      loadBoard();
+  if (page === 'onboarding') renderOnboarding();
 }
 
 const WA_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="vertical-align:middle"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>`;
@@ -194,6 +240,39 @@ function closeModal(id) {
 function esc(str) {
   if (str == null) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Render-side sanitiser for note HTML. Notes saved before the server started
+// sanitising are still raw in the database and are not rewritten, so every
+// place that puts note HTML into the page passes it through here first. Same
+// allow-list as utils/sanitize-note.js. DOMParser documents are inert: nothing
+// loads or runs while the untrusted markup is parsed.
+function sanitizeNoteHtml(html) {
+  if (html == null) return '';
+  // Self-contained on purpose: no dependence on anything else in this file
+  // having initialised first.
+  const NOTE_ALLOWED_TAGS = new Set(['B','I','U','STRONG','EM','A','BR','P','UL','OL','LI']);
+  const NOTE_DROP_TAGS    = new Set(['SCRIPT','STYLE','TEMPLATE','IFRAME','OBJECT','EMBED','NOSCRIPT']);
+  const doc = new DOMParser().parseFromString(String(html), 'text/html');
+  const walk = node => {
+    for (const child of [...node.childNodes]) {
+      if (child.nodeType !== 1) { if (child.nodeType !== 3) child.remove(); continue; }   // keep text, drop comments etc.
+      const tag = child.tagName.toUpperCase();
+      if (NOTE_DROP_TAGS.has(tag)) { child.remove(); continue; }                          // text inside goes too
+      walk(child);
+      if (tag === 'DIV') {                                                                 // editor line -> paragraph
+        const p = doc.createElement('p');
+        while (child.firstChild) p.appendChild(child.firstChild);
+        child.replaceWith(p); continue;
+      }
+      if (!NOTE_ALLOWED_TAGS.has(tag)) { child.replaceWith(...child.childNodes); continue; } // unwrap, keep children
+      const href = tag === 'A' ? child.getAttribute('href') : null;
+      for (const attr of [...child.attributes]) child.removeAttribute(attr.name);
+      if (href && /^\s*(https?:|mailto:)/i.test(href)) child.setAttribute('href', href);
+    }
+  };
+  walk(doc.body);
+  return doc.body.innerHTML;
 }
 
 function fmtDate(dt) {

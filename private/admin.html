@@ -239,6 +239,18 @@
         </div>
       </div>
 
+      <!-- Platform Invite Codes -->
+      <div class="section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <div>
+            <h2 style="margin: 0 0 4px 0;">Platform Invite Codes</h2>
+            <p style="color: #6b7280; font-size: 14px; margin: 0;">One-time codes that allow someone to create a new workspace on signup</p>
+          </div>
+          <button class="btn btn-primary" onclick="generateInvite()">+ Generate</button>
+        </div>
+        <div id="invites-list" class="admin-invites-list"></div>
+      </div>
+
       <!-- Default Contact Columns -->
       <div class="section">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -297,7 +309,7 @@
   </div>
 
   <script>
-    const API_BASE = '/api/admin';
+    const API_BASE = location.pathname.replace(/\/+$/, '') + '/api'; // page lives at ADMIN_CONSOLE_PATH; API is beneath it
     const COLUMN_LABELS = {
       'company': 'Company',
       'email': 'Email',
@@ -359,6 +371,7 @@
     }
 
     async function loadDashboard() {
+      loadInvites(); // independent of stats/defaults; renders its own section and handles its own errors
       try {
         const [statsRes, defaultsRes] = await Promise.all([
           fetch(`${API_BASE}/stats`),
@@ -500,12 +513,9 @@
     }
 
     function generateFieldKey(name) {
-      return name
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, '')
-        .replace(/\s+/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_|_$/g, '');
+      // Same rule as toFieldKey in public/js/admin-import.js (and the inline
+      // copies in settings.js / objects.js): runs of non-alphanumerics -> one _.
+      return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
     }
 
     function updateCustomFieldName(oldKey, newName) {
@@ -631,6 +641,79 @@
       } catch (e) {
         showMessage(`Error saving defaults: ${e.message}`, 'error');
       }
+    }
+
+    // ── Platform invite codes ─────────────────────────────────────────────
+    function esc(str) {
+      if (str == null) return '';
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function fmtDate(dt) {
+      if (!dt) return '';
+      return new Date(dt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    async function loadInvites() {
+      const el = document.getElementById('invites-list');
+      try {
+        const res = await fetch(`${API_BASE}/invites`);
+        const invites = await res.json();
+        if (!res.ok || !Array.isArray(invites)) {
+          el.innerHTML = `<p style="color:#6b7280;font-size:14px;margin:0">${esc(invites?.error || 'Could not load invite codes.')}</p>`;
+          return;
+        }
+        if (!invites.length) {
+          el.innerHTML = '<p style="color:#6b7280;font-size:14px;margin:0">No invite codes yet. Click + Generate to create one.</p>';
+          return;
+        }
+        el.innerHTML = invites.map(inv => `
+          <div class="admin-invite-row ${inv.used ? 'used' : ''}">
+            <div class="admin-invite-code">${esc(inv.code)}</div>
+            <div class="admin-invite-meta">
+              ${inv.used
+                ? `<span class="admin-badge used">Used · ${esc(inv.used_by_workspace_name || '—')}</span>`
+                : `<span class="admin-badge available">Available</span>`}
+              <span class="admin-invite-date">${fmtDate(inv.created_at)}</span>
+            </div>
+            <div class="admin-invite-actions">
+              <button class="btn btn-sm" onclick="copyInvite('${esc(inv.code)}', this)" title="Copy">📋</button>
+              ${!inv.used ? `<button class="btn btn-sm btn-danger" onclick="deleteInvite(${Number(inv.id)})" title="Delete">✕</button>` : ''}
+            </div>
+          </div>`).join('');
+      } catch (e) {
+        el.innerHTML = `<p style="color:#6b7280;font-size:14px;margin:0">Error loading invite codes: ${esc(e.message)}</p>`;
+      }
+    }
+
+    async function generateInvite() {
+      try {
+        const res = await fetch(`${API_BASE}/invites`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { showMessage(`Error: ${data.error}`, 'error'); return; }
+        showMessage('Invite code generated', 'success');
+        loadInvites();
+      } catch (e) {
+        showMessage(`Error generating code: ${e.message}`, 'error');
+      }
+    }
+
+    async function deleteInvite(id) {
+      if (!confirm('Delete this invite code?')) return;
+      try {
+        const res = await fetch(`${API_BASE}/invites/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) { showMessage(`Error: ${data.error}`, 'error'); return; }
+        loadInvites();
+      } catch (e) {
+        showMessage(`Error deleting code: ${e.message}`, 'error');
+      }
+    }
+
+    function copyInvite(code, btn) {
+      navigator.clipboard.writeText(code).then(() => {
+        const orig = btn.textContent; btn.textContent = '✓';
+        setTimeout(() => { btn.textContent = orig; }, 1500);
+      });
     }
 
     function showMessage(text, type) {

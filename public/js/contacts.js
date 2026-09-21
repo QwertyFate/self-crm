@@ -63,6 +63,7 @@ function effectiveContactColumns() {
     { key: 'stage_id',    label: () => t('col_stage'),      type: 'stage',    show: false },
     { key: 'assigned_to', label: () => t('col_assignee'),   type: 'assignee', show: true  },
     { key: 'created_at',  label: () => t('col_created_at'), type: 'date',     show: false },
+    { key: 'onboarding_status', label: () => t('col_onboarding'), type: 'onboarding', show: false },
   ];
   const ALL = [
     ...BUILTIN,
@@ -96,6 +97,59 @@ function getSortValue(c, key) {
   if (f?.type === 'number') return parseFloat(v) || 0;
   if (f?.type === 'date')   return v ? new Date(v).getTime() : 0;
   return (v || '').toString().toLowerCase();
+}
+
+// ---- Onboarding Engine: status badge + manual trigger ----------------------
+// Labels are German in every UI language (business terms); colours follow the
+// stage-badge convention. Keys mirror the CHECK constraint on contacts.onboarding_status.
+const ONBOARDING_STATUS_META = {
+  kein_onboarding:          { color: '#94a3b8' },
+  formular_versendet:       { color: '#3b82f6' },
+  formular_ausgefuellt:     { color: '#6366f1' },
+  termin_gebucht:           { color: '#8b5cf6' },
+  call_erfolgt:             { color: '#f59e0b' },
+  briefing_fertig:          { color: '#10b981' },
+  onboarding_abgeschlossen: { color: '#22c55e' },
+};
+function onboardingLabel(status) {
+  return ONBOARDING_STATUS_META[status] ? t(`onb_${status}`) : (status || t('onb_kein_onboarding'));
+}
+function onboardingBadge(status) {
+  const key  = ONBOARDING_STATUS_META[status] ? status : 'kein_onboarding';
+  const meta = ONBOARDING_STATUS_META[key];
+  return `<span class="stage-badge" title="${esc(key)}"><span class="stage-badge-dot" style="background:${meta.color}"></span>${esc(onboardingLabel(key))}</span>`;
+}
+async function startOnboarding(id, currentStatus) {
+  if (!(await requestOnboardingStart(id, currentStatus))) return;
+  const page = document.querySelector('.sidebar-nav a.active')?.dataset.page;
+  if (page === 'onboarding') await loadOnboarding(); else await loadContacts();
+  await openDetail(id);
+}
+// Confirm → POST → report. Shared by the contact detail, the deal editor and
+// the Onboarding page. Resolves true when the status was changed.
+async function requestOnboardingStart(id, currentStatus, { confirmed = false } = {}) {
+  const msg = currentStatus && currentStatus !== 'kein_onboarding' ? t('onb_confirm_reset') : t('onb_confirm');
+  if (!confirmed && !confirm(msg)) return false;          // confirmed: the caller already asked (stage prompt)
+  const res = await api.post(`/api/contacts/${id}/onboarding/start`, {});
+  if (res.error) { alert(res.error); return false; }
+  invalidate();
+  return true;
+}
+// Inline status picker shown next to the badge (contact detail, deal editor,
+// Onboarding page). ctx decides what is re-rendered after the change.
+function onboardingStatusSelect(contactId, status, ctx) {
+  const opts = Object.keys(ONBOARDING_STATUS_META)
+    .map(k => `<option value="${k}"${k === status ? ' selected' : ''}>${esc(onboardingLabel(k))}</option>`).join('');
+  return `<select class="onb-status-select" title="${esc(t('onb_status_select_title'))}" onchange="changeOnboardingStatus(${contactId}, this.value, '${ctx}')">${opts}</select>`;
+}
+async function changeOnboardingStatus(id, status, ctx) {
+  const res = await api.patch(`/api/contacts/${id}/onboarding-status`, { onboarding_status: status });
+  if (res.error) { alert(res.error); return; }
+  invalidate();
+  if (ctx === 'deal')      await renderContactPanelReadOnly({ id });
+  else if (ctx === 'page') await loadOnboarding();
+  else                     await openDetail(id);
+  if (document.querySelector('.sidebar-nav a.active')?.dataset.page === 'contacts') loadContacts();   // keep the optional column current
 }
 
 function sortContacts(list) {
@@ -156,6 +210,8 @@ function renderContactsTable(list) {
         return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'assigned_to','assignee')" title="${esc(c.assigned_to_name||'')}">${esc(c.assigned_to_name||'')||dash}</td>`;
       if (col.key === 'created_at')
         return `<td title="${esc(String(c.created_at||''))}">${fmtDate(c.created_at)||dash}</td>`;
+      if (col.key === 'onboarding_status')
+        return `<td>${onboardingBadge(c.onboarding_status)}</td>`;
       const v = c.custom_data?.[col.key] ?? '';
       return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${col.key}','${col.type}')" title="${esc(v)}">${esc(v)||dash}</td>`;
     }).join('');

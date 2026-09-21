@@ -2,15 +2,6 @@ async function init() {
   const params     = new URLSearchParams(window.location.search);
   const resetToken = params.get('reset');
 
-  if (params.has('admin')) {
-    document.getElementById('admin-screen').classList.remove('hidden');
-    const { isAdmin } = await api.get('/api/admin/me');
-    document.getElementById('admin-view-login').classList.toggle('hidden', isAdmin);
-    document.getElementById('admin-view-panel').classList.toggle('hidden', !isAdmin);
-    if (isAdmin) loadAdminInvites();
-    return;
-  }
-
   const data = await api.get('/api/auth/me');
   if (data.user && !resetToken) {
     currentUser      = data.user;
@@ -395,6 +386,7 @@ async function switchPage(page) {
   if (page === 'integrations') await loadIntegrations();
   if (page === 'workspaces')   await loadWorkspacesPage();
   if (page === 'chat')         await loadChatPage();
+  if (page === 'onboarding')   await loadOnboarding();
 }
 
 function invalidate() { contacts = []; stages = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }

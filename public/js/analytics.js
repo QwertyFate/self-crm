@@ -28,9 +28,10 @@ function fmtCurrency(n) {
 }
 
 async function loadAnalytics() {
-  const mainSections = document.getElementById('analytics-main-sections');
-  if (mainSections) mainSections.innerHTML = '';
-
+  // Do not clear #analytics-main-sections here. The four section nodes are
+  // static markup; renderAllSections reorders them with appendChild (which
+  // moves an existing node, so it never duplicates). Emptying the container
+  // destroyed them, after which every getElementById below returned null.
   const data = await api.get('/api/analytics/summary');
   if (!data || data.error) return;
   analyticsData = data;
@@ -52,7 +53,7 @@ function buildStatOrder(savedOrder, hiddenIds, d) {
   const base = savedOrder.length ? savedOrder : [...DEFAULT_STAT_ORDER];
   return base
     .filter(id => {
-      const def = STAT_CARD_DEFS[id];
+      const def = Object.hasOwn(STAT_CARD_DEFS, id) ? STAT_CARD_DEFS[id] : null;   // own keys only: a saved "constructor" is not a card
       if (!def) return false;
       if (def.requiresValue && !hasValue) return false;
       return true;
@@ -98,7 +99,7 @@ function renderAnalyticsCards(d) {
   const visible = statCardOrder.filter(c => !c.hidden);
 
   el.innerHTML = visible.map(({ id }) => {
-    const def     = STAT_CARD_DEFS[id];
+    const def     = Object.hasOwn(STAT_CARD_DEFS, id) ? STAT_CARD_DEFS[id] : null;
     const content = getStatCardContent(id, d);
     return `
     <div class="analytics-card" draggable="true" data-stat-id="${id}">
@@ -155,6 +156,10 @@ function initSectionDragDrop() {
   const main = document.getElementById('analytics-main-sections');
   if (!main) return;
   main.querySelectorAll('.analytics-draggable-section').forEach(sec => {
+    // Section nodes persist across loads (they are moved, not rebuilt), so
+    // bind once; a second set of listeners would apply every drop twice.
+    if (sec.dataset.dndBound) return;
+    sec.dataset.dndBound = '1';
     sec.setAttribute('draggable', 'true');
 
     sec.addEventListener('dragstart', e => {
@@ -202,7 +207,11 @@ function saveLayoutConfig() {
 }
 
 function renderWinLoss(d) {
-  const section = document.getElementById('analytics-winloss-section');
+  // The markup id is analytics-sec-winloss (renamed in "fixe analytics
+  // customization"); the old id here threw on every load. If the section is
+  // absent, skip it rather than throw.
+  const section = document.getElementById('analytics-sec-winloss');
+  if (!section) return;
   const total   = d.won_deals + d.lost_deals + d.open_deals;
   section.style.display = '';
   if (total === 0) {
@@ -233,6 +242,7 @@ function renderWinLoss(d) {
 
 function renderByPipeline(d) {
   const el       = document.getElementById('analytics-by-pipeline');
+  if (!el) return;
   const hasValue = d.config.value_field != null;
   if (!d.by_pipeline.length) { el.innerHTML = '<p style="color:var(--muted)">No pipelines yet.</p>'; return; }
   const maxCount = Math.max(...d.by_pipeline.map(p => parseInt(p.cnt) || 0), 1);
