@@ -47,6 +47,17 @@ const TRANSLATIONS = {
     onb_status_select_title:'Change status', set_onboarding_trigger:'Onboarding trigger', onb_trigger_none:'No pipelines yet.',
     hint_onboarding_trigger:'When a deal reaches one of these stages, the CRM asks whether to start onboarding for its contact.',
     onb_stage_prompt:'This deal reached an onboarding stage. Start onboarding for its contact?',
+    onb_col_drive:'Drive', drive_section:'Google Drive', drive_folder_ph:'Paste the folder link or ID', drive_open_folder:'Open folder ↗',
+    drive_files_window:'Files window', drive_no_folder:'No Drive folder linked yet.', drive_invalid:'That is not a Google Drive folder link or ID.',
+    col_drive_files:'Drive files', drive_sync:'Sync', drive_synced_at:'Synced', drive_never_synced:'Not synced yet.', drive_preview:'Preview', drive_open:'Open ↗',
+    drive_empty:'No files in this folder.', drive_not_public:'Folder not found or not shared as "Anyone with the link".',
+    drive_timeout:'Google Drive did not answer in time. Try Sync again.', drive_upstream:'Google Drive returned an error. Try Sync again.',
+    drive_not_configured:'File sync is off: the server has no GOOGLE_API_KEY.',
+    tab_workspace:'Workspace', tab_preferences:'My preferences', tab_tasks:'Tasks', tab_integrations:'Integrations',
+    hint_preferences:'These settings apply only to you, not to the whole workspace.',
+    set_appearance:'Appearance', hint_appearance:'Light or dark theme for this browser.', set_danger:'Delete workspace',
+    hint_members:'Everyone who has joined this workspace.',
+    set_int_pointer:'Lead webhook & Onboarding Engine', hint_int_pointer:"Incoming leads, the engine's API keys and outgoing webhooks are configured on the Integrations page.", btn_open_integrations:'Open Integrations',
     set_miro:'Miro Board', hint_miro:'Paste the embed URL from Miro → Share → Embed.',
     add_deal:'+ Add Deal', lbl_deal_title:'Title', lbl_deal_value:'Value',
     tab_deals:'Deals', set_pipelines:'Pipelines', hint_pipelines:'Each pipeline has its own stages. Deals belong to one pipeline.',
@@ -116,6 +127,17 @@ const TRANSLATIONS = {
     onb_status_select_title:'Status ändern', set_onboarding_trigger:'Onboarding-Auslöser', onb_trigger_none:'Noch keine Pipelines.',
     hint_onboarding_trigger:'Erreicht ein Deal eine dieser Phasen, fragt das CRM, ob das Onboarding für den Kontakt gestartet werden soll.',
     onb_stage_prompt:'Dieser Deal hat eine Onboarding-Phase erreicht. Onboarding für den Kontakt starten?',
+    onb_col_drive:'Drive', drive_section:'Google Drive', drive_folder_ph:'Ordner-Link oder ID einfügen', drive_open_folder:'Ordner öffnen ↗',
+    drive_files_window:'Dateifenster', drive_no_folder:'Noch kein Drive-Ordner verknüpft.', drive_invalid:'Das ist kein Google-Drive-Ordner-Link und keine ID.',
+    col_drive_files:'Drive-Dateien', drive_sync:'Synchronisieren', drive_synced_at:'Synchronisiert', drive_never_synced:'Noch nicht synchronisiert.', drive_preview:'Vorschau', drive_open:'Öffnen ↗',
+    drive_empty:'Keine Dateien in diesem Ordner.', drive_not_public:'Ordner nicht gefunden oder nicht als „Jeder mit dem Link“ freigegeben.',
+    drive_timeout:'Google Drive hat nicht rechtzeitig geantwortet. Bitte erneut synchronisieren.', drive_upstream:'Google Drive hat einen Fehler gemeldet. Bitte erneut synchronisieren.',
+    drive_not_configured:'Dateisynchronisierung aus: Auf dem Server fehlt GOOGLE_API_KEY.',
+    tab_workspace:'Arbeitsbereich', tab_preferences:'Meine Einstellungen', tab_tasks:'Aufgaben', tab_integrations:'Integrationen',
+    hint_preferences:'Diese Einstellungen gelten nur für dich, nicht für den ganzen Arbeitsbereich.',
+    set_appearance:'Darstellung', hint_appearance:'Helles oder dunkles Design für diesen Browser.', set_danger:'Arbeitsbereich löschen',
+    hint_members:'Alle, die diesem Arbeitsbereich beigetreten sind.',
+    set_int_pointer:'Lead-Webhook & Onboarding Engine', hint_int_pointer:'Eingehende Leads, die API-Schlüssel der Engine und ausgehende Webhooks werden auf der Seite „Integrationen“ eingerichtet.', btn_open_integrations:'Integrationen öffnen',
     set_miro:'Miro-Board', hint_miro:'Embed-URL aus Miro → Teilen → Einbetten einfügen.',
     add_deal:'+ Deal hinzufügen', lbl_deal_title:'Titel', lbl_deal_value:'Wert',
     tab_deals:'Deals', set_pipelines:'Pipelines', hint_pipelines:'Jede Pipeline hat eigene Phasen. Deals gehören zu einer Pipeline.',
@@ -331,6 +353,8 @@ function applyTheme(dark) {
   const label = document.getElementById('dark-toggle-label');
   if (track) track.classList.toggle('on', dark);
   if (label) label.textContent = t(dark ? 'light_mode' : 'dark_mode');
+  const pref = document.getElementById('pref-dark-toggle');   // Settings → My preferences → Appearance
+  if (pref) pref.checked = dark;
 }
 
 function toggleDarkMode() {

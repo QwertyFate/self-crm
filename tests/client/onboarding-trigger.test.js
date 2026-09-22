@@ -28,7 +28,7 @@ describe('wiring', () => {
   test('settings card (Deals pane) with hint, stage list and save button', () => {
     const card = html.slice(html.indexOf('id="onboarding-trigger-card"'), html.indexOf('id="onboarding-trigger-msg"'));
     assert.ok(card.length > 0);
-    assert.match(html, /<div class="settings-card hidden" id="onboarding-trigger-card"/);
+    assert.match(html, /<div class="settings-card hidden wide" id="onboarding-trigger-card"/);   // full-width card in the Deals pane (Part 47)
     for (const s of ['data-i18n="set_onboarding_trigger"', 'data-i18n="hint_onboarding_trigger"', 'id="onboarding-trigger-stages"', 'onclick="saveOnboardingTrigger()"']) assert.ok(card.includes(s), s);
   });
   test('the stage list is rendered with the pipelines and shown to owners; save PATCHes the workspace', () => {

@@ -64,6 +64,7 @@ function effectiveContactColumns() {
     { key: 'assigned_to', label: () => t('col_assignee'),   type: 'assignee', show: true  },
     { key: 'created_at',  label: () => t('col_created_at'), type: 'date',     show: false },
     { key: 'onboarding_status', label: () => t('col_onboarding'), type: 'onboarding', show: false },
+    { key: 'drive_file_count',  label: () => t('col_drive_files'), type: 'drive',      show: false },
   ];
   const ALL = [
     ...BUILTIN,
@@ -92,6 +93,7 @@ function getSortValue(c, key) {
   if (key === 'stage_id')    return (c.stage_name || '').toLowerCase();
   if (key === 'assigned_to') return (c.assigned_to_name || '').toLowerCase();
   if (key === 'created_at')  return c.created_at ? new Date(c.created_at).getTime() : 0;
+  if (key === 'drive_file_count') return Number(c.drive_file_count) || 0;
   const f = fields.find(f => f.field_key === key);
   const v = c.custom_data?.[key];
   if (f?.type === 'number') return parseFloat(v) || 0;
@@ -212,6 +214,10 @@ function renderContactsTable(list) {
         return `<td title="${esc(String(c.created_at||''))}">${fmtDate(c.created_at)||dash}</td>`;
       if (col.key === 'onboarding_status')
         return `<td>${onboardingBadge(c.onboarding_status)}</td>`;
+      if (col.key === 'drive_file_count') {
+        const fid = parseDriveFolderId(c.drive_ordner_id || '');
+        return `<td>${fid ? `<a class="btn btn-sm btn-ghost" href="${esc(driveFolderUrl(fid))}" target="_blank" rel="noopener" title="${esc(t('drive_open_folder'))}">📁 ${Number(c.drive_file_count) || 0}</a>` : dash}</td>`;
+      }
       const v = c.custom_data?.[col.key] ?? '';
       return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'${col.key}','${col.type}')" title="${esc(v)}">${esc(v)||dash}</td>`;
     }).join('');

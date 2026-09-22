@@ -90,6 +90,15 @@ describe('Stage 1 migration on a real database', skipUnless(!reason, reason), ()
     assert.equal(row.later, true);
   });
 
+  test('contact_drive_files: one row per (contact, file); rows vanish with their contact', async () => {
+    await pool.query(`INSERT INTO contact_drive_files (workspace_id, contact_id, file_id, name, mime_type) VALUES (7, 61, 'f1', 'Vertrag.pdf', 'application/pdf')`);
+    await assert.rejects(pool.query(`INSERT INTO contact_drive_files (workspace_id, contact_id, file_id, name) VALUES (7, 61, 'f1', 'again')`), e => e.code === '23505');
+    const cols = (await pool.query(`SELECT column_name FROM information_schema.columns WHERE table_name='contacts'`)).rows.map(r => r.column_name);
+    for (const c of ['drive_synced_at', 'drive_sync_error', 'drive_file_count']) assert.ok(cols.includes(c), c);
+    await pool.query('DELETE FROM contacts WHERE id=61');
+    assert.equal((await pool.query('SELECT COUNT(*)::int AS n FROM contact_drive_files WHERE contact_id=61')).rows[0].n, 0, 'CASCADE');
+  });
+
   test('a delivery row defaults to pending and refuses an unknown status', async () => {
     await pool.query(`INSERT INTO engine_webhook (id, workspace_id, url, secret) VALUES (1, 7, 'https://engine.test/hook', 's')`);
     await pool.query(`INSERT INTO engine_webhook_deliveries (webhook_id, workspace_id, event, payload) VALUES (1, 7, 'contact.updated', '{}')`);

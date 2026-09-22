@@ -26,3 +26,17 @@ test('the webhook worker starts inside the initDb().then chain, after listen', (
   assert.match(chain, /startEngineWebhookWorker\(\)/);
   assert.ok(chain.indexOf('httpServer.listen(') < chain.indexOf('startEngineWebhookWorker()'), 'listen before worker');
 });
+
+test('the Drive sync worker starts in the same chain, after the webhook worker', () => {
+  const [chain] = find(/initDb\(\)[\s\S]*?\.catch\(/, 'initDb().then chain');
+  assert.match(chain, /startDriveSyncWorker\(\)/);
+  assert.ok(chain.indexOf('startEngineWebhookWorker()') < chain.indexOf('startDriveSyncWorker()'), 'webhook worker before drive worker');
+});
+
+test('the manual Drive re-sync is rate-limited (20/min per IP) before the contacts router', () => {
+  const [, body] = find(/const driveSyncLimiter = rateLimit\(\{([\s\S]*?)\}\);/, 'driveSyncLimiter');
+  assert.match(body, /windowMs:\s*60 \* 1000,\s*max:\s*20/);
+  const lim   = find(/app\.use\('\/api\/contacts\/:id\/drive-sync',\s*driveSyncLimiter\)/, 'limiter mount').index;
+  const mount = find(/app\.use\('\/api\/contacts',\s*require\('\.\/routes\/contacts'\)\)/, 'contacts mount').index;
+  assert.ok(lim < mount, 'limiter before the router');
+});

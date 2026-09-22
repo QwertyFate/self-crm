@@ -95,6 +95,7 @@ function renderOnboarding() {
       <td>${onboardingProgressHtml(r.onboarding_status)}</td>
       <td>${r.assigned_to_name ? esc(r.assigned_to_name) : dash}</td>
       <td>${fmtDate(r.updated_at) || dash}</td>
+      <td>${(() => { const fid = parseDriveFolderId(r.drive_ordner_id || ''); return fid ? `<a class="btn btn-sm btn-ghost" href="${esc(driveFolderUrl(fid))}" target="_blank" rel="noopener" title="${esc(t('drive_open_folder'))}">📁 ${Number(r.drive_file_count) || 0}</a>` : dash; })()}</td>
     </tr>`).join('');
   const total = filterOnboardingRows(onbRows).length;
   const count = document.getElementById('onb-count');

@@ -6,7 +6,7 @@ const { loadFns } = require('../helpers/client-fn');
 
 const F = loadFns('public/js/contacts.js', ['effectiveContactColumns', 'getSortValue', 'sortContacts'],
   { state: { fields: [], contactColumns: [], sortKey: null, sortDir: 'asc' }, extra: 'function t(k) { return k; }' });
-const BUILTIN = ['company', 'email', 'phone', 'stage_id', 'assigned_to', 'created_at', 'onboarding_status'];
+const BUILTIN = ['company', 'email', 'phone', 'stage_id', 'assigned_to', 'created_at', 'onboarding_status', 'drive_file_count'];
 const BUDGET = { field_key: 'budget', name: 'Budget', type: 'number' };
 const reset = () => { F.__set('fields', []); F.__set('contactColumns', []); F.__set('sortKey', null); F.__set('sortDir', 'asc'); };
 beforeEach(reset);
@@ -16,7 +16,7 @@ describe('effectiveContactColumns', () => {
     F.__set('fields', [BUDGET]);
     const cols = F.effectiveContactColumns();
     assert.deepEqual(cols.map(c => c.key), [...BUILTIN, 'budget']);
-    assert.deepEqual(cols.map(c => c.visible), [true, true, true, false, true, false, false, true]);
+    assert.deepEqual(cols.map(c => c.visible), [true, true, true, false, true, false, false, false, true]);
     assert.equal(cols.at(-1).label(), 'Budget');
     assert.equal(cols[0].label(), 'col_company', 'built-in labels go through t()');
   });
@@ -24,7 +24,7 @@ describe('effectiveContactColumns', () => {
     F.__set('fields', [BUDGET]);
     F.__set('contactColumns', [{ key: 'phone', visible: false }, { key: 'ghost', visible: true }, { key: 'company', visible: true }]);
     const cols = F.effectiveContactColumns();
-    assert.deepEqual(cols.map(c => c.key), ['phone', 'company', 'email', 'stage_id', 'assigned_to', 'created_at', 'onboarding_status', 'budget']);
+    assert.deepEqual(cols.map(c => c.key), ['phone', 'company', 'email', 'stage_id', 'assigned_to', 'created_at', 'onboarding_status', 'drive_file_count', 'budget']);
     assert.equal(cols[0].visible, false, 'saved visibility wins over the default');
     assert.equal(cols.find(c => c.key === 'stage_id').visible, false, 'unsaved column keeps its default');
     assert.equal(cols.find(c => c.key === 'budget').visible, true);

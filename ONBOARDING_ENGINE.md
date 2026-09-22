@@ -363,3 +363,25 @@ npm test   tests 175  pass 175  fail 0
 `AVAILABLE_EVENTS` is now `vertrag.unterschrieben`, `onboarding.status_geaendert`, `test.ereignis`. A status set **by** the engine (`PATCH /api/kunden/:id/status`) is never echoed back. The seven statuses live once in `utils/onboarding-statuses.js`.
 
 **Stage trigger.** `workspaces.onboarding_trigger_stage_ids` (JSONB list of `pipeline_stages.id`), set by the owner in Settings → Deals → *Onboarding trigger* via `PATCH /api/workspace/onboarding-trigger { stage_ids }`. When a deal **enters** one of those stages (kanban drop or deal form) and its contact is not yet in onboarding, the CRM asks whether to start onboarding; yes → the same `POST /api/contacts/:id/onboarding/start` as the button (one confirm only). Moving between two trigger stages, re-saving the same stage or an already-onboarded contact never asks.
+
+---
+
+## Google Drive folder on contact and deal (Part 44)
+
+`contacts.drive_ordner_id` may hold a **bare folder id or a full Drive folder link** (`…/drive/folders/<id>`, `…/open?id=<id>`); the UI normalises either at read time, and `PATCH /api/contacts/:id/drive-folder { drive_ordner_id }` (session) stores the bare id from whatever a user pastes. The engine keeps setting the field through `PATCH /api/kunden/:id/status`.
+
+Folders are shared **"Anyone with the link"**. The contact detail, the deal editor's contact panel and the Onboarding page show the folder; the first two embed Google's folder view (`https://drive.google.com/embeddedfolderview?id=<id>#list`), where clicking a file opens Google's own preview (images, PDF, Word/Excel/PowerPoint, Google Docs). A *Popup* button opens the same view in a separate window. No API key, no server-side listing; the production CSP allows `drive.google.com` in `frameSrc`.
+
+---
+
+## Drive file sync (Part 45)
+
+The CRM reads each contact's public Drive folder (`contacts.drive_ordner_id`, bare id or full link — the engine may send either) through the Drive API with one server-side key and keeps the files in **`contact_drive_files`** (`workspace_id`, `contact_id`, `file_id`, `name`, `mime_type`, `size`, `modified_at`, `synced_at`, unique per contact+file). The contact carries `drive_synced_at`, `drive_sync_error` (`not_public` | `timeout` | `upstream` | `not_configured` | null) and `drive_file_count`.
+
+**When it syncs:** on `PATCH /api/contacts/:id/drive-folder` (right after saving), on `POST /api/contacts/:id/drive-sync` (Sync button, 20/min per IP), in the background after the engine's `PATCH /api/kunden/:id/status` sets `drive_ordner_id` (the engine never waits on Google), and by a worker every `DRIVE_SYNC_INTERVAL_MIN` (15) minutes for contacts older than `DRIVE_SYNC_MAX_AGE_MIN` (60). A Drive failure keeps the previous rows and stores the error code.
+
+**Endpoints (session):** `GET /api/contacts/:id/drive-files` → `{ folder_id, folder_url, embed_url, synced_at, sync_error, configured, files: [{ id, name, mime_type, size, modified_at, kind, is_folder, previewable, preview_url, open_url }] }` from the table only; `POST /api/contacts/:id/drive-sync` → the same shape after re-reading the folder (503 `drive_not_configured` without a key; a Drive failure is 200 with `sync_error`).
+
+**Setup (developer, once):** Google Cloud Console → enable *Google Drive API* → Credentials → API key restricted to the Drive API → `GOOGLE_API_KEY=` in `.env`. The key identifies the app for quota; it grants no access of its own and works for public folders owned by any Google account, so one key serves every workspace. Without it the folder link and the embedded view still work; only the stored list is off.
+
+**Files window (Part 46).** `/drive.html?contact=<id>[&file=<id>]` — a same-origin page the CRM opens in its own window: the contact's synced files as icon tiles with search, Icons/List, Sync, and a preview pane that frames Google's viewer for the selected file. Uses the endpoints above; nothing new server-side.

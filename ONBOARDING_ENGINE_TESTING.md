@@ -304,3 +304,42 @@ Expected: `200 { "success": true, "stage_ids": [ … ] }` (deduplicated, sorted)
 
 ### 8.3 See it in the UI
 Settings → Deals → *Onboarding trigger* → tick a stage → Save. Drag a deal whose contact is still *Kein Onboarding* into that stage → the CRM asks → OK → the contact appears under *Onboarding* at 1/6 and the receiver gets `vertrag.unterschrieben`.
+
+---
+
+## 9. Drive folder on a contact (Part 44)
+
+### 9.1 `PATCH /api/contacts/:id/drive-folder` — set or clear the folder (session, any member)
+| Field | Type | Rules |
+|---|---|---|
+| `drive_ordner_id` | string \| null | a Drive folder link or a bare folder id; `null` / `""` clears |
+```bash
+curl -s -b cookies.txt -X PATCH -H 'Content-Type: application/json' \
+  -d '{"drive_ordner_id":"https://drive.google.com/drive/folders/<folder id>?usp=sharing"}' \
+  $BASE/api/contacts/<contact id>/drive-folder
+```
+Expected: `200 { "success": true, "drive_ordner_id": "<folder id>", "folder_url": "https://drive.google.com/drive/folders/<folder id>" }`. Negative: `https://evil.example/x` → `400 Not a Google Drive folder link or ID`; `/abc/` → `400 Invalid id`; another workspace's contact → `404`.
+
+### 9.2 See it in the UI
+Share the folder as *Anyone with the link* first. Open the contact → *Google Drive* section → the embedded folder view lists the files; click a picture / PDF / .docx → Google's preview; *Popup* opens the view in a window. The same section is in the deal editor's contact panel. If the view stays empty, the folder is not shared by link.
+
+---
+
+## 10. Drive file sync (Part 45)
+
+Needs `GOOGLE_API_KEY` in `.env` (§9 setup) and a folder shared *Anyone with the link*.
+
+### 10.1 `GET /api/contacts/:id/drive-files` — the stored list (session, any member)
+```bash
+curl -s -b cookies.txt $BASE/api/contacts/<contact id>/drive-files
+```
+Expected: `200 { "folder_id": "…", "folder_url": "…", "embed_url": "…", "synced_at": "…", "sync_error": null, "configured": true, "files": [ { "id": "…", "name": "Vertrag.pdf", "kind": "pdf", "previewable": true, "preview_url": "https://drive.google.com/file/d/…/preview", "open_url": "…/view", … } ] }`. Never calls Google. No folder → `folder_id: null, files: []`. Without the key → `configured: false`.
+
+### 10.2 `POST /api/contacts/:id/drive-sync` — re-read the folder now (session, 20/min per IP)
+```bash
+curl -s -b cookies.txt -X POST $BASE/api/contacts/<contact id>/drive-sync
+```
+Expected: `200` in the 10.1 shape with fresh `synced_at`. A private folder → `200` with `"sync_error": "not_public"` and the previous files; no key → `503 { "error": "drive_not_configured" }`; another workspace's contact → `404`.
+
+### 10.3 Automatic paths
+`PATCH /api/contacts/:id/drive-folder` (§9.1) now returns `"sync": { "synced_at", "sync_error", "count" }`; the engine's `PATCH /api/kunden/:id/status` with `drive_ordner_id` (§2.3) triggers a background sync — check 10.1 a few seconds later. The worker logs `drive sync: N ok, M failed of K` when it re-reads stale folders.

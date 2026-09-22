@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drive</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="js/drive-window.js" defer></script>
+</head>
+<body class="dw-page">
+  <div class="dw-app">
+    <header class="dw-topbar">
+      <div class="dw-topbar-left">
+        <div class="dw-title" id="dw-title">Drive</div>
+        <div class="dw-status" id="dw-status"></div>
+      </div>
+      <div class="dw-topbar-right">
+        <input type="search" id="dw-search" class="dw-search" placeholder="Search files…" autocomplete="off" />
+        <div class="view-toggle dw-view-toggle">
+          <button type="button" class="btn btn-sm active" id="dw-view-icons">Icons</button>
+          <button type="button" class="btn btn-sm" id="dw-view-list">List</button>
+        </div>
+        <button type="button" class="btn btn-sm" id="dw-sync">Sync</button>
+        <a class="btn btn-sm btn-ghost hidden" id="dw-open-drive" href="#" target="_blank" rel="noopener">Open folder ↗</a>
+      </div>
+    </header>
+
+    <main class="dw-body">
+      <section class="dw-desktop" id="dw-desktop">
+        <div class="dw-grid" id="dw-grid" role="listbox" aria-label="Files"></div>
+        <div class="empty-state hidden" id="dw-empty">
+          <div class="empty-state-art"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+          <h2 id="dw-empty-title"></h2>
+          <p id="dw-empty-hint"></p>
+          <a class="btn btn-primary btn-sm hidden" id="dw-empty-link" href="/">Open the CRM</a>
+        </div>
+      </section>
+
+      <aside class="dw-preview" id="dw-preview">
+        <div class="dw-preview-bar">
+          <div class="dw-preview-name" id="dw-preview-name"></div>
+          <div class="dw-preview-actions">
+            <a class="btn btn-sm btn-ghost hidden" id="dw-preview-open" href="#" target="_blank" rel="noopener">Open in Drive ↗</a>
+            <button type="button" class="btn btn-sm btn-ghost hidden" id="dw-preview-close">Close</button>
+          </div>
+        </div>
+        <div class="dw-preview-meta" id="dw-preview-meta"></div>
+        <div class="dw-preview-body">
+          <p class="dw-preview-hint" id="dw-preview-hint"></p>
+          <iframe id="dw-frame" class="dw-frame hidden" title="Preview" allow="fullscreen"></iframe>
+        </div>
+      </aside>
+    </main>
+  </div>
+</body>
+</html>

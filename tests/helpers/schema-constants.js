@@ -30,4 +30,8 @@ const ENGINE_INDEXES = [
   'idx_engine_webhook_deliveries_ws', 'idx_idempotency_keys_expires',
 ];
 
-module.exports = { ONBOARDING_STATUSES, CONTACT_ONBOARDING_COLUMNS, ENGINE_TABLES, PRE_STAGE1_TABLES, ENGINE_INDEXES };
+// Part 45: files of the contact's Drive folder + the sync stamps on contacts.
+const DRIVE_FILES_TABLE     = 'contact_drive_files';
+const CONTACT_DRIVE_COLUMNS = ['drive_synced_at', 'drive_sync_error', 'drive_file_count'];
+
+module.exports = { ONBOARDING_STATUSES, CONTACT_ONBOARDING_COLUMNS, ENGINE_TABLES, PRE_STAGE1_TABLES, ENGINE_INDEXES, DRIVE_FILES_TABLE, CONTACT_DRIVE_COLUMNS };

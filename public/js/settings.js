@@ -1,4 +1,4 @@
-let currentSettingsTab = 'general';
+let currentSettingsTab = 'workspace';   // owners start on Workspace; loadSettings() moves members to My preferences
 let taskFields = [];
 let taskStatusDragIdx = null;
 
@@ -10,6 +10,10 @@ function switchSettingsTab(tab) {
 }
 
 async function loadSettings() {
+  // The Workspace tab holds owner-only cards: hide it for members and never leave them on it.
+  const isOwner = currentUser?.role === 'owner';
+  document.getElementById('settings-tab-workspace')?.classList.toggle('hidden', !isOwner);
+  if (!isOwner && currentSettingsTab === 'workspace') currentSettingsTab = 'preferences';
   [stages, fields] = await Promise.all([api.get('/api/stages'), api.get('/api/fields')]);
   renderTimezoneSetting();
   renderFieldsList(); renderContactColumnSettings(); renderContactStagesList();
@@ -75,10 +79,10 @@ async function saveWorkspaceName() {
 function renderOnboardingTriggerSettings() {
   const el = document.getElementById('onboarding-trigger-stages'); if (!el) return;
   const picked = (currentWorkspace?.onboarding_trigger_stage_ids || []).map(Number);
-  if (!pipelines.length) { el.innerHTML = `<p style="color:var(--muted);font-size:13px;padding:8px 0">${esc(t('onb_trigger_none'))}</p>`; return; }
+  if (!pipelines.length) { el.innerHTML = `<p class="settings-empty">${esc(t('onb_trigger_none'))}</p>`; return; }
   el.innerHTML = pipelines.map(p => `
     <div class="onb-trigger-pipeline">
-      <div class="row-label" style="font-weight:600;margin:6px 0 2px">${esc(p.name)}</div>
+      <div class="row-label row-label-strong">${esc(p.name)}</div>
       ${(p.stages || []).map(s => `<label class="onb-trigger-stage"><input type="checkbox" data-id="${s.id}"${picked.includes(s.id) ? ' checked' : ''} /> <span class="row-dot" style="background:${s.color}"></span> ${esc(s.name)}</label>`).join('')}
     </div>`).join('');
 }
@@ -97,12 +101,12 @@ async function saveOnboardingTrigger() {
 function renderPipelinesSettings() {
   renderOnboardingTriggerSettings();                        // the trigger card lists the same stages
   const el = document.getElementById('pipelines-list'); if (!el) return;
-  if (!pipelines.length) { el.innerHTML = `<p style="color:var(--muted);font-size:13px;padding:8px 0">No pipelines yet.</p>`; return; }
+  if (!pipelines.length) { el.innerHTML = `<p class="settings-empty">No pipelines yet.</p>`; return; }
   el.innerHTML = pipelines.map(p => `
     <div class="pipeline-settings-row">
       <div class="pipeline-settings-header">
-        <span class="row-label" style="font-weight:600">📌 ${esc(p.name)}</span>
-        <div style="display:flex;gap:4px">
+        <span class="row-label row-label-strong">📌 ${esc(p.name)}</span>
+        <div class="hstack-tight">
           <button class="btn btn-sm btn-ghost btn-icon" onclick="editPipeline(${p.id},'${esc(p.name).replace(/'/g,'&apos;')}')">✏️</button>
           <button class="btn btn-sm btn-danger btn-icon" onclick="deletePipeline(${p.id})">✕</button>
         </div>
@@ -120,8 +124,10 @@ function renderPipelinesSettings() {
               <button class="btn btn-sm btn-danger btn-icon" onclick="deletePipelineStage(${p.id},${s.id})">✕</button>
             </div>
           </div>`).join('')}
-        <button class="btn btn-sm btn-ghost" style="margin-top:6px" onclick="addPipelineStage(${p.id})">+ Add stage</button>
       </div>
+      <div class="settings-card-body"><div class="settings-card-actions">
+        <button class="btn btn-sm btn-ghost" onclick="addPipelineStage(${p.id})">+ Add stage</button>
+      </div></div>
     </div>`).join('');
 }
 
@@ -186,7 +192,7 @@ async function deletePipelineStage(pipelineId, stageId) {
 
 function renderDealFieldsList() {
   const el = document.getElementById('deal-fields-list'); if (!el) return;
-  if (!dealFields.length) { el.innerHTML = `<li style="color:var(--muted);font-size:13px;padding:6px 10px">No deal fields yet.</li>`; return; }
+  if (!dealFields.length) { el.innerHTML = `<li class="settings-empty">No deal fields yet.</li>`; return; }
   el.innerHTML = dealFields.map(f => `
     <li class="settings-row">
       <span class="row-label">${esc(f.name)}</span><span class="row-sub">${f.type}</span>
@@ -299,7 +305,7 @@ async function deleteStage(id) {
 function renderContactStagesList() {
   const el = document.getElementById('contact-stages-list');
   if (!el) return;
-  if (!stages.length) { el.innerHTML = '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No stages yet</li>'; return; }
+  if (!stages.length) { el.innerHTML = '<li class="settings-empty">No stages yet</li>'; return; }
   el.innerHTML = stages.map((s, i) => `
     <li class="settings-row" draggable="true" data-id="${s.id}"
       ondragstart="stageDragStart(event,${i})" ondragover="stageDragOver(event)" ondrop="stageDrop(event,${i})">
@@ -315,7 +321,7 @@ function renderContactStagesList() {
 
 function renderFieldsList() {
   const el = document.getElementById('fields-list');
-  if (!fields.length) { el.innerHTML = `<li style="color:var(--muted);font-size:13px;padding:6px 10px">${t('no_fields')}</li>`; return; }
+  if (!fields.length) { el.innerHTML = `<li class="settings-empty">${t('no_fields')}</li>`; return; }
   el.innerHTML = fields.map(f => `
     <li class="settings-row">
       <span class="row-label">${esc(f.name)}</span>
@@ -423,7 +429,7 @@ async function loadInvites() {
           : `<button class="btn btn-sm" onclick="copyCode('${c.code}')">Copy</button>
              <button class="btn btn-sm btn-danger btn-icon" onclick="deleteInviteCode(${c.id})">✕</button>`}
       </li>`).join('')
-    : '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No invite codes yet.</li>';
+    : '<li class="settings-empty">No invite codes yet.</li>';
 }
 async function generateInviteCode() { await api.post('/api/invites', {}); await loadInvites(); }
 async function deleteInviteCode(id) { await api.del(`/api/invites/${id}`); await loadInvites(); }
@@ -579,7 +585,7 @@ async function saveTaskStatuses() {
 function renderTaskFieldsList() {
   const el = document.getElementById('task-fields-list');
   if (!el) return;
-  if (!taskFields.length) { el.innerHTML = '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No fields yet.</li>'; return; }
+  if (!taskFields.length) { el.innerHTML = '<li class="settings-empty">No fields yet.</li>'; return; }
   el.innerHTML = taskFields.map(f => `
     <li class="settings-row">
       <span class="row-label">${esc(f.name)}</span>

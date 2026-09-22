@@ -8,7 +8,7 @@ const path    = require('path');
 const { createFakePool } = require('../helpers/fake-pool');
 const { idempotencyTable, apiKeyRules } = require('../helpers/fake-tables');
 const { ONBOARDING_STATUSES } = require('../helpers/schema-constants');
-const { loadRoute, serve, ROOT } = require('../helpers/load-route');
+const { loadRoute, serve, inject, ROOT } = require('../helpers/load-route');
 
 const KEY = 'upg_live_fedcba9876543210';
 const ROW = { id: 60, workspace_id: 7, name: 'Erika Muster', email: 'erika@muster.de', phone: '+49 30 1', company: 'Muster GmbH', contact_type: 'contact',
@@ -31,6 +31,7 @@ before(async () => {
         return { rows: [c] }; } },
     ...idem.rules,
   ]);
+  inject('utils/drive-sync.js', { getDriveSync: () => ({ syncContact: async () => ({ files: [] }) }) });   // the background Drive sync is covered in engine-api-drive-sync.test.js
   server = await serve({ '/api/kunden': loadRoute('engine-api.js', { pool }) });
 });
 after(() => server.close());

@@ -371,6 +371,7 @@
               <th data-i18n="onb_col_progress">Progress</th>
               <th data-i18n="onb_col_assignee">Assignee</th>
               <th data-i18n="onb_col_updated">Last update</th>
+              <th data-i18n="onb_col_drive">Drive</th>
             </tr></thead>
             <tbody id="onb-tbody"></tbody>
           </table>
@@ -629,111 +630,195 @@
         </div>
 
         <nav class="settings-tabs">
-          <button class="settings-tab active" data-tab="general"  onclick="switchSettingsTab('general')"  data-i18n="tab_general">General</button>
-          <button class="settings-tab"         data-tab="deals"    onclick="switchSettingsTab('deals')"    data-i18n="tab_deals">Deals</button>
-          <button class="settings-tab"         data-tab="objects"  onclick="switchSettingsTab('objects')"  id="settings-tab-objects">Objects</button>
-          <button class="settings-tab"         data-tab="contacts" onclick="switchSettingsTab('contacts')" data-i18n="tab_contacts">Contacts</button>
-          <button class="settings-tab"         data-tab="team"     onclick="switchSettingsTab('team')"     data-i18n="tab_team">Team</button>
-          <button class="settings-tab"         data-tab="tasks"         onclick="switchSettingsTab('tasks')">Tasks</button>
+          <button class="settings-tab hidden" data-tab="workspace"    onclick="switchSettingsTab('workspace')"    id="settings-tab-workspace" data-i18n="tab_workspace">Workspace</button>
+          <button class="settings-tab"        data-tab="preferences"  onclick="switchSettingsTab('preferences')"  data-i18n="tab_preferences">My preferences</button>
+          <button class="settings-tab"        data-tab="contacts"     onclick="switchSettingsTab('contacts')"     data-i18n="tab_contacts">Contacts</button>
+          <button class="settings-tab"        data-tab="deals"        onclick="switchSettingsTab('deals')"        data-i18n="tab_deals">Deals</button>
+          <button class="settings-tab"        data-tab="objects"      onclick="switchSettingsTab('objects')"      id="settings-tab-objects">Listings</button>
+          <button class="settings-tab"        data-tab="tasks"        onclick="switchSettingsTab('tasks')"        data-i18n="tab_tasks">Tasks</button>
+          <button class="settings-tab"        data-tab="team"         onclick="switchSettingsTab('team')"         data-i18n="tab_team">Team</button>
+          <button class="settings-tab"        data-tab="integrations" onclick="switchSettingsTab('integrations')" data-i18n="tab_integrations">Integrations</button>
         </nav>
 
         <div class="settings-tab-body">
 
-          <!-- ── General ── -->
-          <div id="settings-pane-general" class="settings-pane active">
+          <!-- ── Workspace (owner only): names + danger zone ── -->
+          <div id="settings-pane-workspace" class="settings-pane">
             <div class="settings-grid">
 
               <div class="settings-card hidden" id="workspace-name-card">
                 <div class="settings-card-header"><h2 data-i18n="set_workspace">Workspace</h2></div>
                 <p class="settings-hint" data-i18n="hint_workspace">Update the name of this workspace.</p>
-                <div class="workspace-name-row">
-                  <input type="text" id="workspace-name-input" class="workspace-name-input" />
-                  <button class="btn btn-primary btn-sm" onclick="saveWorkspaceName()" data-i18n="btn_save">Save</button>
+                <div class="settings-card-body">
+                  <div class="workspace-name-row">
+                    <input type="text" id="workspace-name-input" class="workspace-name-input" />
+                    <button class="btn btn-primary btn-sm" onclick="saveWorkspaceName()" data-i18n="btn_save">Save</button>
+                    <span id="workspace-name-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
-                <div id="workspace-name-msg" class="workspace-name-msg hidden"></div>
-              </div>
-
-              <div class="settings-card hidden" id="delete-workspace-card">
-                <div class="settings-card-header"><h2>Delete Workspace</h2></div>
-                <p class="settings-hint" style="color:#ef4444">This action cannot be undone. All data in this workspace will be permanently deleted.</p>
-                <button class="btn btn-danger btn-sm" onclick="deleteWorkspace()" style="margin-top:12px">Delete This Workspace</button>
-                <div id="delete-workspace-msg" class="workspace-name-msg hidden"></div>
               </div>
 
               <div class="settings-card hidden" id="supplier-name-card">
                 <div class="settings-card-header"><h2>Supplier List Name</h2></div>
                 <p class="settings-hint">What to call the second contact list in the sidebar (e.g. Suppliers, Partners, Team).</p>
-                <div class="workspace-name-row">
-                  <input type="text" id="supplier-name-input" class="workspace-name-input" placeholder="Suppliers" />
-                  <button class="btn btn-primary btn-sm" onclick="saveSupplierName()">Save</button>
+                <div class="settings-card-body">
+                  <div class="workspace-name-row">
+                    <input type="text" id="supplier-name-input" class="workspace-name-input" placeholder="Suppliers" />
+                    <button class="btn btn-primary btn-sm" onclick="saveSupplierName()" data-i18n="btn_save">Save</button>
+                    <span id="supplier-name-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
-                <div id="supplier-name-msg" class="workspace-name-msg hidden"></div>
+              </div>
+
+              <div class="settings-card hidden" id="object-name-card">
+                <div class="settings-card-header"><h2>Object Type Name</h2></div>
+                <p class="settings-hint">The name shown in the sidebar and throughout the app (e.g. Properties, Products, Listings).</p>
+                <div class="settings-card-body">
+                  <div class="workspace-name-row">
+                    <input type="text" id="object-name-input" class="workspace-name-input" placeholder="Listings" />
+                    <button class="btn btn-primary btn-sm" onclick="saveObjectTypeName()" data-i18n="btn_save">Save</button>
+                    <span id="object-name-msg" class="workspace-name-msg hidden"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card danger wide hidden" id="delete-workspace-card">
+                <div class="settings-card-header"><h2 data-i18n="set_danger">Delete workspace</h2></div>
+                <p class="settings-hint text-danger">This action cannot be undone. All data in this workspace will be permanently deleted.</p>
+                <div class="settings-card-body">
+                  <div class="settings-card-actions">
+                    <button class="btn btn-danger btn-sm" onclick="deleteWorkspace()">Delete This Workspace</button>
+                    <span id="delete-workspace-msg" class="workspace-name-msg hidden"></span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── My preferences (per user) ── -->
+          <div id="settings-pane-preferences" class="settings-pane">
+            <p class="settings-tab-hint" data-i18n="hint_preferences">These settings apply only to you, not to the whole workspace.</p>
+            <div class="settings-grid">
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_language">Language</h2></div>
+                <p class="settings-hint" data-i18n="hint_language">Choose your preferred display language.</p>
+                <div class="settings-card-body">
+                  <div class="lang-options">
+                    <label class="lang-opt">
+                      <input type="radio" name="language" value="en" onchange="setLanguage('en')" />
+                      <span class="lang-flag">🇬🇧</span>
+                      <span data-i18n="lang_en">English</span>
+                    </label>
+                    <label class="lang-opt">
+                      <input type="radio" name="language" value="de" onchange="setLanguage('de')" />
+                      <span class="lang-flag">🇩🇪</span>
+                      <span data-i18n="lang_de">German</span>
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <div class="settings-card">
-                <div class="settings-card-header"><h2>Notification Preferences</h2></div>
-                <p class="settings-hint">Choose which activity types send you notifications.</p>
-                <div class="notif-pref-list" id="notif-pref-list">
-                  <label class="notif-pref-row"><input type="checkbox" data-pref="contacts" checked /><span>Contacts &amp; Suppliers</span></label>
-                  <label class="notif-pref-row"><input type="checkbox" data-pref="deals" checked /><span>Deals</span></label>
-                  <label class="notif-pref-row"><input type="checkbox" data-pref="tasks" checked /><span>Tasks</span></label>
-                  <label class="notif-pref-row"><input type="checkbox" data-pref="objects" checked /><span>Listings / Objects</span></label>
-                  <label class="notif-pref-row"><input type="checkbox" data-pref="activities" checked /><span>Activities</span></label>
+                <div class="settings-card-header"><h2 data-i18n="set_appearance">Appearance</h2></div>
+                <p class="settings-hint" data-i18n="hint_appearance">Light or dark theme for this browser.</p>
+                <div class="settings-card-body">
+                  <div class="lang-options">
+                    <label class="lang-opt">
+                      <input type="checkbox" id="pref-dark-toggle" onchange="toggleDarkMode()" />
+                      <span class="lang-flag">🌙</span>
+                      <span data-i18n="dark_mode">Dark mode</span>
+                    </label>
+                  </div>
                 </div>
-                <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveNotifPrefs()">Save Preferences</button>
-                <span id="notif-pref-msg" class="workspace-name-msg hidden"></span>
               </div>
 
               <div class="settings-card">
                 <div class="settings-card-header"><h2>Timezone</h2></div>
                 <p class="settings-hint">Your sidebar clock uses this timezone. Defaults to Germany (Berlin).</p>
-                <div class="workspace-name-row">
-                  <select id="timezone-select" class="workspace-name-input"></select>
-                  <button class="btn btn-primary btn-sm" onclick="saveTimezoneSetting()">Save</button>
+                <div class="settings-card-body">
+                  <div class="workspace-name-row">
+                    <select id="timezone-select" class="workspace-name-input"></select>
+                    <button class="btn btn-primary btn-sm" onclick="saveTimezoneSetting()" data-i18n="btn_save">Save</button>
+                    <span id="timezone-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
-                <div id="timezone-msg" class="workspace-name-msg hidden"></div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2>Notification Preferences</h2></div>
+                <p class="settings-hint">Choose which activity types send you notifications.</p>
+                <div class="settings-card-body">
+                  <div class="notif-pref-list" id="notif-pref-list">
+                    <label class="notif-pref-row"><input type="checkbox" data-pref="contacts" checked /><span>Contacts &amp; Suppliers</span></label>
+                    <label class="notif-pref-row"><input type="checkbox" data-pref="deals" checked /><span>Deals</span></label>
+                    <label class="notif-pref-row"><input type="checkbox" data-pref="tasks" checked /><span>Tasks</span></label>
+                    <label class="notif-pref-row"><input type="checkbox" data-pref="objects" checked /><span>Listings / Objects</span></label>
+                    <label class="notif-pref-row"><input type="checkbox" data-pref="activities" checked /><span>Activities</span></label>
+                  </div>
+                  <div class="settings-card-actions">
+                    <button class="btn btn-primary btn-sm" onclick="saveNotifPrefs()">Save Preferences</button>
+                    <span id="notif-pref-msg" class="workspace-name-msg hidden"></span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── Contacts ── -->
+          <div id="settings-pane-contacts" class="settings-pane">
+            <div class="settings-grid">
+
+              <div class="settings-card">
+                <div class="settings-card-header">
+                  <h2>Contact Stages (Kanban)</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openStageModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
+                </div>
+                <p class="settings-hint">Stages for organizing contacts in the kanban view.</p>
+                <ul id="contact-stages-list" class="settings-list"></ul>
               </div>
 
               <div class="settings-card">
                 <div class="settings-card-header">
-                  <h2 data-i18n="set_wa_template">WhatsApp Message Template</h2>
+                  <h2 data-i18n="set_fields">Custom Fields</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
                 </div>
+                <p class="settings-hint" data-i18n="hint_fields">Extra properties on every contact.</p>
+                <ul id="fields-list" class="settings-list"></ul>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_contact_cols">Contact Columns</h2></div>
+                <p class="settings-hint" data-i18n="hint_contact_cols">Drag to reorder. Name is always first.</p>
+                <div class="settings-row col-cfg-row col-cfg-locked">
+                  <span class="drag-handle">⠿</span>
+                  <span class="row-label" data-i18n="col_name">Name</span>
+                  <input type="checkbox" checked disabled />
+                </div>
+                <ul id="contact-columns-list" class="settings-list"></ul>
+                <div class="settings-card-body">
+                  <div class="settings-card-actions">
+                    <button id="save-contact-cols-btn" class="btn btn-primary btn-sm" onclick="saveContactColumns()" data-i18n="btn_save">Save</button>
+                    <span id="contact-cols-msg" class="workspace-name-msg hidden"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_wa_template">WhatsApp Message Template</h2></div>
                 <p class="settings-hint" data-i18n="hint_wa_template">Written when you tap the WhatsApp button on a contact.</p>
-                <textarea id="wa-template-input" class="settings-textarea" rows="3" placeholder="Hi {{name}}, "></textarea>
-                <p class="wa-vars-hint"><span data-i18n="wa_vars">Available variables:</span>
-                  <code class="wa-var-chip" onclick="insertWaVar('{{name}}')">{{name}}</code>
-                  <code class="wa-var-chip" onclick="insertWaVar('{{company}}')">{{company}}</code>
-                </p>
-                <div style="padding:8px 0 4px;display:flex;align-items:center;gap:10px">
-                  <button id="save-wa-template-btn" class="btn btn-primary btn-sm" onclick="saveWaTemplate()" data-i18n="btn_save">Save</button>
-                  <span id="wa-template-msg" class="workspace-name-msg hidden"></span>
-                </div>
-              </div>
-
-              <div class="settings-card">
-                <div class="settings-card-header"><h2 data-i18n="set_miro">Miro Board</h2></div>
-                <p class="settings-hint" data-i18n="hint_miro">Paste the embed URL from Miro → Share → Embed. Leave blank to hide the Board tab.</p>
-                <div class="workspace-name-row">
-                  <input type="url" id="miro-url-input" class="workspace-name-input" placeholder="https://miro.com/app/live-embed/..." />
-                  <button class="btn btn-primary btn-sm" onclick="saveMiroUrl()">Save</button>
-                </div>
-                <div id="miro-url-msg" class="workspace-name-msg hidden"></div>
-              </div>
-
-              <div class="settings-card">
-                <div class="settings-card-header"><h2 data-i18n="set_language">Language</h2></div>
-                <p class="settings-hint" data-i18n="hint_language">Choose your preferred display language.</p>
-                <div class="lang-options">
-                  <label class="lang-opt">
-                    <input type="radio" name="language" value="en" onchange="setLanguage('en')" />
-                    <span class="lang-flag">🇬🇧</span>
-                    <span data-i18n="lang_en">English</span>
-                  </label>
-                  <label class="lang-opt">
-                    <input type="radio" name="language" value="de" onchange="setLanguage('de')" />
-                    <span class="lang-flag">🇩🇪</span>
-                    <span data-i18n="lang_de">German</span>
-                  </label>
+                <div class="settings-card-body">
+                  <textarea id="wa-template-input" class="settings-textarea" rows="3" placeholder="Hi {{name}}, "></textarea>
+                  <p class="wa-vars-hint"><span data-i18n="wa_vars">Available variables:</span>
+                    <code class="wa-var-chip" onclick="insertWaVar('{{name}}')">{{name}}</code>
+                    <code class="wa-var-chip" onclick="insertWaVar('{{company}}')">{{company}}</code>
+                  </p>
+                  <div class="settings-card-actions">
+                    <button id="save-wa-template-btn" class="btn btn-primary btn-sm" onclick="saveWaTemplate()" data-i18n="btn_save">Save</button>
+                    <span id="wa-template-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
               </div>
 
@@ -744,7 +829,7 @@
           <div id="settings-pane-deals" class="settings-pane">
             <div class="settings-grid">
 
-              <div class="settings-card" style="grid-column:1/-1">
+              <div class="settings-card wide">
                 <div class="settings-card-header">
                   <h2 data-i18n="set_pipelines">Pipelines</h2>
                   <button class="btn btn-primary btn-sm" onclick="openNewPipelineModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
@@ -753,15 +838,17 @@
                 <div id="pipelines-list"></div>
               </div>
 
-              <div class="settings-card hidden" id="onboarding-trigger-card" style="grid-column:1/-1">
+              <div class="settings-card hidden wide" id="onboarding-trigger-card">
                 <div class="settings-card-header">
                   <h2 data-i18n="set_onboarding_trigger">Onboarding trigger</h2>
                 </div>
                 <p class="settings-hint" data-i18n="hint_onboarding_trigger">When a deal reaches one of these stages, the CRM asks whether to start onboarding for its contact.</p>
-                <div id="onboarding-trigger-stages"></div>
-                <div style="padding:8px 0 4px;display:flex;align-items:center;gap:10px">
-                  <button id="save-onboarding-trigger-btn" class="btn btn-primary btn-sm" onclick="saveOnboardingTrigger()" data-i18n="btn_save">Save</button>
-                  <span id="onboarding-trigger-msg" class="workspace-name-msg hidden"></span>
+                <div class="settings-card-body">
+                  <div id="onboarding-trigger-stages"></div>
+                  <div class="settings-card-actions">
+                    <button id="save-onboarding-trigger-btn" class="btn btn-primary btn-sm" onclick="saveOnboardingTrigger()" data-i18n="btn_save">Save</button>
+                    <span id="onboarding-trigger-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
               </div>
 
@@ -778,39 +865,30 @@
                 <div class="settings-card-header"><h2>Deal List Columns</h2></div>
                 <p class="settings-hint">Choose which columns appear in list view. Drag to reorder. Title is always first.</p>
                 <div class="settings-row col-cfg-row col-cfg-locked">
-                  <span class="drag-handle" style="opacity:.25">⠿</span>
+                  <span class="drag-handle">⠿</span>
                   <span class="row-label">Title</span>
-                  <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
+                  <input type="checkbox" checked disabled />
                 </div>
-                <ul id="deal-columns-list" class="settings-list" style="margin-top:6px"></ul>
-                <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
-                  <button id="save-deal-cols-btn" class="btn btn-primary btn-sm" onclick="saveDealColumns()" data-i18n="btn_save">Save</button>
-                  <span id="deal-cols-msg" class="workspace-name-msg hidden"></span>
+                <ul id="deal-columns-list" class="settings-list"></ul>
+                <div class="settings-card-body">
+                  <div class="settings-card-actions">
+                    <button id="save-deal-cols-btn" class="btn btn-primary btn-sm" onclick="saveDealColumns()" data-i18n="btn_save">Save</button>
+                    <span id="deal-cols-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
               </div>
 
             </div>
           </div>
 
-          <!-- ── Objects ── -->
+          <!-- ── Listings (name set by updateObjectsNav) ── -->
           <div id="settings-pane-objects" class="settings-pane">
             <div class="settings-grid">
-
-              <div class="settings-card hidden" id="object-name-card">
-                <div class="settings-card-header"><h2>Object Type Name</h2></div>
-                <p class="settings-hint">The name shown in the sidebar and throughout the app (e.g. Properties, Products, Listings).</p>
-                <div class="workspace-name-row">
-                  <input type="text" id="object-name-input" class="workspace-name-input" placeholder="Listings" />
-                  <button class="btn btn-primary btn-sm" onclick="saveObjectTypeName()">Save</button>
-                </div>
-                <div id="object-name-msg" class="workspace-name-msg hidden"></div>
-              </div>
-
 
               <div class="settings-card">
                 <div class="settings-card-header">
                   <h2>Fields</h2>
-                  <button class="btn btn-primary btn-sm" onclick="openObjectFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
+                  <button class="btn btn-primary btn-sm" onclick="openObjectFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
                 </div>
                 <p class="settings-hint">Custom properties on every item in this list.</p>
                 <ul id="object-fields-list" class="settings-list"></ul>
@@ -820,76 +898,17 @@
                 <div class="settings-card-header"><h2>Columns</h2></div>
                 <p class="settings-hint">Drag to reorder. Name is always first.</p>
                 <div class="settings-row col-cfg-row col-cfg-locked">
-                  <span class="drag-handle" style="opacity:.25">⠿</span>
+                  <span class="drag-handle">⠿</span>
                   <span class="row-label">Name</span>
-                  <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
+                  <input type="checkbox" checked disabled />
                 </div>
-                <ul id="object-columns-list" class="settings-list" style="margin-top:6px"></ul>
-                <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
-                  <button id="save-obj-cols-btn" class="btn btn-primary btn-sm" onclick="saveObjectColumns()">Save</button>
-                  <span id="obj-cols-msg" class="workspace-name-msg hidden"></span>
+                <ul id="object-columns-list" class="settings-list"></ul>
+                <div class="settings-card-body">
+                  <div class="settings-card-actions">
+                    <button id="save-obj-cols-btn" class="btn btn-primary btn-sm" onclick="saveObjectColumns()" data-i18n="btn_save">Save</button>
+                    <span id="obj-cols-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
-              </div>
-
-            </div>
-          </div>
-
-          <!-- ── Contacts ── -->
-          <div id="settings-pane-contacts" class="settings-pane">
-            <div class="settings-grid">
-
-              <div class="settings-card">
-                <div class="settings-card-header">
-                  <h2 data-i18n="set_fields">Custom Fields</h2>
-                  <button class="btn btn-primary btn-sm" onclick="openFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
-                </div>
-                <p class="settings-hint" data-i18n="hint_fields">Extra properties on every contact.</p>
-                <ul id="fields-list" class="settings-list"></ul>
-              </div>
-
-              <div class="settings-card">
-                <div class="settings-card-header"><h2 data-i18n="set_contact_cols">Contact Columns</h2></div>
-                <p class="settings-hint" data-i18n="hint_contact_cols">Drag to reorder. Name is always first.</p>
-                <div class="settings-row col-cfg-row col-cfg-locked">
-                  <span class="drag-handle" style="opacity:.25">⠿</span>
-                  <span class="row-label" data-i18n="col_name">Name</span>
-                  <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
-                </div>
-                <ul id="contact-columns-list" class="settings-list" style="margin-top:6px"></ul>
-                <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
-                  <button id="save-contact-cols-btn" class="btn btn-primary btn-sm" onclick="saveContactColumns()" data-i18n="btn_save">Save</button>
-                  <span id="contact-cols-msg" class="workspace-name-msg hidden"></span>
-                </div>
-              </div>
-
-              <div class="settings-card">
-                <div class="settings-card-header">
-                  <h2>Contact Stages (Kanban)</h2>
-                  <button class="btn btn-primary btn-sm" onclick="openStageModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
-                </div>
-                <p class="settings-hint">Stages for organizing contacts in the kanban view.</p>
-                <ul id="contact-stages-list" class="settings-list"></ul>
-              </div>
-
-            </div>
-          </div>
-
-          <!-- ── Team ── -->
-          <div id="settings-pane-team" class="settings-pane">
-            <div class="settings-grid">
-
-              <div class="settings-card" id="invites-card">
-                <div class="settings-card-header">
-                  <h2 data-i18n="set_invites">Invite Codes</h2>
-                  <button class="btn btn-primary btn-sm" onclick="generateInviteCode()" data-i18n="generate_btn">Generate</button>
-                </div>
-                <p class="settings-hint" data-i18n="hint_invites">One-time codes to let people join this workspace.</p>
-                <ul id="invites-list" class="settings-list"></ul>
-              </div>
-
-              <div class="settings-card">
-                <div class="settings-card-header"><h2 data-i18n="set_members">Team Members</h2></div>
-                <ul id="members-list" class="settings-list"></ul>
               </div>
 
             </div>
@@ -902,23 +921,76 @@
               <div class="settings-card">
                 <div class="settings-card-header">
                   <h2>Task Statuses</h2>
-                  <button class="btn btn-primary btn-sm" onclick="openTaskStatusModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
+                  <button class="btn btn-primary btn-sm" onclick="openTaskStatusModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
                 </div>
                 <p class="settings-hint">Drag to reorder. Used as columns in the kanban board.</p>
                 <ul id="task-statuses-list" class="settings-list"></ul>
-                <div style="margin-top:10px">
-                  <button class="btn btn-primary btn-sm" onclick="saveTaskStatuses()">Save Order</button>
-                  <span id="task-statuses-msg" class="workspace-name-msg hidden"></span>
+                <div class="settings-card-body">
+                  <div class="settings-card-actions">
+                    <button class="btn btn-primary btn-sm" onclick="saveTaskStatuses()">Save Order</button>
+                    <span id="task-statuses-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
               </div>
 
               <div class="settings-card">
                 <div class="settings-card-header">
                   <h2>Custom Fields</h2>
-                  <button class="btn btn-primary btn-sm" onclick="openTaskFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
+                  <button class="btn btn-primary btn-sm" onclick="openTaskFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
                 </div>
                 <p class="settings-hint">Extra properties on every task.</p>
                 <ul id="task-fields-list" class="settings-list"></ul>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── Team ── -->
+          <div id="settings-pane-team" class="settings-pane">
+            <div class="settings-grid">
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_members">Team Members</h2></div>
+                <p class="settings-hint" data-i18n="hint_members">Everyone who has joined this workspace.</p>
+                <ul id="members-list" class="settings-list"></ul>
+              </div>
+
+              <div class="settings-card hidden" id="invites-card">
+                <div class="settings-card-header">
+                  <h2 data-i18n="set_invites">Invite Codes</h2>
+                  <button class="btn btn-primary btn-sm" onclick="generateInviteCode()" data-i18n="generate_btn">Generate</button>
+                </div>
+                <p class="settings-hint" data-i18n="hint_invites">One-time codes to let people join this workspace.</p>
+                <ul id="invites-list" class="settings-list"></ul>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── Integrations ── -->
+          <div id="settings-pane-integrations" class="settings-pane">
+            <div class="settings-grid">
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_miro">Miro Board</h2></div>
+                <p class="settings-hint" data-i18n="hint_miro">Paste the embed URL from Miro → Share → Embed. Leave blank to hide the Board tab.</p>
+                <div class="settings-card-body">
+                  <div class="workspace-name-row">
+                    <input type="url" id="miro-url-input" class="workspace-name-input" placeholder="https://miro.com/app/live-embed/..." />
+                    <button class="btn btn-primary btn-sm" onclick="saveMiroUrl()" data-i18n="btn_save">Save</button>
+                    <span id="miro-url-msg" class="workspace-name-msg hidden"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_int_pointer">Lead webhook &amp; Onboarding Engine</h2></div>
+                <p class="settings-hint" data-i18n="hint_int_pointer">Incoming leads, the engine's API keys and outgoing webhooks are configured on the Integrations page.</p>
+                <div class="settings-card-body">
+                  <div class="settings-card-actions">
+                    <button class="btn btn-sm" onclick="switchPage('integrations')" data-i18n="btn_open_integrations">Open Integrations</button>
+                  </div>
+                </div>
               </div>
 
             </div>
@@ -1714,6 +1786,20 @@
   </div>
 
   <!-- Import CSV Modal -->
+  <!-- Drive preview popup: Google's viewer for one file, over the CRM (no new window) -->
+  <div id="drive-preview-modal" class="modal-overlay hidden">
+    <div class="modal modal-drive-preview">
+      <div class="modal-header">
+        <h2 id="drive-preview-title" class="drive-preview-title"></h2>
+        <div class="hstack">
+          <a id="drive-preview-open" class="btn btn-sm btn-ghost hidden" href="#" target="_blank" rel="noopener" data-i18n="drive_open">Open ↗</a>
+          <button class="close-btn" onclick="closeDrivePreview()">&times;</button>
+        </div>
+      </div>
+      <iframe id="drive-preview-frame" class="drive-preview-frame" title="Preview" allow="fullscreen"></iframe>
+    </div>
+  </div>
+
   <div id="import-modal" class="modal-overlay hidden">
     <div class="modal modal-wide">
       <div class="modal-header">
@@ -1817,6 +1903,7 @@
   <script src="js/auth.js"></script>
   <script src="js/deals.js"></script>
   <script src="js/contacts.js"></script>
+  <script src="js/drive.js"></script>
   <script src="js/onboarding.js"></script>
   <script src="js/objects.js"></script>
   <script src="js/settings.js"></script>

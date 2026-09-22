@@ -110,6 +110,22 @@ describe('the four engine tables', () => {
   });
 });
 
+describe('contact_drive_files + the sync stamps (Part 45)', () => {
+  test('the table belongs to a workspace and a contact (both CASCADE), one row per (contact, file)', () => {
+    const s = must(/CREATE TABLE IF NOT EXISTS contact_drive_files \(/, 'contact_drive_files');
+    assert.match(s, /workspace_id INTEGER NOT NULL REFERENCES workspaces\(id\) ON DELETE CASCADE/);
+    assert.match(s, /contact_id INTEGER NOT NULL REFERENCES contacts\(id\) ON DELETE CASCADE/);
+    assert.match(s, /UNIQUE \(contact_id, file_id\)/);
+    for (const c of ['file_id TEXT NOT NULL', 'name TEXT NOT NULL', 'mime_type TEXT', 'size BIGINT', 'modified_at TIMESTAMPTZ', 'synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW()']) assert.ok(s.includes(c), c);
+    must(/CREATE INDEX IF NOT EXISTS idx_contact_drive_files_contact ON contact_drive_files \(workspace_id, contact_id\)/, 'lookup index');
+  });
+  test('contacts gain the three sync stamps additively', () => {
+    must(/^ALTER TABLE contacts ADD COLUMN IF NOT EXISTS drive_synced_at TIMESTAMPTZ/, 'drive_synced_at');
+    must(/^ALTER TABLE contacts ADD COLUMN IF NOT EXISTS drive_sync_error TEXT/, 'drive_sync_error');
+    must(/^ALTER TABLE contacts ADD COLUMN IF NOT EXISTS drive_file_count INTEGER NOT NULL DEFAULT 0/, 'drive_file_count');
+  });
+});
+
 describe('workspaces: onboarding trigger stages (Part 42)', () => {
   test('the JSONB id list is added additively with an empty default', () => {
     must(/^ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS onboarding_trigger_stage_ids JSONB NOT NULL DEFAULT '\[\]'/, 'onboarding_trigger_stage_ids');

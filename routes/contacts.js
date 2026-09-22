@@ -10,6 +10,11 @@ const { workspaceRefs, refCheck } = require('../utils/workspace-refs');
 // here — never from routes/engine-api.js, which would loop.
 const { emitEngineEvent } = require('../utils/engine-webhook');
 const { ONBOARDING_STATUSES } = require('../utils/onboarding-statuses');
+// Google Drive folder per contact (public, link-shared): the link/id parser and
+// the sync that keeps contact_drive_files in step with the folder (utils/drive-sync.js).
+const drive = require('../utils/google-drive');
+const { getDriveSync } = require('../utils/drive-sync');
+const driveConfigured = () => !!process.env.GOOGLE_API_KEY;
 
 router.use(requireAuth);
 
@@ -506,6 +511,72 @@ router.patch('/:id/onboarding-status', async (req, res, next) => {
       });
     }
     res.json({ success: true, onboarding_status: c.onboarding_status, vorher, event_id, deliveries });
+  } catch (e) { next(e); }
+});
+
+// Drive folder: a user pastes the folder link (or id); the bare id is stored.
+// The engine keeps writing drive_ordner_id through PATCH /api/kunden/:id/status;
+// a manual entry here is a correction, so no engine event is emitted.
+router.patch('/:id/drive-folder', async (req, res, next) => {
+  try {
+    if (!/^\d+$/.test(String(req.params.id))) return res.status(400).json({ error: 'Invalid id' });
+    const raw = req.body?.drive_ordner_id;
+    let value = null;
+    if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
+      value = drive.parseDriveFolderId(String(raw));
+      if (!value) return res.status(400).json({ error: 'Not a Google Drive folder link or ID' });
+    }
+    const result = await pool.query(
+      'UPDATE contacts SET drive_ordner_id=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3',
+      [value, Number(req.params.id), req.workspaceId]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    // Sync right away so the files show up with the save. Clearing always runs
+    // (it only deletes rows); reading a folder needs the key. A Drive failure
+    // never fails the save: it is reported in `sync`.
+    let sync = null;
+    if (!value || driveConfigured()) {
+      const r = await getDriveSync().syncContact(req.workspaceId, Number(req.params.id));
+      sync = { synced_at: r.synced_at ?? null, sync_error: r.sync_error ?? null, count: Array.isArray(r.files) ? r.files.length : 0 };
+    }
+    res.json({ success: true, drive_ordner_id: value, folder_url: value ? drive.folderUrl(value) : null, sync });
+  } catch (e) { next(e); }
+});
+
+// The stored file list — never calls Google. `configured` lets the UI explain
+// an empty list when the server has no GOOGLE_API_KEY.
+function driveView(c, folderId, files) {
+  return {
+    folder_id: folderId, folder_url: folderId ? drive.folderUrl(folderId) : null, embed_url: folderId ? drive.embedUrl(folderId) : null,
+    synced_at: c.drive_synced_at ?? null, sync_error: c.drive_sync_error ?? null, configured: driveConfigured(), files,
+  };
+}
+router.get('/:id/drive-files', async (req, res, next) => {
+  try {
+    if (!/^\d+$/.test(String(req.params.id))) return res.status(400).json({ error: 'Invalid id' });
+    const id = Number(req.params.id);
+    const { rows: [c] } = await pool.query(
+      'SELECT drive_ordner_id, drive_synced_at, drive_sync_error, drive_file_count FROM contacts WHERE id=$1 AND workspace_id=$2', [id, req.workspaceId]);
+    if (!c) return res.status(404).json({ error: 'Not found' });
+    const folderId = drive.parseDriveFolderId(c.drive_ordner_id || '');   // tolerates a full link stored by the engine
+    const files = folderId ? await getDriveSync().listFiles(req.workspaceId, id) : [];
+    res.json(driveView(c, folderId, files));
+  } catch (e) { next(e); }
+});
+
+// Re-read the folder now. A Drive failure is 200 with sync_error (the cached
+// rows are still useful); only a missing key is a 503.
+router.post('/:id/drive-sync', async (req, res, next) => {
+  try {
+    if (!/^\d+$/.test(String(req.params.id))) return res.status(400).json({ error: 'Invalid id' });
+    const id = Number(req.params.id);
+    const { rows: [c] } = await pool.query(
+      'SELECT drive_ordner_id, drive_synced_at, drive_sync_error, drive_file_count FROM contacts WHERE id=$1 AND workspace_id=$2', [id, req.workspaceId]);
+    if (!c) return res.status(404).json({ error: 'Not found' });
+    if (!driveConfigured()) return res.status(503).json({ error: 'drive_not_configured' });
+    const r = await getDriveSync().syncContact(req.workspaceId, id);
+    if (r.error === 'not_found') return res.status(404).json({ error: 'Not found' });
+    res.json(driveView({ drive_synced_at: r.synced_at, drive_sync_error: r.sync_error }, r.folder_id ?? null, r.files || []));
   } catch (e) { next(e); }
 });
 

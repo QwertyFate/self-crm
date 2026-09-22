@@ -541,6 +541,28 @@ async function initDb() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_idempotency_keys_expires ON idempotency_keys (expires_at)`);
 
+  // Files of the contact's public Drive folder (contacts.drive_ordner_id), kept
+  // in step by utils/drive-sync.js. Only raw facts are stored; preview/open
+  // URLs are derived at read time. Additive, like the rest of this block.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS contact_drive_files (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      contact_id   INTEGER NOT NULL REFERENCES contacts(id)   ON DELETE CASCADE,
+      file_id      TEXT NOT NULL,
+      name         TEXT NOT NULL,
+      mime_type    TEXT,
+      size         BIGINT,
+      modified_at  TIMESTAMPTZ,
+      synced_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (contact_id, file_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_contact_drive_files_contact ON contact_drive_files (workspace_id, contact_id)`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS drive_synced_at  TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS drive_sync_error TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS drive_file_count INTEGER NOT NULL DEFAULT 0`);
+
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');
   if (wsCount === 0 && piCount === 0) {

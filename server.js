@@ -49,7 +49,7 @@ app.use(helmet({
       scriptSrc:   ["'self'", "'unsafe-inline'", "https://challenges.cloudflare.com", "https://static.cloudflareinsights.com"],
       styleSrc:    ["'self'", "'unsafe-inline'"],
       imgSrc:      ["'self'", "data:", "blob:", "https:"],
-      frameSrc:    ["https://docs.google.com"],
+      frameSrc:    ["https://docs.google.com", "https://drive.google.com"],   // drive: the embedded folder view on contacts/deals
       connectSrc:  ["'self'", "https://*.supabase.co", "https://cloudflareinsights.com", "wss:"],
       fontSrc:     ["'self'", "data:"],
       objectSrc:   ["'none'"],
@@ -123,6 +123,13 @@ const engineApiLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
 });
 
+// Manual Drive re-sync: each call reads Google (60 s cache behind it); keep
+// one IP from burning the shared API key's quota.
+const driveSyncLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 20,
+  message: { error: 'drive_upstream' },
+  standardHeaders: true, legacyHeaders: false,
+});
 // Contact import bodies pass the global 100 kB default at roughly 500 rows,
 // well under the route's own 2000-row cap. Parse this one route with a larger
 // limit; body-parser skips an already-parsed body, so the global parser below
@@ -157,6 +164,7 @@ app.use('/api/auth/forgot-password', passwordLimiter);
 app.use('/api/auth/reset-password',  passwordLimiter);
 
 app.use('/api/auth',          require('./routes/auth'));
+app.use('/api/contacts/:id/drive-sync', driveSyncLimiter);
 app.use('/api/contacts',      require('./routes/contacts'));
 app.use('/api/stages',        require('./routes/stages'));
 app.use('/api/fields',        require('./routes/fields'));
@@ -317,4 +325,5 @@ io.on('connection', async (socket) => {
 initDb()
   .then(() => httpServer.listen(PORT, () => console.log(`CRM running at http://localhost:${PORT}`)))
   .then(() => require('./utils/engine-webhook').startEngineWebhookWorker())   // retries failed engine webhooks every 30 s
+  .then(() => require('./utils/drive-sync').startDriveSyncWorker())          // re-reads contacts' Drive folders (DRIVE_SYNC_INTERVAL_MIN / _MAX_AGE_MIN); idle without GOOGLE_API_KEY
   .catch(err => { console.error('Database init failed:', err); process.exit(1); });

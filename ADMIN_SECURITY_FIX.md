@@ -2854,3 +2854,160 @@ BASELINE (pre-change copies of analytics.js + admin.html)      LIVE
 Whole suite: **342 tests, 342 pass, 0 todo, 0 fail** (two fewer than Part 42: each todo and its "pinned" companion became one real test). `node --check public/js/analytics.js` clean.
 
 Files: `public/js/analytics.js` (2 lines), `private/admin.html` (`generateFieldKey`), `tests/client/analytics-helpers.test.js`, `tests/client/field-key.test.js`, `tests/README.md` (two rows).
+
+---
+
+## Part 44 — Google Drive folder on contact and deal (embedded folder view + popup)
+
+**Request.** Show the contact's Google Drive folder (`contacts.drive_ordner_id`, set by the engine or entered by hand) on the contact and on the deal, list the folder's files, and offer a preview in a popup for pictures, PDFs and Word files.
+
+**Decisions by the user.** Folders are shared **"Anyone with the link"**; the value may be a full Drive link or a bare id; previews use **Google's own viewer**; and — after the question "why do we need googleapi, since the googledrive link is public" — **no API key**: the CRM embeds Google's folder widget (`https://drive.google.com/embeddedfolderview?id=<id>#list`) instead of listing files itself. A first cut with a server-side listing (API-key client, `GET /:id/drive-files`, a rate limiter, `GOOGLE_API_KEY` in `.env.example`) was written and then removed before anything ran; nothing of it remains (asserted by `tests/client/drive-ui.test.js`).
+
+**What it means in practice.** Google's widget renders the file list with Google's icons; clicking a file opens Google's preview (images, PDF, Office documents, Google Docs). A *Popup* button opens the same widget in its own window. The trade-off versus an API key: no per-file rows or buttons of our own, and the widget needs `drive.google.com` in the production CSP `frameSrc`.
+
+**Server.**
+- `utils/google-drive.js` (new): `parseDriveFolderId` (bare id or any Drive folder link shape — `/drive/folders/<id>`, `/drive/u/0/folders/<id>`, `/open?id=`, `/folderview?id=` — `https` and `drive|docs.google.com` only, else `null`), `folderUrl`, `embedUrl`.
+- `routes/contacts.js` **`PATCH /:id/drive-folder`** `{ drive_ordner_id }`: digits-only id (400); `null`/`''` clears; otherwise parsed → invalid → 400 `Not a Google Drive folder link or ID`; scoped `UPDATE contacts SET drive_ordner_id=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3` (404 when missing); response `{ success, drive_ordner_id: <bare id|null>, folder_url }`. No engine event (the engine owns this field; a manual entry is a correction). `PUT /:id` untouched. The engine's `PATCH /api/kunden/:id/status` still stores whatever it sends (≤ 255 chars); the UI parses a full link at read time, so both shapes display.
+- `server.js`: production CSP `frameSrc` gains `https://drive.google.com`. Nothing else.
+
+**Client.**
+- `public/js/drive.js` (new, loaded after `contacts.js`): `parseDriveFolderId` (mirror of the server rule), `driveFolderUrl`, `driveEmbedUrl`, `driveSectionHtml(contactId, folderId, ctx)` — an input prefilled with the folder link, *Save*, *Open folder ↗*, *Popup*, then the embedded folder view in an `<iframe class="drive-embed">`; without a folder only a hint. **Every `src`/`href` is built from the validated id**, never from the stored or typed text; a stored value that is not a folder id is treated as none. `openDriveFolderPopup(btn)` opens the embed URL from a data attribute (validated again by regex) with `window.open(…, 'popup=yes,…')`, falling back to a new tab when popups are blocked. `saveDriveFolder(contactId, ctx)` validates client-side, PATCHes, `invalidate()`s and re-renders the calling context (contact detail → `openDetail`; deal → `renderContactPanelReadOnly({ id })`).
+- `public/js/modals.js`: a "Google Drive" `detail-section` between Deals and Activities in the contact detail; a "Google Drive" block under the rows of the deal editor's contact panel (existing pinned literals untouched).
+- `public/js/onboarding.js` + `index.html`: a *Drive* column on the Onboarding page with a folder link when set.
+- i18n (both dictionaries): `onb_col_drive`, `drive_section`, `drive_folder_ph`, `drive_open_folder`, `drive_popup`, `drive_no_folder`, `drive_invalid`, `drive_embed_hint` (tells the user the folder must be shared "Anyone with the link" when the widget shows nothing). CSS: `.drive-section`, `.drive-folder-row`, `.drive-embed`, `.drive-hint`.
+
+**Verification.**
+- `tests/unit/google-drive.test.js` (3): seven accepted link/id shapes; eleven rejected inputs (`http:`, foreign host, file link, `javascript:`, spaces…); the two URLs; the module exports no listing client.
+- `tests/routes/contacts-drive.test.js` (4): junk / `javascript:` / bad id → 400 with no query; foreign contact → 404 with the scoped UPDATE bound `[id, 61, 7]` and the row unchanged; a full link stored as the bare id `[ID, 62, 7]`; bare id accepted; `''` and `null` clear.
+- `tests/client/drive-ui.test.js` (9): parser mirror; section with folder (prefilled link, Save, Open, Popup data attribute, iframe src, hint) / without (hint only, no iframe, no links) / with an untrusted stored value (nothing reaches src/href); script order; both views call `driveSectionHtml` and nothing references a server listing; popup reads only `dataset.embed` and matches the embed URL shape; save PATCHes the scoped endpoint and re-renders per context; `server.js` frames `drive.google.com` and has no limiter, `routes/contacts.js` has no `drive-files` route and no `GOOGLE_API_KEY`.
+```
+BASELINE (pre-change mirror)                       LIVE
+  0 / 16 (two files fail to load, four route red)  16 / 16
+```
+Whole suite: **358 tests, 358 pass, 0 todo, 0 fail**. `node --check` clean on the seven edited/new scripts. Existing pins untouched and green (`contacts-crud` PUT, `onboarding-status-select`, `deal-onboarding`, `ui-onboarding`, `i18n`, `engine-api`).
+
+**Manual check for the developer.** Share a Drive folder as "Anyone with the link" → open a contact → paste the link into the Google Drive section → Save → the folder's files appear in the embedded view; click a picture, a PDF and a .docx → Google previews each; *Popup* opens the same view in a window; the deal editor's contact panel shows the same section; the Onboarding page shows a folder link. In production (`NODE_ENV=production`) the iframe is allowed by the updated CSP.
+
+Files: `utils/google-drive.js` (new), `routes/contacts.js` (`PATCH /:id/drive-folder`), `server.js` (CSP `frameSrc`), `public/js/drive.js` (new), `public/js/modals.js`, `public/js/onboarding.js`, `public/js/core.js` (8 keys ×2), `public/index.html` (script tag, Onboarding column), `public/style.css`, three new test files, `ONBOARDING_ENGINE.md`, `ONBOARDING_ENGINE_TESTING.md`, `tests/README.md`.
+
+---
+
+## Part 45 — Drive file sync: the contact's public folder is read with the Drive API and its files stored on the contact
+
+**Request.** "When there is a folder link, navigate that link to get every file in there and automatically add it to our contact columns." Decisions by the user after discussion: folders stay public "Anyone with the link"; the CRM reads them with **one server-side Google API key** (`GOOGLE_API_KEY`, configured once by the developer — it identifies the app to Google, grants no access of its own, is never sent to the browser, and works for folders owned by any Google account); previews stay in Google's viewer (popup). Multi-tenant is unchanged: file rows carry `workspace_id` + `contact_id` and every route is workspace-scoped, so one key serves all workspaces and rows never cross one.
+
+**Data (`db.js`, additive, after the Stage 1 block).** Table `contact_drive_files (id, workspace_id → workspaces CASCADE, contact_id → contacts CASCADE, file_id, name, mime_type, size BIGINT, modified_at, synced_at, UNIQUE (contact_id, file_id))` + index `(workspace_id, contact_id)`; contacts gain `drive_synced_at`, `drive_sync_error`, `drive_file_count INTEGER NOT NULL DEFAULT 0`. Only raw facts are stored; kind / preview URL / open URL are derived at read time. Top level of the folder only; sub-folders are rows of kind `folder` that open in Drive.
+
+**Server.**
+- `utils/google-drive.js`: `parseDriveFolderId`, `folderUrl`, `embedUrl` (unchanged); `fileKind(mime)`; `describeFile(row|googleFile)` → `{ id, name, mime_type, size, modified_at, kind, is_folder, previewable, preview_url, open_url }` with URLs built only from an id matching `^[A-Za-z0-9_-]+$` (images/PDF/Office → `drive.google.com/file/d/<id>/preview`, Google Docs types → `docs.google.com/<app>/d/<id>/preview`, folders → no preview); `createDriveClient({ apiKey, fetch, now, ttlMs, timeoutMs, maxPages })` → `listFolder(folderId)`: `files.list` with `q='<id>' in parents and trashed=false`, `fields=nextPageToken,files(id,name,mimeType,size,modifiedTime)`, `pageSize=200`, follows `nextPageToken` up to 10 pages, 60 s cache, `AbortSignal.timeout(10 s)`; `DriveError` codes `not_configured`, `invalid_folder`, `not_public` (Google 404), `upstream`, `timeout`. The key is never logged.
+- `utils/drive-sync.js` (new): `createDriveSync({ pool, drive, now, log })` → `syncContact(ws, id)` (contact lookup scoped → no/invalid folder: delete rows + count 0 → `listFolder` → on `DriveError` keep the rows and store the code in `drive_sync_error` → else one transaction: `DELETE … WHERE NOT (file_id = ANY($3::text[]))`, one multi-row `INSERT … ON CONFLICT (contact_id, file_id) DO UPDATE`, `UPDATE contacts SET drive_file_count, drive_synced_at, drive_sync_error=NULL`; files with an unexpected id or an empty name are skipped), `listFiles(ws, id)`, `syncDue({ olderThanMs, limit })` (never-synced first, sequential), `startWorker({ intervalMs, olderThanMs })` (`unref`, overlap guard, idle without a key). `getDriveSync()` singleton re-reads the key per call; `startDriveSyncWorker()` reads `DRIVE_SYNC_INTERVAL_MIN` (15) / `DRIVE_SYNC_MAX_AGE_MIN` (60).
+- `routes/contacts.js`: `GET /:id/drive-files` (stored list only — never calls Google; `{ folder_id, folder_url, embed_url, synced_at, sync_error, configured, files }`), `POST /:id/drive-sync` (503 without a key; a Drive failure is 200 with `sync_error` and the cached rows), `PATCH /:id/drive-folder` now syncs right after saving (clearing always — it only deletes rows; reading needs the key) and returns `sync: { synced_at, sync_error, count }`.
+- `routes/engine-api.js` `PATCH /api/kunden/:id/status`: when `drive_ordner_id` was sent, a background `syncContact` is kicked **without awaiting** — the engine's response is unchanged.
+- `server.js`: `driveSyncLimiter` 20/min per IP on `POST /api/contacts/:id/drive-sync`; `startDriveSyncWorker()` after the webhook worker in the `initDb().then` chain. `.env.example`: `GOOGLE_API_KEY` with the one-time setup steps and the two optional intervals.
+
+**Client.**
+- `public/js/drive.js`: the section now has the folder row (input, Save, Open folder ↗, Popup = Google's embedded view in a window), a status line (last sync / error / "key missing") with a **Sync** button, and our own file list: icon by kind, escaped name, size, date, **Preview** (Google's viewer in a popup, URL only from a data attribute) and **Open ↗**. The inline iframe is gone (reachable via Popup). `loadDriveFiles` GETs the stored list; `syncDriveFiles` POSTs a re-sync.
+- `public/js/modals.js`: contact detail and deal contact panel call `loadDriveFiles` after rendering; the deal panel's column rows skip the new count column (the block covers it).
+- `public/js/contacts.js`: new optional built-in column **Drive files** (`drive_file_count`, hidden by default, enable in Settings → Contact Columns) showing `📁 n` linking to the folder; numeric sort. `public/js/onboarding.js`: the Drive cell shows the count.
+- i18n (both dictionaries): `col_drive_files`, `drive_sync`, `drive_synced_at`, `drive_never_synced`, `drive_preview`, `drive_open`, `drive_empty`, `drive_not_public`, `drive_timeout`, `drive_upstream`, `drive_not_configured` (the `drive_embed_hint` key was dropped). CSS: `.drive-status(-row)`, `.drive-file*`.
+
+**Verification.**
+- `tests/unit/google-drive.test.js` (14): parser; `describeFile` for Google's shape and our row shape, Google Docs, folders, unknown types, bad ids; client request params and signal, pagination joined with the token only on the second request, `maxPages`, cache TTL, 404/403/timeout/network mapping, no network for a bad id, not configured.
+- `tests/unit/drive-sync.test.js` (8): unknown contact; no/unparsable folder → DELETE + count 0 with no Google call; success → DELETE-not-in-list `[60, 7, ['a1','b2']]`, one upsert whose placeholder count equals its 14 bound values (bad id and empty name skipped, name trimmed), `[2, 60, 7]`, BEGIN→…→COMMIT in order, no ROLLBACK; Google failure → rows kept, code stored, rows returned; unexpected error → `upstream`; empty folder; `syncDue` query and sequential syncs; unconfigured → idle; worker tick / overlap / stop.
+- `tests/routes/contacts-drive.test.js` (9): PATCH validation with no sync, foreign 404, link → bare id + immediate sync summary, Drive failure still 200, clearing syncs without a key while setting without a key does not; GET foreign 404, empty shape, stored list without Google, stored full link normalised, stored error reported, `configured:false` without a key; POST 503/404/400, sync now in the GET shape, failure → 200 with `sync_error` and cached rows.
+- `tests/routes/engine-api-drive-sync.test.js` (2): status without a folder → no sync; with a folder → 200 before the sync resolves, exactly one `syncContact(7, 60)`, response unchanged. `tests/routes/engine-api.test.js` injects a no-op sync.
+- `tests/unit/db-migrations.test.js` (+2), `tests/unit/server-wiring.test.js` (+2), `tests/client/drive-ui.test.js` (11, rewritten), `tests/client/contacts-helpers.test.js` (eighth built-in column — deliberate).
+```
+BASELINE (pre-change mirror)                                  LIVE
+  4 / 20 (three files fail to load; describeFile/client red)  20 / 20 (+ the touched files)
+```
+Whole suite: **393 tests, 393 pass, 0 todo, 0 fail**. Real PostgreSQL 16 (throwaway `crm_stage1`, dropped again): 12/12 — the table exists after migrating the pre-Stage-1 schema, `UNIQUE (contact_id, file_id)` rejects a duplicate (23505), rows vanish with their contact (CASCADE), the three contact columns exist. `node --check` clean on the eleven edited/new scripts.
+
+**Manual check for the developer** (`GOOGLE_API_KEY` in `.env`, a folder shared "Anyone with the link"): paste the link on a contact → Save → the files appear at once with Preview / Open; Preview opens Google's viewer in a popup for a picture, a PDF and a .docx; Settings → Contact Columns → enable *Drive files* → the table shows `📁 n`; the deal editor shows the same list; the engine's `PATCH /api/kunden/:id/status` with a folder fills the list without anyone clicking; a private folder shows "not shared as Anyone with the link" and keeps the old rows; without the key the folder link still works and the status line says the key is missing.
+
+Files: `db.js` (+22), `server.js` (limiter, mount, worker), `.env.example`, `routes/contacts.js`, `routes/engine-api.js`, `utils/google-drive.js`, `utils/drive-sync.js` (new), `public/js/drive.js`, `public/js/modals.js`, `public/js/contacts.js`, `public/js/onboarding.js`, `public/js/core.js`, `public/style.css`, tests as listed, `ONBOARDING_ENGINE.md`, `ONBOARDING_ENGINE_TESTING.md`, `tests/README.md`.
+
+---
+
+## Part 46 — Drive files window: a desktop-style file browser with the preview inside
+
+**Request.** "Make the whole files be like a desktop in the new window where the user can find the list of files and preview them there like an icon."
+
+**What was built.** A standalone page `public/drive.html` (served by the existing `express.static`, no server change, no schema change), opened by the CRM with `window.open('/drive.html?contact=<id>[&file=<fileId>]')`. It runs on the same origin, so the session cookie, the theme (`localStorage.theme`) and the language (`localStorage.lang`) carry over.
+- **Desktop:** the contact's stored files as icon tiles (icon by kind, name, size), with a search box, an Icons/List toggle, a Sync button, "Open folder ↗", and a status line (last sync / error / key missing / item count). Click selects, double-click or Enter previews, arrow keys move the selection, Escape closes the preview.
+- **Preview pane** (right side; stacked below on narrow windows): file name, kind, size, date, "Open in Drive ↗", Close, and an `<iframe>` of the file's `preview_url` — Google's own viewer page, which is built to be framed. The production CSP already allows `drive.google.com` and `docs.google.com` in `frameSrc` (Part 44). Folders and non-previewable types show a hint with the Open link instead.
+- **Deep link:** the row *Preview* buttons in the contact detail / deal panel open the window with `&file=<id>` so that file is selected and previewed at once; the folder row's *Files window* button opens it plain. The bare Google popup and the embedded-view popup are gone (`openDriveFolderPopup` removed; `driveEmbedUrl` stays for the API's `embed_url`).
+- **States:** not signed in → "Please log in to the CRM first" with a link to `/`; contact not in the workspace → "Not found"; no folder / empty / not synced / key missing / not public / timeout / upstream — all worded in the window's own small en/de dictionary.
+
+**Safety.** `?contact` must be a positive integer and `?file` a Drive id; anything else is ignored. Tiles carry only the validated file id as a data attribute; names are escaped text; there is no inline JavaScript with file data and no inline `<script>` on the page. The iframe `src` is set only when the URL matches `^https://(drive|docs)\.google\.com/`; the Open links likewise. The window calls the same workspace-scoped endpoints as the CRM (`GET …/drive-files`, `POST …/drive-sync`, `GET /api/contacts/:id` for the title).
+
+**Files.** `public/drive.html` (new), `public/js/drive-window.js` (new: dictionary, `dwParams`, `dwFilterSort`, `dwTile`, `dwStatusText`, `dwPreviewSrc`, then the DOM code), `public/js/drive.js` (`openDriveWindow`, row Preview → window, *Files window* button, `driveFileRow(f, contactId)`), `public/js/core.js` (`drive_files_window` replaces `drive_popup`), `public/style.css` (`.dw-*`).
+
+**Verification.** `tests/client/drive-window.test.js` (9): dictionary parity and non-empty values; `dwParams` accept/reject; `dwFilterSort` folders first, name/date order, search, no mutation; tile escaping + validated id only + no inline JS; status precedence; iframe source Google-only; `drive.html` links the stylesheet and the script, has all 18 ids, no inline script, frame hidden by default; `openDriveWindow` validates both ids and opens `/drive.html?contact=…`; row Preview delegates; old popups gone; CSP unchanged. `tests/client/drive-ui.test.js` updated to the new buttons.
+```
+BASELINE (pre-change mirror)                          LIVE
+  9 / 13 in drive-ui (row/section/wiring red), the    21 / 21
+  window file fails to load (no drive-window.js)
+```
+Whole suite: **402 tests, 402 pass, 0 fail**. `node --check` clean on the three scripts.
+
+**Manual check for the developer.** Contact → Google Drive → *Files window* → a window with the files as icons; click one → details on the right; double-click or Enter → the preview inside the window (picture, PDF, .docx); search filters; List view; Sync re-reads; dark mode and German follow the CRM; a row's *Preview* button lands on that file; log out and open the window → the sign-in hint.
+
+---
+
+## Part 47 — Settings page: regrouped tabs, one card anatomy, consistent spacing
+
+**Request.** "Fix the UI … especially in Settings → General the spacing is way off"; then: plan the Settings tabs first, look at the components and group them so they are easy to find. Decisions by the user: keep the horizontal tabs; regroup; personal settings get their own tab.
+
+**Why the spacing was off.** `.settings-card` had no padding of its own; only `.settings-card-header`, `.settings-hint` and `.settings-row` inset their content (16px). Every other card child — the input rows, the notification list, the textarea, the language radios, the Save buttons and their message spans — sat at 0px against the card border under `overflow:hidden`, each card with a different ad-hoc gap (`margin-top:12px`, `padding:8px 0 4px`, `margin-top:10px`, none). Besides that: the pipelines card laid each pipeline's name *beside* its stages (`.pipeline-settings-row` was a row flexbox), empty-state rows were inset 10px while filled rows are 16px, stage rows and column rows fought over two paddings on the same element, and the tab bar had a double gap below it (page gap + `padding-top`).
+
+**One card anatomy (`public/style.css`).** `header (h2 + optional action button)` → `p.settings-hint` → **body** (`.settings-card-body`: 8/16/16 padding, 12px gap; controls; a `.settings-card-actions` row holding Save + `<span class="workspace-name-msg">`) or **list** (`ul.settings-list` of rows; empty state `li.settings-empty` with the same 16px inset; optional body under it for a Save row). Single-input cards put the message span into the `.workspace-name-row` next to Save, so message and button share a line. New rules: `.settings-card-body`, `.settings-card-actions`, `.settings-empty`, `.settings-card.wide` (replaces inline `grid-column`), `.settings-card.danger` (red border + title), `.settings-tab-hint`, `.settings-tab.hidden`, `.text-danger`, `.row-label-strong`, `.col-cfg-locked …` (replaces inline opacity), `.onb-trigger-pipeline`; `.settings-tab-body` `padding-top: 0`; `.pipeline-settings-row` is now a column; `.settings-row.pipeline-stage-row, .settings-row.col-cfg-row` share one inset; `h3` in a card header styled like `h2`. The Settings section now contains **no** inline `margin` / `padding` / `gap` / `grid-column` / `opacity` (asserted).
+
+**Regrouped tabs (`public/index.html`).**
+
+| Tab | Who | Cards |
+|---|---|---|
+| Workspace (new; hidden for members) | owner | Workspace name · Supplier list name (from General) · Object type name (from Listings) · **Delete workspace** — last, full width, red |
+| My preferences (new) | everyone | Language · **Appearance** (new dark-mode toggle, synced by `applyTheme`) · Timezone · Notification preferences — with the hint "These settings apply only to you" |
+| Contacts | everyone | Contact stages · Custom fields · Contact columns · WhatsApp template (from General) |
+| Deals | everyone | Pipelines · Onboarding trigger (owner) · Deal fields · Deal list columns |
+| Listings | everyone | Fields · Columns |
+| Tasks (now translated) | everyone | Task statuses · Custom fields |
+| Team | everyone | Team members (gets a hint) · Invite codes (owner) |
+| Integrations (new) | everyone | Miro board (from General) · pointer card to the Integrations page (lead webhook, engine keys, outgoing webhooks) |
+
+"General" is gone. Default tab: Workspace for owners, My preferences for members (`loadSettings` hides `#settings-tab-workspace` for members and moves them off it). Every card keeps its element ids and handlers, so `clock.js`, `notifications.js`, `objects.js` (`updateObjectsNav`, `saveMiroUrl`) and the guided tour (`contacts`, `deals` tabs) work unchanged. `settings.js`: the five empty-state `<li>` and the two "no pipelines" `<p>` use `.settings-empty`; the pipeline header buttons use `.hstack-tight`; "+ Add stage" sits in a body/actions row; the trigger card's pipeline names use `.row-label-strong`. i18n (both dictionaries): `tab_workspace`, `tab_preferences`, `tab_tasks`, `tab_integrations`, `hint_preferences`, `set_appearance`, `hint_appearance`, `set_danger`, `hint_members`, `set_int_pointer`, `hint_int_pointer`, `btn_open_integrations`.
+
+**Verification.** `tests/client/settings-layout.test.js` (16): the eight tabs in order, each pane once, General gone; Workspace tab hidden by default, Tasks translated; each card id in its expected pane and order; the "only you" hint, the danger card, members before invites; no inline spacing in the section; ≥ 14 bodies and every message span beside its button; `wide` cards; the CSS primitives and the fixed rhythm; `settings.js` without inline spacing, `.settings-empty` ≥ 7×, role-based default tab; `core.js` syncs the Appearance toggle; the tour targets existing tabs. `tests/client/onboarding-trigger.test.js`: the pinned opening tag now includes `wide` (deliberate). The section's `<div>`s balance (107/107).
+```
+BASELINE (pre-change public/)   LIVE
+  4 / 17                        16 / 16
+```
+Whole suite: **419 tests, 419 pass, 0 fail**. `node --check` clean on `settings.js` and `core.js`. Existing pins green: `i18n` parity (all new `data-i18n` keys in both dictionaries), `field-key` (4 slugifiers in `settings.js`), `ui-onboarding` (Integrations-page cards untouched), `drive-ui`, `import-modal-layout`.
+
+**Manual check for the developer.** Settings as owner opens on Workspace: three name cards with their message next to Save, the red Delete card last and full width; every card's content inset like its header; My preferences shows Language, Appearance (toggle follows the sidebar switch and vice versa), Timezone, Notifications under the "only you" line; Contacts has WhatsApp; Deals → Pipelines shows each pipeline's name above its stages with "+ Add stage" below them; Integrations has Miro and the button to the Integrations page; as a member the Workspace tab is absent and My preferences opens first; German translates every tab label except Listings (the workspace's own name); at ≤ 820px the tabs scroll and the cards stack.
+
+**Left for a later pass (outside Settings).** Bare `<form>` under `.modal` in 13 modals has no padding (no `.modal > form` rule) while two modals use `.modal-body`; `#detail-body` / `#object-detail-body` lack `modal-body`; `class="data-table"` (undefined) on the engine tables and `var(--bg-secondary)` (undefined) on the webhook panel; a handful of off-scale inline values (22px, 18px, 14px) in `index.html` / `modals.js`.
+
+Files: `public/index.html` (the Settings section, 632–928 → 368 lines), `public/style.css`, `public/js/settings.js`, `public/js/core.js`, `tests/client/settings-layout.test.js` (new), `tests/client/onboarding-trigger.test.js` (one regex), `tests/README.md`.
+
+---
+
+## Part 48 — Drive previews as an in-page popup; file rows show the whole name
+
+**Request.** "Instead of having a new window for the preview I want it just a pop-up window, not a full tab; also instead of the dates and file size, just make the whole name there."
+
+**Preview popup.** A new `#drive-preview-modal` (`public/index.html`, before the import modal) — the app's usual `.modal-overlay` with a wide modal (`.modal-drive-preview`, 96vw × 88vh) holding the file name, an *Open ↗* link and an `<iframe id="drive-preview-frame">`. `public/js/drive.js` `openDrivePreview(btn)` reads `data-preview` / `data-open` / `data-name` from the row's button, accepts only `https://drive.google.com/…` or `https://docs.google.com/…` (`DRIVE_PREVIEW_URL_RE`), sets the iframe `src` and shows the overlay; `closeDrivePreview()` removes the `src` (the viewer stops) and hides it. No `window.open` for previews any more; the *Files window* button (`openDriveWindow`) is unchanged for those who want the desktop view. The production CSP already frames both Google hosts (Part 44).
+
+**Whole name.** `driveFileRow` renders icon · full name (`.drive-file-name` now wraps, no ellipsis, no `title`) · Preview · Open — the size and date spans are gone. In the files window `dwTile` shows icon + full name (the two-line clamp and the size line removed) and the preview pane's meta line shows the kind only.
+
+**Verification.** `tests/client/drive-ui.test.js`: the row has the escaped full name in a plain span, the Preview button carries url + name as data attributes and no size/date text; `openDrivePreview` uses the modal (`drive-preview-modal`, `frame.src = url`, no `window.open`), `closeDrivePreview` unloads the frame; the modal markup has the empty iframe, title, Open link and close button. `tests/client/drive-window.test.js`: tile without meta/title; row Preview no longer opens a window. 
+```
+BASELINE (pre-change public/)   LIVE
+  17 / 22                       22 / 22
+```
+Whole suite: **420 tests, 420 pass, 0 fail**. `node --check` clean on both scripts.
+
+**Manual check.** Contact → Google Drive → Preview on a picture / PDF / .docx → the viewer opens over the CRM; × closes it and the viewer stops; long file names wrap fully; no sizes or dates in the rows or the files window.
+
+Files: `public/index.html` (preview modal), `public/js/drive.js`, `public/js/drive-window.js`, `public/style.css`, the two test files.

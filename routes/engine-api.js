@@ -20,6 +20,8 @@ router.use(engineAuth);
 
 // Shared with routes/contacts.js (manual change) — one list, see utils/onboarding-statuses.js.
 const { ONBOARDING_STATUSES } = require('../utils/onboarding-statuses');
+// Drive file sync (read-only against Google; not a webhook, so no loop concern).
+const { getDriveSync } = require('../utils/drive-sync');
 const MAX_DRIVE_ID = 255;
 
 const fehler = (res, status, code, nachricht) => res.status(status).json({ fehler: { code, nachricht } });
@@ -97,6 +99,9 @@ router.patch('/:id/status', (req, res, next) =>
       params
     );
     if (!c) return fehler(res, 404, 'nicht_gefunden', 'Kunde nicht gefunden.');
+    // A new folder: read its files in the background. The engine's request
+    // never waits on Google, and a Drive failure is recorded on the contact.
+    if (hasDrive) getDriveSync().syncContact(req.workspaceId, id).catch(e => console.error('drive sync (engine) failed:', e.message));
     res.json(kundeView(c));
   }).catch(next)
 );

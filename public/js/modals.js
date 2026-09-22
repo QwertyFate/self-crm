@@ -120,6 +120,10 @@ function buildDetailHTML(c, contactDeals, id) {
       <div class="contact-deals-list" id="contact-deals-list">${renderContactDeals(contactDeals)}</div>
     </div>
     <div class="detail-section">
+      <div class="detail-section-header"><h3>${t('drive_section')}</h3></div>
+      ${driveSectionHtml(id, c.drive_ordner_id, 'detail')}
+    </div>
+    <div class="detail-section">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <h3>${t('detail_activities')}</h3>
         <div style="display:flex;gap:6px">
@@ -191,6 +195,7 @@ async function openDetail(id) {
     document.getElementById('detail-body').innerHTML    = buildDetailHTML(c, contactDeals, id);
     document.getElementById('detail-modal').classList.remove('hidden');
   }
+  loadDriveFiles(id, 'detail');   // the stored Drive file list, once the section markup is in place
 }
 
 async function updateContactStage(contactId, stageId) {
@@ -574,7 +579,7 @@ async function renderContactPanelReadOnly(contact) {
     <div class="contact-panel-scroll" style="color:var(--muted);font-size:13px;padding:10px 22px">Loading…</div>`;
   await ensureFields();
   const full = await api.get(`/api/contacts/${contact.id}`);
-  const visibleCols = effectiveContactColumns().filter(c => c.visible && c.key !== '_name' && c.key !== 'stage_id');
+  const visibleCols = effectiveContactColumns().filter(c => c.visible && c.key !== '_name' && c.key !== 'stage_id' && c.key !== 'drive_file_count');   // Drive has its own block below
   const dash = '<span style="color:var(--muted)">—</span>';
   const rows = visibleCols.map(col => {
     let value;
@@ -608,7 +613,10 @@ async function renderContactPanelReadOnly(contact) {
       <div class="contact-panel-rows">
         ${rows.map(r => `<div class="contact-panel-row"><label>${esc(r.label)}</label><span>${r.value}</span></div>`).join('')}
       </div>
+      <div class="contact-panel-section-label">${esc(t('drive_section'))}</div>
+      ${driveSectionHtml(full.id, full.drive_ordner_id, 'deal')}
     </div>`;
+  loadDriveFiles(full.id, 'deal');
 }
 
 // Start onboarding for the deal's linked contact (header button). Reads the
