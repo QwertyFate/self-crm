@@ -90,6 +90,15 @@
     }
     .section h2 { margin-top: 0; font-size: 19px; color: var(--text); letter-spacing: -.02em; }
     .section p { color: var(--muted) !important; }
+    .feature-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .feature-status {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 12px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; letter-spacing: .02em;
+    }
+    .feature-status.on  { background: color-mix(in srgb, #22c55e 16%, transparent); color: #15803d; }
+    .feature-status.off { background: color-mix(in srgb, #ef4444 14%, transparent); color: #b91c1c; }
+    .feature-note { font-size: 12px; color: var(--muted); margin: 12px 0 0 0; }
     .stage-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
     .stage-item { background: color-mix(in srgb, var(--bg) 65%, var(--card-bg)); padding: 12px; border-radius: 10px; border: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
     .stage-color { width: 24px; height: 24px; border-radius: 8px; border: 1px solid var(--border); }
@@ -292,6 +301,25 @@
         </div>
       </div>
 
+      <!-- Tutorial / Product Tour -->
+      <div class="section">
+        <div class="feature-row">
+          <div style="max-width: 60ch;">
+            <h2 style="margin: 0 0 4px 0;">Tutorial / Product Tour</h2>
+            <p style="font-size: 14px; margin: 0;">
+              The in-app guided tour is <strong>disabled by default</strong>. While disabled it does not exist for
+              anyone — no auto-start and no Help button in the sidebar. Enable it to show the Help button and run the
+              tour for users who have not seen it yet.
+            </p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <span id="tour-status" class="feature-status off">Loading…</span>
+            <button class="btn btn-primary" id="tour-toggle-btn" onclick="toggleTour()" disabled>…</button>
+          </div>
+        </div>
+        <p class="feature-note">Changes apply the next time each user loads the app.</p>
+      </div>
+
       <div id="message" class="message" style="display: none;"></div>
     </div>
   </div>
@@ -311,6 +339,7 @@
     const FIELD_TYPES = ['text', 'email', 'phone', 'number', 'dropdown', 'date', 'url'];
     let currentDefaults = {};
     let editMode = null;
+    let currentFeatures = { tourEnabled: false };
 
     async function checkAdminStatus() {
       const res = await fetch(`${API_BASE}/me`);
@@ -360,14 +389,17 @@
 
     async function loadDashboard() {
       try {
-        const [statsRes, defaultsRes] = await Promise.all([
+        const [statsRes, defaultsRes, featuresRes] = await Promise.all([
           fetch(`${API_BASE}/stats`),
-          fetch(`${API_BASE}/defaults`)
+          fetch(`${API_BASE}/defaults`),
+          fetch(`${API_BASE}/features`)
         ]);
 
         const stats = await statsRes.json();
         const defaults = await defaultsRes.json();
+        const features = await featuresRes.json().catch(() => ({ tourEnabled: false }));
         currentDefaults = defaults;
+        currentFeatures = { tourEnabled: features.tourEnabled === true };
 
         // Update stats
         document.getElementById('stat-workspaces').textContent = stats.totalWorkspaces || 0;
@@ -398,6 +430,9 @@
 
         // Initialize edit forms
         renderEditForms();
+
+        // Tutorial / tour switch
+        renderTourState();
       } catch (e) {
         showMessage(`Error loading dashboard: ${e.message}`, 'error');
       }
@@ -630,6 +665,52 @@
         }
       } catch (e) {
         showMessage(`Error saving defaults: ${e.message}`, 'error');
+      }
+    }
+
+    // ── Tutorial / product tour switch ──────────────────────────────────────
+    function renderTourState() {
+      const on = currentFeatures.tourEnabled === true;
+      const statusEl = document.getElementById('tour-status');
+      if (statusEl) {
+        statusEl.className = `feature-status ${on ? 'on' : 'off'}`;
+        statusEl.textContent = on ? 'Enabled' : 'Disabled (default)';
+      }
+      const btn = document.getElementById('tour-toggle-btn');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = on ? 'Disable tour' : 'Enable tour';
+        btn.className = on ? 'btn' : 'btn btn-primary';
+      }
+    }
+
+    async function toggleTour() {
+      const btn = document.getElementById('tour-toggle-btn');
+      const next = !(currentFeatures.tourEnabled === true);
+      if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+      try {
+        const res = await fetch(`${API_BASE}/features`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tourEnabled: next })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showMessage(`Error: ${data.error}`, 'error');
+          renderTourState();
+          return;
+        }
+        currentFeatures.tourEnabled = next;
+        renderTourState();
+        showMessage(
+          next
+            ? 'Tutorial enabled — the Help button and the guided tour are now available to users.'
+            : 'Tutorial disabled — the tour is switched off for everyone.',
+          'success'
+        );
+      } catch (e) {
+        showMessage(`Error updating the tutorial: ${e.message}`, 'error');
+        renderTourState();
       }
     }
 

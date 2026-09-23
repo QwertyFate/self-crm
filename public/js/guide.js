@@ -56,7 +56,7 @@ const GUIDE_STEPS = [
   },
   {
     title: 'Connecting a Listing to a Deal',
-    body:  'Inside any deal, scroll to the <strong>Linked Listings</strong> section at the bottom of the deal panel. Search and attach any listing directly from there.',
+    body:  'Inside any deal, the <strong>Listings</strong> section sits under the Contact panel. Pick a listing from the dropdown and press <strong>Add</strong> to link it; press <strong>×</strong> on a card to unlink it.',
     target: null,
     pos: 'center',
   },
@@ -92,8 +92,24 @@ const GUIDE_STEPS = [
 let guideStep    = 0;
 let guideActive  = false;
 let guideResizeObs = null;
+// Platform-wide switch, owned by the admin console. Default OFF: the tour does
+// not exist for users until an admin enables it.
+let tourEnabled  = false;
+
+async function loadTourFlag() {
+  try {
+    const features = await api.get('/api/platform/features');
+    tourEnabled = features?.tourEnabled === true;
+  } catch {
+    tourEnabled = false;
+  }
+  // The Help / Tour button only exists while the tour is enabled.
+  document.getElementById('guide-help-btn')?.closest('li')?.classList.toggle('hidden', !tourEnabled);
+  return tourEnabled;
+}
 
 function startGuide() {
+  if (!tourEnabled) return;
   guideStep   = 0;
   guideActive = true;
   document.getElementById('guide-overlay').classList.remove('hidden');
@@ -120,7 +136,8 @@ function guidePrev() {
   if (guideStep > 0) { guideStep--; showGuideStep(guideStep); }
 }
 
-function maybeStartGuide() {
+async function maybeStartGuide() {
+  if (!(await loadTourFlag())) return; // tour disabled platform-wide — nothing to show
   const seenInDb    = currentUser?.analytics_layout?.guide_seen === true;
   const seenLocally = !!localStorage.getItem(GUIDE_KEY);
   if (seenInDb) {

@@ -269,9 +269,9 @@
       <!-- Footer — sticks to bottom -->
       <div class="sidebar-footer">
         <ul class="sidebar-nav">
-          <!-- Help / Tour button -->
-          <li>
-            <button class="notif-bell-btn" onclick="startGuide()" title="Help / Tour">
+          <!-- Help / Tour button — revealed only when the tour is enabled in the admin console -->
+          <li id="guide-help-item" class="hidden">
+            <button class="notif-bell-btn" id="guide-help-btn" onclick="startGuide()" title="Help / Tour">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
               <span>Help</span>
             </button>
@@ -444,19 +444,20 @@
         <div class="page-header">
           <h1 id="objects-page-title">Listings</h1>
           <div class="page-actions">
-            <div class="view-toggle">
-              <button class="view-toggle-btn active" id="obj-view-table" onclick="setObjectView('table')" title="Table view">
-                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="1" width="14" height="2.5" rx="1.25"/><rect x="0" y="5.75" width="14" height="2.5" rx="1.25"/><rect x="0" y="10.5" width="14" height="2.5" rx="1.25"/></svg>
-              </button>
-              <button class="view-toggle-btn" id="obj-view-card" onclick="setObjectView('card')" title="Card view">
-                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="0" width="6" height="6" rx="1"/><rect x="8" y="0" width="6" height="6" rx="1"/><rect x="0" y="8" width="6" height="6" rx="1"/><rect x="8" y="8" width="6" height="6" rx="1"/></svg>
-              </button>
-            </div>
+            <button class="btn" id="add-object-column-btn" onclick="openObjectFieldModal()" title="Add a new property (column) to every listing">
+              <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/></svg><span>Add column</span>
+            </button>
             <button class="btn btn-primary" id="add-object-btn" onclick="openObjectModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
           </div>
         </div>
         <div class="toolbar">
-          <input type="text" id="object-search" placeholder="Search…" oninput="filterObjects()" />
+          <input type="text" id="object-search" placeholder="Search…" autocomplete="off" oninput="onObjectSearch()" />
+          <div class="toolbar-actions">
+            <span id="object-count" class="text-xs text-muted"></span>
+            <button class="btn btn-sm hidden" id="object-search-clear" onclick="clearObjectSearch()">
+              <svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg><span>Clear</span>
+            </button>
+          </div>
         </div>
         <div class="table-wrap" id="objects-table-wrap">
           <table class="table" id="objects-table">
@@ -464,7 +465,6 @@
             <tbody id="objects-tbody"></tbody>
           </table>
         </div>
-        <div id="objects-card-grid" class="objects-card-grid hidden"></div>
         <div id="objects-pagination" class="pagination-bar"></div>
       </section>
 
@@ -1122,13 +1122,15 @@
       <form id="contact-form" onsubmit="saveContact(event)">
         <input type="hidden" id="contact-id" />
         <input type="hidden" id="cf-type" value="contact" />
-        <div class="form-group"><label><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="cf-name" required /></div>
-        <div class="form-group"><label data-i18n="lbl_company">Company</label><input type="text" id="cf-company" /></div>
-        <div class="form-group"><label data-i18n="lbl_email">Email</label><input type="email" id="cf-email" /></div>
-        <div class="form-group"><label data-i18n="lbl_phone">Phone</label><input type="tel" id="cf-phone" /></div>
-        <div class="form-group"><label data-i18n="lbl_stage">Stage</label><select id="cf-stage"></select></div>
-        <div class="form-group"><label data-i18n="lbl_assignee">Assignee</label><select id="cf-assignee"></select></div>
-        <div id="cf-custom-fields"></div>
+        <div class="modal-body" id="contact-modal-body">
+          <div class="form-group"><label for="cf-name"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="cf-name" required /></div>
+          <div class="form-group"><label for="cf-company" data-i18n="lbl_company">Company</label><input type="text" id="cf-company" /></div>
+          <div class="form-group"><label for="cf-email" data-i18n="lbl_email">Email</label><input type="email" id="cf-email" /></div>
+          <div class="form-group"><label for="cf-phone" data-i18n="lbl_phone">Phone</label><input type="tel" id="cf-phone" /></div>
+          <div class="form-group"><label for="cf-stage" data-i18n="lbl_stage">Stage</label><select id="cf-stage"></select></div>
+          <div class="form-group"><label for="cf-assignee" data-i18n="lbl_assignee">Assignee</label><select id="cf-assignee"></select></div>
+          <div id="cf-custom-fields" class="form-stack"></div>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('contact-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
@@ -1156,16 +1158,18 @@
         <button class="close-btn" onclick="closeModal('activity-modal')">&times;</button>
       </div>
       <form id="activity-form" onsubmit="saveActivity(event)">
-        <div class="form-group"><label data-i18n="lbl_type">Type</label>
-          <select id="act-type">
-            <option value="note" data-i18n="act_note">Note</option>
-            <option value="call" data-i18n="act_call">Call</option>
-            <option value="email" data-i18n="act_email">Email</option>
-            <option value="whatsapp" data-i18n="act_whatsapp">WhatsApp</option>
-          </select>
+        <div class="modal-body">
+          <div class="form-group"><label for="act-type" data-i18n="lbl_type">Type</label>
+            <select id="act-type">
+              <option value="note" data-i18n="act_note">Note</option>
+              <option value="call" data-i18n="act_call">Call</option>
+              <option value="email" data-i18n="act_email">Email</option>
+              <option value="whatsapp" data-i18n="act_whatsapp">WhatsApp</option>
+            </select>
+          </div>
+          <div class="form-group"><label for="act-contact" data-i18n="lbl_contact">Contact</label><select id="act-contact"></select></div>
+          <div class="form-group"><label for="act-content"><span data-i18n="lbl_content">Content</span> <span class="req">*</span></label><textarea id="act-content" rows="3" required></textarea></div>
         </div>
-        <div class="form-group"><label data-i18n="lbl_contact">Contact</label><select id="act-contact"></select></div>
-        <div class="form-group"><label><span data-i18n="lbl_content">Content</span> <span class="req">*</span></label><textarea id="act-content" rows="3" required></textarea></div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('activity-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
@@ -1182,14 +1186,16 @@
         <button class="close-btn" onclick="closeModal('kanban-add-contact-modal')">&times;</button>
       </div>
       <form id="kanban-add-form" onsubmit="confirmAddContactToKanban(event)">
-        <div class="form-group">
-          <label style="display:block;margin-bottom:6px">Select Contact</label>
-          <input type="text" id="kanban-contact-search" placeholder="Search contacts…" style="width:100%;margin-bottom:8px" oninput="filterKanbanContacts()" />
-          <select id="kanban-contact-select" style="width:100%;max-height:140px" required></select>
-        </div>
-        <div class="form-group">
-          <label>Select Stage</label>
-          <select id="kanban-stage-select" style="width:100%" required></select>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="kanban-contact-search" style="display:block">Select Contact</label>
+            <input type="text" id="kanban-contact-search" placeholder="Search contacts…" style="width:100%" oninput="filterKanbanContacts()" />
+            <select id="kanban-contact-select" style="width:100%;max-height:140px" required></select>
+          </div>
+          <div class="form-group">
+            <label for="kanban-stage-select">Select Stage</label>
+            <select id="kanban-stage-select" style="width:100%" required></select>
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('kanban-add-contact-modal')">Cancel</button>
@@ -1208,8 +1214,10 @@
       </div>
       <form id="stage-form" onsubmit="saveStage(event)">
         <input type="hidden" id="stage-id" />
-        <div class="form-group"><label><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="stage-name" required /></div>
-        <div class="form-group"><label data-i18n="lbl_color">Color</label><input type="color" id="stage-color" value="#4f6ef7" /></div>
+        <div class="modal-body">
+          <div class="form-group"><label for="stage-name"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="stage-name" required /></div>
+          <div class="form-group"><label for="stage-color" data-i18n="lbl_color">Color</label><input type="color" id="stage-color" value="#4f6ef7" /></div>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('stage-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
@@ -1227,22 +1235,24 @@
       </div>
       <form id="field-form" onsubmit="saveField(event)">
         <input type="hidden" id="field-id" />
-        <div class="form-group"><label><span data-i18n="lbl_field_label">Label</span> <span class="req">*</span></label><input type="text" id="field-name" required oninput="autoKey()" /></div>
-        <div class="form-group"><label data-i18n="lbl_key">Key</label><input type="text" id="field-key" readonly style="opacity:.55" /></div>
-        <div class="form-group"><label data-i18n="lbl_type">Type</label>
-          <select id="field-type" onchange="toggleDropdownOptions()">
-            <option value="text">Text</option>
-            <option value="email">Email</option>
-            <option value="phone">Phone</option>
-            <option value="number">Number</option>
-            <option value="date">Date</option>
-            <option value="url">URL</option>
-            <option value="dropdown">Dropdown</option>
-          </select>
-        </div>
-        <div class="form-group hidden" id="field-options-group">
-          <label data-i18n="lbl_options">Options (one per line)</label>
-          <textarea id="field-options" rows="4" placeholder="Option A&#10;Option B&#10;Option C"></textarea>
+        <div class="modal-body">
+          <div class="form-group"><label for="field-name"><span data-i18n="lbl_field_label">Label</span> <span class="req">*</span></label><input type="text" id="field-name" required autocomplete="off" oninput="autoKey()" /></div>
+          <div class="form-group"><label for="field-key" data-i18n="lbl_key">Key</label><input type="text" id="field-key" readonly style="opacity:.55" /></div>
+          <div class="form-group"><label for="field-type" data-i18n="lbl_type">Type</label>
+            <select id="field-type" onchange="toggleDropdownOptions()">
+              <option value="text">Text</option>
+              <option value="email">Email</option>
+              <option value="phone">Phone</option>
+              <option value="number">Number</option>
+              <option value="date">Date</option>
+              <option value="url">URL</option>
+              <option value="dropdown">Dropdown</option>
+            </select>
+          </div>
+          <div class="form-group hidden" id="field-options-group">
+            <label for="field-options" data-i18n="lbl_options">Options (one per line)</label>
+            <textarea id="field-options" rows="4" placeholder="Option A&#10;Option B&#10;Option C"></textarea>
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('field-modal')" data-i18n="btn_cancel">Cancel</button>
@@ -1254,15 +1264,20 @@
 
   <!-- Object Modal (create/edit) -->
   <div id="object-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm" style="max-width:460px">
+    <div class="modal" style="max-width:560px">
       <div class="modal-header">
         <h2 id="object-modal-title">Add</h2>
         <button class="close-btn" onclick="closeModal('object-modal')">&times;</button>
       </div>
       <form id="object-form" onsubmit="saveObject(event)">
         <input type="hidden" id="object-id" />
-        <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="obj-name" required /></div>
-        <div id="obj-custom-fields"></div>
+        <div class="modal-body" id="object-modal-body">
+          <div class="form-group">
+            <label for="obj-name" id="obj-name-label">Name <span class="req">*</span></label>
+            <input type="text" id="obj-name" autocomplete="off" required />
+          </div>
+          <div id="obj-custom-fields" class="form-grid-2"></div>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('object-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
@@ -1278,7 +1293,7 @@
         <h2 id="object-detail-title"></h2>
         <button class="close-btn" onclick="closeModal('object-detail-modal')">&times;</button>
       </div>
-      <div id="object-detail-body"></div>
+      <div id="object-detail-body" class="modal-body"></div>
     </div>
   </div>
 
@@ -1291,19 +1306,22 @@
       </div>
       <form id="object-field-form" onsubmit="saveObjectField(event)">
         <input type="hidden" id="objf-id" />
-        <div class="form-group"><label>Label <span class="req">*</span></label><input type="text" id="objf-name" required oninput="autoObjectFieldKey()" /></div>
-        <div class="form-group"><label data-i18n="lbl_key">Key</label><input type="text" id="objf-key" readonly style="opacity:.55" /></div>
-        <div class="form-group"><label data-i18n="lbl_type">Type</label>
-          <select id="objf-type" onchange="toggleObjectFieldOptions()">
-            <option value="text">Text</option><option value="number">Number</option>
-            <option value="dropdown">Dropdown</option><option value="date">Date</option>
-            <option value="url">URL</option><option value="email">Email</option>
-            <option value="phone">Phone</option>
-          </select>
-        </div>
-        <div class="form-group hidden" id="objf-options-group">
-          <label data-i18n="lbl_options">Options (one per line)</label>
-          <textarea id="objf-options" rows="4" placeholder="Option A&#10;Option B"></textarea>
+        <div class="modal-body">
+          <p class="text-xs text-muted" id="objf-hint">Each field becomes a column in the list and a property on every item.</p>
+          <div class="form-group"><label for="objf-name">Label <span class="req">*</span></label><input type="text" id="objf-name" required autocomplete="off" oninput="autoObjectFieldKey()" /></div>
+          <div class="form-group"><label for="objf-key" data-i18n="lbl_key">Key</label><input type="text" id="objf-key" readonly style="opacity:.55" /></div>
+          <div class="form-group"><label for="objf-type" data-i18n="lbl_type">Type</label>
+            <select id="objf-type" onchange="toggleObjectFieldOptions()">
+              <option value="text">Text</option><option value="number">Number</option>
+              <option value="dropdown">Dropdown</option><option value="date">Date</option>
+              <option value="url">URL</option><option value="email">Email</option>
+              <option value="phone">Phone</option>
+            </select>
+          </div>
+          <div class="form-group hidden" id="objf-options-group">
+            <label for="objf-options" data-i18n="lbl_options">Options (one per line)</label>
+            <textarea id="objf-options" rows="4" placeholder="Option A&#10;Option B"></textarea>
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('object-field-modal')" data-i18n="btn_cancel">Cancel</button>
@@ -1355,10 +1373,17 @@
           </form>
         </div>
 
-        <!-- ── Middle: Contact panel ── -->
-        <div class="deal-modal-col deal-col-contact" id="deal-contact-panel">
-          <div class="deal-col-label">Contact</div>
-          <div class="contact-panel-empty">No contact linked</div>
+        <!-- ── Middle: Contact panel, with linked Listings below it ── -->
+        <div class="deal-modal-col deal-col-contact">
+          <div id="deal-contact-panel">
+            <div class="deal-col-label">Contact</div>
+            <div class="contact-panel-empty">No contact linked</div>
+          </div>
+
+          <div class="deal-object-panel">
+            <div class="eyebrow" id="deal-object-panel-label">Listings</div>
+            <div id="deal-object-panel-body" class="object-panel-body"></div>
+          </div>
         </div>
 
         <!-- ── Right: Notes panel (timeline) ── -->
@@ -1539,8 +1564,10 @@
       </div>
       <form id="task-status-form" onsubmit="saveTaskStatus(event)">
         <input type="hidden" id="ts-key-hidden" />
-        <div class="form-group"><label>Label <span class="req">*</span></label><input type="text" id="ts-label" required /></div>
-        <div class="form-group"><label>Color</label><input type="color" id="ts-color" value="#94a3b8" /></div>
+        <div class="modal-body">
+          <div class="form-group"><label for="ts-label">Label <span class="req">*</span></label><input type="text" id="ts-label" required autocomplete="off" /></div>
+          <div class="form-group"><label for="ts-color">Color</label><input type="color" id="ts-color" value="#94a3b8" /></div>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('task-status-modal')">Cancel</button>
           <button type="submit" class="btn btn-primary">Save</button>
@@ -1558,20 +1585,22 @@
       </div>
       <form id="task-field-form" onsubmit="saveTaskField(event)">
         <input type="hidden" id="tff-id" />
-        <div class="form-group"><label>Label <span class="req">*</span></label><input type="text" id="tff-name" required oninput="autoTaskFieldKey()" /></div>
-        <div class="form-group"><label>Key</label><input type="text" id="tff-key" required /></div>
-        <div class="form-group"><label>Type</label>
-          <select id="tff-type" onchange="toggleTaskFieldOptions()">
-            <option value="text">Text</option>
-            <option value="number">Number</option>
-            <option value="date">Date</option>
-            <option value="dropdown">Dropdown</option>
-            <option value="url">URL</option>
-          </select>
-        </div>
-        <div class="form-group hidden" id="tff-options-group">
-          <label>Options (one per line)</label>
-          <textarea id="tff-options" rows="4"></textarea>
+        <div class="modal-body">
+          <div class="form-group"><label for="tff-name">Label <span class="req">*</span></label><input type="text" id="tff-name" required autocomplete="off" oninput="autoTaskFieldKey()" /></div>
+          <div class="form-group"><label for="tff-key">Key</label><input type="text" id="tff-key" required /></div>
+          <div class="form-group"><label for="tff-type">Type</label>
+            <select id="tff-type" onchange="toggleTaskFieldOptions()">
+              <option value="text">Text</option>
+              <option value="number">Number</option>
+              <option value="date">Date</option>
+              <option value="dropdown">Dropdown</option>
+              <option value="url">URL</option>
+            </select>
+          </div>
+          <div class="form-group hidden" id="tff-options-group">
+            <label for="tff-options">Options (one per line)</label>
+            <textarea id="tff-options" rows="4"></textarea>
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('task-field-modal')">Cancel</button>
@@ -1628,7 +1657,9 @@
       </div>
       <form id="new-pipeline-form" onsubmit="saveNewPipeline(event)">
         <input type="hidden" id="pipeline-edit-id" />
-        <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="pipeline-name-input" required /></div>
+        <div class="modal-body">
+          <div class="form-group"><label for="pipeline-name-input">Name <span class="req">*</span></label><input type="text" id="pipeline-name-input" required autocomplete="off" /></div>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('new-pipeline-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
@@ -1646,18 +1677,20 @@
       </div>
       <form id="deal-field-form" onsubmit="saveDealField(event)">
         <input type="hidden" id="deal-field-id" />
-        <div class="form-group"><label>Label <span class="req">*</span></label><input type="text" id="dff-name" required oninput="autoDealFieldKey()" /></div>
-        <div class="form-group"><label data-i18n="lbl_key">Key</label><input type="text" id="dff-key" readonly style="opacity:.55" /></div>
-        <div class="form-group"><label data-i18n="lbl_type">Type</label>
-          <select id="dff-type" onchange="toggleDealFieldOptions()">
-            <option value="text">Text</option><option value="number">Number</option>
-            <option value="dropdown">Dropdown</option><option value="date">Date</option>
-            <option value="url">URL</option>
-          </select>
-        </div>
-        <div class="form-group hidden" id="dff-options-group">
-          <label data-i18n="lbl_options">Options (one per line)</label>
-          <textarea id="dff-options" rows="4" placeholder="Option A&#10;Option B"></textarea>
+        <div class="modal-body">
+          <div class="form-group"><label for="dff-name">Label <span class="req">*</span></label><input type="text" id="dff-name" required autocomplete="off" oninput="autoDealFieldKey()" /></div>
+          <div class="form-group"><label for="dff-key" data-i18n="lbl_key">Key</label><input type="text" id="dff-key" readonly style="opacity:.55" /></div>
+          <div class="form-group"><label for="dff-type" data-i18n="lbl_type">Type</label>
+            <select id="dff-type" onchange="toggleDealFieldOptions()">
+              <option value="text">Text</option><option value="number">Number</option>
+              <option value="dropdown">Dropdown</option><option value="date">Date</option>
+              <option value="url">URL</option>
+            </select>
+          </div>
+          <div class="form-group hidden" id="dff-options-group">
+            <label for="dff-options" data-i18n="lbl_options">Options (one per line)</label>
+            <textarea id="dff-options" rows="4" placeholder="Option A&#10;Option B"></textarea>
+          </div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('deal-field-modal')" data-i18n="btn_cancel">Cancel</button>

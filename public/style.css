@@ -1213,6 +1213,24 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 /* Trailing button cluster inside a footer */
 .modal-actions .hstack { margin-left: auto; }
 
+/* Form shells that sit directly under .modal: the form provides the flex column
+   so its .modal-body can own the padding, the gap and the scrolling. */
+.modal > form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+/* Two-up field grid used by the listing form; falls back to one column when narrow */
+.form-grid-2 {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--sp-4); align-items: start;
+}
+.form-grid-2 > p { grid-column: 1 / -1; }
+
+/* Field stacks injected at runtime inside a .modal-body (contact custom fields),
+   so they inherit the same vertical rhythm as the static fields around them. */
+.form-stack { display: flex; flex-direction: column; gap: var(--sp-4); }
+
+/* The modal body already spaces its sections, so drop the standalone rhythm */
+.modal-body .detail-section { margin-bottom: 0; padding-bottom: 0; }
+
 /* ── Deal modal: three columns ──────────────────────────────────────────── */
 .modal-deal { max-width: none; }
 .deal-modal-columns {
@@ -1304,11 +1322,14 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 .contact-deal-value { font-size: var(--fs-xs); font-weight: 680; color: var(--success-ink); font-variant-numeric: tabular-nums; }
 
 /* ── Linked objects panel ───────────────────────────────────────────────── */
-.object-panel-top { display: flex; flex-direction: column; gap: var(--sp-3); }
-.object-panel-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-2); }
+/* Sits under the contact panel inside the deal modal's middle column; the
+   column itself scrolls, so the body just stacks its rows. */
+.deal-object-panel { margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--line); }
+.object-panel-body  { margin-top: var(--sp-25); display: flex; flex-direction: column; gap: var(--sp-3); }
+.object-panel-cards { display: flex; flex-direction: column; gap: var(--sp-2); }
 .object-panel-add { display: flex; gap: var(--sp-2); }
-.object-panel-add select { flex: 1; }
-.object-panel-empty { padding: var(--sp-8) var(--sp-4); text-align: center; font-size: var(--fs-sm); color: var(--ink-subtle); }
+.object-panel-add select { flex: 1; min-width: 0; }
+.object-panel-empty { padding: var(--sp-3) var(--sp-2); text-align: center; font-size: var(--fs-sm); color: var(--ink-subtle); }
 .object-panel-card {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-md); overflow: hidden;
@@ -1337,36 +1358,21 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 .object-panel-unlink:hover { background: var(--danger-subtle); color: var(--danger); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   14 · OBJECTS / LISTINGS — card view
+   14 · OBJECTS / LISTINGS — list view + empty state
    ═══════════════════════════════════════════════════════════════════════════ */
-.objects-card-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
-  gap: var(--sp-3); flex: 1; min-height: 0; overflow-y: auto; align-content: start;
-  padding-bottom: var(--sp-1);
+/* Empty state rendered as a row inside the listings table */
+.table-empty-row td,
+.table tbody tr.table-empty-row:hover td {
+  padding: 0 var(--sp-4); border-bottom: none; background: transparent;
+  white-space: normal; max-width: none; overflow: visible; text-overflow: clip;
 }
-.obj-card {
-  display: flex; flex-direction: column;
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--r-lg); overflow: hidden;
-  box-shadow: var(--shadow-xs);
-  transition: box-shadow var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+.table-empty {
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--sp-3); padding: var(--sp-10) var(--sp-6); text-align: center;
 }
-.obj-card:hover { box-shadow: var(--shadow-md); border-color: var(--line-strong); transform: translateY(-2px); }
-.obj-card-header {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-3) var(--sp-2);
-}
-.obj-card-name { font-size: var(--fs-sm); font-weight: 620; color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.obj-card-fields { display: flex; flex-direction: column; padding: 0 var(--sp-3) var(--sp-2); }
-.obj-card-field { display: flex; align-items: baseline; gap: var(--sp-2); padding: var(--sp-1) 0; }
-.obj-card-field label { flex: 0 0 42%; font-size: var(--fs-xs); color: var(--ink-muted); }
-.obj-card-field span  { flex: 1; min-width: 0; font-size: var(--fs-sm); color: var(--ink-secondary); word-break: break-word; }
-.obj-card-actions {
-  display: flex; align-items: center; gap: var(--sp-1); justify-content: flex-end;
-  padding: var(--sp-2) var(--sp-3); margin-top: auto;
-  border-top: 1px solid var(--line-soft); background: var(--canvas);
-}
-[data-theme="dark"] .obj-card-actions { background: var(--surface-sunken); }
+.table-empty h2 { font-size: var(--fs-md); font-weight: 620; color: var(--ink); }
+.table-empty p  { font-size: var(--fs-sm); color: var(--ink-muted); max-width: 42ch; line-height: var(--lh-normal); }
+.table-empty .btn { margin-top: var(--sp-1); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    15 · TASKS
@@ -2868,7 +2874,7 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
   .page-header { flex-wrap: wrap; gap: var(--sp-2); }
   .toolbar input { max-width: none; }
   .analytics-cards { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-  .ws-page-grid, .objects-card-grid { grid-template-columns: 1fr; }
+  .ws-page-grid { grid-template-columns: 1fr; }
   .chat-panel { right: 0; left: 0; bottom: 0; width: 100%; height: 78vh; border-radius: var(--r-xl) var(--r-xl) 0 0; }
 }
 
