@@ -2696,6 +2696,15 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 .import-browse-link { color: var(--brand-ink); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .import-info-text { font-size: var(--fs-sm); color: var(--ink-secondary); line-height: var(--lh-loose); }
 
+/* Wizard steps: the step body scrolls on its own, so the footer actions
+   (Back / Import contacts) stay inside the modal when optional sections
+   such as "Create deals during import" are expanded. */
+.import-step { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.import-step-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: var(--sp-5);
+}
+
 .import-map-header-row {
   display: grid; grid-template-columns: 1fr 24px 1fr; gap: var(--sp-2); align-items: center;
   padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--line);
