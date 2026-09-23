@@ -14,7 +14,6 @@ let objectFields     = [];
 let objectColumns    = [];
 let objColDragIdx    = null;
 let objCurrentPage   = 1;
-let objectViewMode     = localStorage.getItem('objectViewMode') || 'table';
 let currentContactType = 'contact';
 let dealFields       = [];
 let dealKanbanFields = ['contact', 'value'];

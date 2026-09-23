@@ -2,6 +2,7 @@ const express  = require('express');
 const router   = express.Router();
 const crypto   = require('crypto');
 const { pool } = require('../db');
+const { readFeatures, writeFeatures } = require('../utils/features');
 
 function requireAdmin(req, res, next) {
   if (!req.session?.isAdmin) return res.status(401).json({ error: 'Admin access required' });
@@ -133,6 +134,27 @@ router.patch('/defaults', requireAdmin, async (req, res, next) => {
 
     await Promise.all(updates);
     res.json({ success: true, message: 'Defaults updated successfully' });
+  } catch (e) { next(e); }
+});
+
+// ── Feature flags (tutorial / product tour, …) ─────────────────────────────
+router.get('/features', requireAdmin, async (req, res, next) => {
+  try {
+    res.json(await readFeatures());
+  } catch (e) { next(e); }
+});
+
+router.patch('/features', requireAdmin, async (req, res, next) => {
+  try {
+    const { tourEnabled } = req.body;
+    if (tourEnabled !== undefined && typeof tourEnabled !== 'boolean') {
+      return res.status(400).json({ error: 'tourEnabled must be a boolean' });
+    }
+    if (tourEnabled === undefined) {
+      return res.status(400).json({ error: 'No feature flags provided' });
+    }
+    const next = await writeFeatures({ tourEnabled });
+    res.json({ success: true, ...next });
   } catch (e) { next(e); }
 });
 

@@ -87,6 +87,7 @@ app.use('/api/auth/reset-password',  passwordLimiter);
 
 app.use('/api/auth',          require('./routes/auth'));
 app.use('/api/admin',         require('./routes/admin'));
+app.use('/api/platform',      require('./routes/platform'));
 app.use('/api/contacts',      require('./routes/contacts'));
 app.use('/api/stages',        require('./routes/stages'));
 app.use('/api/fields',        require('./routes/fields'));

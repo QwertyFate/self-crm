@@ -18,14 +18,18 @@ async function saveSupplierName() {
 
 function updateObjectsNav() {
   const name  = currentWorkspace?.object_name || 'Listings';
+  const singular = name.replace(/s$/i, '');
   const label = document.getElementById('nav-objects-label');
   const title = document.getElementById('objects-page-title');
   const btn   = document.getElementById('add-object-btn');
   const tab   = document.getElementById('settings-tab-objects');
+  const search = document.getElementById('object-search');
   if (label) label.textContent = name;
   if (title) title.textContent = name;
-  if (btn)   btn.textContent   = `+ Add ${name.replace(/s$/i, '')}`;
+  // Keep the plus icon: only the label inside the button changes.
+  if (btn)   { const span = btn.querySelector('span'); if (span) span.textContent = `Add ${singular}`; }
   if (tab)   tab.textContent   = name;
+  if (search) search.placeholder = `Search ${name.toLowerCase()}…`;
 }
 
 function effectiveObjectColumns() {
@@ -41,118 +45,116 @@ function effectiveObjectColumns() {
 }
 
 async function loadObjects() {
-  const objTable = document.getElementById('objects-table-wrap');
-  const objGrid = document.getElementById('objects-card-grid');
-  if (objTable) objTable.innerHTML = '';
-  if (objGrid) objGrid.innerHTML = '';
-
-  objectFields  = await api.get('/api/object-fields');
-  objectColumns = currentWorkspace?.object_columns || [];
-  objects       = await api.get('/api/objects');
+  localStorage.removeItem('objectViewMode'); // legacy card/table preference — this page is list-only now
+  objectFields   = await api.get('/api/object-fields');
+  objectColumns  = currentWorkspace?.object_columns || [];
+  objects        = await api.get('/api/objects');
   objCurrentPage = 1;
-  setObjectView(objectViewMode, false);
   renderObjectsCurrent();
 }
 
-function setObjectView(mode, save = true) {
-  objectViewMode = mode;
-  if (save) localStorage.setItem('objectViewMode', mode);
-  document.getElementById('obj-view-table')?.classList.toggle('active', mode === 'table');
-  document.getElementById('obj-view-card')?.classList.toggle('active', mode === 'card');
-  document.getElementById('objects-table-wrap')?.classList.toggle('hidden', mode === 'card');
-  document.getElementById('objects-card-grid')?.classList.toggle('hidden', mode === 'table');
-  if (objects.length) renderObjectsCurrent();
+// A new search term resets to page 1 so results are never missed off-page.
+function onObjectSearch() {
+  objCurrentPage = 1;
+  renderObjectsCurrent();
 }
 
-function filterObjects() {
-  const q = document.getElementById('object-search').value.toLowerCase();
-  const filtered = objects.filter(o => o.name.toLowerCase().includes(q));
-  if (objectViewMode === 'card') renderObjectsCards(filtered); else renderObjectsTable(filtered);
+function clearObjectSearch() {
+  const input = document.getElementById('object-search');
+  if (input) input.value = '';
+  objCurrentPage = 1;
+  renderObjectsCurrent();
+}
+
+// Matches the name plus every custom value, so users can search any column.
+function objectMatchesQuery(o, q) {
+  if (!q) return true;
+  if ((o.name || '').toLowerCase().includes(q)) return true;
+  return Object.values(o.custom_data || {}).some(v => String(v ?? '').toLowerCase().includes(q));
 }
 
 function renderObjectsCurrent() {
-  const q = document.getElementById('object-search')?.value.toLowerCase() || '';
-  const filtered = q ? objects.filter(o => o.name.toLowerCase().includes(q)) : objects;
-  if (objectViewMode === 'card') renderObjectsCards(filtered); else renderObjectsTable(filtered);
+  const q = (document.getElementById('object-search')?.value || '').trim().toLowerCase();
+  renderObjectsTable(objects.filter(o => objectMatchesQuery(o, q)), q);
 }
 
-function renderObjectsCards(list) {
-  const visCols = effectiveObjectColumns().filter(c => c.visible);
-  const grid = document.getElementById('objects-card-grid'), pag = document.getElementById('objects-pagination');
-  if (!grid) return;
+function renderObjectsTable(list, q = '') {
+  const visCols  = effectiveObjectColumns().filter(c => c.visible);
+  const typeName = currentWorkspace?.object_name || 'Listings';
+  const singular = typeName.replace(/s$/i, '');
+  const dash     = '<span class="muted-dash">—</span>';
+  const colspan  = visCols.length + 2;
+
+  document.getElementById('objects-thead').innerHTML =
+    `<tr><th>${esc(singular)} name</th>${visCols.map(c => `<th>${esc(c.label())}</th>`).join('')}<th></th></tr>`;
+
   const total = list.length, totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   if (objCurrentPage > totalPages) objCurrentPage = totalPages;
   const page = list.slice((objCurrentPage - 1) * PAGE_SIZE, objCurrentPage * PAGE_SIZE);
+  const tbody = document.getElementById('objects-tbody');
 
-  grid.innerHTML = page.map(o => {
-    const fieldRows = visCols.map(col => {
-      const val = col.key === 'created_at'
-        ? (fmtDate(o.created_at) || '—')
-        : (o.custom_data?.[col.key] ? esc(o.custom_data[col.key]) : '<span style="color:var(--muted)">—</span>');
-      return `<div class="obj-card-field"><label>${esc(col.label())}</label><span>${val}</span></div>`;
-    }).join('');
-    return `<div class="obj-card" onclick="openObjectDetail(${o.id})">
-      <div class="obj-card-header">
-        <div class="obj-card-name">${esc(o.name)}</div>
-        <div class="obj-card-actions">
-          <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();openObjectModal(${o.id})">Edit</button>
-          <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteObject(${o.id})">Delete</button>
-        </div>
+  if (!page.length) {
+    tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colspan}">
+      <div class="table-empty">
+        <div class="empty-state-art"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg></div>
+        <h2>${q ? 'No matches found' : `No ${esc(typeName.toLowerCase())} yet`}</h2>
+        <p>${q
+          ? `Nothing matches “${esc(q)}”. Try a different search term.`
+          : `Add your first ${esc(singular.toLowerCase())} to keep everything in one place.`}</p>
+        ${q
+          ? '<button class="btn btn-sm" onclick="clearObjectSearch()">Clear search</button>'
+          : `<div class="hstack-tight">
+              <button class="btn btn-sm btn-primary" onclick="openObjectModal()">+ Add ${esc(singular)}</button>
+              ${objectFields.length ? '' : '<button class="btn btn-sm" onclick="openObjectFieldModal()">Add column</button>'}
+            </div>`}
       </div>
-      ${fieldRows ? `<div class="obj-card-fields">${fieldRows}</div>` : ''}
-    </div>`;
-  }).join('') || '<p style="color:var(--muted);padding:20px 0">No items found.</p>';
-
-  if (pag && totalPages > 1) {
-    const s = (objCurrentPage-1)*PAGE_SIZE+1, e = Math.min(objCurrentPage*PAGE_SIZE, total);
-    const pages = buildPageNumbers(objCurrentPage, totalPages);
-    pag.innerHTML = `<span class="pagination-info">Showing ${s}–${e} of ${total}</span>
-      <div class="pagination-controls">
-        <button class="page-btn" onclick="objGoToPage(${objCurrentPage-1})" ${objCurrentPage===1?'disabled':''}>‹</button>
-        ${pages.map(p => p==='…'?'<span class="page-ellipsis">…</span>':`<button class="page-btn${p===objCurrentPage?' active':''}" onclick="objGoToPage(${p})">${p}</button>`).join('')}
-        <button class="page-btn" onclick="objGoToPage(${objCurrentPage+1})" ${objCurrentPage===totalPages?'disabled':''}>›</button>
-      </div>`;
-  } else if (pag) { pag.innerHTML = ''; }
-}
-
-function renderObjectsTable(list) {
-  const visCols = effectiveObjectColumns().filter(c => c.visible);
-  document.getElementById('objects-thead').innerHTML = `<tr><th>Name</th>${visCols.map(c => `<th>${c.label()}</th>`).join('')}<th></th></tr>`;
-  const total = list.length, totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  if (objCurrentPage > totalPages) objCurrentPage = totalPages;
-  const page = list.slice((objCurrentPage - 1) * PAGE_SIZE, objCurrentPage * PAGE_SIZE);
-  const dash = '<span class="muted-dash">—</span>';
-
-  document.getElementById('objects-tbody').innerHTML = page.map(o => {
-    const cells = visCols.map(col => {
-      if (col.key === 'created_at') return `<td>${fmtDate(o.created_at)}</td>`;
-      const v = o.custom_data?.[col.key] ?? '';
-      return `<td class="editable-cell" onclick="startObjectInlineEdit(this,${o.id},'${col.key}','${col.type||'text'}')">${esc(v)||dash}</td>`;
+    </td></tr>`;
+  } else {
+    tbody.innerHTML = page.map(o => {
+      const cells = visCols.map(col => {
+        if (col.key === 'created_at')
+          return `<td title="${esc(String(o.created_at || ''))}">${fmtDate(o.created_at) || dash}</td>`;
+        const v = o.custom_data?.[col.key] ?? '';
+        return `<td class="editable-cell" title="${esc(v)}" onclick="startObjectInlineEdit(this,${o.id},'${col.key}','${col.type||'text'}')">${esc(v) || dash}</td>`;
+      }).join('');
+      return `<tr>
+        <td class="name-cell" title="${esc(o.name)}"><strong class="contact-name-link" onclick="openObjectDetail(${o.id})">${esc(o.name)}</strong></td>
+        ${cells}
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-ghost" onclick="openObjectModal(${o.id})">Edit</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteObject(${o.id})">Delete</button>
+        </td>
+      </tr>`;
     }).join('');
-    return `<tr>
-      <td><strong class="contact-name-link" onclick="openObjectDetail(${o.id})">${esc(o.name)}</strong></td>
-      ${cells}
-      <td style="white-space:nowrap">
-        <button class="btn btn-sm btn-ghost" onclick="openObjectModal(${o.id})">Edit</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteObject(${o.id})">Delete</button>
-      </td>
-    </tr>`;
-  }).join('');
+  }
+
+  updateObjectCountTag(total, page.length, q);
 
   const pagEl = document.getElementById('objects-pagination');
-  if (pagEl && totalPages > 1) {
-    const s = (objCurrentPage-1)*PAGE_SIZE+1, e = Math.min(objCurrentPage*PAGE_SIZE, total);
-    const pages = buildPageNumbers(objCurrentPage, totalPages);
-    pagEl.innerHTML = `<span class="pagination-info">Showing ${s}–${e} of ${total}</span>
-      <div class="pagination-controls">
+  if (!pagEl) return;
+  if (!total) { pagEl.innerHTML = ''; return; }
+  const s = (objCurrentPage - 1) * PAGE_SIZE + 1, e = Math.min(objCurrentPage * PAGE_SIZE, total);
+  pagEl.innerHTML = `<span class="pagination-info">Showing ${s}–${e} of ${total}</span>` + (totalPages > 1
+    ? `<div class="pagination-controls">
         <button class="page-btn" onclick="objGoToPage(${objCurrentPage-1})" ${objCurrentPage===1?'disabled':''}>‹</button>
-        ${pages.map(p => p==='…'?'<span class="page-ellipsis">…</span>':`<button class="page-btn${p===objCurrentPage?' active':''}" onclick="objGoToPage(${p})">${p}</button>`).join('')}
+        ${buildPageNumbers(objCurrentPage, totalPages).map(p => p==='…'?'<span class="page-ellipsis">…</span>':`<button class="page-btn${p===objCurrentPage?' active':''}" onclick="objGoToPage(${p})">${p}</button>`).join('')}
         <button class="page-btn" onclick="objGoToPage(${objCurrentPage+1})" ${objCurrentPage===totalPages?'disabled':''}>›</button>
-      </div>`;
-  } else if (pagEl) { pagEl.innerHTML = ''; }
+      </div>`
+    : '');
 }
 
-function objGoToPage(p) { objCurrentPage = p; filterObjects(); }
+// Toolbar feedback: how many rows matched + a Clear button while searching.
+function updateObjectCountTag(total, showing, q) {
+  const tag = document.getElementById('object-count');
+  if (tag) {
+    if (!total)   tag.textContent = '';
+    else if (q)   tag.textContent = `${showing} of ${total} shown`;
+    else          tag.textContent = `${total} item${total === 1 ? '' : 's'}`;
+  }
+  document.getElementById('object-search-clear')?.classList.toggle('hidden', !q);
+}
+
+function objGoToPage(p) { objCurrentPage = p; renderObjectsCurrent(); }
 
 function startObjectInlineEdit(td, objectId, fieldKey, fieldType) {
   if (td.querySelector('input,select')) return;
@@ -166,7 +168,7 @@ function startObjectInlineEdit(td, objectId, fieldKey, fieldType) {
     const val = el.value.trim(); td.innerHTML = origHTML; if (val === origVal) return;
     obj.custom_data = { ...(obj.custom_data||{}), [fieldKey]: val };
     await api.put(`/api/objects/${objectId}`, { name: obj.name, custom_data: obj.custom_data });
-    filterObjects();
+    renderObjectsCurrent();
   };
   el.onkeydown = e => {
     if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
@@ -181,15 +183,22 @@ async function openObjectModal(id) {
   document.getElementById('object-id').value = id || '';
   const typeName = (currentWorkspace?.object_name || 'Listing').replace(/s$/i,'');
   document.getElementById('object-modal-title').textContent = id ? `Edit ${typeName}` : `Add ${typeName}`;
-  document.getElementById('obj-custom-fields').innerHTML = objectFields.map(f =>
-    `<div class="form-group"><label>${esc(f.name)}</label>${renderDealFieldInput(f,'')}</div>`
-  ).join('');
+  const nameLabel = document.getElementById('obj-name-label');
+  if (nameLabel) nameLabel.innerHTML = `${esc(typeName)} name <span class="req">*</span>`;
+  document.getElementById('obj-custom-fields').innerHTML = objectFields.length
+    ? objectFields.map(f =>
+        `<div class="form-group"><label for="dfield-${f.field_key}">${esc(f.name)}</label>${renderDealFieldInput(f,'')}</div>`
+      ).join('')
+    : '<p class="text-xs text-muted">No extra fields set up yet — the name is all that is needed.</p>';
   if (id) {
     const obj = objects.find(o => o.id === id) || await api.get(`/api/objects/${id}`);
     document.getElementById('obj-name').value = obj.name;
     objectFields.forEach(f => { const el = document.getElementById(`dfield-${f.field_key}`); if (el) el.value = obj.custom_data?.[f.field_key] ?? ''; });
   }
+  const body = document.getElementById('object-modal-body');
+  if (body) body.scrollTop = 0;
   document.getElementById('object-modal').classList.remove('hidden');
+  document.getElementById('obj-name')?.focus();
 }
 
 async function saveObject(e) {
@@ -202,9 +211,10 @@ async function saveObject(e) {
 }
 
 async function deleteObject(id) {
-  if (!confirm('Delete this item?')) return;
+  const singular = (currentWorkspace?.object_name || 'Listing').replace(/s$/i,'');
+  if (!confirm(`Delete this ${singular.toLowerCase()}?`)) return;
   await api.del(`/api/objects/${id}`);
-  objects = objects.filter(o => o.id !== id); filterObjects();
+  objects = objects.filter(o => o.id !== id); renderObjectsCurrent();
 }
 
 async function openObjectDetail(id) {
@@ -223,7 +233,7 @@ async function openObjectDetail(id) {
   const fieldHtml = objectFields.map(f => {
     const v = obj.custom_data?.[f.field_key];
     return v ? `<div class="detail-item"><label>${esc(f.name)}</label><span>${esc(v)}</span></div>` : '';
-  }).join('');
+  }).join('') || '<p class="text-xs text-muted">No details recorded yet.</p>';
 
   const linkedContactIds = new Set((obj.contacts || []).map(c => c.id));
   const contactRows = (obj.contacts || []).map(c => `
@@ -293,9 +303,11 @@ async function openObjectDetail(id) {
   dealInput._availableDeals = deals.filter(d => !linkedDealIds.has(d.id));
   dealInput._selectedDealId = null;
 
-  document.querySelector('#object-detail-modal')?.addEventListener('scroll', () => {
+  // The dropdowns live inside the scrolling modal body, so close them when it scrolls.
+  const detailBody = document.getElementById('object-detail-body');
+  if (detailBody) detailBody.onscroll = () => {
     document.querySelectorAll('.deal-search-dropdown').forEach(dd => dd.classList.add('hidden'));
-  }, { passive: true });
+  };
 
   document.getElementById('object-detail-modal').classList.remove('hidden');
 }
@@ -408,7 +420,10 @@ function openObjectFieldModal(id) {
   document.getElementById('object-field-form').reset();
   document.getElementById('objf-id').value = id || '';
   document.getElementById('objf-options-group').classList.add('hidden');
+  const objName = currentWorkspace?.object_name || 'Listings';
   document.getElementById('object-field-modal-title').textContent = id ? 'Edit Field' : 'Add Field';
+  const hint = document.getElementById('objf-hint');
+  if (hint) hint.textContent = `Each field becomes a column in ${objName} and a property on every item.`;
   if (id) {
     const f = objectFields.find(f => f.id === id);
     document.getElementById('objf-name').value = f.name;
@@ -418,6 +433,7 @@ function openObjectFieldModal(id) {
     if (f.type === 'dropdown') document.getElementById('objf-options-group').classList.remove('hidden');
   }
   document.getElementById('object-field-modal').classList.remove('hidden');
+  document.getElementById('objf-name')?.focus();
 }
 function autoObjectFieldKey() {
   if (document.getElementById('objf-id').value) return;
@@ -426,6 +442,12 @@ function autoObjectFieldKey() {
 }
 function toggleObjectFieldOptions() {
   document.getElementById('objf-options-group').classList.toggle('hidden', document.getElementById('objf-type').value !== 'dropdown');
+}
+// Keep Settings (fields + column order) and the listings table in sync.
+function refreshObjectFieldViews() {
+  renderObjectFieldsList();
+  renderObjectColumnSettings();
+  if (document.getElementById('page-objects')?.classList.contains('active')) renderObjectsCurrent();
 }
 async function saveObjectField(e) {
   e.preventDefault();
@@ -436,11 +458,15 @@ async function saveObjectField(e) {
   };
   const res = id ? await api.put(`/api/object-fields/${id}`, payload) : await api.post('/api/object-fields', payload);
   if (res.error) { alert(res.error); return; }
-  closeModal('object-field-modal'); objectFields = await api.get('/api/object-fields'); renderObjectFieldsList();
+  closeModal('object-field-modal');
+  objectFields = await api.get('/api/object-fields');
+  refreshObjectFieldViews();
 }
 async function deleteObjectField(id) {
-  if (!confirm('Delete this field?')) return;
-  await api.del(`/api/object-fields/${id}`); objectFields = objectFields.filter(f => f.id !== id); renderObjectFieldsList();
+  if (!confirm('Delete this column? Values stored in it will no longer show on any item.')) return;
+  await api.del(`/api/object-fields/${id}`);
+  objectFields = objectFields.filter(f => f.id !== id);
+  refreshObjectFieldViews();
 }
 
 function renderObjectColumnSettings() {
@@ -471,7 +497,7 @@ async function saveObjectColumns(){
   if(res.error){if(msgEl){msgEl.textContent=res.error;msgEl.className='workspace-name-msg error';msgEl.classList.remove('hidden');}return;}
   objectColumns=toSave; currentWorkspace.object_columns=toSave;
   if(msgEl){msgEl.textContent='✓ Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
-  setTimeout(()=>msgEl?.classList.add('hidden'),2500); filterObjects();
+  setTimeout(()=>msgEl?.classList.add('hidden'),2500); renderObjectsCurrent();
 }
 async function saveObjectTypeName(){
   const input=document.getElementById('object-name-input'), msgEl=document.getElementById('object-name-msg');

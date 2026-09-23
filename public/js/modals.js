@@ -30,7 +30,10 @@ async function openContactModal(id) {
   } else {
     assigneeEl.value = currentUser?.id || '';
   }
+  const body = document.getElementById('contact-modal-body');
+  if (body) body.scrollTop = 0;
   document.getElementById('contact-modal').classList.remove('hidden');
+  document.getElementById('cf-name')?.focus();
 }
 
 function renderFieldInput(f, value) {
@@ -1220,13 +1223,23 @@ async function openDealModal(id) {
 }
 
 async function renderObjectPanel(dealId, linkedObjects) {
-  const label = document.getElementById('deal-object-panel-label'), body = document.getElementById('deal-object-panel-body');
+  const label = document.getElementById('deal-object-panel-label');
+  const body  = document.getElementById('deal-object-panel-body');
   if (!label || !body) return;
-  const objName = currentWorkspace?.object_name || 'Objects';
+
+  const objName  = currentWorkspace?.object_name || 'Listings';
+  const singular = objName.replace(/s$/i, '');
   label.textContent = objName;
-  if (!dealId) { body.innerHTML = `<div class="object-panel-empty">Save the deal first to link ${esc(objName.toLowerCase())}.</div>`; return; }
+  linkedObjects = Array.isArray(linkedObjects) ? linkedObjects : [];
+
+  if (!dealId) {
+    body.innerHTML = `<div class="object-panel-empty">Save the deal first to link ${esc(objName.toLowerCase())}.</div>`;
+    return;
+  }
+
   if (!objectFields.length) objectFields = await api.get('/api/object-fields');
-  const dash = `<span style="color:var(--muted)">—</span>`;
+  if (!objects.length)      objects      = await api.get('/api/objects');
+
   const linkedIds = new Set(linkedObjects.map(o => o.id));
   const available = objects.filter(o => !linkedIds.has(o.id));
 
@@ -1234,11 +1247,12 @@ async function renderObjectPanel(dealId, linkedObjects) {
     ? linkedObjects.map(o => {
         const customData = o.custom_data || {};
         const fieldRows = objectFields.map(f => {
-          const raw = customData[f.field_key]; let val;
-          if (raw === undefined || raw === null || raw === '') { val = dash; }
-          else if (f.type === 'date') { val = esc(fmtDate(raw)); }
+          const raw = customData[f.field_key];
+          if (raw === undefined || raw === null || raw === '') return '';
+          let val;
+          if (f.type === 'date') { val = esc(fmtDate(raw)); }
           else if (f.type === 'checkbox') { val = raw === true || raw === 'true' || raw === '1' ? '✓ Yes' : '✗ No'; }
-          else if (f.type === 'select' && Array.isArray(f.options)) {
+          else if ((f.type === 'select' || f.type === 'dropdown') && Array.isArray(f.options)) {
             const opt = f.options.find(op => op === raw || (typeof op === 'object' && op.value === raw));
             val = esc(typeof opt === 'object' ? opt.label : (opt || raw));
           } else { val = esc(String(raw)); }
@@ -1246,38 +1260,48 @@ async function renderObjectPanel(dealId, linkedObjects) {
         }).join('');
         return `<div class="object-panel-card" id="opcard-${o.id}">
           <div class="object-panel-card-header">
-            <div class="object-panel-card-name">${esc(o.name)}</div>
-            <button class="object-panel-unlink" title="Unlink" onclick="unlinkObjectFromDeal(${dealId},${o.id})">×</button>
+            <div class="object-panel-card-name" title="${esc(o.name)}">${esc(o.name)}</div>
+            <button class="object-panel-unlink" title="Unlink from this deal" onclick="unlinkObjectFromDeal(${dealId},${o.id})">×</button>
           </div>
           ${fieldRows ? `<div class="object-panel-card-fields">${fieldRows}</div>` : ''}
         </div>`;
       }).join('')
     : `<div class="object-panel-empty">No ${esc(objName.toLowerCase())} linked yet.</div>`;
 
-  body.innerHTML = `
-    <div id="object-panel-cards">${cards}</div>
-    <div class="object-panel-add">
-      <select id="object-panel-select"><option value="">— Add ${esc(objName)} —</option>
+  let addRow;
+  if (!objects.length) {
+    addRow = `<div class="object-panel-empty">No ${esc(objName.toLowerCase())} yet — add one on the ${esc(objName)} page.</div>`;
+  } else if (!available.length) {
+    addRow = `<div class="object-panel-empty">All ${esc(objName.toLowerCase())} in this workspace are linked.</div>`;
+  } else {
+    addRow = `<div class="object-panel-add">
+      <select id="object-panel-select"><option value="">— Add ${esc(singular)} —</option>
         ${available.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}
       </select>
       <button class="btn btn-sm btn-primary" onclick="linkObjectInDeal(${dealId})">Add</button>
     </div>`;
+  }
+
+  body.innerHTML = `${addRow}<div class="object-panel-cards">${cards}</div>`;
 }
 
 async function linkObjectInDeal(dealId) {
-  const sel = document.getElementById('object-panel-select'), objectId = parseInt(sel?.value);
-  if (!objectId) return;
-  await api.post(`/api/deals/${dealId}/objects`, { object_id: objectId });
+  const sel = document.getElementById('object-panel-select');
+  const objectId = parseInt(sel?.value, 10);
+  if (!objectId) { sel?.focus(); return; }
+  const res = await api.post(`/api/deals/${dealId}/objects`, { object_id: objectId });
+  if (res?.error) { alert(res.error); return; }
   objects = await api.get('/api/objects');
   const linked = await api.get(`/api/deals/${dealId}/objects`);
-  await renderObjectPanel(dealId, linked);
+  await renderObjectPanel(dealId, Array.isArray(linked) ? linked : []);
 }
 
 async function unlinkObjectFromDeal(dealId, objectId) {
-  await api.del(`/api/deals/${dealId}/objects/${objectId}`);
+  const res = await api.del(`/api/deals/${dealId}/objects/${objectId}`);
+  if (res?.error) { alert(res.error); return; }
   objects = await api.get('/api/objects');
   const linked = await api.get(`/api/deals/${dealId}/objects`);
-  await renderObjectPanel(dealId, linked);
+  await renderObjectPanel(dealId, Array.isArray(linked) ? linked : []);
 }
 
 function populateDealStages(pipelineId, selectedStageId) {
