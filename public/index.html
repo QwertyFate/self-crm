@@ -1676,72 +1676,77 @@
       </div>
 
       <!-- Step 1: Upload -->
-      <div id="import-step-upload">
-        <div class="import-upload-area" onclick="document.getElementById('import-file-input').click()"
-             ondragover="event.preventDefault()" ondrop="handleImportDrop(event)">
-          <div class="import-upload-icon"><svg class="ic" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
-          <p>Drag &amp; drop a CSV here, or <span class="import-browse-link">browse</span></p>
-          <p class="import-upload-hint">First row must be column headers</p>
-          <input type="file" id="import-file-input" accept=".csv,text/csv" style="display:none" onchange="handleImportFile(event)" />
+      <div id="import-step-upload" class="import-step">
+        <div class="import-step-body">
+          <div class="import-upload-area" onclick="document.getElementById('import-file-input').click()"
+               ondragover="event.preventDefault()" ondrop="handleImportDrop(event)">
+            <div class="import-upload-icon"><svg class="ic" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+            <p>Drag &amp; drop a CSV here, or <span class="import-browse-link">browse</span></p>
+            <p class="import-upload-hint">First row must be column headers</p>
+            <input type="file" id="import-file-input" accept=".csv,text/csv" style="display:none" onchange="handleImportFile(event)" />
+          </div>
         </div>
       </div>
 
       <!-- Step 2: Map columns -->
-      <div id="import-step-map" class="hidden">
-        <p class="import-info-text" id="import-info-text"></p>
+      <div id="import-step-map" class="import-step hidden">
+        <div class="import-step-body">
+          <p class="import-info-text" id="import-info-text"></p>
 
-        <!-- Split name option -->
-        <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:12px;display:flex;gap:8px;align-items:center">
-          <input type="checkbox" id="import-split-name" onchange="updateImportNameOptions()" />
-          <label for="import-split-name" style="cursor:pointer;margin:0">Combine First Name + Last Name into Contact Name</label>
-        </div>
-
-        <!-- Auto deal creation option -->
-        <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:16px">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-            <input type="checkbox" id="import-create-deals" onchange="toggleImportDealOptions()" />
-            <label for="import-create-deals" style="cursor:pointer;margin:0">Create deals during import</label>
+          <!-- Split name option -->
+          <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:12px;display:flex;gap:8px;align-items:center">
+            <input type="checkbox" id="import-split-name" onchange="updateImportNameOptions()" />
+            <label for="import-split-name" style="cursor:pointer;margin:0">Combine First Name + Last Name into Contact Name</label>
           </div>
-          <div id="import-deal-options" style="display:none;margin-top:8px;padding-left:24px">
-            <div style="margin-bottom:12px;padding:8px;background:var(--card-bg);border-radius:4px">
-              <div style="display:flex;gap:8px;margin-bottom:8px">
-                <input type="checkbox" id="import-deals-new" checked />
-                <label for="import-deals-new" style="cursor:pointer;margin:0;font-size:13px">For new contacts</label>
-              </div>
-              <div style="display:flex;gap:8px">
-                <input type="checkbox" id="import-deals-updated" />
-                <label for="import-deals-updated" style="cursor:pointer;margin:0;font-size:13px">For updated contacts (optional)</label>
-              </div>
+
+          <!-- Auto deal creation option -->
+          <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:16px">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+              <input type="checkbox" id="import-create-deals" onchange="toggleImportDealOptions()" />
+              <label for="import-create-deals" style="cursor:pointer;margin:0">Create deals during import</label>
             </div>
-            <div style="margin-bottom:8px">
-              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Pipeline</label>
-              <select id="import-pipeline" style="width:100%">
-                <option value="">— Select a pipeline —</option>
-              </select>
-            </div>
-            <div>
-              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Starting Stage (optional)</label>
-              <select id="import-stage" style="width:100%">
-                <option value="">— Auto (first stage) —</option>
-              </select>
+            <div id="import-deal-options" style="display:none;margin-top:8px;padding-left:24px">
+              <div style="margin-bottom:12px;padding:8px;background:var(--card-bg);border-radius:4px">
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                  <input type="checkbox" id="import-deals-new" checked />
+                  <label for="import-deals-new" style="cursor:pointer;margin:0;font-size:13px">For new contacts</label>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <input type="checkbox" id="import-deals-updated" />
+                  <label for="import-deals-updated" style="cursor:pointer;margin:0;font-size:13px">For updated contacts (optional)</label>
+                </div>
+              </div>
+              <div style="margin-bottom:8px">
+                <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Pipeline</label>
+                <select id="import-pipeline" style="width:100%">
+                  <option value="">— Select a pipeline —</option>
+                </select>
+              </div>
+              <div>
+                <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Starting Stage (optional)</label>
+                <select id="import-stage" style="width:100%">
+                  <option value="">— Auto (first stage) —</option>
+                </select>
+              </div>
             </div>
           </div>
+
+          <!-- Assignee selection -->
+          <div style="margin-bottom:16px">
+            <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Assignee (optional)</label>
+            <select id="import-assignee" style="width:100%">
+              <option value="">— Use default or unassigned —</option>
+            </select>
+          </div>
+
+          <div class="import-map-header-row">
+            <span>CSV column &amp; sample</span>
+            <span></span>
+            <span>Maps to CRM field</span>
+          </div>
+          <div id="import-map-rows" class="import-map-rows"></div>
         </div>
 
-        <!-- Assignee selection -->
-        <div style="margin-bottom:16px">
-          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Assignee (optional)</label>
-          <select id="import-assignee" style="width:100%">
-            <option value="">— Use default or unassigned —</option>
-          </select>
-        </div>
-
-        <div class="import-map-header-row">
-          <span>CSV column &amp; sample</span>
-          <span></span>
-          <span>Maps to CRM field</span>
-        </div>
-        <div id="import-map-rows" class="import-map-rows"></div>
         <div class="modal-actions">
           <button class="btn" onclick="importBack()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back</span></button>
           <button class="btn btn-primary" id="import-run-btn" onclick="runImport()">Import contacts</button>
@@ -1749,10 +1754,12 @@
       </div>
 
       <!-- Step 3: Done -->
-      <div id="import-step-done" class="hidden">
-        <div class="import-done">
-          <div class="import-done-icon"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
-          <p id="import-done-text"></p>
+      <div id="import-step-done" class="import-step hidden">
+        <div class="import-step-body">
+          <div class="import-done">
+            <div class="import-done-icon"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
+            <p id="import-done-text"></p>
+          </div>
         </div>
         <div class="modal-actions">
           <button class="btn btn-primary" onclick="closeModal('import-modal');loadContacts()">Done</button>
