@@ -148,6 +148,41 @@ router.delete('/members/:id', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Owner only: switch a member between 'member' and 'admin'. Role lives in both
+// users.role (displayed) and user_workspaces.role (enforced by middleware/auth.js).
+router.patch('/members/:id/role', async (req, res, next) => {
+  try {
+    if (req.userRole !== 'owner') return res.status(403).json({ error: 'Owner only' });
+
+    const { role } = req.body || {};
+    if (!['member', 'admin'].includes(role)) return res.status(400).json({ error: 'Role must be "member" or "admin"' });
+
+    const memberId = parseInt(req.params.id);
+    if (memberId === req.userId) return res.status(400).json({ error: 'You cannot change your own role' });
+
+    const { rows: [member] } = await pool.query(
+      'SELECT id, role FROM users WHERE id=$1 AND workspace_id=$2',
+      [memberId, req.workspaceId]
+    );
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    if (member.role === 'owner') return res.status(400).json({ error: 'Cannot change the role of the workspace owner' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE users SET role=$1 WHERE id=$2 AND workspace_id=$3', [role, memberId, req.workspaceId]);
+      await client.query('UPDATE user_workspaces SET role=$1 WHERE user_id=$2 AND workspace_id=$3', [role, memberId, req.workspaceId]);
+      await client.query('COMMIT');
+      res.json({ success: true, role });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (e) { next(e); }
+});
+
 router.patch('/name', async (req, res, next) => {
   try {
     if (req.userRole !== 'owner') return res.status(403).json({ error: 'Owner only' });

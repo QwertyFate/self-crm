@@ -83,6 +83,7 @@ const TRANSLATIONS = {
     detail_log_ph:'Add note, call, or email…', detail_unassigned:'Unassigned',
     opt_none:'— None —', opt_no_stage:'— No stage —', opt_unassigned:'— Unassigned —',
     lang_en:'English', lang_de:'German',
+    role_owner:'Owner', role_admin:'Admin', role_member:'Member', lbl_invite_role:'Role',
   },
   de: {
     nav_deals:'Deals', nav_contacts:'Kontakte', nav_activities:'Aktivitäten', nav_settings:'Einstellungen', nav_board:'Board',
@@ -129,11 +130,19 @@ const TRANSLATIONS = {
     detail_log_ph:'Notiz, Anruf oder E-Mail hinzufügen…', detail_unassigned:'Nicht zugewiesen',
     opt_none:'— Keine —', opt_no_stage:'— Keine Phase —', opt_unassigned:'— Nicht zugewiesen —',
     lang_en:'Englisch', lang_de:'Deutsch',
+    role_owner:'Inhaber', role_admin:'Admin', role_member:'Mitglied', lbl_invite_role:'Rolle',
   },
 };
 
 function t(key) {
   return (TRANSLATIONS[currentLang] || TRANSLATIONS.en)[key] ?? TRANSLATIONS.en[key] ?? key;
+}
+
+// Human label for a workspace role ('owner' | 'admin' | 'member'); unknown values fall back to the raw string.
+function roleLabel(role) {
+  const key = `role_${role}`;
+  const label = t(key);
+  return label === key ? esc(String(role ?? '')) : label;
 }
 
 function applyTranslations() {

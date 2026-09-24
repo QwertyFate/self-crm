@@ -1066,9 +1066,11 @@ async function saveDealActivity() {
 }
 
 async function editContactPanel(contactId) {
-  await Promise.all([ensureStages(), ensureFields()]);
+  await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
   const contact = contacts.find(c => c.id === contactId) || await api.get(`/api/contacts/${contactId}`);
   const panel = document.getElementById('deal-contact-panel'); if (!panel) return;
+  const assigneeOptions = '<option value="">— Unassigned —</option>' +
+    members.map(m => `<option value="${m.id}"${contact.assigned_to === m.id ? ' selected' : ''}>${esc(m.name)}${m.id === currentUser?.id ? ' (you)' : ''}</option>`).join('');
   const customInputs = fields.map(f => `
     <div class="form-group"><label>${esc(f.name)}</label>
       <input type="text" id="cpfield-${f.field_key}" value="${esc(contact.custom_data?.[f.field_key] || '')}" /></div>`).join('');
@@ -1083,6 +1085,8 @@ async function editContactPanel(contactId) {
         <select id="cpanel-stage"><option value="">— None —</option>
           ${stages.map(s => `<option value="${s.id}"${contact.stage_id===s.id?' selected':''}>${esc(s.name)}</option>`).join('')}
         </select></div>
+      <div class="form-group"><label>Assignee</label>
+        <select id="cpanel-assignee">${assigneeOptions}</select></div>
       ${customInputs}
       <div class="contact-panel-edit-actions">
         <button class="btn btn-sm" onclick="cancelContactPanelEdit(${contactId})">Cancel</button>
@@ -1102,7 +1106,7 @@ async function saveContactPanel(contactId) {
     email:       document.getElementById('cpanel-email')?.value   || '',
     phone:       document.getElementById('cpanel-phone')?.value   || '',
     stage_id:    document.getElementById('cpanel-stage')?.value   || null,
-    assigned_to: contacts.find(c => c.id === contactId)?.assigned_to || null,
+    assigned_to: parseInt(document.getElementById('cpanel-assignee')?.value) || null,
     custom_data,
   };
   const btn = document.querySelector('#deal-contact-panel .btn-primary');
@@ -1110,7 +1114,11 @@ async function saveContactPanel(contactId) {
   const res = await api.put(`/api/contacts/${contactId}`, payload);
   if (res.error) { alert(res.error); if (btn) { btn.disabled = false; btn.textContent = 'Save Contact'; } return; }
   const c = contacts.find(c => c.id === contactId);
-  if (c) { Object.assign(c, payload); const stg = stages.find(s => String(s.id) === String(payload.stage_id)); c.stage_name = stg?.name || null; c.stage_color = stg?.color || null; }
+  if (c) {
+    Object.assign(c, payload);
+    const stg = stages.find(s => String(s.id) === String(payload.stage_id)); c.stage_name = stg?.name || null; c.stage_color = stg?.color || null;
+    c.assigned_to_name = members.find(m => m.id === payload.assigned_to)?.name || null;
+  }
   renderContactPanelReadOnly(c || { id: contactId, ...payload });
 }
 

@@ -145,7 +145,7 @@ router.post('/switch-workspace', async (req, res, next) => {
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
     workspace.contact_columns = workspace.contact_columns || [];
-    res.json({ workspace, role: targetUser.role });
+    res.json({ workspace, role: targetUser.role, user_id: targetUser.id });
   } catch (e) { next(e); }
 });
 
@@ -288,13 +288,14 @@ router.post('/signup', async (req, res, next) => {
       );
       if (!invite)      return res.status(400).json({ error: 'Invalid invite code' });
       if (invite.used)  return res.status(400).json({ error: 'Invite code already used' });
+      const role = invite.role === 'admin' ? 'admin' : 'member';
 
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
         const { rows: [u] } = await client.query(
           'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-          [invite.workspace_id, name.trim(), normalizedEmail, password_hash, 'member']
+          [invite.workspace_id, name.trim(), normalizedEmail, password_hash, role]
         );
         await client.query(
           'UPDATE invite_codes SET used=1, used_by=$1 WHERE id=$2',
@@ -302,12 +303,12 @@ router.post('/signup', async (req, res, next) => {
         );
         await client.query(
           'INSERT INTO user_workspaces (user_id, workspace_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
-          [u.id, invite.workspace_id, 'member']
+          [u.id, invite.workspace_id, role]
         );
         await client.query('COMMIT');
         req.session.userId      = u.id;
         req.session.workspaceId = invite.workspace_id;
-        req.session.userRole    = 'member';
+        req.session.userRole    = role;
         return res.status(201).json({ success: true });
       } catch (e) {
         await client.query('ROLLBACK');
@@ -479,6 +480,7 @@ router.post('/join-workspace', async (req, res, next) => {
     );
     if (!invite)     return res.status(400).json({ error: 'Invalid invite code' });
     if (invite.used) return res.status(400).json({ error: 'Invite code already used' });
+    const role = invite.role === 'admin' ? 'admin' : 'member';
 
     const { rows: [currentUser] } = await pool.query(
       'SELECT email, name FROM users WHERE id=$1',
@@ -494,18 +496,18 @@ router.post('/join-workspace', async (req, res, next) => {
 
     const { rows: [newUser] } = await pool.query(
       'INSERT INTO users (workspace_id, email, name, password_hash, role) SELECT $1, $2, $3, password_hash, $4 FROM users WHERE id=$5 RETURNING id',
-      [invite.workspace_id, currentUser.email, currentUser.name, 'member', req.session.userId]
+      [invite.workspace_id, currentUser.email, currentUser.name, role, req.session.userId]
     );
 
     await pool.query(
       'INSERT INTO user_workspaces (user_id, workspace_id, role) VALUES ($1,$2,$3)',
-      [newUser.id, invite.workspace_id, 'member']
+      [newUser.id, invite.workspace_id, role]
     );
     await pool.query('UPDATE invite_codes SET used=1, used_by=$1 WHERE id=$2', [req.session.userId, invite.id]);
 
     req.session.workspaceId = invite.workspace_id;
     req.session.userId      = newUser.id;
-    req.session.userRole    = 'member';
+    req.session.userRole    = role;
 
     const { rows: [workspace] } = await pool.query(
       'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id=$1',
