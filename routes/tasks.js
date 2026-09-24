@@ -8,10 +8,11 @@ router.use(requireAuth);
 
 router.get('/', async (req, res, next) => {
   try {
-    const { list_id } = req.query;
+    const { list_id, contact_id } = req.query;
     const params = [req.workspaceId];
     let filter = '';
-    if (list_id) { params.push(list_id); filter = ` AND t.list_id = $${params.length}`; }
+    if (list_id)    { params.push(list_id);    filter += ` AND t.list_id = $${params.length}`; }
+    if (contact_id) { params.push(contact_id); filter += ` AND t.contact_id = $${params.length}`; }   // the contact record's Tasks block
 
     const { rows } = await pool.query(`
       SELECT t.*,

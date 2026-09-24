@@ -5,7 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node --env-file=.env server.js",
-    "dev": "nodemon --exec 'node --env-file=.env' server.js"
+    "dev": "nodemon --exec 'node --env-file=.env' server.js",
+    "test": "node --test \"tests/**/*.test.js\"",
+    "test:client": "node --test \"tests/client/*.test.js\"",
+    "test:routes": "node --test \"tests/routes/*.test.js\"",
+    "test:unit": "node --test \"tests/unit/*.test.js\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
@@ -23,5 +27,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

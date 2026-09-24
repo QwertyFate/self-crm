@@ -46,9 +46,9 @@ function adminCopyCode(code, btn) {
 
 function exportContactsCSV() {
   if (!contacts.length) { alert('No contacts to export.'); return; }
-  const hdrs = ['Name','Company','Email','Phone','Stage','Assignee', ...fields.map(f => f.name)];
+  const hdrs = ['Name','Company','Email','Phone','Assignee', ...fields.map(f => f.name)];
   const rows = contacts.map(c => [
-    c.name, c.company||'', c.email||'', c.phone||'', c.stage_name||'', c.assigned_to_name||'',
+    c.name, c.company||'', c.email||'', c.phone||'', c.assigned_to_name||'',
     ...fields.map(f => c.custom_data?.[f.field_key] ?? '')
   ]);
   const csv = [hdrs, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -98,7 +98,6 @@ function autoMapHeader(header) {
   if (['email','e-mail','email address','e-mail-adresse','emailadresse','e_mail','email_address'].includes(h)) return 'email';
   if (['phone','mobile','telephone','tel','phone number','phone no','telefonnummer','telefon','handy','mobilnummer','mobile number','phone_number','telefonnr'].includes(h)) return 'phone';
   if (['company','organization','org','account','company name','firma','unternehmen','firmenname'].includes(h)) return 'company';
-  if (['stage','status','pipeline stage','deal stage','phase'].includes(h)) return 'stage';
   if (['assignee','owner','assigned to','assigned_to','zuständig'].includes(h)) return 'assignee';
   const cf = fields.find(f => f.name.toLowerCase() === h || f.field_key === toFieldKey(h));
   if (cf) return `custom:${cf.field_key}`;
@@ -157,7 +156,11 @@ function updateImportStages() {
     pipeline.stages.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
 }
 function showImportStep(step) {
-  ['upload','map','done'].forEach(s => document.getElementById(`import-step-${s}`).classList.toggle('hidden', s !== step));
+  ['upload','map','done'].forEach(s => {
+    document.getElementById(`import-step-${s}`).classList.toggle('hidden', s !== step);
+    const footer = document.getElementById(`import-footer-${s}`);   // the step's action bar (upload has none)
+    if (footer) footer.classList.toggle('hidden', s !== step);
+  });
 }
 function handleImportDrop(e) { e.preventDefault(); const file = e.dataTransfer.files?.[0]; if (file) processImportFile(file); }
 function handleImportFile(e) { const file = e.target.files?.[0]; if (file) processImportFile(file); }
@@ -165,7 +168,7 @@ function handleImportFile(e) { const file = e.target.files?.[0]; if (file) proce
 async function processImportFile(file) {
   const text = await readFileText(file), delimiter = detectDelimiter(text), allRows = parseCSV(text, delimiter);
   if (allRows.length < 2) { alert('CSV must have a header row and at least one data row.'); return; }
-  await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
+  await Promise.all([ensureFields(), ensureMembers()]);
   const headers = allRows[0].map(h => h.trim()), dataRows = allRows.slice(1).filter(r => r.some(v => v.trim())), sampleRow = allRows[1] || [];
   importData = { headers, rows: dataRows, sampleRow, mappings: headers.map(h => ({ mapTo: autoMapHeader(h), newFieldName: h })) };
   renderImportMapping(); showImportStep('map');
@@ -180,8 +183,8 @@ function renderImportMapping() {
   document.getElementById('import-info-text').textContent = `${rows.length} row${rows.length !== 1 ? 's' : ''} detected — match each column to a CRM field.`;
   const splitName = document.getElementById('import-split-name').checked;
   const builtins = splitName
-    ? [{ val:'first_name', label:'First Name' }, { val:'last_name', label:'Last Name' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'stage', label:'Stage' }, { val:'assignee', label:'Assignee' }]
-    : [{ val:'name', label:'Name *' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'stage', label:'Stage' }, { val:'assignee', label:'Assignee' }];
+    ? [{ val:'first_name', label:'First Name' }, { val:'last_name', label:'Last Name' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'assignee', label:'Assignee' }]
+    : [{ val:'name', label:'Name *' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'assignee', label:'Assignee' }];
   const buildOptions = cur => {
     let o = `<option value="skip"${cur==='skip'?' selected':''}>— Don't import —</option>
       <optgroup label="Contact fields">${builtins.map(b => `<option value="${b.val}"${cur===b.val?' selected':''}>${b.label}</option>`).join('')}</optgroup>`;
@@ -243,7 +246,6 @@ async function runImport() {
       else if (m.mapTo === 'email')   c.email   = val;
       else if (m.mapTo === 'phone')   c.phone   = val.replace(/^p:/i, '').trim();
       else if (m.mapTo === 'company') c.company = val;
-      else if (m.mapTo === 'stage')   { const s = stages.find(s => s.name.toLowerCase() === val.toLowerCase()); if (s) c.stage_id = s.id; }
       else if (m.mapTo === 'assignee') { const mem = members.find(mem => mem.name.toLowerCase() === val.toLowerCase() || mem.email.toLowerCase() === val.toLowerCase()); if (mem) c.assigned_to = mem.id; }
       else if (m.mapTo.startsWith('custom:')) c.custom_data[m.mapTo.slice(7)] = val;
       else if (m.mapTo === 'new' && newKeyByCol[i]) c.custom_data[newKeyByCol[i]] = val;
@@ -285,6 +287,7 @@ async function runImport() {
     stageId,
     defaultAssigneeId: assigneeId
   });
+  if (res.error) { alert(res.error); return; }   // 413 / 503 / 504 from the server — stay on the mapping step
   btn.disabled = false; btn.textContent = 'Import contacts';
   const dealsCreated = res.deals_created || 0;
   let message = `Successfully imported ${res.imported} contact${res.imported !== 1 ? 's' : ''}.`;

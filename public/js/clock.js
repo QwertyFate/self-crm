@@ -78,6 +78,6 @@ async function saveTimezoneSetting() {
   }
   if (currentUser) currentUser.timezone = timezone;
   updateClock();
-  if (msgEl) { msgEl.textContent = '✓ Timezone saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }

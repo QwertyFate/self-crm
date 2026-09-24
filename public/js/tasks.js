@@ -16,9 +16,14 @@ const DEFAULT_TASK_STATUSES = [
 
 const PRIORITY_LABELS = { urgent: 'Urgent', high: 'High', medium: 'Medium', low: 'Low' };
 
+// Project statuses win when the project has any; otherwise the workspace's
+// own list (edited in Settings, previously ignored here); otherwise the
+// built-in four. Same precedence the server validates against.
 function getActiveTaskStatuses() {
-  const saved = currentProject?.statuses;
-  return (Array.isArray(saved) && saved.length) ? saved : DEFAULT_TASK_STATUSES;
+  const list = a => (Array.isArray(a) && a.length) ? a : null;
+  return list(currentProject?.statuses)
+      || list(typeof currentWorkspace !== 'undefined' ? currentWorkspace?.task_statuses : null)
+      || DEFAULT_TASK_STATUSES;
 }
 
 async function loadTasks() {
@@ -85,7 +90,7 @@ function renderProjectNav() {
   const nav = document.getElementById('tasks-project-nav');
   if (!nav) return;
   if (!taskProjects.length) {
-    nav.innerHTML = `<div style="padding:8px 8px;color:var(--muted);font-size:12px">No projects yet.</div>`;
+    nav.innerHTML = `<div class="empty-inline">No projects yet.</div>`;
     return;
   }
 
@@ -266,7 +271,7 @@ function renderTasksList(list) {
   const parents  = list.filter(t => !t.parent_id);
   const subMap   = buildSubtaskMap(list);
   if (!parents.length) {
-    el.innerHTML = `<div style="color:var(--muted);padding:30px;text-align:center;font-size:14px">No tasks yet. Click + Add Task to get started.</div>`;
+    el.innerHTML = `<div class="empty-state compact">No tasks yet. Click + Add Task to get started.</div>`;
     return;
   }
   el.innerHTML = parents.map(t => taskListRow(t, false, subMap)).join('');
@@ -338,7 +343,7 @@ function renderTasksKanban(list) {
         <div class="task-col-cards"
           ondragover="taskDragOver(event)" ondragleave="taskDragLeave(event)"
           ondrop="taskDrop(event,'${st.key}')">
-          ${cards || `<div style="color:var(--muted);font-size:12px;padding:8px 4px">No tasks</div>`}
+          ${cards || `<div class="empty-inline">No tasks</div>`}
         </div>
       </div>`;
   }).join('');
@@ -681,7 +686,7 @@ function renderSubtasksList(subtasks, parentId) {
       <span class="subtask-item-title${s.status === (getActiveTaskStatuses().at(-1)?.key||'done') ? ' done' : ''}">${esc(s.title)}</span>
       <button type="button" class="btn btn-sm btn-danger btn-icon" style="padding:1px 5px"
         onclick="deleteSubtask(${s.id}, ${parentId})">✕</button>
-    </div>`).join('') || `<p style="color:var(--muted);font-size:12px">No subtasks yet.</p>`;
+    </div>`).join('') || `<p class="empty-inline">${t('no_subtasks')}</p>`;
 }
 
 async function addSubtask() {
@@ -750,6 +755,7 @@ async function saveTask(e) {
   if (id) await api.put(`/api/tasks/${id}`, payload);
   else    await api.post('/api/tasks', payload);
   closeModal('task-modal');
+  refreshContactTasks();                 // the contact record's Tasks block, when one is open
   if (currentListId) {
     tasks = await api.get(`/api/tasks?list_id=${currentListId}`);
     renderTasksCurrent();
@@ -761,6 +767,7 @@ async function deleteTaskFromModal() {
   if (!id || !confirm('Delete this task and all its subtasks?')) return;
   await api.del(`/api/tasks/${id}`);
   closeModal('task-modal');
+  refreshContactTasks();
   tasks = tasks.filter(t => t.id !== Number(id) && t.parent_id !== Number(id));
   renderTasksCurrent();
 }

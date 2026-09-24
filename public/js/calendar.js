@@ -80,9 +80,8 @@ async function renderCalendar() {
 }
 
 function stripHtml(html) {
-  const div = document.createElement('div');
-  div.innerHTML = html || '';
-  return div.textContent || '';
+  // DOMParser is inert: a detached div.innerHTML would still load <img onerror>.
+  return new DOMParser().parseFromString(html || '', 'text/html').body.textContent || '';
 }
 
 async function openDayModal(dateStr) {
@@ -111,12 +110,12 @@ async function openDayModal(dateStr) {
     : `<p class="day-events-empty">No notes scheduled for this day.</p>`;
 
   modal.innerHTML = `
-    <div class="modal" style="max-width:640px;width:92vw;max-height:85vh;display:flex;flex-direction:column">
-      <div class="modal-header" style="flex-shrink:0">
+    <div class="modal modal-md">
+      <div class="modal-header">
         <h2>${dateLabel}</h2>
         <button class="close-btn" onclick="document.getElementById('day-events-modal')?.remove()">&times;</button>
       </div>
-      <div class="day-events-list" style="flex:1;overflow-y:auto;padding:16px 24px;display:flex;flex-direction:column;gap:8px">
+      <div class="day-events-list">
         ${items}
       </div>
       <div style="padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:16px;align-items:center;font-size:12px;color:var(--muted)">
