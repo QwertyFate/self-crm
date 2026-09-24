@@ -1855,6 +1855,11 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
   font-size: var(--fs-3xs); font-weight: 650; text-transform: uppercase;
   letter-spacing: .04em; color: var(--ink-muted);
 }
+.member-role.role-admin { background: var(--brand-subtle); border-color: transparent; color: var(--brand-ink); }
+.member-role.role-owner { background: var(--ink); border-color: transparent; color: var(--surface); }
+/* The global `select { width: 100% }` rule would stretch these across the flex row. */
+.member-role-select, #invite-role-select { width: auto; flex: 0 0 auto; height: 26px; }
+.invite-actions { display: flex; align-items: center; gap: var(--sp-2); }
 
 .workspace-name-row { display: flex; align-items: center; gap: var(--sp-2); }
 .workspace-name-input { flex: 1; }

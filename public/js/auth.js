@@ -139,7 +139,7 @@ function showWorkspacePicker(workspaces, user) {
       <div class="workspace-picker-avatar">${(w.name||'?')[0].toUpperCase()}</div>
       <div>
         <div class="workspace-picker-name">${esc(w.name)}</div>
-        <div class="workspace-picker-role">${w.role}</div>
+        <div class="workspace-picker-role">${roleLabel(w.role)}</div>
       </div>
     </button>`).join('');
 }
@@ -187,7 +187,7 @@ async function loadWorkspacesPage() {
       </div>
       <div class="ws-page-card-body">
         <div class="ws-page-name">${esc(w.name)}</div>
-        <div class="ws-page-role">${w.role === 'owner' ? 'Owner' : 'Member'}</div>
+        <div class="ws-page-role">${roleLabel(w.role)}</div>
       </div>
       <div class="ws-page-card-footer">
         <span class="ws-page-open-btn">${isActive ? 'Currently open' : 'Switch →'}</span>
@@ -215,6 +215,9 @@ async function switchWorkspace(workspaceId) {
   const data = await api.post('/api/auth/switch-workspace', { workspace_id: workspaceId });
   if (data.error) { alert(data.error); return; }
   currentWorkspace = data.workspace;
+  // Users are per-workspace rows, so both the id and the role change on switch.
+  if (currentUser && data.role)    currentUser.role = data.role;
+  if (currentUser && data.user_id) currentUser.id   = data.user_id;
   kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = data.workspace.contact_columns || [];
   objectColumns    = data.workspace.object_columns  || [];

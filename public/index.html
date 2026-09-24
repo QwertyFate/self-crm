@@ -883,7 +883,13 @@
               <div class="settings-card" id="invites-card">
                 <div class="settings-card-header">
                   <h2 data-i18n="set_invites">Invite Codes</h2>
-                  <button class="btn btn-primary btn-sm" onclick="generateInviteCode()" data-i18n="generate_btn">Generate</button>
+                  <div class="invite-actions">
+                    <select id="invite-role-select" class="btn btn-sm hidden" title="Role" aria-label="Role for the new invite code">
+                      <option value="member">Member</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    <button class="btn btn-primary btn-sm" onclick="generateInviteCode()" data-i18n="generate_btn">Generate</button>
+                  </div>
                 </div>
                 <p class="settings-hint" data-i18n="hint_invites">One-time codes to let people join this workspace.</p>
                 <ul id="invites-list" class="settings-list"></ul>
@@ -1050,7 +1056,7 @@
             </div>
             <div>
               <div class="add-ws-choice-title">Join a workspace</div>
-              <div class="add-ws-choice-sub">Enter an invite code from a workspace owner</div>
+              <div class="add-ws-choice-sub">Enter an invite code from a workspace owner or admin</div>
             </div>
           </button>
           <button class="add-ws-choice" onclick="pickAddWorkspace('create')">

@@ -20,7 +20,7 @@ const SCHEMA = `
     name          TEXT NOT NULL,
     email         TEXT NOT NULL,
     password_hash TEXT NOT NULL,
-    role          TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','member')),
+    role          TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','admin','member')),
     created_at    TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(workspace_id, email)
   );
@@ -195,6 +195,14 @@ async function initDb() {
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_activities_event_date ON activities (workspace_id, event_date)`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS analytics_layout JSONB NOT NULL DEFAULT '{}'`);
+  // Workspace roles: invite codes carry the role the joiner will receive (member or admin).
+  await pool.query(`ALTER TABLE invite_codes ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'member'`);
+  try {
+    await pool.query(`ALTER TABLE invite_codes DROP CONSTRAINT IF EXISTS invite_codes_role_check`);
+    await pool.query(`ALTER TABLE invite_codes ADD CONSTRAINT invite_codes_role_check CHECK(role IN ('member','admin'))`);
+  } catch (e) {
+    if (e.code !== '42710') throw e;
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notifications (
       id           SERIAL PRIMARY KEY,
@@ -370,11 +378,21 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS user_workspaces (
       user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
       workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-      role         TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','member')),
+      role         TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('owner','admin','member')),
       joined_at    TIMESTAMPTZ DEFAULT NOW(),
       PRIMARY KEY (user_id, workspace_id)
     )
   `);
+  // Widen the role CHECKs on existing databases to allow 'admin'. Must run before the
+  // backfill below, which copies users.role into user_workspaces on every boot.
+  try {
+    await pool.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
+    await pool.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK(role IN ('owner','admin','member'))`);
+    await pool.query(`ALTER TABLE user_workspaces DROP CONSTRAINT IF EXISTS user_workspaces_role_check`);
+    await pool.query(`ALTER TABLE user_workspaces ADD CONSTRAINT user_workspaces_role_check CHECK(role IN ('owner','admin','member'))`);
+  } catch (e) {
+    if (e.code !== '42710') throw e;
+  }
   await pool.query(`
     INSERT INTO user_workspaces (user_id, workspace_id, role)
     SELECT id, workspace_id, role FROM users

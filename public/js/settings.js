@@ -32,9 +32,18 @@ async function loadSettings() {
   await loadTaskSettings();
   loadNotifPrefs();
   switchSettingsTab(currentSettingsTab);
-  if (currentUser?.role === 'owner') {
-    document.getElementById('invites-card').classList.remove('hidden');
-    loadInvites();
+  // Owners and admins can issue invite codes; only owners may pick the role a code grants.
+  const isOwner = currentUser?.role === 'owner';
+  const canManageInvites = isOwner || currentUser?.role === 'admin';
+  document.getElementById('invites-card').classList.toggle('hidden', !canManageInvites);
+  const inviteRoleSelect = document.getElementById('invite-role-select');
+  if (inviteRoleSelect) {
+    inviteRoleSelect.classList.toggle('hidden', !isOwner);
+    inviteRoleSelect.title = t('lbl_invite_role');
+    inviteRoleSelect.querySelectorAll('option').forEach(o => { o.textContent = roleLabel(o.value); });
+  }
+  if (canManageInvites) loadInvites();
+  if (isOwner) {
     const wsCard = document.getElementById('workspace-name-card');
     wsCard.classList.remove('hidden');
     document.getElementById('workspace-name-input').value = currentWorkspace?.name || '';
@@ -49,7 +58,6 @@ async function loadSettings() {
       deleteCard.classList.add('hidden');
     }
   } else {
-    document.getElementById('invites-card').classList.add('hidden');
     document.getElementById('workspace-name-card').classList.add('hidden');
     const deleteCard = document.getElementById('delete-workspace-card');
     if (deleteCard) deleteCard.classList.add('hidden');
@@ -390,6 +398,7 @@ async function loadInvites() {
     ? codes.map(c => `
       <li class="settings-row">
         <span class="invite-code-val ${c.used ? 'invite-used' : ''}">${c.code}</span>
+        <span class="member-role role-${c.role}">${roleLabel(c.role)}</span>
         ${c.used
           ? `<span class="row-sub">Used by ${esc(c.used_by_name||'someone')}</span>`
           : `<button class="btn btn-sm" onclick="copyCode('${c.code}')">Copy</button>
@@ -397,7 +406,13 @@ async function loadInvites() {
       </li>`).join('')
     : '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No invite codes yet.</li>';
 }
-async function generateInviteCode() { await api.post('/api/invites', {}); await loadInvites(); }
+async function generateInviteCode() {
+  const sel  = document.getElementById('invite-role-select');
+  const role = currentUser?.role === 'owner' && sel ? sel.value : 'member';
+  const res  = await api.post('/api/invites', { role });
+  if (res?.error) { alert(res.error); return; }
+  await loadInvites();
+}
 async function deleteInviteCode(id) { await api.del(`/api/invites/${id}`); await loadInvites(); }
 function copyCode(code) { navigator.clipboard.writeText(code).then(() => alert(`Copied: ${code}`)); }
 
@@ -410,11 +425,19 @@ async function loadMembers() {
         <div class="row-label">${esc(m.name)}${m.id === currentUser?.id ? ' <span style="color:var(--muted);font-weight:400">(you)</span>' : ''}</div>
         <div class="row-sub">${esc(m.email)}</div>
       </div>
-      <span class="member-role">${m.role}</span>
       ${currentUser?.role === 'owner' && m.id !== currentUser?.id && m.role !== 'owner'
-        ? `<button class="btn btn-sm btn-danger btn-icon" onclick="removeMember(${m.id}, '${esc(m.name)}')">Remove</button>`
-        : ''}
+        ? `<select class="btn btn-sm member-role-select" title="${t('lbl_invite_role')}" onchange="changeMemberRole(${m.id}, this.value)">
+             <option value="member"${m.role === 'member' ? ' selected' : ''}>${roleLabel('member')}</option>
+             <option value="admin"${m.role === 'admin' ? ' selected' : ''}>${roleLabel('admin')}</option>
+           </select>
+           <button class="btn btn-sm btn-danger btn-icon" onclick="removeMember(${m.id}, '${esc(m.name)}')">Remove</button>`
+        : `<span class="member-role role-${m.role}">${roleLabel(m.role)}</span>`}
     </li>`).join('');
+}
+async function changeMemberRole(id, role) {
+  const res = await api.patch(`/api/workspace/members/${id}/role`, { role });
+  if (res?.error) alert(res.error);
+  invalidate(); await loadMembers();
 }
 async function removeMember(id, name) {
   if (!confirm(`Remove ${name} from this workspace? Their assigned contacts will become unassigned.`)) return;
