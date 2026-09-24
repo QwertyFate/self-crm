@@ -1315,7 +1315,8 @@ async function unlinkObjectFromDeal(dealId, objectId) {
 function populateDealStages(pipelineId, selectedStageId) {
   const pipeline = pipelines.find(p => p.id === pipelineId);
   const stageSel = document.getElementById('df-stage');
-  stageSel.innerHTML = (pipeline?.stages || []).map(s =>
+  stageSel.innerHTML = `<option value="">— No stage —</option>` +
+    (pipeline?.stages || []).map(s =>
       `<option value="${s.id}" ${selectedStageId === s.id ? 'selected' : ''}>${esc(s.name)}</option>`
     ).join('');
 }
