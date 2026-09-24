@@ -26,6 +26,15 @@ async function init() {
   }
 }
 
+// A user or workspace change is a fresh start. Everything the previous
+// identity rendered, cached, timed (notification polling) or connected (the
+// chat socket, which the server binds to the session at connect time) is
+// dropped by a real page load; init() then rebuilds the app for whoever the
+// session now belongs to. The bare path also drops any ?reset= / ?admin query.
+function restartApp() {
+  window.location.replace(window.location.pathname);
+}
+
 function showAuth() {
   document.getElementById('auth-screen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
@@ -123,13 +132,7 @@ async function handleLogin(e) {
     showWorkspacePicker(data.workspaces, data.user);
     return;
   }
-
-  currentUser      = data.user;
-  currentWorkspace = data.workspace;
-  kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
-  contactColumns   = data.workspace.contact_columns || [];
-  dealColumns      = Array.isArray(data.user?.deal_columns) ? data.user.deal_columns : [];
-  showApp();
+  restartApp();
 }
 
 function showWorkspacePicker(workspaces, user) {
@@ -149,13 +152,7 @@ async function selectWorkspace(workspaceId) {
   errEl.classList.add('hidden');
   const data = await api.post('/api/auth/select-workspace', { workspace_id: workspaceId });
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
-  currentUser      = data.user;
-  currentWorkspace = data.workspace;
-  kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
-  contactColumns   = data.workspace.contact_columns || [];
-  dealColumns      = Array.isArray(data.user?.deal_columns) ? data.user.deal_columns : [];
-  objectColumns    = data.workspace.object_columns  || [];
-  showApp();
+  restartApp();
 }
 
 const WS_PALETTE = [
@@ -214,18 +211,7 @@ async function switchWorkspace(workspaceId) {
   if (workspaceId === currentWorkspace?.id) { await switchPage('deals'); return; }
   const data = await api.post('/api/auth/switch-workspace', { workspace_id: workspaceId });
   if (data.error) { alert(data.error); return; }
-  currentWorkspace = data.workspace;
-  // Users are per-workspace rows, so both the id and the role change on switch.
-  if (currentUser && data.role)    currentUser.role = data.role;
-  if (currentUser && data.user_id) currentUser.id   = data.user_id;
-  kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
-  contactColumns   = data.workspace.contact_columns || [];
-  objectColumns    = data.workspace.object_columns  || [];
-  document.getElementById('sidebar-workspace').textContent = data.workspace.name || '';
-  const settingsLabel = document.getElementById('settings-workspace-label');
-  if (settingsLabel) settingsLabel.textContent = data.workspace.name || '';
-  invalidate();
-  await switchPage('deals');
+  restartApp();   // users are per-workspace rows: id, role, columns, caches, socket — all start over
 }
 
 function openAddWorkspaceChoice() {
@@ -266,18 +252,7 @@ async function handleCreateWorkspace(e) {
   });
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
   closeCreateWorkspaceModal();
-  window.location.reload();
-}
-
-function showJoinWorkspace(e) {
-  e?.preventDefault();
-  wsSwitcherOpen = false;
-  document.getElementById('ws-dropdown').classList.add('hidden');
-  document.getElementById('join-ws-code').value = '';
-  document.getElementById('join-ws-error').classList.add('hidden');
-  showAuthView('join-workspace');
-  document.getElementById('auth-screen').classList.remove('hidden');
-  document.getElementById('app').classList.add('hidden');
+  restartApp();
 }
 
 function closeJoinWorkspace(e) {
@@ -300,14 +275,7 @@ async function handleJoinWorkspace(e) {
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
 
   document.getElementById('join-workspace-modal').classList.add('hidden');
-  currentWorkspace = data.workspace;
-  kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
-  contactColumns   = data.workspace.contact_columns || [];
-  objectColumns    = data.workspace.object_columns  || [];
-  document.getElementById('sidebar-workspace').textContent = data.workspace.name || '';
-  invalidate();
-  loadWorkspacesPage();
-  switchPage('workspaces');
+  restartApp();   // the session now points at the joined workspace
 }
 
 async function handleSignup(e) {
@@ -325,14 +293,7 @@ async function handleSignup(e) {
     password:             document.getElementById('su-password').value,
   });
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
-  const me = await api.get('/api/auth/me');
-  currentUser      = me.user;
-  currentWorkspace = me.workspace;
-  kanbanFields     = me.workspace.kanban_fields   || ['company', 'email'];
-  contactColumns   = me.workspace.contact_columns || [];
-  dealColumns      = Array.isArray(me.user?.deal_columns) ? me.user.deal_columns : [];
-  objectColumns    = me.workspace.object_columns  || [];
-  showApp();
+  restartApp();
 }
 
 async function handleForgotPassword(e) {
@@ -369,10 +330,8 @@ async function handleResetPassword(e) {
 
 async function logout(e) {
   e?.preventDefault();
-  await api.post('/api/auth/logout', {});
-  currentUser = currentWorkspace = null;
-  contacts = stages = fields = activities = members = [];
-  showAuth();
+  await api.post('/api/auth/logout', {});   // the server destroys the session
+  restartApp();                              // the fresh load shows the login screen
 }
 
 document.querySelectorAll('.sidebar-nav a[data-page]').forEach(link => {
@@ -397,11 +356,10 @@ async function switchPage(page) {
   if (page === 'analytics')    await loadAnalytics();
   if (page === 'integrations') await loadIntegrations();
   if (page === 'workspaces')   await loadWorkspacesPage();
-  if (page === 'chat')         await loadChatPage();
+  if (page === 'chat')         await loadChatPage(); else leaveChatPage();
 }
 
-function invalidate() { contacts = []; stages = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }
-async function ensureStages()   { if (!stages.length)   stages   = await api.get('/api/stages'); }
+function invalidate() { contacts = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }
 async function ensureFields()   { if (!fields.length)   fields   = await api.get('/api/fields'); }
 async function ensureContacts() { if (!contacts.length) contacts = await api.get('/api/contacts'); }
 async function ensureMembers()  { if (!members.length)  members  = await api.get('/api/workspace/members'); }

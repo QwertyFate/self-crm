@@ -5,12 +5,17 @@ const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
 
+// One page of the room, ascending. `before=<id>` pages back through history
+// (the 50 just older than the cursor); `after=<id>` fetches what a client
+// missed while disconnected (the 50 just newer). Both cursors and the sort
+// use the id, so a page can neither repeat nor skip a message.
 router.get('/messages', async (req, res, next) => {
   try {
-    const { before } = req.query;
+    const before = parseInt(req.query.before), after = parseInt(req.query.after);
     const params = [req.workspaceId];
-    let cursor = '';
-    if (before && parseInt(before)) { params.push(parseInt(before)); cursor = `AND m.id < $${params.length}`; }
+    let cursor = '', order = 'DESC';
+    if (after)       { params.push(after);  cursor = `AND m.id > $${params.length}`; order = 'ASC'; }
+    else if (before) { params.push(before); cursor = `AND m.id < $${params.length}`; }
 
     const { rows } = await pool.query(`
       SELECT m.id, m.content, m.created_at, m.user_id,
@@ -18,11 +23,11 @@ router.get('/messages', async (req, res, next) => {
       FROM chat_messages m
       JOIN users u ON u.id = m.user_id
       WHERE m.workspace_id = $1 ${cursor}
-      ORDER BY m.created_at DESC
+      ORDER BY m.id ${order}
       LIMIT 50
     `, params);
 
-    res.json({ messages: rows.reverse() });
+    res.json({ messages: order === 'ASC' ? rows : rows.reverse() });
   } catch (err) { next(err); }
 });
 

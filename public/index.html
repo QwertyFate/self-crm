@@ -42,7 +42,7 @@
           <p class="admin-panel-sub">Enter your admin secret to manage platform invite codes.</p>
           <form class="auth-form" onsubmit="handleAdminLogin(event)">
             <div class="auth-field">
-              <label>Admin Secret</label>
+              <label for="admin-secret-input">Admin Secret</label>
               <input type="password" id="admin-secret-input" required autocomplete="current-password" />
             </div>
             <div id="admin-login-error" class="auth-error hidden"></div>
@@ -90,11 +90,11 @@
           <!-- Login -->
           <form id="login-form" class="auth-form" onsubmit="handleLogin(event)">
             <div class="auth-field">
-              <label>Email</label>
+              <label for="login-email">Email</label>
               <input type="email" id="login-email" required autocomplete="email" />
             </div>
             <div class="auth-field">
-              <label>Password</label>
+              <label for="login-password">Password</label>
               <input type="password" id="login-password" required autocomplete="current-password" />
             </div>
             <div id="login-error" class="auth-error hidden"></div>
@@ -117,27 +117,27 @@
               </label>
             </div>
             <div class="auth-field" id="su-workspace-field">
-              <label>Workspace name</label>
+              <label for="su-workspace">Workspace name</label>
               <input type="text" id="su-workspace" placeholder="e.g. Acme Sales" />
             </div>
             <div class="auth-field" id="su-platform-code-field">
-              <label>Platform invite code <span class="auth-hint">(required to create a workspace)</span></label>
+              <label for="su-platform-code">Platform invite code <span class="auth-hint">(required to create a workspace)</span></label>
               <input type="text" id="su-platform-code" placeholder="Paste platform code here" autocomplete="off" />
             </div>
             <div class="auth-field hidden" id="su-code-field">
-              <label>Workspace invite code</label>
+              <label for="su-code">Workspace invite code</label>
               <input type="text" id="su-code" placeholder="Paste workspace code here" autocomplete="off" />
             </div>
             <div class="auth-field">
-              <label>Your name</label>
+              <label for="su-name">Your name</label>
               <input type="text" id="su-name" required autocomplete="name" />
             </div>
             <div class="auth-field">
-              <label>Email</label>
+              <label for="su-email">Email</label>
               <input type="email" id="su-email" required autocomplete="email" />
             </div>
             <div class="auth-field">
-              <label>Password <span class="auth-hint">(min 6 chars)</span></label>
+              <label for="su-password">Password <span class="auth-hint">(min 6 chars)</span></label>
               <input type="password" id="su-password" required autocomplete="new-password" />
             </div>
             <div id="signup-error" class="auth-error hidden"></div>
@@ -151,7 +151,7 @@
           <p class="auth-view-sub">Enter your email and we'll send you a reset link.</p>
           <form class="auth-form" onsubmit="handleForgotPassword(event)">
             <div class="auth-field">
-              <label>Email</label>
+              <label for="forgot-email">Email</label>
               <input type="email" id="forgot-email" required autocomplete="email" />
             </div>
             <div id="forgot-error" class="auth-error hidden"></div>
@@ -176,11 +176,11 @@
           <form class="auth-form" onsubmit="handleResetPassword(event)">
             <input type="hidden" id="reset-token" />
             <div class="auth-field">
-              <label>New password <span class="auth-hint">(min 6 chars)</span></label>
+              <label for="reset-password">New password <span class="auth-hint">(min 6 chars)</span></label>
               <input type="password" id="reset-password" required autocomplete="new-password" />
             </div>
             <div class="auth-field">
-              <label>Confirm password</label>
+              <label for="reset-confirm">Confirm password</label>
               <input type="password" id="reset-confirm" required autocomplete="new-password" />
             </div>
             <div id="reset-error" class="auth-error hidden"></div>
@@ -204,7 +204,7 @@
           <p class="auth-view-title">Join a workspace</p>
           <form class="auth-form" onsubmit="handleJoinWorkspace(event)">
             <div class="auth-field">
-              <label>Workspace invite code</label>
+              <label for="join-ws-code">Workspace invite code</label>
               <input type="text" id="join-ws-code" placeholder="Paste invite code here" autocomplete="off" />
             </div>
             <div id="join-ws-error" class="auth-error hidden"></div>
@@ -218,6 +218,7 @@
         <div class="admin-link-row">
           <a href="/?admin" class="admin-link"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Admin</span></a>
         </div>
+
 
       </div>
     </div>
@@ -251,17 +252,17 @@
         <div class="sidebar-section-label">Tools</div>
         <ul class="sidebar-nav">
           <li><a href="#" data-page="chat">
-            <div style="position:relative;display:inline-flex">
+            <span class="nav-icon-wrap">
               <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-              <span class="chat-badge hidden" id="chat-badge">0</span>
-            </div>
-            <span>Team Chat</span>
+              <span class="chat-badge hidden" id="chat-badge" aria-label="Unread messages">0</span>
+            </span>
+            <span data-i18n="nav_chat">Team chat</span>
           </a></li>
           <li><a href="#" data-page="activities"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span data-i18n="nav_activities">Activities</span></a></li>
           <li><a href="#" data-page="calendar"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Calendar</span></a></li>
           <li><a href="#" data-page="objects" id="nav-objects-link"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg><span id="nav-objects-label">Listings</span></a></li>
           <li><a href="#" data-page="board" id="nav-board-link"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg><span data-i18n="nav_board">Board</span></a></li>
-          <li><a href="#" data-page="analytics"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15v3M12 10v8M17 6v12"/></svg><span>Analytics</span></a></li>
+          <li><a href="#" data-page="analytics"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15v3M12 10v8M17 6v12"/></svg><span data-i18n="nav_analytics">Analytics</span></a></li>
           <li><a href="#" data-page="integrations"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v3a6 6 0 0 1-12 0V8z"/></svg><span>Integrations</span></a></li>
         </ul>
       </div>
@@ -328,20 +329,27 @@
       <!-- ── Deals ── -->
       <section id="page-deals" class="page active">
         <div class="page-header">
-          <h1 data-i18n="nav_deals">Deals</h1>
+          <div>
+            <h1 data-i18n="nav_deals">Deals</h1>
+            <p class="page-sub" id="deals-summary"></p>
+          </div>
           <div class="page-actions">
-            <div class="view-toggle">
-              <button class="view-toggle-btn active" id="deal-view-kanban" onclick="setDealView('kanban')" title="Kanban view">
-                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="0" width="6" height="6" rx="1"/><rect x="8" y="0" width="6" height="6" rx="1"/><rect x="0" y="8" width="6" height="6" rx="1"/><rect x="8" y="8" width="6" height="6" rx="1"/></svg>
+            <select id="deals-pipeline-select" class="deals-pipeline-select" aria-label="Pipeline" onchange="onPipelineChange()"></select>
+            <div class="view-toggle" role="group" aria-label="View">
+              <button class="view-toggle-btn active" id="deal-view-kanban" onclick="setDealView('kanban')" aria-label="Board view" aria-pressed="true" title="Board view">
+                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14" aria-hidden="true"><rect x="0" y="0" width="6" height="6" rx="1"/><rect x="8" y="0" width="6" height="6" rx="1"/><rect x="0" y="8" width="6" height="6" rx="1"/><rect x="8" y="8" width="6" height="6" rx="1"/></svg>
               </button>
-              <button class="view-toggle-btn" id="deal-view-list" onclick="setDealView('list')" title="List view">
-                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="1" width="14" height="2.5" rx="1.25"/><rect x="0" y="5.75" width="14" height="2.5" rx="1.25"/><rect x="0" y="10.5" width="14" height="2.5" rx="1.25"/></svg>
+              <button class="view-toggle-btn" id="deal-view-list" onclick="setDealView('list')" aria-label="List view" aria-pressed="false" title="List view">
+                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14" aria-hidden="true"><rect x="0" y="1" width="14" height="2.5" rx="1.25"/><rect x="0" y="5.75" width="14" height="2.5" rx="1.25"/><rect x="0" y="10.5" width="14" height="2.5" rx="1.25"/></svg>
               </button>
             </div>
-            <select id="deals-pipeline-select" class="deals-pipeline-select" onchange="onPipelineChange()"></select>
-            <button class="btn btn-primary" onclick="openDealModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_deal">Add Deal</span></button>
+            <button class="btn btn-primary" onclick="openDealModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_deal">Add deal</span></button>
           </div>
         </div>
+        <div class="toolbar">
+          <input type="text" id="deal-search" data-i18n-ph="search_deals_ph" placeholder="Search deals by title or contact…" oninput="onDealSearch()" />
+        </div>
+        <div id="deals-board-notice" class="board-notice hidden" role="status" aria-live="polite"></div>
         <div id="deals-board" class="pipeline-board"></div>
         <div id="deals-list-view" class="table-wrap hidden">
           <table class="table" id="deals-table">
@@ -349,6 +357,7 @@
             <tbody id="deals-tbody"></tbody>
           </table>
         </div>
+        <div id="deals-pagination" class="pagination-bar hidden"></div>
       </section>
 
       <!-- ── Contacts ── -->
@@ -361,20 +370,17 @@
               <button class="btn btn-primary" id="list-add-btn" onclick="openContactModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_contact">Add Contact</span></button>
             </div>
           </div>
-          <div class="toolbar">
-            <input type="text" id="contact-search" data-i18n-ph="search_ph" placeholder="Search contacts…" oninput="onContactSearch()" />
+          <div class="toolbar" id="contacts-toolbar">
+            <input type="text" id="contact-search" data-i18n-ph="search_contacts_ph" placeholder="Search name, company, email or phone…" oninput="onContactSearch()" />
             <div class="toolbar-actions">
-              <button class="btn btn-sm" id="select-mode-btn" onclick="toggleSelectMode()"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Select</span></button>
-              <div id="bulk-delete-section" class="hidden hstack">
-                <span id="bulk-delete-count" class="text-xs text-muted"></span>
-                <button class="btn btn-sm btn-danger" onclick="openBulkDeleteModal()" title="Delete selected"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg><span>Delete</span></button>
-              </div>
               <button class="btn btn-sm filter-toggle-btn" id="filter-toggle-btn" onclick="toggleFilterPanel()">
-                <svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>Filter</span> <span id="filter-badge" class="filter-badge hidden">0</span>
+                <svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span data-i18n="btn_filter">Filter</span> <span id="filter-badge" class="filter-badge hidden">0</span>
               </button>
               <button class="btn btn-sm" onclick="openImportModal()"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg><span data-i18n="import_csv">Import CSV</span></button>
               <button class="btn btn-sm" onclick="exportContactsCSV()"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 11l5 5 5-5"/><path d="M12 16V4"/></svg><span data-i18n="export_csv">Export CSV</span></button>
             </div>
+            <!-- Replaces the toolbar while rows are selected (filled by renderSelectionBar) -->
+            <div class="selection-bar hidden" id="selection-bar"></div>
           </div>
           <div id="filter-panel" class="filter-panel hidden"></div>
           <div id="filter-chips" class="filter-chips hidden"></div>
@@ -397,32 +403,51 @@
         </div>
       </section>
 
-      <!-- ── Team Chat ── -->
+      <!-- ── Team chat: header with presence · connection banner · transcript (+ jump pill) · composer ── -->
       <section id="page-chat" class="page page-chat-layout">
         <div class="chat-page-header">
-          <h1>Team Chat</h1>
-          <div class="page-actions">
-            <button class="btn btn-sm" onclick="renderChatRoom()"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3v6h-6"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg><span>Refresh</span></button>
-          </div>
+          <h1 data-i18n="page_chat">Team chat</h1>
+          <div class="chat-presence" id="chat-presence"></div>
         </div>
-        <div class="chat-page-online-bar" id="chat-page-online-bar"></div>
-        <div class="chat-page-messages" id="chat-page-messages"></div>
+        <div class="chat-connection hidden" id="chat-connection" role="status" aria-live="polite"></div>
+        <div class="chat-transcript">
+          <div class="chat-page-messages" id="chat-page-messages" role="log" aria-live="polite" aria-label="Team chat"></div>
+          <button type="button" class="chat-jump hidden" id="chat-jump"></button>
+        </div>
         <div class="chat-composer">
-          <input type="text" class="chat-input" id="chat-page-input" placeholder="Message your team..." autocomplete="off"
-                 onkeydown="if(event.key==='Enter'){sendChatMessageFromPage();event.preventDefault()}" />
-          <button class="chat-send-btn" onclick="sendChatMessageFromPage()" title="Send" aria-label="Send message">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-          </button>
+          <div class="chat-notice hidden" id="chat-notice" role="alert"></div>
+          <div class="chat-composer-row">
+            <textarea class="chat-input" id="chat-page-input" rows="1" data-i18n-ph="chat_placeholder" placeholder="Message your team…" autocomplete="off"></textarea>
+            <span class="chat-counter hidden" id="chat-counter"></span>
+            <button type="button" class="chat-send-btn" id="chat-page-send" data-i18n-title="chat_send" title="Send" aria-label="Send" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            </button>
+          </div>
         </div>
       </section>
 
-      <!-- ── Activities ── -->
-      <section id="page-activities" class="page">
+      <!-- ── Activities: the workspace log, grouped by day ── -->
+      <section id="page-activities" class="page page-reading">
         <div class="page-header">
-          <h1 data-i18n="page_activities">Activities</h1>
-          <button class="btn btn-primary" onclick="openActivityModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="log_activity">Log Activity</span></button>
+          <div>
+            <h1 data-i18n="page_activities">Activities</h1>
+            <p class="page-sub" id="activities-summary"></p>
+          </div>
+          <div class="page-actions">
+            <button type="button" class="btn btn-primary" onclick="openActivityModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="log_activity">Log activity</span></button>
+          </div>
         </div>
-        <div id="activities-list" class="activities-list"></div>
+        <div class="toolbar">
+          <input type="search" id="activities-search" data-i18n-ph="activities_search_ph" placeholder="Search activities…" autocomplete="off" oninput="setActivityQuery(this.value)" />
+          <div class="view-toggle" id="activities-type-toggle" role="group" aria-label="Type">
+            <button type="button" class="view-toggle-btn text active" data-type="all" aria-pressed="true" onclick="setActivityType('all')" data-i18n="act_all">All</button>
+            <button type="button" class="view-toggle-btn text" data-type="note" aria-pressed="false" onclick="setActivityType('note')" data-i18n="act_note">Note</button>
+            <button type="button" class="view-toggle-btn text" data-type="call" aria-pressed="false" onclick="setActivityType('call')" data-i18n="act_call">Call</button>
+            <button type="button" class="view-toggle-btn text" data-type="email" aria-pressed="false" onclick="setActivityType('email')" data-i18n="act_email">Email</button>
+            <button type="button" class="view-toggle-btn text" data-type="whatsapp" aria-pressed="false" onclick="setActivityType('whatsapp')" data-i18n="act_whatsapp">WhatsApp</button>
+          </div>
+        </div>
+        <div id="activities-list" class="activities-page"></div>
       </section>
 
       <!-- ── Calendar ── -->
@@ -489,11 +514,11 @@
           </div>
 
           <!-- Active list content (hidden until list selected) -->
-          <div id="tasks-content" class="hidden" style="display:flex;flex-direction:column;height:100%;gap:16px">
+          <div id="tasks-content" class="hidden vstack-page">
             <div class="page-header">
               <div>
                 <div class="tasks-breadcrumb" id="tasks-breadcrumb"></div>
-                <h1 id="tasks-main-title" style="margin:0">Tasks</h1>
+                <h1 id="tasks-main-title">Tasks</h1>
               </div>
               <div class="page-actions">
                 <div class="view-toggle">
@@ -534,220 +559,284 @@
         <div id="board-content" class="board-content"></div>
       </section>
 
-      <!-- ── Analytics ── -->
-      <section id="page-analytics" class="page">
-        <div class="analytics-header">
+      <!-- ── Analytics: the band of numbers → outcomes beside pipelines → trends ── -->
+      <section id="page-analytics" class="page page-reading page-scroll">
+        <div class="page-header">
           <div>
-            <h1 class="analytics-title">Analytics</h1>
-            <p class="analytics-sub" id="analytics-period"></p>
+            <h1 data-i18n="page_analytics">Analytics</h1>
+            <p class="page-sub" id="analytics-period"></p>
           </div>
-          <button class="btn btn-sm" onclick="openAnalyticsConfig()">Configure Metrics</button>
+          <div class="page-actions">
+            <button type="button" class="btn btn-sm" onclick="openAnalyticsConfig()"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span data-i18n="analytics_settings">Metric settings</span></button>
+          </div>
         </div>
 
-        <div id="analytics-main-sections" style="padding-left:24px;margin-left:-24px">
-          <!-- Stat cards -->
-          <div class="analytics-draggable-section" id="analytics-sec-stats" data-section-id="stats">
-            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
-            <div class="analytics-cards" id="analytics-cards"></div>
-          </div>
+        <div class="analytics-band" id="analytics-cards" role="list"></div>
 
-          <!-- Win / Loss bar -->
-          <div class="analytics-draggable-section" id="analytics-sec-winloss" data-section-id="winloss">
-            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
-            <div class="analytics-section" id="analytics-winloss-section">
-              <div class="analytics-section-title">Deal Outcomes</div>
-              <div class="analytics-winloss">
-                <div class="analytics-winloss-bar" id="analytics-winloss-bar"></div>
-                <div class="analytics-winloss-legend" id="analytics-winloss-legend"></div>
-              </div>
+        <div class="analytics-row">
+          <div class="analytics-section" id="analytics-winloss-section">
+            <div class="analytics-section-head"><h2 data-i18n="analytics_outcomes">Deal outcomes</h2></div>
+            <div class="analytics-section-body">
+              <div class="wl-bar" id="analytics-winloss-bar"></div>
+              <div class="wl-legend" id="analytics-winloss-legend"></div>
             </div>
           </div>
+          <div class="analytics-section">
+            <div class="analytics-section-head"><h2 data-i18n="analytics_pipelines">Deals by pipeline</h2></div>
+            <div class="analytics-section-body" id="analytics-by-pipeline"></div>
+          </div>
+        </div>
 
-          <!-- By pipeline -->
-          <div class="analytics-draggable-section" id="analytics-sec-pipeline" data-section-id="pipeline">
-            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
-            <div class="analytics-section">
-              <div class="analytics-section-title">Deals by Pipeline</div>
-              <div id="analytics-by-pipeline"></div>
+        <div class="analytics-section">
+          <div class="analytics-section-head">
+            <h2 data-i18n="analytics_trends">Trends</h2>
+            <div class="view-toggle" id="analytics-period-switcher" role="group" aria-label="Period">
+              <button type="button" class="view-toggle-btn text active" data-period="week" aria-pressed="true" onclick="switchTrendPeriod('week')" data-i18n="period_week">Week</button>
+              <button type="button" class="view-toggle-btn text" data-period="month" aria-pressed="false" onclick="switchTrendPeriod('month')" data-i18n="period_month">Month</button>
+              <button type="button" class="view-toggle-btn text" data-period="year" aria-pressed="false" onclick="switchTrendPeriod('year')" data-i18n="period_year">Year</button>
             </div>
           </div>
-
-          <!-- Trend charts -->
-          <div class="analytics-draggable-section" id="analytics-sec-trends" data-section-id="trends">
-            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
-            <div class="analytics-section">
-              <div class="analytics-trend-header">
-                <div class="analytics-section-title" style="margin:0">Trends</div>
-                <div class="analytics-period-switcher">
-                  <button class="period-btn active" data-period="week"  onclick="switchTrendPeriod('week')">Week</button>
-                  <button class="period-btn"        data-period="month" onclick="switchTrendPeriod('month')">Month</button>
-                  <button class="period-btn"        data-period="year"  onclick="switchTrendPeriod('year')">Year</button>
-                </div>
-              </div>
-              <div class="analytics-trend-grid" id="analytics-trend-grid"></div>
-            </div>
-          </div>
+          <div class="trend-grid" id="analytics-trend-grid"></div>
         </div>
       </section>
 
-      <!-- Analytics config modal -->
+      <!-- Metric settings modal -->
       <div id="analytics-config-modal" class="modal-overlay hidden">
-        <div class="modal" style="max-width:720px">
+        <div class="modal modal-lg">
           <div class="modal-header">
-            <h2>Configure Metrics</h2>
+            <h2 data-i18n="cfg_title">Metric settings</h2>
             <button class="close-btn" onclick="closeAnalyticsConfig()">&times;</button>
           </div>
           <div class="modal-body">
             <div class="analytics-config-group">
-              <div class="analytics-config-label">Visible Metric Cards</div>
-              <p class="text-xs text-muted">Toggle which cards appear in the overview row.</p>
+              <div class="analytics-config-label" data-i18n="cfg_cards">Numbers on the page</div>
+              <p class="text-xs text-muted" data-i18n="cfg_cards_hint">Choose which numbers appear in the band at the top.</p>
               <div id="analytics-card-visibility" class="analytics-stage-chips"></div>
             </div>
-            <div class="analytics-config-group" style="margin-top:20px">
-              <div class="analytics-config-label">Deal Value Field</div>
-              <p class="text-xs text-muted">Which field holds the deal price? Only numeric/currency fields appear here.</p>
-              <select id="analytics-value-field" class="form-control" style="width:100%"></select>
+            <div class="analytics-config-group">
+              <div class="analytics-config-label" data-i18n="cfg_value_field">Deal value field</div>
+              <p class="text-xs text-muted" data-i18n="cfg_value_field_hint">The field that holds a deal's price. Only number and currency fields are listed.</p>
+              <select id="analytics-value-field" class="form-control"></select>
             </div>
-            <div class="analytics-config-group" style="margin-top:20px">
-              <div class="analytics-config-label" style="color:#22c55e">Won Stages</div>
+            <div class="analytics-config-group">
+              <div class="analytics-config-label won" data-i18n="cfg_won_stages">Won stages</div>
               <div id="analytics-won-stages"></div>
             </div>
-            <div class="analytics-config-group" style="margin-top:16px">
-              <div class="analytics-config-label" style="color:#ef4444">Lost Stages</div>
+            <div class="analytics-config-group">
+              <div class="analytics-config-label lost" data-i18n="cfg_lost_stages">Lost stages</div>
               <div id="analytics-lost-stages"></div>
             </div>
             <div id="analytics-config-msg" class="workspace-name-msg hidden"></div>
           </div>
           <div class="modal-footer">
-            <button class="btn" onclick="closeAnalyticsConfig()">Cancel</button>
-            <button class="btn btn-primary" onclick="saveAnalyticsConfig()">Save</button>
+            <button type="button" class="btn" onclick="closeAnalyticsConfig()" data-i18n="btn_cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="saveAnalyticsConfig()" data-i18n="btn_save">Save</button>
           </div>
         </div>
       </div>
 
       <!-- ── Settings ── -->
-      <section id="page-settings" class="page">
+      <section id="page-settings" class="page page-reading">
         <div class="settings-page-header">
           <div class="settings-page-brand">
-            <div class="settings-page-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="24" height="24">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-              </svg>
-            </div>
-            <div>
-              <h1 class="settings-page-title" data-i18n="page_settings">Settings</h1>
-              <p class="settings-page-sub" id="settings-workspace-label"></p>
-            </div>
+            <h1 class="settings-page-title" data-i18n="page_settings">Settings</h1>
+            <p class="settings-page-sub" id="settings-workspace-label"></p>
           </div>
         </div>
 
+        <div class="settings-layout">
         <nav class="settings-tabs">
-          <button class="settings-tab active" data-tab="general"  onclick="switchSettingsTab('general')"  data-i18n="tab_general">General</button>
-          <button class="settings-tab"         data-tab="deals"    onclick="switchSettingsTab('deals')"    data-i18n="tab_deals">Deals</button>
-          <button class="settings-tab"         data-tab="objects"  onclick="switchSettingsTab('objects')"  id="settings-tab-objects">Objects</button>
-          <button class="settings-tab"         data-tab="contacts" onclick="switchSettingsTab('contacts')" data-i18n="tab_contacts">Contacts</button>
-          <button class="settings-tab"         data-tab="team"     onclick="switchSettingsTab('team')"     data-i18n="tab_team">Team</button>
-          <button class="settings-tab"         data-tab="tasks"         onclick="switchSettingsTab('tasks')">Tasks</button>
+          <button class="settings-tab hidden" data-tab="workspace"    onclick="switchSettingsTab('workspace')"    id="settings-tab-workspace" data-i18n="tab_workspace">Workspace</button>
+          <div class="settings-tab-sep" aria-hidden="true"></div>
+          <button class="settings-tab"        data-tab="preferences"  onclick="switchSettingsTab('preferences')"  data-i18n="tab_preferences">My preferences</button>
+          <div class="settings-tab-sep" aria-hidden="true"></div>
+          <button class="settings-tab"        data-tab="contacts"     onclick="switchSettingsTab('contacts')"     data-i18n="tab_contacts">Contacts</button>
+          <button class="settings-tab"        data-tab="deals"        onclick="switchSettingsTab('deals')"        data-i18n="tab_deals">Deals</button>
+          <button class="settings-tab"        data-tab="objects"      onclick="switchSettingsTab('objects')"      id="settings-tab-objects">Listings</button>
+          <button class="settings-tab"        data-tab="tasks"        onclick="switchSettingsTab('tasks')"        data-i18n="tab_tasks">Tasks</button>
+          <div class="settings-tab-sep" aria-hidden="true"></div>
+          <button class="settings-tab"        data-tab="team"         onclick="switchSettingsTab('team')"         data-i18n="tab_team">Team</button>
+          <button class="settings-tab"        data-tab="integrations" onclick="switchSettingsTab('integrations')" data-i18n="tab_integrations">Integrations</button>
         </nav>
 
         <div class="settings-tab-body">
 
-          <!-- ── General ── -->
-          <div id="settings-pane-general" class="settings-pane active">
+          <!-- ── Workspace (owner only): names + danger zone ── -->
+          <div id="settings-pane-workspace" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="pane_workspace">Workspace</h2>
+              <p class="settings-tab-hint" data-i18n="hint_pane_workspace">Name this workspace and what it calls suppliers and listings.</p>
+            </div>
             <div class="settings-grid">
 
               <div class="settings-card hidden" id="workspace-name-card">
-                <div class="settings-card-header"><h2 data-i18n="set_workspace">Workspace</h2></div>
-                <p class="settings-hint" data-i18n="hint_workspace">Update the name of this workspace.</p>
-                <div class="workspace-name-row">
-                  <input type="text" id="workspace-name-input" class="workspace-name-input" />
-                  <button class="btn btn-primary btn-sm" onclick="saveWorkspaceName()" data-i18n="btn_save">Save</button>
+                <div class="settings-card-header"><h2 data-i18n="set_workspace">Workspace name</h2></div>
+                <p class="settings-hint" data-i18n="hint_workspace">Shown in the sidebar and to everyone you invite.</p>
+                <div class="settings-card-body">
+                  <div class="workspace-name-row">
+                    <input type="text" id="workspace-name-input" class="workspace-name-input" />
+                    <button class="btn btn-primary btn-sm" onclick="saveWorkspaceName()" data-i18n="btn_save">Save</button>
+                    <span id="workspace-name-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
-                <div id="workspace-name-msg" class="workspace-name-msg hidden"></div>
-              </div>
-
-              <div class="settings-card hidden" id="delete-workspace-card">
-                <div class="settings-card-header"><h2>Delete Workspace</h2></div>
-                <p class="settings-hint" style="color:#ef4444">This action cannot be undone. All data in this workspace will be permanently deleted.</p>
-                <button class="btn btn-danger btn-sm" onclick="deleteWorkspace()" style="margin-top:12px">Delete This Workspace</button>
-                <div id="delete-workspace-msg" class="workspace-name-msg hidden"></div>
               </div>
 
               <div class="settings-card hidden" id="supplier-name-card">
-                <div class="settings-card-header"><h2>Supplier List Name</h2></div>
-                <p class="settings-hint">What to call the second contact list in the sidebar (e.g. Suppliers, Partners, Team).</p>
-                <div class="workspace-name-row">
-                  <input type="text" id="supplier-name-input" class="workspace-name-input" placeholder="Suppliers" />
-                  <button class="btn btn-primary btn-sm" onclick="saveSupplierName()">Save</button>
-                </div>
-                <div id="supplier-name-msg" class="workspace-name-msg hidden"></div>
-              </div>
-
-              <div class="settings-card">
-                <div class="settings-card-header"><h2>Notification Preferences</h2></div>
-                <p class="settings-hint">Choose which activity types send you notifications.</p>
-                <div class="notif-pref-list" id="notif-pref-list">
-                  <label class="notif-pref-row"><input type="checkbox" data-pref="contacts" checked /><span>Contacts &amp; Suppliers</span></label>
-                  <label class="notif-pref-row"><input type="checkbox" data-pref="deals" checked /><span>Deals</span></label>
-                  <label class="notif-pref-row"><input type="checkbox" data-pref="tasks" checked /><span>Tasks</span></label>
-                  <label class="notif-pref-row"><input type="checkbox" data-pref="objects" checked /><span>Listings / Objects</span></label>
-                  <label class="notif-pref-row"><input type="checkbox" data-pref="activities" checked /><span>Activities</span></label>
-                </div>
-                <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveNotifPrefs()">Save Preferences</button>
-                <span id="notif-pref-msg" class="workspace-name-msg hidden"></span>
-              </div>
-
-              <div class="settings-card">
-                <div class="settings-card-header"><h2>Timezone</h2></div>
-                <p class="settings-hint">Your sidebar clock uses this timezone. Defaults to Germany (Berlin).</p>
-                <div class="workspace-name-row">
-                  <select id="timezone-select" class="workspace-name-input"></select>
-                  <button class="btn btn-primary btn-sm" onclick="saveTimezoneSetting()">Save</button>
-                </div>
-                <div id="timezone-msg" class="workspace-name-msg hidden"></div>
-              </div>
-
-              <div class="settings-card">
-                <div class="settings-card-header">
-                  <h2 data-i18n="set_wa_template">WhatsApp Message Template</h2>
-                </div>
-                <p class="settings-hint" data-i18n="hint_wa_template">Written when you tap the WhatsApp button on a contact.</p>
-                <textarea id="wa-template-input" class="settings-textarea" rows="3" placeholder="Hi {{name}}, "></textarea>
-                <p class="wa-vars-hint"><span data-i18n="wa_vars">Available variables:</span>
-                  <code class="wa-var-chip" onclick="insertWaVar('{{name}}')">{{name}}</code>
-                  <code class="wa-var-chip" onclick="insertWaVar('{{company}}')">{{company}}</code>
-                </p>
-                <div style="padding:8px 0 4px;display:flex;align-items:center;gap:10px">
-                  <button id="save-wa-template-btn" class="btn btn-primary btn-sm" onclick="saveWaTemplate()" data-i18n="btn_save">Save</button>
-                  <span id="wa-template-msg" class="workspace-name-msg hidden"></span>
+                <div class="settings-card-header"><h2 data-i18n="set_supplier_name">Name for suppliers</h2></div>
+                <p class="settings-hint" data-i18n="hint_supplier_name">What the second contact list is called in the sidebar, for example Suppliers or Partners.</p>
+                <div class="settings-card-body">
+                  <div class="workspace-name-row">
+                    <input type="text" id="supplier-name-input" class="workspace-name-input" placeholder="Suppliers" />
+                    <button class="btn btn-primary btn-sm" onclick="saveSupplierName()" data-i18n="btn_save">Save</button>
+                    <span id="supplier-name-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
               </div>
 
-              <div class="settings-card">
-                <div class="settings-card-header"><h2 data-i18n="set_miro">Miro Board</h2></div>
-                <p class="settings-hint" data-i18n="hint_miro">Paste the embed URL from Miro → Share → Embed. Leave blank to hide the Board tab.</p>
-                <div class="workspace-name-row">
-                  <input type="url" id="miro-url-input" class="workspace-name-input" placeholder="https://miro.com/app/live-embed/..." />
-                  <button class="btn btn-primary btn-sm" onclick="saveMiroUrl()">Save</button>
+              <div class="settings-card hidden" id="object-name-card">
+                <div class="settings-card-header"><h2 data-i18n="set_object_name">Name for listings</h2></div>
+                <p class="settings-hint" data-i18n="hint_object_name">What the things you list are called throughout the app, for example Properties or Products.</p>
+                <div class="settings-card-body">
+                  <div class="workspace-name-row">
+                    <input type="text" id="object-name-input" class="workspace-name-input" placeholder="Listings" />
+                    <button class="btn btn-primary btn-sm" onclick="saveObjectTypeName()" data-i18n="btn_save">Save</button>
+                    <span id="object-name-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
-                <div id="miro-url-msg" class="workspace-name-msg hidden"></div>
               </div>
+
+              <div class="settings-card danger wide hidden" id="delete-workspace-card">
+                <div class="settings-card-header"><h2 data-i18n="set_danger">Delete workspace</h2></div>
+                <p class="settings-hint text-danger"><span data-i18n="hint_delete_workspace">Deletes every contact, deal, task and file in this workspace. This cannot be undone.</span></p>
+                <div class="settings-card-body">
+                  <div class="settings-card-actions">
+                    <button class="btn btn-danger btn-sm" onclick="deleteWorkspace()" data-i18n="btn_delete_workspace">Delete workspace</button>
+                    <span id="delete-workspace-msg" class="workspace-name-msg hidden"></span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── My preferences (per user) ── -->
+          <div id="settings-pane-preferences" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="pane_preferences">My preferences</h2>
+              <p class="settings-tab-hint" data-i18n="hint_preferences">These settings apply only to you, not to the whole workspace.</p>
+            </div>
+            <div class="settings-grid">
 
               <div class="settings-card">
                 <div class="settings-card-header"><h2 data-i18n="set_language">Language</h2></div>
-                <p class="settings-hint" data-i18n="hint_language">Choose your preferred display language.</p>
-                <div class="lang-options">
-                  <label class="lang-opt">
-                    <input type="radio" name="language" value="en" onchange="setLanguage('en')" />
-                    <span class="lang-flag">🇬🇧</span>
-                    <span data-i18n="lang_en">English</span>
+                <p class="settings-hint" data-i18n="hint_language">The language of menus, labels and hints.</p>
+                <div class="settings-card-body">
+                  <div class="lang-options">
+                    <label class="lang-opt">
+                      <input type="radio" name="language" value="en" onchange="setLanguage('en')" />
+                      <span class="lang-code">EN</span>
+                      <span data-i18n="lang_en">English</span>
+                    </label>
+                    <label class="lang-opt">
+                      <input type="radio" name="language" value="de" onchange="setLanguage('de')" />
+                      <span class="lang-code">DE</span>
+                      <span data-i18n="lang_de">German</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_appearance">Appearance</h2></div>
+                <p class="settings-hint" data-i18n="hint_appearance">Light or dark theme for this browser.</p>
+                <div class="settings-card-body">
+                  <label class="switch-row">
+                    <input type="checkbox" id="pref-dark-toggle" onchange="toggleDarkMode()" />
+                    <span data-i18n="dark_mode">Dark mode</span>
                   </label>
-                  <label class="lang-opt">
-                    <input type="radio" name="language" value="de" onchange="setLanguage('de')" />
-                    <span class="lang-flag">🇩🇪</span>
-                    <span data-i18n="lang_de">German</span>
-                  </label>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_timezone">Time zone</h2></div>
+                <p class="settings-hint" data-i18n="hint_timezone">Used by the clock in the sidebar. Defaults to Berlin.</p>
+                <div class="settings-card-body">
+                  <div class="workspace-name-row">
+                    <select id="timezone-select" class="workspace-name-input"></select>
+                    <button class="btn btn-primary btn-sm" onclick="saveTimezoneSetting()" data-i18n="btn_save">Save</button>
+                    <span id="timezone-msg" class="workspace-name-msg hidden"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_notifications">Notifications</h2></div>
+                <p class="settings-hint" data-i18n="hint_notifications">Choose which activity sends you a notification.</p>
+                <div class="settings-card-body">
+                  <div class="notif-pref-list" id="notif-pref-list">
+                    <label class="notif-pref-row"><input type="checkbox" data-pref="contacts" checked /><span data-i18n="notif_contacts">Contacts and suppliers</span></label>
+                    <label class="notif-pref-row"><input type="checkbox" data-pref="deals" checked /><span data-i18n="notif_deals">Deals</span></label>
+                    <label class="notif-pref-row"><input type="checkbox" data-pref="tasks" checked /><span data-i18n="notif_tasks">Tasks</span></label>
+                    <label class="notif-pref-row"><input type="checkbox" data-pref="objects" checked /><span data-i18n="notif_objects">Listings</span></label>
+                    <label class="notif-pref-row"><input type="checkbox" data-pref="activities" checked /><span data-i18n="notif_activities">Activities</span></label>
+                  </div>
+                  <div class="settings-card-actions">
+                    <button class="btn btn-primary btn-sm" onclick="saveNotifPrefs()" data-i18n="btn_save">Save</button>
+                    <span id="notif-pref-msg" class="workspace-name-msg hidden"></span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── Contacts ── -->
+          <div id="settings-pane-contacts" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="pane_contacts">Contacts</h2>
+              <p class="settings-tab-hint" data-i18n="hint_pane_contacts">Custom fields, table columns and the WhatsApp template.</p>
+            </div>
+            <div class="settings-grid">
+
+              <div class="settings-card">
+                <div class="settings-card-header">
+                  <h2 data-i18n="set_fields">Custom Fields</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
+                </div>
+                <p class="settings-hint" data-i18n="hint_fields">Extra properties on every contact.</p>
+                <ul id="fields-list" class="settings-list"></ul>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_contact_cols">Table columns</h2></div>
+                <p class="settings-hint" data-i18n="hint_contact_cols">Drag to reorder. Name is always first.</p>
+                <div class="settings-row col-cfg-row col-cfg-locked">
+                  <span class="drag-handle"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+                  <span class="row-label" data-i18n="col_name">Name</span>
+                  <input type="checkbox" checked disabled />
+                </div>
+                <ul id="contact-columns-list" class="settings-list"></ul>
+                <div class="settings-card-body">
+                  <div class="settings-card-actions">
+                    <button id="save-contact-cols-btn" class="btn btn-primary btn-sm" onclick="saveContactColumns()" data-i18n="btn_save">Save</button>
+                    <span id="contact-cols-msg" class="workspace-name-msg hidden"></span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_wa_template">WhatsApp Message Template</h2></div>
+                <p class="settings-hint" data-i18n="hint_wa_template">Written when you tap the WhatsApp button on a contact.</p>
+                <div class="settings-card-body">
+                  <textarea id="wa-template-input" class="settings-textarea" rows="3" placeholder="Hi {{name}}, "></textarea>
+                  <p class="wa-vars-hint"><span data-i18n="wa_vars">Available variables:</span>
+                    <code class="wa-var-chip" onclick="insertWaVar('{{name}}')">{{name}}</code>
+                    <code class="wa-var-chip" onclick="insertWaVar('{{company}}')">{{company}}</code>
+                  </p>
+                  <div class="settings-card-actions">
+                    <button id="save-wa-template-btn" class="btn btn-primary btn-sm" onclick="saveWaTemplate()" data-i18n="btn_save">Save</button>
+                    <span id="wa-template-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
               </div>
 
@@ -756,9 +845,13 @@
 
           <!-- ── Deals ── -->
           <div id="settings-pane-deals" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="pane_deals">Deals</h2>
+              <p class="settings-tab-hint" data-i18n="hint_pane_deals">Pipelines and their stages, deal fields and list columns.</p>
+            </div>
             <div class="settings-grid">
 
-              <div class="settings-card" style="grid-column:1/-1">
+              <div class="settings-card wide">
                 <div class="settings-card-header">
                   <h2 data-i18n="set_pipelines">Pipelines</h2>
                   <button class="btn btn-primary btn-sm" onclick="openNewPipelineModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
@@ -777,100 +870,92 @@
               </div>
 
               <div class="settings-card">
-                <div class="settings-card-header"><h2>Deal List Columns</h2></div>
-                <p class="settings-hint">Choose which columns appear in list view. Drag to reorder. Title is always first.</p>
+                <div class="settings-card-header"><h2 data-i18n="set_deal_cols">Deal list columns</h2></div>
+                <p class="settings-hint" data-i18n="hint_deal_cols">Columns of the deal list view. Drag to reorder. Title is always first.</p>
                 <div class="settings-row col-cfg-row col-cfg-locked">
-                  <span class="drag-handle" style="opacity:.25">⠿</span>
-                  <span class="row-label">Title</span>
-                  <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
+                  <span class="drag-handle"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+                  <span class="row-label" data-i18n="lbl_deal_title">Title</span>
+                  <input type="checkbox" checked disabled />
                 </div>
-                <ul id="deal-columns-list" class="settings-list" style="margin-top:6px"></ul>
-                <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
-                  <button id="save-deal-cols-btn" class="btn btn-primary btn-sm" onclick="saveDealColumns()" data-i18n="btn_save">Save</button>
-                  <span id="deal-cols-msg" class="workspace-name-msg hidden"></span>
+                <ul id="deal-columns-list" class="settings-list"></ul>
+                <div class="settings-card-body">
+                  <div class="settings-card-actions">
+                    <button id="save-deal-cols-btn" class="btn btn-primary btn-sm" onclick="saveDealColumns()" data-i18n="btn_save">Save</button>
+                    <span id="deal-cols-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
               </div>
 
             </div>
           </div>
 
-          <!-- ── Objects ── -->
+          <!-- ── Listings (name set by updateObjectsNav) ── -->
           <div id="settings-pane-objects" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" id="settings-objects-pane-title">Listings</h2>
+              <p class="settings-tab-hint" data-i18n="hint_pane_objects">Fields and table columns.</p>
+            </div>
             <div class="settings-grid">
-
-              <div class="settings-card hidden" id="object-name-card">
-                <div class="settings-card-header"><h2>Object Type Name</h2></div>
-                <p class="settings-hint">The name shown in the sidebar and throughout the app (e.g. Properties, Products, Listings).</p>
-                <div class="workspace-name-row">
-                  <input type="text" id="object-name-input" class="workspace-name-input" placeholder="Listings" />
-                  <button class="btn btn-primary btn-sm" onclick="saveObjectTypeName()">Save</button>
-                </div>
-                <div id="object-name-msg" class="workspace-name-msg hidden"></div>
-              </div>
-
 
               <div class="settings-card">
                 <div class="settings-card-header">
-                  <h2>Fields</h2>
-                  <button class="btn btn-primary btn-sm" onclick="openObjectFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
+                  <h2 data-i18n="set_object_fields">Fields</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openObjectFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
                 </div>
-                <p class="settings-hint">Custom properties on every item in this list.</p>
+                <p class="settings-hint" data-i18n="hint_object_fields">Extra properties on every item in this list.</p>
                 <ul id="object-fields-list" class="settings-list"></ul>
               </div>
 
               <div class="settings-card">
-                <div class="settings-card-header"><h2>Columns</h2></div>
-                <p class="settings-hint">Drag to reorder. Name is always first.</p>
+                <div class="settings-card-header"><h2 data-i18n="set_object_cols">Table columns</h2></div>
+                <p class="settings-hint" data-i18n="hint_contact_cols">Drag to reorder. Name is always first.</p>
                 <div class="settings-row col-cfg-row col-cfg-locked">
-                  <span class="drag-handle" style="opacity:.25">⠿</span>
-                  <span class="row-label">Name</span>
-                  <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
+                  <span class="drag-handle"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+                  <span class="row-label" data-i18n="col_name">Name</span>
+                  <input type="checkbox" checked disabled />
                 </div>
-                <ul id="object-columns-list" class="settings-list" style="margin-top:6px"></ul>
-                <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
-                  <button id="save-obj-cols-btn" class="btn btn-primary btn-sm" onclick="saveObjectColumns()">Save</button>
-                  <span id="obj-cols-msg" class="workspace-name-msg hidden"></span>
+                <ul id="object-columns-list" class="settings-list"></ul>
+                <div class="settings-card-body">
+                  <div class="settings-card-actions">
+                    <button id="save-obj-cols-btn" class="btn btn-primary btn-sm" onclick="saveObjectColumns()" data-i18n="btn_save">Save</button>
+                    <span id="obj-cols-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
               </div>
 
             </div>
           </div>
 
-          <!-- ── Contacts ── -->
-          <div id="settings-pane-contacts" class="settings-pane">
+          <!-- ── Tasks ── -->
+          <div id="settings-pane-tasks" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="pane_tasks">Tasks</h2>
+              <p class="settings-tab-hint" data-i18n="hint_pane_tasks">Statuses and custom fields for tasks.</p>
+            </div>
             <div class="settings-grid">
 
               <div class="settings-card">
                 <div class="settings-card-header">
-                  <h2 data-i18n="set_fields">Custom Fields</h2>
-                  <button class="btn btn-primary btn-sm" onclick="openFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
+                  <h2 data-i18n="set_task_statuses">Task statuses</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openTaskStatusModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
                 </div>
-                <p class="settings-hint" data-i18n="hint_fields">Extra properties on every contact.</p>
-                <ul id="fields-list" class="settings-list"></ul>
-              </div>
-
-              <div class="settings-card">
-                <div class="settings-card-header"><h2 data-i18n="set_contact_cols">Contact Columns</h2></div>
-                <p class="settings-hint" data-i18n="hint_contact_cols">Drag to reorder. Name is always first.</p>
-                <div class="settings-row col-cfg-row col-cfg-locked">
-                  <span class="drag-handle" style="opacity:.25">⠿</span>
-                  <span class="row-label" data-i18n="col_name">Name</span>
-                  <input type="checkbox" checked disabled style="opacity:.35;pointer-events:none" />
-                </div>
-                <ul id="contact-columns-list" class="settings-list" style="margin-top:6px"></ul>
-                <div style="padding:12px 0 4px;display:flex;align-items:center;gap:10px">
-                  <button id="save-contact-cols-btn" class="btn btn-primary btn-sm" onclick="saveContactColumns()" data-i18n="btn_save">Save</button>
-                  <span id="contact-cols-msg" class="workspace-name-msg hidden"></span>
+                <p class="settings-hint" data-i18n="hint_task_statuses">Drag to reorder. Statuses are the columns of the task board.</p>
+                <ul id="task-statuses-list" class="settings-list"></ul>
+                <div class="settings-card-body">
+                  <div class="settings-card-actions">
+                    <button class="btn btn-primary btn-sm" onclick="saveTaskStatuses()" data-i18n="btn_save">Save</button>
+                    <span id="task-statuses-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
               </div>
 
               <div class="settings-card">
                 <div class="settings-card-header">
-                  <h2>Contact Stages (Kanban)</h2>
-                  <button class="btn btn-primary btn-sm" onclick="openStageModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
+                  <h2 data-i18n="set_task_fields">Custom fields</h2>
+                  <button class="btn btn-primary btn-sm" onclick="openTaskFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_btn">Add</span></button>
                 </div>
-                <p class="settings-hint">Stages for organizing contacts in the kanban view.</p>
-                <ul id="contact-stages-list" class="settings-list"></ul>
+                <p class="settings-hint" data-i18n="hint_task_fields">Extra properties on every task.</p>
+                <ul id="task-fields-list" class="settings-list"></ul>
               </div>
 
             </div>
@@ -878,9 +963,19 @@
 
           <!-- ── Team ── -->
           <div id="settings-pane-team" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="pane_team">Team</h2>
+              <p class="settings-tab-hint" data-i18n="hint_pane_team">Who is in this workspace, and invite codes for new members.</p>
+            </div>
             <div class="settings-grid">
 
-              <div class="settings-card" id="invites-card">
+              <div class="settings-card">
+                <div class="settings-card-header"><h2 data-i18n="set_members">Members</h2></div>
+                <p class="settings-hint" data-i18n="hint_members">Everyone who has joined this workspace.</p>
+                <ul id="members-list" class="settings-list"></ul>
+              </div>
+
+              <div class="settings-card hidden" id="invites-card">
                 <div class="settings-card-header">
                   <h2 data-i18n="set_invites">Invite Codes</h2>
                   <div class="invite-actions">
@@ -895,52 +990,42 @@
                 <ul id="invites-list" class="settings-list"></ul>
               </div>
 
-              <div class="settings-card">
-                <div class="settings-card-header"><h2 data-i18n="set_members">Team Members</h2></div>
-                <ul id="members-list" class="settings-list"></ul>
-              </div>
-
             </div>
           </div>
 
-          <!-- ── Tasks ── -->
-          <div id="settings-pane-tasks" class="settings-pane">
+          <!-- ── Integrations ── -->
+          <div id="settings-pane-integrations" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="pane_integrations">Integrations</h2>
+              <p class="settings-tab-hint" data-i18n="hint_pane_integrations">The Miro board embedded on the Board page.</p>
+            </div>
             <div class="settings-grid">
 
               <div class="settings-card">
-                <div class="settings-card-header">
-                  <h2>Task Statuses</h2>
-                  <button class="btn btn-primary btn-sm" onclick="openTaskStatusModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
+                <div class="settings-card-header"><h2 data-i18n="set_miro">Miro board</h2></div>
+                <p class="settings-hint" data-i18n="hint_miro">Paste the embed URL from Miro → Share → Embed. Leave blank to hide the Board tab.</p>
+                <div class="settings-card-body">
+                  <div class="workspace-name-row">
+                    <input type="url" id="miro-url-input" class="workspace-name-input" placeholder="https://miro.com/app/live-embed/..." />
+                    <button class="btn btn-primary btn-sm" onclick="saveMiroUrl()" data-i18n="btn_save">Save</button>
+                    <span id="miro-url-msg" class="workspace-name-msg hidden"></span>
+                  </div>
                 </div>
-                <p class="settings-hint">Drag to reorder. Used as columns in the kanban board.</p>
-                <ul id="task-statuses-list" class="settings-list"></ul>
-                <div style="margin-top:10px">
-                  <button class="btn btn-primary btn-sm" onclick="saveTaskStatuses()">Save Order</button>
-                  <span id="task-statuses-msg" class="workspace-name-msg hidden"></span>
-                </div>
-              </div>
-
-              <div class="settings-card">
-                <div class="settings-card-header">
-                  <h2>Custom Fields</h2>
-                  <button class="btn btn-primary btn-sm" onclick="openTaskFieldModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
-                </div>
-                <p class="settings-hint">Extra properties on every task.</p>
-                <ul id="task-fields-list" class="settings-list"></ul>
               </div>
 
             </div>
           </div>
 
+        </div>
         </div>
       </section>
 
       <!-- ── Integrations page ── -->
-      <section id="page-integrations" class="page" style="overflow-y:auto">
-        <div class="page-header" style="flex-shrink:0">
+      <section id="page-integrations" class="page page-reading page-scroll">
+        <div class="page-header">
           <h1>Integrations</h1>
         </div>
-        <div class="settings-grid" style="grid-template-columns:1fr;flex:1">
+        <div class="settings-stack">
 
           <div class="settings-card">
             <div class="settings-card-header">
@@ -956,20 +1041,20 @@
                 <button class="btn btn-sm" onclick="regenerateWebhookKey()">Regenerate</button>
               </div>
             </div>
-            <div class="intg-section-title" style="margin-top:20px">Field Mapping</div>
-            <p class="settings-hint" style="margin-bottom:12px">Map incoming JSON keys to contact fields. Use dot notation for nested keys (e.g. <code>data.email</code>).</p>
+            <div class="intg-section-title intg-section-gap">Field Mapping</div>
+            <p class="settings-hint">Map incoming JSON keys to contact fields. Use dot notation for nested keys (e.g. <code>data.email</code>).</p>
             <div id="intg-field-map" class="intg-field-map"></div>
-            <div class="intg-section-title" style="margin-top:20px">Auto-create Deal</div>
-            <div class="intg-row" style="margin-bottom:12px">
+            <div class="intg-section-title intg-section-gap">Auto-create Deal</div>
+            <div class="intg-row intg-row-gap">
               <label class="intg-toggle-label"><input type="checkbox" id="intg-create-deal" onchange="toggleIntgDeal(); saveIntegration(true)"> Create a deal for every incoming lead</label>
             </div>
             <div id="intg-deal-options" class="hidden">
               <div class="intg-row"><label class="intg-label">Pipeline</label><select id="intg-pipeline" class="form-control" onchange="loadIntgStages(); saveIntegration(true)"></select></div>
-              <div class="intg-row" style="margin-top:8px"><label class="intg-label">Stage</label><select id="intg-stage" class="form-control" onchange="saveIntegration(true)"></select></div>
+              <div class="intg-row"><label class="intg-label">Stage</label><select id="intg-stage" class="form-control" onchange="saveIntegration(true)"></select></div>
             </div>
 
             <!-- Default Assignee -->
-            <div class="intg-row" style="margin-top:16px">
+            <div class="intg-row intg-section-gap">
               <label class="intg-label">Default Assignee (for all incoming contacts)</label>
               <select id="intg-assignee" class="form-control" onchange="saveIntegration(true)">
                 <option value="">— Not set (assigned to self) —</option>
@@ -1001,14 +1086,14 @@
       </section>
 
       <!-- ── Workspaces page ── -->
-      <section id="page-workspaces" class="page" style="overflow-y:auto">
-        <div class="page-header" style="flex-shrink:0">
-          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+      <section id="page-workspaces" class="page page-reading page-scroll">
+        <div class="page-header">
+          <div class="page-header-stack">
             <div>
               <h1>Workspaces</h1>
-              <p class="text-muted">Switch between your workspaces or create a new one.</p>
+              <p class="page-sub">Switch between your workspaces or create a new one.</p>
             </div>
-            <button class="btn btn-primary" onclick="openCreateWorkspaceModal()" style="flex-shrink: 0;"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New Workspace</span></button>
+            <button class="btn btn-primary" onclick="openCreateWorkspaceModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New Workspace</span></button>
           </div>
         </div>
         <div id="workspaces-grid" class="ws-page-grid"></div>
@@ -1028,11 +1113,13 @@
         <button class="close-btn" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')">&times;</button>
       </div>
       <form onsubmit="handleJoinWorkspace(event)">
-        <div class="form-group">
-          <label>Workspace Invite Code <span class="req">*</span></label>
-          <input type="text" id="join-ws-code" placeholder="Paste invite code here" autocomplete="off" required />
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="join-ws-code">Workspace Invite Code <span class="req">*</span></label>
+            <input type="text" id="join-ws-code" placeholder="Paste invite code here" autocomplete="off" required />
+          </div>
+          <div id="join-ws-error" class="auth-error hidden"></div>
         </div>
-        <div id="join-ws-error" class="auth-error hidden" style="margin:0 22px 10px"></div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')">Cancel</button>
           <button type="submit" class="btn btn-primary">Join Workspace</button>
@@ -1081,16 +1168,18 @@
         <button class="close-btn" onclick="closeCreateWorkspaceModal()">&times;</button>
       </div>
       <form onsubmit="handleCreateWorkspace(event)">
-        <div class="form-group">
-          <label>Workspace Name <span class="req">*</span></label>
-          <input type="text" id="cw-name" placeholder="e.g. Acme Sales" required />
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="cw-name">Workspace Name <span class="req">*</span></label>
+            <input type="text" id="cw-name" placeholder="e.g. Acme Sales" required />
+          </div>
+          <div class="form-group">
+            <label for="cw-code">Platform Invite Code <span class="req">*</span></label>
+            <input type="text" id="cw-code" placeholder="Paste platform code here" autocomplete="off" />
+            <span class="text-xs text-muted">Ask your platform administrator for a code.</span>
+          </div>
+          <div id="cw-error" class="auth-error hidden"></div>
         </div>
-        <div class="form-group">
-          <label>Platform Invite Code <span class="req">*</span></label>
-          <input type="text" id="cw-code" placeholder="Paste platform code here" autocomplete="off" />
-          <span class="text-xs text-muted">Get a code from the admin panel (yoursite.com/?admin)</span>
-        </div>
-        <div id="cw-error" class="auth-error hidden" style="margin:0 22px 10px"></div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeCreateWorkspaceModal()">Cancel</button>
           <button type="submit" class="btn btn-primary">Create Workspace</button>
@@ -1106,14 +1195,16 @@
         <h2>Confirm Delete</h2>
         <button class="close-btn" onclick="closeModal('bulk-delete-modal')">&times;</button>
       </div>
-      <div style="padding:20px;background:var(--card-bg)">
-        <p id="bulk-delete-message" style="margin-bottom:16px;color:var(--text)"></p>
-        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">To confirm, type the number of contacts you want to delete:</p>
-        <input type="text" id="bulk-delete-confirm-input" placeholder="e.g., 5" style="width:100%;margin-bottom:16px" />
-        <div class="hstack" style="justify-content:flex-end">
-          <button class="btn" onclick="closeModal('bulk-delete-modal')">Cancel</button>
-          <button class="btn btn-danger" onclick="confirmBulkDelete()">Delete</button>
+      <div class="modal-body">
+        <p id="bulk-delete-message"></p>
+        <div class="form-group">
+          <label for="bulk-delete-confirm-input">To confirm, type the number of contacts you want to delete:</label>
+          <input type="text" id="bulk-delete-confirm-input" placeholder="e.g., 5" />
         </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal('bulk-delete-modal')">Cancel</button>
+        <button class="btn btn-danger" onclick="confirmBulkDelete()">Delete</button>
       </div>
     </div>
   </div>
@@ -1133,9 +1224,8 @@
           <div class="form-group"><label for="cf-company" data-i18n="lbl_company">Company</label><input type="text" id="cf-company" /></div>
           <div class="form-group"><label for="cf-email" data-i18n="lbl_email">Email</label><input type="email" id="cf-email" /></div>
           <div class="form-group"><label for="cf-phone" data-i18n="lbl_phone">Phone</label><input type="tel" id="cf-phone" /></div>
-          <div class="form-group"><label for="cf-stage" data-i18n="lbl_stage">Stage</label><select id="cf-stage"></select></div>
           <div class="form-group"><label for="cf-assignee" data-i18n="lbl_assignee">Assignee</label><select id="cf-assignee"></select></div>
-          <div id="cf-custom-fields" class="form-stack"></div>
+          <div id="cf-custom-fields" class="custom-fields"></div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('contact-modal')" data-i18n="btn_cancel">Cancel</button>
@@ -1152,7 +1242,7 @@
         <h2 id="detail-title"></h2>
         <button class="close-btn" onclick="closeModal('detail-modal')">&times;</button>
       </div>
-      <div id="detail-body"></div>
+      <div id="detail-body" class="side-panel-body"></div>
     </div>
   </div>
 
@@ -1160,7 +1250,7 @@
   <div id="activity-modal" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
-        <h2>Log Activity</h2>
+        <h2 data-i18n="log_activity_title">Log activity</h2>
         <button class="close-btn" onclick="closeModal('activity-modal')">&times;</button>
       </div>
       <form id="activity-form" onsubmit="saveActivity(event)">
@@ -1184,54 +1274,6 @@
     </div>
   </div>
 
-  <!-- Add Existing Contact to Kanban Modal -->
-  <div id="kanban-add-contact-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2>Add Contact to Kanban</h2>
-        <button class="close-btn" onclick="closeModal('kanban-add-contact-modal')">&times;</button>
-      </div>
-      <form id="kanban-add-form" onsubmit="confirmAddContactToKanban(event)">
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="kanban-contact-search" style="display:block">Select Contact</label>
-            <input type="text" id="kanban-contact-search" placeholder="Search contacts…" style="width:100%" oninput="filterKanbanContacts()" />
-            <select id="kanban-contact-select" style="width:100%;max-height:140px" required></select>
-          </div>
-          <div class="form-group">
-            <label for="kanban-stage-select">Select Stage</label>
-            <select id="kanban-stage-select" style="width:100%" required></select>
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('kanban-add-contact-modal')">Cancel</button>
-          <button type="submit" class="btn btn-primary">Add</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Stage Modal -->
-  <div id="stage-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2 id="stage-modal-title">Add Stage</h2>
-        <button class="close-btn" onclick="closeModal('stage-modal')">&times;</button>
-      </div>
-      <form id="stage-form" onsubmit="saveStage(event)">
-        <input type="hidden" id="stage-id" />
-        <div class="modal-body">
-          <div class="form-group"><label for="stage-name"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="stage-name" required /></div>
-          <div class="form-group"><label for="stage-color" data-i18n="lbl_color">Color</label><input type="color" id="stage-color" value="#4f6ef7" /></div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('stage-modal')" data-i18n="btn_cancel">Cancel</button>
-          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
   <!-- Field Modal -->
   <div id="field-modal" class="modal-overlay hidden">
     <div class="modal modal-sm">
@@ -1242,7 +1284,7 @@
       <form id="field-form" onsubmit="saveField(event)">
         <input type="hidden" id="field-id" />
         <div class="modal-body">
-          <div class="form-group"><label for="field-name"><span data-i18n="lbl_field_label">Label</span> <span class="req">*</span></label><input type="text" id="field-name" required autocomplete="off" oninput="autoKey()" /></div>
+          <div class="form-group"><label for="field-name"><span data-i18n="lbl_field_label">Label</span> <span class="req">*</span></label><input type="text" id="field-name" required oninput="autoKey()" /></div>
           <div class="form-group"><label for="field-key" data-i18n="lbl_key">Key</label><input type="text" id="field-key" readonly style="opacity:.55" /></div>
           <div class="form-group"><label for="field-type" data-i18n="lbl_type">Type</label>
             <select id="field-type" onchange="toggleDropdownOptions()">
@@ -1270,7 +1312,7 @@
 
   <!-- Object Modal (create/edit) -->
   <div id="object-modal" class="modal-overlay hidden">
-    <div class="modal" style="max-width:560px">
+    <div class="modal modal-md">
       <div class="modal-header">
         <h2 id="object-modal-title">Add</h2>
         <button class="close-btn" onclick="closeModal('object-modal')">&times;</button>
@@ -1282,7 +1324,7 @@
             <label for="obj-name" id="obj-name-label">Name <span class="req">*</span></label>
             <input type="text" id="obj-name" autocomplete="off" required />
           </div>
-          <div id="obj-custom-fields" class="form-grid-2"></div>
+          <div id="obj-custom-fields" class="custom-fields form-grid-2"></div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('object-modal')" data-i18n="btn_cancel">Cancel</button>
@@ -1339,103 +1381,111 @@
 
   <!-- Deal Modal -->
   <div id="deal-modal" class="modal-overlay hidden">
-    <div class="modal modal-deal" style="width:min(96vw,1800px);max-width:none;max-height:88vh">
+    <div class="modal modal-deal">
       <div class="modal-header">
-        <h2 id="deal-modal-title">Add Deal</h2>
-        <div class="hstack" style="gap:8px">
-          <button type="button" class="btn btn-sm" id="deal-add-task-btn" onclick="addTaskFromDeal()" style="display:none">＋ Task</button>
-          <button class="close-btn" onclick="closeModal('deal-modal')">&times;</button>
+        <p class="modal-eyebrow" id="deal-modal-title">Edit deal</p>
+        <div class="hstack">
+          <button type="button" class="btn btn-sm" id="deal-add-task-btn" onclick="addTaskFromDeal()" style="display:none"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="btn_add_task">Task</span></button>
+          <button class="close-btn" onclick="closeModal('deal-modal')" aria-label="Close">&times;</button>
         </div>
+      </div>
+
+      <!-- Hero: the deal's identity and progress. The title input belongs to #deal-form via the form attribute. -->
+      <div class="deal-hero">
+        <input type="text" id="df-title" class="deal-title-input" form="deal-form" required autocomplete="off" data-i18n-ph="deal_title_ph" placeholder="Deal title" />
+        <div id="df-stage-stepper" class="stage-stepper" role="radiogroup" aria-label="Stage"></div>
       </div>
 
       <div class="deal-modal-columns">
 
-        <!-- ── Left: Deal fields ── -->
+        <!-- ── Left: Details ── -->
         <div class="deal-modal-col">
-          <div class="deal-col-label">Deal</div>
-          <form id="deal-form" onsubmit="saveDeal(event)">
+          <div class="deal-col-label deal-col-title" data-i18n="sec_details">Details</div>
+          <form id="deal-form" onsubmit="saveDeal(event)" class="field-grid">
             <input type="hidden" id="deal-id" />
-            <div class="form-group"><label data-i18n="lbl_deal_title">Title <span class="req">*</span></label><input type="text" id="df-title" required /></div>
-            <div class="form-group"><label data-i18n="lbl_contact">Contact</label><select id="df-contact" onchange="onDealContactChange()"></select></div>
-            <div class="form-group"><label id="df-supplier-label">Supplier</label><select id="df-supplier"></select></div>
-            <div class="form-group"><label>Pipeline <span class="req">*</span></label><select id="df-pipeline" onchange="onDealPipelineChange()" required></select></div>
-            <div class="form-group"><label data-i18n="lbl_stage">Stage</label><select id="df-stage"></select></div>
-            <div class="form-group"><label data-i18n="lbl_deal_value">Value</label><input type="number" id="df-value" min="0" step="0.01" /></div>
-            <div class="form-group">
-              <label>Urgency</label>
-              <div style="display:flex;gap:8px;align-items:center">
-                <span id="df-urgency-dot" style="width:14px;height:14px;border-radius:50%;border:2px solid var(--line);background:transparent;flex-shrink:0"></span>
-                <select id="df-urgency" style="flex:1" onchange="updateUrgencyDot()">
-                  <option value="0">— No urgency —</option>
-                  <option value="1">Low</option>
-                  <option value="2">Medium</option>
-                  <option value="3">High</option>
-                  <option value="4">Very urgent</option>
-                </select>
-              </div>
+            <!-- Searchable pickers: the hidden selects stay the source of truth (see attachPicker in core.js) -->
+            <label for="df-contact" data-i18n="lbl_contact">Contact</label>
+            <div class="picker-cell"><select id="df-contact" class="sr-only" onchange="onDealContactChange()"></select></div>
+            <label for="df-supplier" id="df-supplier-label">Supplier</label>
+            <div class="picker-cell"><select id="df-supplier" class="sr-only"></select></div>
+            <label for="df-pipeline" data-i18n="lbl_pipeline">Pipeline</label>
+            <select id="df-pipeline" onchange="onDealPipelineChange()" required></select>
+            <!-- The stage select stays the source of truth; the stepper in the hero writes to it. -->
+            <div class="sr-only"><label for="df-stage" data-i18n="lbl_stage">Stage</label><select id="df-stage"></select></div>
+            <label for="df-value" data-i18n="lbl_deal_value">Value</label>
+            <div class="input-affix"><input type="number" id="df-value" min="0" step="0.01" inputmode="decimal" /><span class="input-affix-unit" aria-hidden="true">€</span></div>
+            <label data-i18n="urgency">Urgency</label>
+            <div>
+              <div class="seg" id="df-urgency-seg" role="radiogroup" aria-label="Urgency"></div>
+              <select id="df-urgency" class="sr-only" onchange="updateUrgencyDot()">
+                <option value="0" data-i18n="urg_0">No urgency</option>
+                <option value="1" data-i18n="urg_1">Low</option>
+                <option value="2" data-i18n="urg_2">Medium</option>
+                <option value="3" data-i18n="urg_3">High</option>
+                <option value="4" data-i18n="urg_4">Very urgent</option>
+              </select>
             </div>
-            <div class="form-group"><label data-i18n="lbl_assignee">Assignee</label><select id="df-assignee"></select></div>
-            <div id="df-custom-fields"></div>
+            <label for="df-assignee" data-i18n="lbl_assignee">Assignee</label>
+            <select id="df-assignee"></select>
+            <div id="df-custom-fields" class="field-grid-more"></div>
           </form>
         </div>
 
-        <!-- ── Middle: Contact panel, with linked Listings below it ── -->
+        <!-- ── Middle: Contact + linked listings ── -->
         <div class="deal-modal-col deal-col-contact">
-          <div id="deal-contact-panel">
-            <div class="deal-col-label">Contact</div>
-            <div class="contact-panel-empty">No contact linked</div>
+          <div class="deal-col-label deal-col-title" data-i18n="sec_contact">Contact</div>
+          <div id="deal-contact-panel" class="contact-panel">
+            <div class="contact-card contact-card-empty" data-i18n="deal_no_contact_hint">No contact linked. Choose one under Details.</div>
           </div>
-
-          <div class="deal-object-panel">
-            <div class="eyebrow" id="deal-object-panel-label">Listings</div>
-            <div id="deal-object-panel-body" class="object-panel-body"></div>
-          </div>
+          <div class="deal-col-label deal-col-title" id="deal-object-panel-label"></div>
+          <div id="deal-object-panel-body" class="object-panel"></div>
         </div>
 
-        <!-- ── Right: Notes panel (timeline) ── -->
+        <!-- ── Right: Notes (timeline) ── -->
         <div class="deal-modal-col deal-col-notes" id="deal-notes-panel">
-          <div class="deal-col-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:22px">
-            <span>Notes</span>
+          <div class="deal-col-label deal-col-title deal-col-label-row">
+            <span data-i18n="sec_notes">Notes</span>
             <div class="hstack-tight">
-              <button type="button" class="btn btn-sm btn-primary" onclick="toggleDealNoteForm()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add Note</span></button>
-              <button type="button" class="btn btn-sm" onclick="toggleShowAllDealNotes()" id="deal-show-all-btn">Show All</button>
+              <button type="button" class="btn btn-sm btn-primary" onclick="toggleDealNoteForm()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="btn_add_note">Add note</span></button>
+              <button type="button" class="btn btn-sm" onclick="toggleShowAllDealNotes()" id="deal-show-all-btn" data-i18n="btn_show_all">Show all</button>
             </div>
           </div>
-          <div id="deal-notes-container" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+          <div id="deal-notes-container" class="deal-notes-stack">
             <!-- Collapsible add-note form -->
             <div id="deal-note-form-wrapper" class="deal-note-form-wrapper hidden">
               <input type="hidden" id="deal-activity-deal-id" />
-              <select id="deal-activity-type" class="activity-type-select">
-                <option value="note">Note</option>
-                <option value="call">Call</option>
-                <option value="email">Email</option>
-                <option value="whatsapp">WhatsApp</option>
+              <div class="seg" id="deal-activity-type-seg" role="radiogroup" aria-label="Type"></div>
+              <select id="deal-activity-type" class="sr-only">
+                <option value="note" data-i18n="act_note">Note</option>
+                <option value="call" data-i18n="act_call">Call</option>
+                <option value="email" data-i18n="act_email">Email</option>
+                <option value="whatsapp" data-i18n="act_whatsapp">WhatsApp</option>
               </select>
               <div class="note-editor-toolbar" id="deal-toolbar">
-                <button type="button" class="fmt-btn" onclick="formatDealNote('bold')" title="Bold"><strong>B</strong></button>
-                <button type="button" class="fmt-btn" onclick="formatDealNote('italic')" title="Italic"><em>I</em></button>
-                <button type="button" class="fmt-btn" onclick="formatDealNote('underline')" title="Underline"><u>U</u></button>
+                <button type="button" class="fmt-btn" onclick="formatDealNote('bold')" title="Bold" data-i18n-title="fmt_bold"><strong>B</strong></button>
+                <button type="button" class="fmt-btn" onclick="formatDealNote('italic')" title="Italic" data-i18n-title="fmt_italic"><em>I</em></button>
+                <button type="button" class="fmt-btn" onclick="formatDealNote('underline')" title="Underline" data-i18n-title="fmt_underline"><u>U</u></button>
                 <div class="fmt-divider"></div>
-                <button type="button" class="fmt-btn" onclick="formatDealNote('insertUnorderedList')" title="List">• List</button>
-                <button type="button" class="fmt-btn" onclick="formatDealNote('createLink')" title="Link" aria-label="Insert link"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></button>
+                <button type="button" class="fmt-btn" onclick="formatDealNote('insertUnorderedList')" title="List" data-i18n-title="fmt_list"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/></svg></button>
+                <button type="button" class="fmt-btn" onclick="formatDealNote('createLink')" title="Link" data-i18n-title="fmt_link" aria-label="Insert link"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></button>
                 <button type="button" class="fmt-btn" onclick="formatDealNote('removeFormat')" title="Clear formatting" aria-label="Clear formatting"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
               </div>
               <div class="hstack note-date-row">
-                <label class="eyebrow">Date</label>
+                <label class="eyebrow" for="deal-activity-date" data-i18n="lbl_date">Date</label>
                 <input type="date" id="deal-activity-date" disabled />
-                <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);cursor:pointer;flex-shrink:0;white-space:nowrap" title="Save this note without a date — it won't appear on the calendar">
-                  <input type="checkbox" id="deal-activity-no-date" checked onchange="toggleNoDate(this)" /> No date
+                <label title="Saved without a date, so it will not appear on the calendar." data-i18n-title="no_date_hint">
+                  <input type="checkbox" id="deal-activity-no-date" checked onchange="toggleNoDate(this)" /> <span data-i18n="no_date">No date</span>
                 </label>
               </div>
-              <div id="deal-activity-content" class="note-editor" contenteditable="true" placeholder="Add note, call, or email…"
+              <div id="deal-activity-content" class="note-editor" contenteditable="true" data-i18n-ph="detail_log_ph" placeholder="Add note, call, or email…"
                 onkeydown="if(event.key==='Enter' && event.ctrlKey){event.preventDefault();saveDealActivity();}"></div>
               <div class="hstack note-form-actions">
-                <button type="button" class="btn btn-primary" id="deal-log-btn" style="flex:1" onclick="saveDealActivity()">Log (Ctrl+Enter)</button>
-                <button type="button" class="btn" onclick="toggleDealNoteForm()">Cancel</button>
+                <button type="button" class="btn btn-primary" id="deal-log-btn" onclick="saveDealActivity()"><span data-i18n="btn_log">Log</span><kbd class="kbd">Ctrl+Enter</kbd></button>
+                <button type="button" class="btn" onclick="toggleDealNoteForm()" data-i18n="btn_cancel">Cancel</button>
               </div>
             </div>
             <!-- Timeline list -->
-            <div id="deal-activities-list" class="deal-timeline" style="flex:1;overflow-y:auto;padding:12px 22px;"></div>
+            <div id="deal-activities-list" class="deal-timeline"></div>
           </div>
         </div>
 
@@ -1443,10 +1493,11 @@
 
       <!-- Sticky footer -->
       <div class="modal-actions deal-modal-footer">
-        <button type="button" class="btn btn-danger" id="deal-delete-btn" onclick="deleteDealFromModal()" style="display:none">Delete Deal</button>
+        <button type="button" class="btn btn-danger" id="deal-delete-btn" onclick="deleteDealFromModal()" style="display:none" data-i18n="delete_deal">Delete deal</button>
+        <span id="deal-form-error" class="workspace-name-msg error hidden"></span>
         <div class="hstack">
           <button type="button" class="btn" onclick="closeModal('deal-modal')" data-i18n="btn_cancel">Cancel</button>
-          <button type="submit" form="deal-form" class="btn btn-primary" data-i18n="btn_save">Save Deal</button>
+          <button type="submit" form="deal-form" class="btn btn-primary" data-i18n="save_deal">Save deal</button>
         </div>
       </div>
     </div>
@@ -1454,7 +1505,7 @@
 
   <!-- Task Modal -->
   <div id="task-modal" class="modal-overlay hidden">
-    <div class="modal" style="width:min(92vw,1100px);max-width:none;max-height:88vh;overflow-y:auto">
+    <div class="modal modal-xl">
       <div class="modal-header">
         <h2 id="task-modal-title">Add Task</h2>
         <button class="close-btn" onclick="closeModal('task-modal')">&times;</button>
@@ -1462,18 +1513,18 @@
       <form id="task-form" onsubmit="saveTask(event)">
         <input type="hidden" id="task-id" />
         <input type="hidden" id="task-parent-id" />
-        <div class="modal-body" style="display:grid;grid-template-columns:1.2fr 1fr;gap:24px;padding:24px">
-          <div style="display:flex;flex-direction:column;gap:12px">
-            <div class="form-group" style="grid-column:1/-1">
-              <label>Title <span class="req">*</span></label>
+        <div class="modal-body modal-body-grid">
+          <div class="modal-col">
+            <div class="form-group">
+              <label for="task-title">Title <span class="req">*</span></label>
               <input type="text" id="task-title" required />
             </div>
-            <div class="form-group" style="grid-column:1/-1">
-              <label>Description</label>
+            <div class="form-group">
+              <label for="task-description">Description</label>
               <textarea id="task-description" rows="3" style="resize:vertical"></textarea>
             </div>
             <div class="form-group">
-              <label>Status</label>
+              <label for="task-status">Status</label>
               <select id="task-status">
                 <option value="todo">Todo</option>
                 <option value="in_progress">In Progress</option>
@@ -1482,7 +1533,7 @@
               </select>
             </div>
             <div class="form-group">
-              <label>Priority</label>
+              <label for="task-priority">Priority</label>
               <select id="task-priority">
                 <option value="low">Low</option>
                 <option value="medium" selected>Medium</option>
@@ -1491,43 +1542,43 @@
               </select>
             </div>
             <div class="form-group">
-              <label>Assignee</label>
+              <label for="task-assignee">Assignee</label>
               <select id="task-assignee"></select>
             </div>
             <div class="form-group">
-              <label>Due Date</label>
+              <label for="task-due-date">Due Date</label>
               <input type="date" id="task-due-date" />
             </div>
             <div class="form-group">
-              <label>Project</label>
+              <label for="task-project">Project</label>
               <select id="task-project" onchange="onTaskProjectChange()"><option value="">— No project —</option></select>
             </div>
             <div class="form-group">
-              <label>List</label>
+              <label for="task-list">List</label>
               <select id="task-list"><option value="">— No list —</option></select>
             </div>
-            <div id="task-custom-fields"></div>
+            <div id="task-custom-fields" class="custom-fields"></div>
           </div>
           <!-- Right column: linked (always) + subtasks (when editing) -->
-          <div id="task-side-col" style="display:flex;flex-direction:column;gap:24px">
+          <div id="task-side-col" class="modal-col-loose">
 
             <!-- Linked deal / contact -->
-            <div class="task-side-section" style="display:flex;flex-direction:column;gap:12px">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-                <div class="eyebrow" style="margin:0">Linked Deal / Contact</div>
+            <div class="task-side-section modal-col">
+              <div class="hstack-between">
+                <div class="eyebrow">Linked Deal / Contact</div>
                 <button type="button" class="btn btn-sm" id="task-link-btn" onclick="toggleTaskLinkPicker()">+ Link</button>
               </div>
-              <div id="task-links" style="display:flex;flex-direction:column;gap:8px"></div>
-              <div id="task-link-picker" style="display:none;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--surface-sunken)">
-                <div class="form-group" style="margin:0">
-                  <label>Deal</label>
+              <div id="task-links" class="vstack"></div>
+              <div id="task-link-picker" class="modal-subform" style="display:none">
+                <div class="form-group">
+                  <label for="task-link-deal">Deal</label>
                   <select id="task-link-deal"><option value="">— No deal —</option></select>
                 </div>
-                <div class="form-group" style="margin:0">
-                  <label>Contact</label>
+                <div class="form-group">
+                  <label for="task-link-contact">Contact</label>
                   <select id="task-link-contact"><option value="">— No contact —</option></select>
                 </div>
-                <div class="hstack" style="justify-content:flex-end;margin-top:2px">
+                <div class="hstack modal-subform-actions">
                   <button type="button" class="btn btn-sm" onclick="cancelTaskLinkPicker()">Cancel</button>
                   <button type="button" class="btn btn-sm btn-primary" onclick="confirmTaskLink()">Link</button>
                 </div>
@@ -1537,14 +1588,13 @@
             </div>
 
             <!-- Subtasks (only when editing) -->
-            <div id="task-subtasks-section" class="task-side-section" style="display:flex;flex-direction:column;gap:12px">
-              <div class="eyebrow" style="margin:0">Subtasks</div>
+            <div id="task-subtasks-section" class="task-side-section modal-col">
+              <div class="eyebrow">Subtasks</div>
               <div id="task-subtasks-list"></div>
-              <div class="form-group" style="flex-direction:row;gap:6px;margin:0">
+              <div class="form-group form-row">
                 <input type="text" id="new-subtask-input" placeholder="Add subtask…"
-                  style="flex:1;width:auto"
                   onkeydown="if(event.key==='Enter'){event.preventDefault();addSubtask();}" />
-                <button type="button" class="btn btn-sm btn-primary" style="flex-shrink:0" onclick="addSubtask()">Add</button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="addSubtask()">Add</button>
               </div>
             </div>
 
@@ -1571,7 +1621,7 @@
       <form id="task-status-form" onsubmit="saveTaskStatus(event)">
         <input type="hidden" id="ts-key-hidden" />
         <div class="modal-body">
-          <div class="form-group"><label for="ts-label">Label <span class="req">*</span></label><input type="text" id="ts-label" required autocomplete="off" /></div>
+          <div class="form-group"><label for="ts-label">Label <span class="req">*</span></label><input type="text" id="ts-label" required /></div>
           <div class="form-group"><label for="ts-color">Color</label><input type="color" id="ts-color" value="#94a3b8" /></div>
         </div>
         <div class="modal-actions">
@@ -1592,7 +1642,7 @@
       <form id="task-field-form" onsubmit="saveTaskField(event)">
         <input type="hidden" id="tff-id" />
         <div class="modal-body">
-          <div class="form-group"><label for="tff-name">Label <span class="req">*</span></label><input type="text" id="tff-name" required autocomplete="off" oninput="autoTaskFieldKey()" /></div>
+          <div class="form-group"><label for="tff-name">Label <span class="req">*</span></label><input type="text" id="tff-name" required oninput="autoTaskFieldKey()" /></div>
           <div class="form-group"><label for="tff-key">Key</label><input type="text" id="tff-key" required /></div>
           <div class="form-group"><label for="tff-type">Type</label>
             <select id="tff-type" onchange="toggleTaskFieldOptions()">
@@ -1623,14 +1673,14 @@
         <h2 id="project-modal-title">New Project</h2>
         <button class="close-btn" onclick="closeModal('project-modal')">&times;</button>
       </div>
-      <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
-        <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="project-name-input" /></div>
-        <div class="form-group"><label>Color</label><input type="color" id="project-color-input" value="#3b82f6" /></div>
-        <div id="project-error" style="color:var(--danger);font-size:13px;display:none"></div>
-        <div class="modal-actions">
-          <button class="btn" onclick="closeModal('project-modal')">Cancel</button>
-          <button class="btn btn-primary" onclick="saveProject()">Save</button>
-        </div>
+      <div class="modal-body">
+        <div class="form-group"><label for="project-name-input">Name <span class="req">*</span></label><input type="text" id="project-name-input" /></div>
+        <div class="form-group"><label for="project-color-input">Color</label><input type="color" id="project-color-input" value="#3b82f6" /></div>
+        <div id="project-error" class="text-danger text-xs" style="display:none"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal('project-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveProject()">Save</button>
       </div>
     </div>
   </div>
@@ -1642,14 +1692,14 @@
         <h2 id="list-modal-title">New List</h2>
         <button class="close-btn" onclick="closeModal('list-modal')">&times;</button>
       </div>
-      <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div class="modal-body">
         <input type="hidden" id="list-project-id" />
         <input type="hidden" id="list-edit-id" />
-        <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="list-name-input" /></div>
-        <div class="modal-actions">
-          <button class="btn" onclick="closeModal('list-modal')">Cancel</button>
-          <button class="btn btn-primary" onclick="saveList()">Save</button>
-        </div>
+        <div class="form-group"><label for="list-name-input">Name <span class="req">*</span></label><input type="text" id="list-name-input" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal('list-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveList()">Save</button>
       </div>
     </div>
   </div>
@@ -1664,7 +1714,7 @@
       <form id="new-pipeline-form" onsubmit="saveNewPipeline(event)">
         <input type="hidden" id="pipeline-edit-id" />
         <div class="modal-body">
-          <div class="form-group"><label for="pipeline-name-input">Name <span class="req">*</span></label><input type="text" id="pipeline-name-input" required autocomplete="off" /></div>
+          <div class="form-group"><label for="pipeline-name-input">Name <span class="req">*</span></label><input type="text" id="pipeline-name-input" required /></div>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn" onclick="closeModal('new-pipeline-modal')" data-i18n="btn_cancel">Cancel</button>
@@ -1684,7 +1734,7 @@
       <form id="deal-field-form" onsubmit="saveDealField(event)">
         <input type="hidden" id="deal-field-id" />
         <div class="modal-body">
-          <div class="form-group"><label for="dff-name">Label <span class="req">*</span></label><input type="text" id="dff-name" required autocomplete="off" oninput="autoDealFieldKey()" /></div>
+          <div class="form-group"><label for="dff-name">Label <span class="req">*</span></label><input type="text" id="dff-name" required oninput="autoDealFieldKey()" /></div>
           <div class="form-group"><label for="dff-key" data-i18n="lbl_key">Key</label><input type="text" id="dff-key" readonly style="opacity:.55" /></div>
           <div class="form-group"><label for="dff-type" data-i18n="lbl_type">Type</label>
             <select id="dff-type" onchange="toggleDealFieldOptions()">
@@ -1714,95 +1764,94 @@
         <button class="close-btn" onclick="closeModal('import-modal')">&times;</button>
       </div>
 
+      <!-- Scrolling body: the box is max-height + overflow:hidden, so the steps
+           live in .modal-body and the action bars are siblings of it (below). -->
+      <div class="modal-body">
       <!-- Step 1: Upload -->
-      <div id="import-step-upload" class="import-step">
-        <div class="import-step-body">
-          <div class="import-upload-area" onclick="document.getElementById('import-file-input').click()"
-               ondragover="event.preventDefault()" ondrop="handleImportDrop(event)">
-            <div class="import-upload-icon"><svg class="ic" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
-            <p>Drag &amp; drop a CSV here, or <span class="import-browse-link">browse</span></p>
-            <p class="import-upload-hint">First row must be column headers</p>
-            <input type="file" id="import-file-input" accept=".csv,text/csv" style="display:none" onchange="handleImportFile(event)" />
-          </div>
+      <div id="import-step-upload">
+        <div class="import-upload-area" onclick="document.getElementById('import-file-input').click()"
+             ondragover="event.preventDefault()" ondrop="handleImportDrop(event)">
+          <div class="import-upload-icon"><svg class="ic" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+          <p>Drag &amp; drop a CSV here, or <span class="import-browse-link">browse</span></p>
+          <p class="import-upload-hint">First row must be column headers</p>
+          <input type="file" id="import-file-input" accept=".csv,text/csv" style="display:none" onchange="handleImportFile(event)" />
         </div>
       </div>
 
       <!-- Step 2: Map columns -->
-      <div id="import-step-map" class="import-step hidden">
-        <div class="import-step-body">
-          <p class="import-info-text" id="import-info-text"></p>
+      <div id="import-step-map" class="hidden">
+        <p class="import-info-text" id="import-info-text"></p>
 
-          <!-- Split name option -->
-          <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:12px;display:flex;gap:8px;align-items:center">
-            <input type="checkbox" id="import-split-name" onchange="updateImportNameOptions()" />
-            <label for="import-split-name" style="cursor:pointer;margin:0">Combine First Name + Last Name into Contact Name</label>
-          </div>
-
-          <!-- Auto deal creation option -->
-          <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:16px">
-            <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-              <input type="checkbox" id="import-create-deals" onchange="toggleImportDealOptions()" />
-              <label for="import-create-deals" style="cursor:pointer;margin:0">Create deals during import</label>
-            </div>
-            <div id="import-deal-options" style="display:none;margin-top:8px;padding-left:24px">
-              <div style="margin-bottom:12px;padding:8px;background:var(--card-bg);border-radius:4px">
-                <div style="display:flex;gap:8px;margin-bottom:8px">
-                  <input type="checkbox" id="import-deals-new" checked />
-                  <label for="import-deals-new" style="cursor:pointer;margin:0;font-size:13px">For new contacts</label>
-                </div>
-                <div style="display:flex;gap:8px">
-                  <input type="checkbox" id="import-deals-updated" />
-                  <label for="import-deals-updated" style="cursor:pointer;margin:0;font-size:13px">For updated contacts (optional)</label>
-                </div>
-              </div>
-              <div style="margin-bottom:8px">
-                <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Pipeline</label>
-                <select id="import-pipeline" style="width:100%">
-                  <option value="">— Select a pipeline —</option>
-                </select>
-              </div>
-              <div>
-                <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Starting Stage (optional)</label>
-                <select id="import-stage" style="width:100%">
-                  <option value="">— Auto (first stage) —</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <!-- Assignee selection -->
-          <div style="margin-bottom:16px">
-            <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Assignee (optional)</label>
-            <select id="import-assignee" style="width:100%">
-              <option value="">— Use default or unassigned —</option>
-            </select>
-          </div>
-
-          <div class="import-map-header-row">
-            <span>CSV column &amp; sample</span>
-            <span></span>
-            <span>Maps to CRM field</span>
-          </div>
-          <div id="import-map-rows" class="import-map-rows"></div>
+        <!-- Split name option -->
+        <div class="import-option import-option-head">
+          <input type="checkbox" id="import-split-name" onchange="updateImportNameOptions()" />
+          <label for="import-split-name">Combine First Name + Last Name into Contact Name</label>
         </div>
 
-        <div class="modal-actions">
-          <button class="btn" onclick="importBack()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back</span></button>
-          <button class="btn btn-primary" id="import-run-btn" onclick="runImport()">Import contacts</button>
+        <!-- Auto deal creation option -->
+        <div class="import-option">
+          <div class="import-option-head">
+            <input type="checkbox" id="import-create-deals" onchange="toggleImportDealOptions()" />
+            <label for="import-create-deals">Create deals during import</label>
+          </div>
+          <div id="import-deal-options" class="import-option-nested" style="display:none">
+            <div class="import-option-sub">
+              <div class="import-option-head">
+                <input type="checkbox" id="import-deals-new" checked />
+                <label for="import-deals-new">For new contacts</label>
+              </div>
+              <div class="import-option-head">
+                <input type="checkbox" id="import-deals-updated" />
+                <label for="import-deals-updated">For updated contacts (optional)</label>
+              </div>
+            </div>
+            <div class="import-field">
+              <label for="import-pipeline">Pipeline</label>
+              <select id="import-pipeline">
+                <option value="">— Select a pipeline —</option>
+              </select>
+            </div>
+            <div class="import-field">
+              <label for="import-stage">Starting Stage (optional)</label>
+              <select id="import-stage">
+                <option value="">— Auto (first stage) —</option>
+              </select>
+            </div>
+          </div>
         </div>
+
+        <!-- Assignee selection -->
+        <div class="import-field">
+          <label for="import-assignee">Assignee (optional)</label>
+          <select id="import-assignee">
+            <option value="">— Use default or unassigned —</option>
+          </select>
+        </div>
+
+        <div class="import-map-header-row">
+          <span>CSV column &amp; sample</span>
+          <span></span>
+          <span>Maps to CRM field</span>
+        </div>
+        <div id="import-map-rows" class="import-map-rows"></div>
       </div>
 
       <!-- Step 3: Done -->
-      <div id="import-step-done" class="import-step hidden">
-        <div class="import-step-body">
-          <div class="import-done">
-            <div class="import-done-icon"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
-            <p id="import-done-text"></p>
-          </div>
+      <div id="import-step-done" class="hidden">
+        <div class="import-done">
+          <div class="import-done-icon"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
+          <p id="import-done-text"></p>
         </div>
-        <div class="modal-actions">
-          <button class="btn btn-primary" onclick="closeModal('import-modal');loadContacts()">Done</button>
-        </div>
+      </div>
+      </div><!-- /.modal-body -->
+
+      <!-- Per-step action bars, toggled by showImportStep() together with the step -->
+      <div id="import-footer-map" class="modal-actions hidden">
+        <button class="btn" onclick="importBack()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back</span></button>
+        <button class="btn btn-primary" id="import-run-btn" onclick="runImport()">Import contacts</button>
+      </div>
+      <div id="import-footer-done" class="modal-actions hidden">
+        <button class="btn btn-primary" onclick="closeModal('import-modal');loadContacts()">Done</button>
       </div>
     </div>
   </div>
@@ -1812,6 +1861,7 @@
   <script src="js/deals.js"></script>
   <script src="js/contacts.js"></script>
   <script src="js/objects.js"></script>
+  <script src="js/activities.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/modals.js"></script>
   <script src="js/tasks.js"></script>

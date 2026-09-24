@@ -7,6 +7,7 @@ const path       = require('path');
 const helmet     = require('helmet');
 const { rateLimit } = require('express-rate-limit');
 const { pool, initDb } = require('./db');
+const { registerChatSocket } = require('./utils/chat-socket');
 
 const app        = express();
 const httpServer = http.createServer(app);
@@ -127,72 +128,8 @@ const io = new Server(httpServer, {
 
 io.engine.use(sessionMiddleware);
 
-const presence = new Map();
-
-function getOnlineList(workspaceId) {
-  const ws = presence.get(workspaceId);
-  if (!ws) return [];
-  return [...ws.entries()].map(([id, u]) => ({ id, name: u.name }));
-}
-
-io.on('connection', async (socket) => {
-  const sess = socket.request.session;
-  if (!sess?.userId || !sess?.workspaceId) { socket.disconnect(); return; }
-
-  const userId      = sess.userId;
-  const workspaceId = sess.workspaceId;
-
-  try {
-    const { rows: [mem] } = await pool.query(
-      'SELECT role FROM user_workspaces WHERE user_id=$1 AND workspace_id=$2',
-      [userId, workspaceId]
-    );
-    if (!mem) { socket.disconnect(); return; }
-  } catch { socket.disconnect(); return; }
-
-  const { rows: [user] } = await pool.query('SELECT name FROM users WHERE id=$1', [userId]);
-  const userName = user?.name || 'Unknown';
-
-  socket.join(`ws-${workspaceId}`);
-
-  if (!presence.has(workspaceId)) presence.set(workspaceId, new Map());
-  const wsPresence = presence.get(workspaceId);
-  if (!wsPresence.has(userId)) wsPresence.set(userId, { name: userName, sockets: new Set() });
-  wsPresence.get(userId).sockets.add(socket.id);
-
-  io.to(`ws-${workspaceId}`).emit('online_users', getOnlineList(workspaceId));
-
-  socket.on('chat_message', async (content) => {
-    if (!content?.trim() || content.length > 2000) return;
-    try {
-      const { rows: [msg] } = await pool.query(
-        `INSERT INTO chat_messages (workspace_id, user_id, content) VALUES ($1,$2,$3) RETURNING id, created_at`,
-        [workspaceId, userId, content.trim()]
-      );
-      await pool.query(
-        `INSERT INTO chat_reads (user_id, workspace_id, last_read_at) VALUES ($1,$2,NOW())
-         ON CONFLICT (user_id, workspace_id) DO UPDATE SET last_read_at = NOW()`,
-        [userId, workspaceId]
-      );
-      io.to(`ws-${workspaceId}`).emit('new_message', {
-        id: msg.id,
-        content: content.trim(),
-        created_at: msg.created_at,
-        user_id: userId,
-        user_name: userName,
-      });
-    } catch (e) { console.error('Socket chat error:', e); }
-  });
-
-  socket.on('disconnect', () => {
-    const u = wsPresence?.get(userId);
-    if (u) {
-      u.sockets.delete(socket.id);
-      if (u.sockets.size === 0) wsPresence.delete(userId);
-    }
-    io.to(`ws-${workspaceId}`).emit('online_users', getOnlineList(workspaceId));
-  });
-});
+// Team chat: presence, room broadcast, acked sends, per-user rate limit (utils/chat-socket.js).
+registerChatSocket(io, pool);
 
 initDb()
   .then(() => httpServer.listen(PORT, () => console.log(`CRM running at http://localhost:${PORT}`)))

@@ -1,581 +1,351 @@
-let analyticsData  = null;
-let statCardOrder  = [];
-let sectionOrder   = [];
+/* ── Analytics ──────────────────────────────────────────────────────────────
+   One fixed page: a band with the workspace's numbers, deal outcomes beside
+   deals by pipeline, then the trends over a week, a month or a year. The
+   settings that matter live in the metric settings modal: which numbers
+   show, the deal value field, and which stages count as won and lost.
+   Charts are drawn in real pixels with a scale and a baseline; money goes
+   through the workspace formatter.                                          */
+let analyticsData      = null;
+let statCardOrder      = [];
+let currentTrendPeriod = 'week';
+let trendRawData       = null;
+let trendResizeObserver = null;
+let trendRaf           = 0;
 
 const STAT_CARD_DEFS = {
-  contacts:       { label: 'Total Contacts',  color: '#3b82f6' },
-  deals:          { label: 'Total Deals',     color: '#8b5cf6' },
-  win_rate:       { label: 'Win Rate',        color: '#22c55e' },
-  pipeline_value: { label: 'Pipeline Value',  color: '#f59e0b', requiresValue: true },
-  won_value:      { label: 'Won Value',       color: '#10b981', requiresValue: true },
-  new_deals:      { label: 'New Deals',       color: '#6366f1' },
+  pipeline_value: { label: 'kpi_pipeline_value', requiresValue: true },
+  won_value:      { label: 'kpi_won_value',      requiresValue: true },
+  win_rate:       { label: 'kpi_win_rate' },
+  deals:          { label: 'kpi_deals' },
+  new_deals:      { label: 'kpi_new_deals' },
+  contacts:       { label: 'kpi_contacts' },
+  overdue_tasks:  { label: 'kpi_overdue_tasks' },
 };
-const DEFAULT_STAT_ORDER    = ['contacts','deals','win_rate','pipeline_value','won_value','new_deals'];
-const DEFAULT_SECTION_ORDER = ['stats','winloss','pipeline','trends'];
+const DEFAULT_STAT_ORDER = ['pipeline_value', 'won_value', 'win_rate', 'deals', 'new_deals', 'contacts', 'overdue_tasks'];
+const TREND_DEFS = {
+  deals:    { title: 'trend_new_deals',    key: 'cnt', dataKey: 'deals',       kind: 'line' },
+  contacts: { title: 'trend_new_contacts', key: 'cnt', dataKey: 'contacts',    kind: 'line' },
+  value:    { title: 'trend_deal_value',   key: 'val', dataKey: 'value_trend', kind: 'bar', money: true },
+};
 
+/* ── Formatting ──────────────────────────────────────────────────────────── */
+
+function analyticsLocale() {
+  return (typeof currentLang !== 'undefined' && currentLang === 'de') ? 'de-DE' : 'en-GB';
+}
 function fmt(n) {
-  if (n == null) return '—';
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-  if (n >= 1000)    return (n / 1000).toFixed(1) + 'K';
-  return String(Math.round(n));
+  if (n == null || !Number.isFinite(Number(n))) return '—';
+  const v = Number(n);
+  if (v >= 1000000) return (v / 1000000).toFixed(1) + 'M';
+  if (v >= 1000)    return (v / 1000).toFixed(1) + 'K';
+  return String(Math.round(v));
+}
+// €96K / €1.3M / €420, with the currency where the workspace formatter puts it.
+function fmtMoneyShort(n) {
+  if (n == null || !Number.isFinite(Number(n))) return '—';
+  const v = Number(n), abs = Math.abs(v);
+  if (abs < 1000) return fmtMoney(v);
+  const sample = fmtMoney(0);
+  const sym = sample.replace(/[\d\s .,]/g, '');
+  const after = /\d[\s ]*[^\d\s]+$/.test(sample);
+  const num = abs >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : `${(v / 1e3).toFixed(0)}K`;
+  return after ? `${num} ${sym}` : `${sym}${num}`;
+}
+function dealCount(n) { return t(n === 1 ? 'deal_one' : 'deal_other').replace('{n}', n); }
+
+/* ── Chart geometry (pure) ───────────────────────────────────────────────── */
+
+// The smallest 1 / 2 / 5 × 10ⁿ at or above max, so the scale reads cleanly. Never zero.
+function niceMax(max) {
+  if (!(max > 0)) return 1;
+  const exp = Math.floor(Math.log10(max)), base = Math.pow(10, exp), f = max / base;
+  const m = f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10;
+  return m * base;
+}
+// Maps series values into pixel space: gutters for the tick labels and the x labels, a baseline at zero, evenly spaced ticks.
+function chartLayout(width, height, values, { ticks = 3 } = {}) {
+  const padL = 36, padR = 8, padT = 8, padB = 20;
+  const n = values.length;
+  const max = niceMax(Math.max(0, ...values));
+  const innerW = Math.max(width - padL - padR, 1), innerH = Math.max(height - padT - padB, 1);
+  const baselineY = padT + innerH;
+  const x = i => n <= 1 ? padL : padL + (i / (n - 1)) * innerW;
+  const y = v => baselineY - (Math.max(0, v) / max) * innerH;
+  const tickList = Array.from({ length: ticks + 1 }, (_, k) => { const v = max * k / ticks; return { v, y: y(v) }; });
+  return { padL, padR, padT, padB, innerW, innerH, max, baselineY, x, y, ticks: tickList };
+}
+function r1(n) { return String(Math.round(n * 10) / 10); }
+function linePath(points) { return points.map((p, i) => `${i ? 'L' : 'M'}${r1(p.x)},${r1(p.y)}`).join(' '); }
+function areaPath(points, baselineY) {
+  if (!points.length) return '';
+  return `${linePath(points)} L${r1(points[points.length - 1].x)},${r1(baselineY)} L${r1(points[0].x)},${r1(baselineY)} Z`;
+}
+// Which x labels to draw: the first, the last, and evenly spaced ones between, at most `max`.
+function labelIndexes(n, max = 7) {
+  if (n <= 0) return [];
+  if (n <= max) return Array.from({ length: n }, (_, i) => i);
+  const step = Math.ceil((n - 1) / (max - 1));
+  const out = [];
+  for (let i = 0; i < n - 1; i += step) out.push(i);
+  out.push(n - 1);
+  return out;
+}
+function formatTrendLabel(dateStr, period) {
+  const d = new Date(dateStr);
+  if (period === 'year')  return d.toLocaleDateString(analyticsLocale(), { month: 'short' });
+  if (period === 'month') return String(d.getDate());
+  return d.toLocaleDateString(analyticsLocale(), { weekday: 'short' });
 }
 
-function fmtCurrency(n) {
-  if (n == null) return '—';
-  if (n >= 1000000) return '$' + (n / 1000000).toFixed(2) + 'M';
-  if (n >= 1000)    return '$' + (n / 1000).toFixed(1) + 'K';
-  return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+/* ── The band ────────────────────────────────────────────────────────────── */
+
+// Fixed order; value cards need a value field; hidden ones come from the user's layout.
+function buildStatOrder(hiddenIds, d) {
+  const hasValue = d?.config?.value_field != null;
+  const hidden = Array.isArray(hiddenIds) ? hiddenIds : [];
+  return DEFAULT_STAT_ORDER
+    .filter(id => !STAT_CARD_DEFS[id].requiresValue || hasValue)
+    .map(id => ({ id, hidden: hidden.includes(id) }));
 }
-
-async function loadAnalytics() {
-  const mainSections = document.getElementById('analytics-main-sections');
-  if (mainSections) mainSections.innerHTML = '';
-
-  const data = await api.get('/api/analytics/summary');
-  if (!data || data.error) return;
-  analyticsData = data;
-
-  const now = new Date();
-  document.getElementById('analytics-period').textContent =
-    now.toLocaleString('default', { month: 'long', year: 'numeric' });
-
-  const layout = data.layout || {};
-  statCardOrder = buildStatOrder(layout.stat_card_order || [], layout.hidden_stat_cards || [], data);
-  sectionOrder  = buildSectionOrder(layout.section_order || []);
-
-  renderAllSections(data);
-  loadTrend(currentTrendPeriod);
-}
-
-function buildStatOrder(savedOrder, hiddenIds, d) {
-  const hasValue = d.config.value_field != null;
-  const base = savedOrder.length ? savedOrder : [...DEFAULT_STAT_ORDER];
-  return base
-    .filter(id => {
-      const def = STAT_CARD_DEFS[id];
-      if (!def) return false;
-      if (def.requiresValue && !hasValue) return false;
-      return true;
-    })
-    .map(id => ({ id, hidden: hiddenIds.includes(id) }));
-}
-
-function buildSectionOrder(saved) {
-  const base = saved.length ? saved : [...DEFAULT_SECTION_ORDER];
-  return base.filter(id => DEFAULT_SECTION_ORDER.includes(id));
-}
-
-function renderAllSections(d) {
-  const main = document.getElementById('analytics-main-sections');
-  if (!main) return;
-
-  sectionOrder.forEach(id => {
-    const el = document.getElementById(`analytics-sec-${id}`);
-    if (el) main.appendChild(el);
-  });
-
-  renderAnalyticsCards(d);
-  renderWinLoss(d);
-  renderByPipeline(d);
-  initSectionDragDrop();
-}
-
-function getStatCardContent(id, d) {
+function statCellContent(id, d) {
   switch (id) {
-    case 'contacts':       return { value: fmt(d.total_contacts),  sub: `+${d.new_contacts} this month` };
-    case 'deals':          return { value: fmt(d.total_deals),     sub: `${d.open_deals} open` };
-    case 'win_rate':       return { value: d.win_rate != null ? d.win_rate + '%' : '—', sub: d.win_rate != null ? `${d.won_deals} won · ${d.lost_deals} lost` : 'Configure won/lost stages' };
-    case 'pipeline_value': return { value: fmtCurrency(d.pipeline_value), sub: 'Open deals' };
-    case 'won_value':      return { value: fmtCurrency(d.won_value), sub: d.avg_value != null ? `Avg ${fmtCurrency(d.avg_value)}` : 'Won deals' };
-    case 'new_deals':      return { value: fmt(d.new_deals), sub: 'This month' };
-    default: return { value: '—', sub: '' };
+    case 'pipeline_value': return { value: fmtMoneyShort(d.pipeline_value), sub: t('kpi_open_deals_sub').replace('{n}', d.open_deals) };
+    case 'won_value':      return { value: fmtMoneyShort(d.won_value), sub: d.avg_value != null ? t('kpi_avg_sub').replace('{v}', fmtMoneyShort(d.avg_value)) : '' };
+    case 'win_rate':       return d.win_rate != null
+      ? { value: `${d.win_rate}%`, sub: t('kpi_won_lost_sub').replace('{w}', d.won_deals).replace('{l}', d.lost_deals) }
+      : { value: '—', sub: `<button type="button" class="btn-link" onclick="openAnalyticsConfig()">${t('kpi_setup_stages')}</button>` };
+    case 'deals':          return { value: fmt(d.total_deals), sub: t('kpi_open_deals_sub').replace('{n}', d.open_deals) };
+    case 'new_deals':      return { value: fmt(d.new_deals), sub: t('kpi_this_month') };
+    case 'contacts':       return { value: fmt(d.total_contacts), sub: t('kpi_new_this_month').replace('{n}', d.new_contacts) };
+    case 'overdue_tasks':  return { value: fmt(d.overdue_tasks), sub: t('kpi_of_tasks').replace('{n}', d.total_tasks) };
+    default:               return { value: '—', sub: '' };
   }
 }
-
 function renderAnalyticsCards(d) {
-  const el = document.getElementById('analytics-cards');
-  if (!el) return;
-  const visible = statCardOrder.filter(c => !c.hidden);
-
-  el.innerHTML = visible.map(({ id }) => {
-    const def     = STAT_CARD_DEFS[id];
-    const content = getStatCardContent(id, d);
-    return `
-    <div class="analytics-card" draggable="true" data-stat-id="${id}">
-      <div class="analytics-card-drag">⠿</div>
-      <div class="analytics-card-accent" style="background:${def.color}"></div>
-      <div class="analytics-card-label">${def.label}</div>
-      <div class="analytics-card-value">${content.value}</div>
-      <div class="analytics-card-sub">${content.sub}</div>
+  const el = document.getElementById('analytics-cards'); if (!el) return;
+  el.innerHTML = statCardOrder.filter(c => !c.hidden).map(({ id }) => {
+    const c = statCellContent(id, d);
+    return `<div class="analytics-cell" role="listitem">
+      <div class="analytics-cell-label">${t(STAT_CARD_DEFS[id].label)}</div>
+      <div class="analytics-cell-value">${c.value}</div>
+      <div class="analytics-cell-sub">${c.sub}</div>
     </div>`;
   }).join('');
-
-  initStatCardDragDrop();
 }
 
-let dragStatId = null;
-function initStatCardDragDrop() {
-  const grid = document.getElementById('analytics-cards');
-  grid.querySelectorAll('.analytics-card[data-stat-id]').forEach(card => {
-    card.addEventListener('dragstart', e => {
-      e.stopPropagation();
-      dragStatId = card.dataset.statId;
-      e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => card.classList.add('dragging'), 0);
-    });
-    card.addEventListener('dragend', () => {
-      card.classList.remove('dragging');
-      grid.querySelectorAll('.analytics-card').forEach(c => c.classList.remove('drag-over'));
-    });
-    card.addEventListener('dragover', e => {
-      e.preventDefault();
-      if (card.dataset.statId !== dragStatId) {
-        grid.querySelectorAll('.analytics-card').forEach(c => c.classList.remove('drag-over'));
-        card.classList.add('drag-over');
-      }
-    });
-    card.addEventListener('drop', e => {
-      e.preventDefault();
-      card.classList.remove('drag-over');
-      const toId = card.dataset.statId;
-      if (!dragStatId || dragStatId === toId) return;
-      const allIds  = statCardOrder.map(c => c.id);
-      const fromIdx = allIds.indexOf(dragStatId);
-      const toIdx   = allIds.indexOf(toId);
-      const [moved] = statCardOrder.splice(fromIdx, 1);
-      statCardOrder.splice(toIdx, 0, moved);
-      renderAnalyticsCards(analyticsData);
-      saveLayoutConfig();
-    });
-  });
-}
-
-let dragSectionId = null;
-function initSectionDragDrop() {
-  const main = document.getElementById('analytics-main-sections');
-  if (!main) return;
-  main.querySelectorAll('.analytics-draggable-section').forEach(sec => {
-    sec.setAttribute('draggable', 'true');
-
-    sec.addEventListener('dragstart', e => {
-      dragSectionId = sec.dataset.sectionId;
-      e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => sec.classList.add('dragging'), 0);
-    });
-    sec.addEventListener('dragend', () => {
-      sec.classList.remove('dragging');
-      main.querySelectorAll('.analytics-draggable-section').forEach(s => s.classList.remove('drag-over'));
-    });
-    sec.addEventListener('dragover', e => {
-      e.preventDefault();
-      if (sec.dataset.sectionId !== dragSectionId) {
-        main.querySelectorAll('.analytics-draggable-section').forEach(s => s.classList.remove('drag-over'));
-        sec.classList.add('drag-over');
-      }
-    });
-    sec.addEventListener('drop', e => {
-      e.preventDefault();
-      sec.classList.remove('drag-over');
-      const toId = sec.dataset.sectionId;
-      if (!dragSectionId || dragSectionId === toId) return;
-      const fromIdx = sectionOrder.indexOf(dragSectionId);
-      const toIdx   = sectionOrder.indexOf(toId);
-      sectionOrder.splice(fromIdx, 1);
-      sectionOrder.splice(toIdx, 0, dragSectionId);
-      renderAllSections(analyticsData);
-      loadTrend(currentTrendPeriod);
-      saveLayoutConfig();
-    });
-  });
-}
-
-function saveLayoutConfig() {
-  const layout = {
-    stat_card_order:   statCardOrder.map(c => c.id),
-    hidden_stat_cards: statCardOrder.filter(c => c.hidden).map(c => c.id),
-    section_order:     sectionOrder,
-    trend_config:      trendCardOrder.map(({ id, view }) => ({ id, view })),
-  };
-  api.patch('/api/analytics/layout', layout).then(res => {
-    if (!res.error && analyticsData) analyticsData.layout = { ...analyticsData.layout, ...layout };
-  });
-}
+/* ── Outcomes and pipelines ──────────────────────────────────────────────── */
 
 function renderWinLoss(d) {
-  const section = document.getElementById('analytics-winloss-section');
-  const total   = d.won_deals + d.lost_deals + d.open_deals;
-  section.style.display = '';
-  if (total === 0) {
-    document.getElementById('analytics-winloss-bar').innerHTML    = '';
-    document.getElementById('analytics-winloss-legend').innerHTML = '<p style="color:var(--muted);font-size:13px;margin:0">No deal outcomes yet — configure Won and Lost stages in Configure Metrics.</p>';
+  const bar = document.getElementById('analytics-winloss-bar'), legend = document.getElementById('analytics-winloss-legend');
+  if (!bar || !legend) return;
+  const parts = [['won', d.won_deals || 0], ['open', d.open_deals || 0], ['lost', d.lost_deals || 0]];
+  const total = parts.reduce((s, [, n]) => s + n, 0);
+  const configured = (d.config?.won_stage_ids?.length || 0) + (d.config?.lost_stage_ids?.length || 0) > 0;
+  if (!total || !configured) {
+    bar.innerHTML = '';
+    legend.innerHTML = total
+      ? `<p class="empty-inline">${t('no_outcomes_setup')} <button type="button" class="btn-link" onclick="openAnalyticsConfig()">${t('kpi_setup_stages')}</button></p>`
+      : `<p class="empty-inline">${t('no_outcomes_hint')}</p>`;
     return;
   }
-
-  const wonPct  = (d.won_deals  / total * 100).toFixed(1);
-  const lostPct = (d.lost_deals / total * 100).toFixed(1);
-  const openPct = (d.open_deals / total * 100).toFixed(1);
-
-  document.getElementById('analytics-winloss-bar').innerHTML = `
-    <div class="wl-segment" style="width:${wonPct}%;background:#22c55e" title="Won ${wonPct}%"></div>
-    <div class="wl-segment" style="width:${openPct}%;background:#3b82f6" title="Open ${openPct}%"></div>
-    <div class="wl-segment" style="width:${lostPct}%;background:#ef4444" title="Lost ${lostPct}%"></div>`;
-
-  document.getElementById('analytics-winloss-legend').innerHTML = [
-    { label: `Won — ${d.won_deals}`,   color: '#22c55e', pct: wonPct  },
-    { label: `Open — ${d.open_deals}`, color: '#3b82f6', pct: openPct },
-    { label: `Lost — ${d.lost_deals}`, color: '#ef4444', pct: lostPct },
-  ].map(l => `
-    <div class="wl-legend-item">
-      <span class="wl-dot" style="background:${l.color}"></span>
-      ${l.label} <span class="wl-pct">(${l.pct}%)</span>
+  bar.innerHTML = parts.filter(([, n]) => n > 0).map(([k, n]) => {
+    const pct = n / total * 100;
+    return `<div class="wl-segment ${k}" style="flex-basis:${pct.toFixed(1)}%" title="${esc(t('outcome_' + k))}: ${n}">${pct >= 12 ? n : ''}</div>`;
+  }).join('');
+  legend.innerHTML = parts.map(([k, n]) =>
+    `<div class="wl-legend-item"><span class="wl-dot ${k}"></span><span>${t('outcome_' + k)}</span><strong>${n}</strong><span class="wl-pct">${Math.round(n / total * 100)}%</span></div>`
+  ).join('');
+}
+function renderByPipeline(d) {
+  const el = document.getElementById('analytics-by-pipeline'); if (!el) return;
+  const hasValue = d.config?.value_field != null;
+  const rows = (d.by_pipeline || []).map(p => ({ name: p.pipeline_name, count: parseInt(p.cnt) || 0, val: parseFloat(p.val) || 0 }));
+  if (!rows.length) { el.innerHTML = `<p class="empty-inline">${t('no_pipelines')}</p>`; return; }
+  const total = Math.max(rows.reduce((s, r) => s + r.count, 0), 1);          // widths compare across pipelines
+  el.innerHTML = rows.map(r => `
+    <div class="pipeline-bar-row">
+      <div class="pipeline-bar-label" title="${esc(r.name)}">${esc(r.name)}</div>
+      <div class="pipeline-bar-track"><div class="pipeline-bar-fill" style="width:${Math.round(r.count / total * 100)}%"></div></div>
+      <div class="pipeline-bar-stats">${dealCount(r.count)}${hasValue ? ` · ${fmtMoneyShort(r.val)}` : ''}</div>
     </div>`).join('');
 }
 
-function renderByPipeline(d) {
-  const el       = document.getElementById('analytics-by-pipeline');
-  const hasValue = d.config.value_field != null;
-  if (!d.by_pipeline.length) { el.innerHTML = '<p style="color:var(--muted)">No pipelines yet.</p>'; return; }
-  const maxCount = Math.max(...d.by_pipeline.map(p => parseInt(p.cnt) || 0), 1);
-  el.innerHTML = d.by_pipeline.map(p => {
-    const count = parseInt(p.cnt) || 0;
-    const val   = parseFloat(p.val) || 0;
-    const pct   = Math.round((count / maxCount) * 100);
-    return `
-    <div class="pipeline-bar-row">
-      <div class="pipeline-bar-label">${esc(p.pipeline_name)}</div>
-      <div class="pipeline-bar-track"><div class="pipeline-bar-fill" style="width:${pct}%"></div></div>
-      <div class="pipeline-bar-stats">${count} deal${count !== 1 ? 's' : ''}${hasValue ? ' · ' + fmtCurrency(val) : ''}</div>
-    </div>`;
-  }).join('');
-}
-
-const TREND_DEFS = {
-  contacts: { title: 'New Contacts', key: 'cnt', color: '#3b82f6', dataKey: 'contacts' },
-  deals:    { title: 'New Deals',    key: 'cnt', color: '#8b5cf6', dataKey: 'deals'    },
-  value:    { title: 'Deal Value',   key: 'val', color: '#10b981', dataKey: 'value_trend', currency: true },
-};
-
-let currentTrendPeriod = 'week';
-let trendCardOrder     = [];
-let trendRawData       = null;
-let dragCardId         = null;
+/* ── Trends ──────────────────────────────────────────────────────────────── */
 
 async function loadTrend(period) {
   currentTrendPeriod = period;
   const data = await api.get(`/api/analytics/trend?period=${period}`);
   if (!data || data.error) return;
   trendRawData = data;
-
-  const hasValue = analyticsData?.config?.value_field != null;
-  const saved    = analyticsData?.layout?.trend_config || [];
-
-  const base = saved.length
-    ? saved.filter(c => c.id !== 'value' || hasValue)
-    : [{ id: 'contacts', view: 'line' }, { id: 'deals', view: 'line' }];
-
-  if (hasValue && !base.find(c => c.id === 'value')) {
-    base.push({ id: 'value', view: 'bar' });
-  }
-  trendCardOrder = base;
-
   renderTrendCards();
 }
-
+function trendSeriesIds() {
+  const hasValue = analyticsData?.config?.value_field != null;
+  return Object.keys(TREND_DEFS).filter(id => id !== 'value' || hasValue);
+}
 function renderTrendCards() {
-  const grid = document.getElementById('analytics-trend-grid');
-  grid.innerHTML = trendCardOrder.map(({ id, view }) => {
-    const def  = TREND_DEFS[id];
-    const rows = trendRawData?.[def.dataKey] || [];
-    const total = rows.reduce((s, r) => s + parseFloat(r[def.key] || 0), 0);
-    return `
-    <div class="trend-card" draggable="true" data-card-id="${id}">
-      <div class="trend-card-header">
-        <div class="trend-drag-handle" title="Drag to reorder">⠿</div>
-        <div class="trend-card-title">${def.title}</div>
-        <div class="trend-view-btns">
-          <button class="trend-view-btn${view==='line'   ? ' active':''}" onclick="setCardView('${id}','line')"   title="Line">╱</button>
-          <button class="trend-view-btn${view==='bar'    ? ' active':''}" onclick="setCardView('${id}','bar')"    title="Bar">▮</button>
-          <button class="trend-view-btn${view==='detail' ? ' active':''}" onclick="setCardView('${id}','detail')" title="Detail">≡</button>
-        </div>
-      </div>
-      <div class="trend-card-total">${def.currency ? fmtCurrency(total) : fmt(total)}</div>
-      <div class="trend-chart-wrap" id="tc-${id}"></div>
-      ${view !== 'detail' ? `<div class="trend-x-labels" id="tc-${id}-labels"></div>` : ''}
+  const grid = document.getElementById('analytics-trend-grid'); if (!grid || !trendRawData) return;
+  grid.innerHTML = trendSeriesIds().map(id => {
+    const def = TREND_DEFS[id];
+    const rows = trendRawData[def.dataKey] || [];
+    const total = rows.reduce((s, r) => s + (parseFloat(r[def.key]) || 0), 0);
+    return `<div class="trend-card" data-series="${id}">
+      <div class="trend-card-head"><span class="trend-card-title">${t(def.title)}</span><span class="trend-card-total">${def.money ? fmtMoneyShort(total) : fmt(total)}</span></div>
+      <div class="trend-chart" id="tc-${id}"></div>
     </div>`;
   }).join('');
-
-  trendCardOrder.forEach(({ id, view }) => {
-    const def    = TREND_DEFS[id];
-    const rows   = trendRawData?.[def.dataKey] || [];
-    const values = rows.map(r => parseFloat(r[def.key] || 0));
-    const labels = rows.map(r => formatTrendLabel(r.period, currentTrendPeriod));
-    if (view === 'line')   renderSparkline(`tc-${id}`, values, labels, def.color, def.currency);
-    if (view === 'bar')    renderBarChart(`tc-${id}`,  values, labels, def.color, def.currency);
-    if (view === 'detail') renderDetailView(`tc-${id}`, values, labels, def.color, def.currency);
-  });
-
-  initTrendDragDrop();
-}
-
-function setCardView(id, view) {
-  const card = trendCardOrder.find(c => c.id === id);
-  if (card) card.view = view;
-  renderTrendCards();
-  saveTrendConfig();
-}
-
-function saveTrendConfig() {
-  const tc = trendCardOrder.map(({ id, view }) => ({ id, view }));
-  api.patch('/api/analytics/layout', { trend_config: tc }).then(res => {
-    if (!res.error && analyticsData) {
-      analyticsData.layout = analyticsData.layout || {};
-      analyticsData.layout.trend_config = tc;
-    }
-  });
-}
-
-function initTrendDragDrop() {
-  const grid = document.getElementById('analytics-trend-grid');
-  grid.querySelectorAll('.trend-card').forEach(card => {
-    card.addEventListener('dragstart', e => {
-      e.stopPropagation();
-      dragCardId = card.dataset.cardId;
-      e.dataTransfer.effectAllowed = 'move';
-      setTimeout(() => card.classList.add('dragging'), 0);
-    });
-    card.addEventListener('dragend', () => {
-      card.classList.remove('dragging');
-      grid.querySelectorAll('.trend-card').forEach(c => c.classList.remove('drag-over'));
-    });
-    card.addEventListener('dragover', e => {
-      e.preventDefault();
-      if (card.dataset.cardId !== dragCardId) {
-        grid.querySelectorAll('.trend-card').forEach(c => c.classList.remove('drag-over'));
-        card.classList.add('drag-over');
-      }
-    });
-    card.addEventListener('drop', e => {
-      e.preventDefault();
-      card.classList.remove('drag-over');
-      const toId = card.dataset.cardId;
-      if (!dragCardId || dragCardId === toId) return;
-      const fromIdx = trendCardOrder.findIndex(c => c.id === dragCardId);
-      const toIdx   = trendCardOrder.findIndex(c => c.id === toId);
-      const [moved] = trendCardOrder.splice(fromIdx, 1);
-      trendCardOrder.splice(toIdx, 0, moved);
-      renderTrendCards();
-      saveTrendConfig();
-    });
-  });
-}
-
-function formatTrendLabel(dateStr, period) {
-  const d = new Date(dateStr);
-  if (period === 'year')  return d.toLocaleString('default', { month: 'short' });
-  if (period === 'month') return d.getDate().toString();
-  return d.toLocaleString('default', { weekday: 'short' });
-}
-
-function renderSparkline(containerId, values, labels, color, isCurrency) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  el.style.height = '90px';
-  const W = 500, H = 90, padX = 4, padY = 8;
-  const max  = Math.max(...values, 1);
-  const n    = values.length;
-  const step = (W - padX * 2) / Math.max(n - 1, 1);
-  const pts  = values.map((v, i) => ({ x: padX + i * step, y: padY + (1 - v / max) * (H - padY * 2) }));
-  const linePath = pts.map((p, i) => `${i===0?'M':'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-  const areaPath = `${linePath} L${pts[n-1].x},${H} L${pts[0].x},${H} Z`;
-  const gradId   = `grad-${containerId}`;
-  const maxLabels = 7;
-  const labelStep = Math.ceil(n / maxLabels);
-  const labelIdx  = values.map((_, i) => i).filter(i => i % labelStep === 0 || i === n - 1);
-
-  el.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="sparkline-svg">
-      <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%"   stop-color="${color}" stop-opacity="0.3"/>
-        <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
-      </linearGradient></defs>
-      <path d="${areaPath}" fill="url(#${gradId})"/>
-      <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-      ${pts.map((p, i) => `<circle class="spark-dot" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5"
-        fill="${color}" stroke="var(--card-bg)" stroke-width="2"
-        data-val="${isCurrency ? fmtCurrency(values[i]) : values[i]}" data-label="${labels[i]}"/>`).join('')}
-    </svg>`;
-
-  const labelsEl = document.getElementById(`${containerId}-labels`);
-  if (labelsEl) labelsEl.innerHTML = `<div class="spark-label-row">${
-    labelIdx.map(i => `<span class="spark-label" style="left:${n<=1?0:(i/(n-1)*100)}%">${labels[i]}</span>`).join('')
-  }</div>`;
-
-  el.querySelectorAll('.spark-dot').forEach(dot => {
-    dot.addEventListener('mouseenter', e => showSparkTooltip(e, dot.dataset.label, dot.dataset.val));
-    dot.addEventListener('mouseleave', hideSparkTooltip);
-  });
-}
-
-function renderBarChart(containerId, values, labels, color, isCurrency) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  el.style.height = '90px';
-  const W = 500, H = 90, padX = 4, padY = 4;
-  const max  = Math.max(...values, 1);
-  const n    = values.length;
-  const slot = (W - padX * 2) / n;
-  const barW = Math.max(slot * 0.65, 2);
-  const maxLabels = 7;
-  const labelStep = Math.ceil(n / maxLabels);
-  const labelIdx  = values.map((_, i) => i).filter(i => i % labelStep === 0 || i === n - 1);
-
-  el.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="sparkline-svg">
-      ${values.map((v, i) => {
-        const bh = v > 0 ? Math.max((v / max) * (H - padY * 2), 2) : 0;
-        const x  = padX + i * slot + (slot - barW) / 2;
-        const y  = H - padY - bh;
-        return `<rect class="spark-dot" x="${x.toFixed(1)}" y="${y.toFixed(1)}"
-          width="${barW.toFixed(1)}" height="${bh.toFixed(1)}"
-          fill="${color}" rx="2" opacity="0.85"
-          data-val="${isCurrency ? fmtCurrency(v) : v}" data-label="${labels[i]}"/>`;
-      }).join('')}
-    </svg>`;
-
-  const labelsEl = document.getElementById(`${containerId}-labels`);
-  if (labelsEl) labelsEl.innerHTML = `<div class="spark-label-row">${
-    labelIdx.map(i => {
-      const pct = n <= 1 ? 0 : (i / (n - 1)) * 100;
-      return `<span class="spark-label" style="left:${pct}%">${labels[i]}</span>`;
-    }).join('')
-  }</div>`;
-
-  el.querySelectorAll('.spark-dot').forEach(dot => {
-    dot.addEventListener('mouseenter', e => showSparkTooltip(e, dot.dataset.label, dot.dataset.val));
-    dot.addEventListener('mouseleave', hideSparkTooltip);
-  });
-}
-
-function renderDetailView(containerId, values, labels, color, isCurrency) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  el.style.height = 'auto';
-  const max = Math.max(...values, 1);
-  el.innerHTML = `<div class="trend-detail-list">${
-    values.map((v, i) => {
-      const pct = Math.round((v / max) * 100);
-      const val = isCurrency ? fmtCurrency(v) : v;
-      return `<div class="trend-detail-row">
-        <span class="trend-detail-label">${labels[i]}</span>
-        <div class="trend-detail-track"><div class="trend-detail-fill" style="width:${pct}%;background:${color}"></div></div>
-        <span class="trend-detail-val">${val}</span>
-      </div>`;
-    }).join('')
-  }</div>`;
-}
-
-function showSparkTooltip(e, label, val) {
-  let tip = document.getElementById('spark-tooltip');
-  if (!tip) {
-    tip = document.createElement('div');
-    tip.id = 'spark-tooltip';
-    tip.className = 'spark-tooltip';
-    document.body.appendChild(tip);
+  drawTrendCharts();
+  if (!trendResizeObserver && typeof ResizeObserver !== 'undefined') {
+    trendResizeObserver = new ResizeObserver(() => { cancelAnimationFrame(trendRaf); trendRaf = requestAnimationFrame(drawTrendCharts); });
+    trendResizeObserver.observe(grid);
   }
-  tip.textContent = `${label}: ${val}`;
-  tip.style.display = 'block';
-  tip.style.left = (e.clientX + 10) + 'px';
-  tip.style.top  = (e.clientY - 28) + 'px';
 }
-function hideSparkTooltip() {
-  const tip = document.getElementById('spark-tooltip');
-  if (tip) tip.style.display = 'none';
+function drawTrendCharts() {
+  if (!trendRawData) return;
+  for (const id of trendSeriesIds()) {
+    const def = TREND_DEFS[id];
+    const rows = trendRawData[def.dataKey] || [];
+    renderTrendChart(document.getElementById(`tc-${id}`), {
+      values: rows.map(r => parseFloat(r[def.key]) || 0),
+      labels: rows.map(r => formatTrendLabel(r.period, currentTrendPeriod)),
+      series: id, kind: def.kind, money: !!def.money,
+    });
+  }
 }
-
+// One chart in real pixels: gridlines with tick labels, the baseline, the series (line + area, or bars), x labels, and a hover column with its value.
+function renderTrendChart(el, { values, labels, series, kind = 'line', money = false }) {
+  if (!el) return;
+  const width = Math.max(el.clientWidth || 0, 240), height = 140;
+  const L = chartLayout(width, height, values);
+  const n = values.length;
+  const fmtVal = v => money ? fmtMoneyShort(v) : fmt(v);
+  const slot = L.innerW / Math.max(n, 1);
+  const cx = i => kind === 'bar' ? L.padL + (i + 0.5) * slot : L.x(i);
+  const grid = L.ticks.map(tk =>
+    `<line class="chart-grid" x1="${L.padL}" x2="${width - L.padR}" y1="${r1(tk.y)}" y2="${r1(tk.y)}"/>` +
+    `<text class="chart-axis" x="${L.padL - 6}" y="${r1(tk.y)}" text-anchor="end" dominant-baseline="middle">${esc(fmtVal(tk.v))}</text>`
+  ).join('');
+  const xLabels = labelIndexes(n).map(i =>
+    `<text class="chart-axis" x="${r1(cx(i))}" y="${height - 5}" text-anchor="${n > 1 && i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}">${esc(labels[i] ?? '')}</text>`
+  ).join('');
+  let shape = '';
+  if (kind === 'bar') {
+    const barW = Math.max(slot * 0.6, 2);
+    shape = values.map((v, i) => {
+      const h = v > 0 ? Math.max(L.baselineY - L.y(v), 2) : 0;
+      return `<rect class="chart-bar ${series}" x="${r1(cx(i) - barW / 2)}" y="${r1(L.baselineY - h)}" width="${r1(barW)}" height="${r1(h)}" rx="2"/>`;
+    }).join('');
+  } else if (n) {
+    const pts = values.map((v, i) => ({ x: L.x(i), y: L.y(v) }));
+    shape = `<path class="chart-area ${series}" d="${areaPath(pts, L.baselineY)}"/><path class="chart-line ${series}" d="${linePath(pts)}"/>`;
+  }
+  const cols = values.map((v, i) => {
+    const hw = Math.max(slot / 2, 6);
+    return `<g class="chart-col" data-i="${i}"><rect class="chart-hit" x="${r1(cx(i) - hw)}" y="${L.padT}" width="${r1(hw * 2)}" height="${r1(L.innerH)}"><title>${esc(labels[i] ?? '')}: ${esc(fmtVal(v))}</title></rect>` +
+      (kind === 'bar' ? '' : `<circle class="chart-dot ${series}" cx="${r1(cx(i))}" cy="${r1(L.y(v))}" r="3.5"/>`) + `</g>`;
+  }).join('');
+  el.innerHTML = `<svg class="chart" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="${esc(t(TREND_DEFS[series]?.title || ''))}">
+    ${grid}<line class="chart-baseline" x1="${L.padL}" x2="${width - L.padR}" y1="${r1(L.baselineY)}" y2="${r1(L.baselineY)}"/>${shape}${cols}${xLabels}
+  </svg><div class="chart-tip hidden"></div>`;
+  const tip = el.querySelector('.chart-tip');
+  el.querySelectorAll('.chart-col').forEach(col => {
+    const i = Number(col.dataset.i);
+    col.addEventListener('mouseenter', () => {
+      tip.textContent = `${labels[i] ?? ''}: ${fmtVal(values[i])}`;
+      tip.style.left = `${cx(i)}px`;
+      tip.classList.remove('hidden');
+    });
+    col.addEventListener('mouseleave', () => tip.classList.add('hidden'));
+  });
+}
 function switchTrendPeriod(period) {
-  document.querySelectorAll('.period-btn').forEach(b => b.classList.toggle('active', b.dataset.period === period));
+  document.querySelectorAll('#analytics-period-switcher .view-toggle-btn').forEach(b => {
+    const on = b.dataset.period === period;
+    b.classList.toggle('active', on); b.setAttribute('aria-pressed', String(on));
+  });
   loadTrend(period);
 }
+
+/* ── Page ────────────────────────────────────────────────────────────────── */
+
+async function loadAnalytics() {
+  const data = await api.get('/api/analytics/summary');
+  if (!data || data.error) return;
+  analyticsData = data;
+  const period = document.getElementById('analytics-period');
+  if (period) period.textContent = new Date().toLocaleDateString(analyticsLocale(), { month: 'long', year: 'numeric' });
+  statCardOrder = buildStatOrder(data.layout?.hidden_stat_cards || [], data);
+  renderAnalyticsCards(data);
+  renderWinLoss(data);
+  renderByPipeline(data);
+  loadTrend(currentTrendPeriod);
+}
+function saveLayoutConfig() {
+  const layout = { hidden_stat_cards: statCardOrder.filter(c => c.hidden).map(c => c.id) };
+  return api.patch('/api/analytics/layout', layout).then(res => {
+    if (!res.error && analyticsData) analyticsData.layout = { ...analyticsData.layout, ...layout };
+  });
+}
+
+/* ── Metric settings ─────────────────────────────────────────────────────── */
 
 function openAnalyticsConfig() {
   if (!analyticsData) return;
   const { all_stages, deal_fields, config } = analyticsData;
-  const wonIds     = (config.won_stage_ids  || []).map(Number);
-  const lostIds    = (config.lost_stage_ids || []).map(Number);
+  const wonIds  = (config.won_stage_ids  || []).map(Number);
+  const lostIds = (config.lost_stage_ids || []).map(Number);
   const valueField = config.value_field || '';
 
-  const pipelines = [];
-  const pipelineMap = {};
-  for (const s of all_stages) {
-    if (!pipelineMap[s.pipeline_id]) {
-      pipelineMap[s.pipeline_id] = { name: s.pipeline_name, stages: [] };
-      pipelines.push(pipelineMap[s.pipeline_id]);
-    }
-    pipelineMap[s.pipeline_id].stages.push(s);
+  const pipelines = [], byId = {};
+  for (const s of all_stages || []) {
+    if (!byId[s.pipeline_id]) { byId[s.pipeline_id] = { name: s.pipeline_name, stages: [] }; pipelines.push(byId[s.pipeline_id]); }
+    byId[s.pipeline_id].stages.push(s);
   }
-
-  function renderStageGroup(containerId, selectedIds) {
-    document.getElementById(containerId).innerHTML = pipelines.map(pl => `
+  const stageGroup = (containerId, selected) => {
+    const el = document.getElementById(containerId); if (!el) return;
+    el.innerHTML = pipelines.map(pl => `
       <div class="analytics-pipeline-group">
         <div class="analytics-pipeline-sep">${esc(pl.name)}</div>
         <div class="analytics-stage-chips">
-          ${pl.stages.map(s => `
-            <label class="analytics-stage-option">
-              <input type="checkbox" data-id="${s.id}" ${selectedIds.includes(s.id) ? 'checked' : ''}>
-              <span class="analytics-stage-dot" style="background:${s.color}"></span>
-              ${esc(s.name)}
-            </label>`).join('')}
+          ${pl.stages.map(s => `<label class="analytics-stage-option"><input type="checkbox" data-id="${s.id}" ${selected.includes(s.id) ? 'checked' : ''}><span class="col-dot" style="--stage:${esc(s.color || '')}"></span>${esc(s.name)}</label>`).join('')}
         </div>
       </div>`).join('');
-  }
+  };
+  stageGroup('analytics-won-stages',  wonIds);
+  stageGroup('analytics-lost-stages', lostIds);
 
-  renderStageGroup('analytics-won-stages',  wonIds);
-  renderStageGroup('analytics-lost-stages', lostIds);
-
-  const numericFields = deal_fields.filter(f => f.type === 'number' || f.type === 'currency');
-  const valueOptions  = [
-    { key: '',      label: 'None — hide value metrics' },
-    { key: 'value', label: 'Deal Value (built-in)' },
+  const numericFields = (deal_fields || []).filter(f => f.type === 'number' || f.type === 'currency');
+  const valueOptions = [
+    { key: '',      label: t('cfg_value_none') },
+    { key: 'value', label: t('cfg_value_builtin') },
     ...numericFields.map(f => ({ key: f.field_key, label: f.name })),
   ];
-  document.getElementById('analytics-value-field').innerHTML =
-    valueOptions.map(o => `<option value="${o.key}" ${valueField === o.key ? 'selected' : ''}>${o.label}</option>`).join('');
+  const sel = document.getElementById('analytics-value-field');
+  if (sel) sel.innerHTML = valueOptions.map(o => `<option value="${esc(o.key)}" ${valueField === o.key ? 'selected' : ''}>${esc(o.label)}</option>`).join('');
 
-  const hasValue = analyticsData?.config?.value_field != null;
-  document.getElementById('analytics-card-visibility').innerHTML =
-    Object.entries(STAT_CARD_DEFS)
-      .filter(([, def]) => !def.requiresValue || hasValue)
-      .map(([id, def]) => {
-        const card    = statCardOrder.find(c => c.id === id);
-        const hidden  = card ? card.hidden : false;
-        return `<label class="analytics-stage-option">
-          <input type="checkbox" data-card-vis="${id}" ${!hidden ? 'checked' : ''}>
-          <span class="analytics-stage-dot" style="background:${def.color}"></span>
-          ${def.label}
-        </label>`;
-      }).join('');
+  const hasValue = config.value_field != null;
+  const vis = document.getElementById('analytics-card-visibility');
+  if (vis) vis.innerHTML = DEFAULT_STAT_ORDER
+    .filter(id => !STAT_CARD_DEFS[id].requiresValue || hasValue)
+    .map(id => {
+      const card = statCardOrder.find(c => c.id === id);
+      return `<label class="analytics-stage-option"><input type="checkbox" data-card-vis="${id}" ${card?.hidden ? '' : 'checked'}>${t(STAT_CARD_DEFS[id].label)}</label>`;
+    }).join('');
 
-  document.getElementById('analytics-config-msg').classList.add('hidden');
-  document.getElementById('analytics-config-modal').classList.remove('hidden');
+  document.getElementById('analytics-config-msg')?.classList.add('hidden');
+  document.getElementById('analytics-config-modal')?.classList.remove('hidden');
 }
-
 function closeAnalyticsConfig() {
-  document.getElementById('analytics-config-modal').classList.add('hidden');
+  document.getElementById('analytics-config-modal')?.classList.add('hidden');
 }
-
 async function saveAnalyticsConfig() {
-  const wonIds     = [...document.querySelectorAll('#analytics-won-stages  input[data-id]:checked')].map(el => parseInt(el.dataset.id));
-  const lostIds    = [...document.querySelectorAll('#analytics-lost-stages input[data-id]:checked')].map(el => parseInt(el.dataset.id));
-  const valueField = document.getElementById('analytics-value-field').value || null;
+  const wonIds  = [...document.querySelectorAll('#analytics-won-stages  input[data-id]:checked')].map(el => parseInt(el.dataset.id));
+  const lostIds = [...document.querySelectorAll('#analytics-lost-stages input[data-id]:checked')].map(el => parseInt(el.dataset.id));
+  const valueField = document.getElementById('analytics-value-field')?.value || null;
+  const msgEl = document.getElementById('analytics-config-msg');
+  const showError = text => { if (!msgEl) return; msgEl.textContent = text; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); };
 
-  const msgEl  = document.getElementById('analytics-config-msg');
-  const overlap = wonIds.filter(id => lostIds.includes(id));
-  if (overlap.length) {
-    msgEl.textContent = 'A stage cannot be both Won and Lost.';
-    msgEl.className   = 'workspace-name-msg error';
-    msgEl.classList.remove('hidden');
-    return;
-  }
+  if (wonIds.some(id => lostIds.includes(id))) { showError(t('cfg_overlap_error')); return; }
 
   document.querySelectorAll('#analytics-card-visibility input[data-card-vis]').forEach(cb => {
     const card = statCardOrder.find(c => c.id === cb.dataset.cardVis);
@@ -584,17 +354,8 @@ async function saveAnalyticsConfig() {
   });
 
   const res = await api.patch('/api/analytics/config', { won_stage_ids: wonIds, lost_stage_ids: lostIds, value_field: valueField });
-  await api.patch('/api/analytics/layout', {
-    stat_card_order:   statCardOrder.map(c => c.id),
-    hidden_stat_cards: statCardOrder.filter(c => c.hidden).map(c => c.id),
-    section_order:     sectionOrder,
-  });
-  if (res.error) {
-    msgEl.textContent = res.error;
-    msgEl.className   = 'workspace-name-msg error';
-    msgEl.classList.remove('hidden');
-    return;
-  }
+  await saveLayoutConfig();
+  if (res.error) { showError(res.error); return; }
   closeAnalyticsConfig();
   loadAnalytics();
 }

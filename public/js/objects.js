@@ -12,7 +12,7 @@ async function saveSupplierName() {
   currentWorkspace.supplier_name = res.name;
   updateSuppliersNav();
   if (currentContactType === 'supplier') updateContactsPageHeader();
-  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
@@ -24,12 +24,14 @@ function updateObjectsNav() {
   const btn   = document.getElementById('add-object-btn');
   const tab   = document.getElementById('settings-tab-objects');
   const search = document.getElementById('object-search');
+  const pane  = document.getElementById('settings-objects-pane-title');
   if (label) label.textContent = name;
   if (title) title.textContent = name;
   // Keep the plus icon: only the label inside the button changes.
   if (btn)   { const span = btn.querySelector('span'); if (span) span.textContent = `Add ${singular}`; }
   if (tab)   tab.textContent   = name;
   if (search) search.placeholder = `Search ${name.toLowerCase()}…`;
+  if (pane)  pane.textContent  = name;
 }
 
 function effectiveObjectColumns() {
@@ -95,7 +97,7 @@ function renderObjectsTable(list, q = '') {
 
   if (!page.length) {
     tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colspan}">
-      <div class="table-empty">
+      <div class="table-empty-state">
         <div class="empty-state-art"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg></div>
         <h2>${q ? 'No matches found' : `No ${esc(typeName.toLowerCase())} yet`}</h2>
         <p>${q
@@ -246,7 +248,7 @@ async function openObjectDetail(id) {
         </div>
       </div>
       <button class="btn btn-sm btn-danger btn-icon" onclick="unlinkContactFromObject(${id},${c.id})">✕</button>
-    </div>`).join('') || '<p style="color:var(--muted);font-size:12px;padding:4px 0">No contacts or suppliers linked.</p>';
+    </div>`).join('') || '<p class="empty-inline">No contacts or suppliers linked.</p>';
 
   const availablePeople = [...allContacts, ...allSuppliers].filter(c => !linkedContactIds.has(c.id));
 
@@ -259,7 +261,7 @@ async function openObjectDetail(id) {
         ${d.pipeline_name ? `<span style="font-size:11px;color:var(--muted)">${esc(d.pipeline_name)}</span>` : ''}
         ${d.value != null ? `<span class="contact-deal-value">€ ${Number(d.value).toLocaleString()}</span>` : ''}
       </div>
-    </div>`).join('') || '<p style="color:var(--muted);font-size:12px;padding:4px 0">No deals linked.</p>';
+    </div>`).join('') || '<p class="empty-inline">No deals linked.</p>';
 
   document.getElementById('object-detail-body').innerHTML = `
     <div class="detail-section"><div class="detail-grid">${fieldHtml}</div></div>
@@ -405,13 +407,13 @@ async function navigateToDeal(dealId) {
 
 function renderObjectFieldsList() {
   const el = document.getElementById('object-fields-list'); if (!el) return;
-  if (!objectFields.length) { el.innerHTML = '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No fields yet.</li>'; return; }
+  if (!objectFields.length) { el.innerHTML = `<li class="settings-empty">${t('no_fields')}</li>`; return; }
   el.innerHTML = objectFields.map(f => `
     <li class="settings-row">
       <span class="row-label">${esc(f.name)}</span><span class="row-sub">${f.type}</span>
       <div class="row-actions">
-        <button class="btn btn-sm btn-ghost btn-icon" onclick="openObjectFieldModal(${f.id})">✏️</button>
-        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteObjectField(${f.id})">✕</button>
+        <button class="btn btn-sm btn-ghost btn-icon" title="${t('btn_edit')}" aria-label="${t('btn_edit')}" onclick="openObjectFieldModal(${f.id})">${UI_ICON.edit}</button>
+        <button class="btn btn-sm btn-danger btn-icon" title="${t('btn_delete')}" aria-label="${t('btn_delete')}" onclick="deleteObjectField(${f.id})">${UI_ICON.remove}</button>
       </div>
     </li>`).join('');
 }
@@ -475,7 +477,7 @@ function renderObjectColumnSettings() {
   el.innerHTML = cols.map((col, i) => `
     <li class="settings-row col-cfg-row" draggable="true"
       ondragstart="objColDragStart(event,${i})" ondragover="colDragOver(event)" ondrop="objColDrop(event,${i})" ondragleave="colDragLeave(event)">
-      <span class="drag-handle">⠿</span>
+      <span class="drag-handle">${UI_ICON.drag}</span>
       <span class="row-label">${col.label()}</span>
       <label class="col-vis-toggle"><input type="checkbox" ${col.visible?'checked':''} onchange="objColToggle(${i},this.checked)" /></label>
     </li>`).join('');
@@ -496,7 +498,7 @@ async function saveObjectColumns(){
   if(btn){btn.disabled=false;btn.textContent=t('btn_save');}
   if(res.error){if(msgEl){msgEl.textContent=res.error;msgEl.className='workspace-name-msg error';msgEl.classList.remove('hidden');}return;}
   objectColumns=toSave; currentWorkspace.object_columns=toSave;
-  if(msgEl){msgEl.textContent='✓ Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
+  if(msgEl){msgEl.textContent='Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
   setTimeout(()=>msgEl?.classList.add('hidden'),2500); renderObjectsCurrent();
 }
 async function saveObjectTypeName(){
@@ -505,7 +507,7 @@ async function saveObjectTypeName(){
   const res=await api.patch('/api/workspace/object-name',{name});
   if(res.error){if(msgEl){msgEl.textContent=res.error;msgEl.className='workspace-name-msg error';msgEl.classList.remove('hidden');}return;}
   currentWorkspace.object_name=res.name; updateObjectsNav();
-  if(msgEl){msgEl.textContent='✓ Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
+  if(msgEl){msgEl.textContent='Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
   setTimeout(()=>msgEl?.classList.add('hidden'),2500);
 }
 
@@ -536,26 +538,8 @@ async function saveMiroUrl() {
   const res = await api.patch('/api/workspace/miro-url', { url });
   if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
   currentWorkspace.miro_url = url; updateBoardNavVisibility();
-  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
-async function loadActivities() {
-  const el = document.getElementById('activities-list');
-  if (el) el.innerHTML = '';
-
-  activities = await api.get('/api/activities');
-  if (!activities.length) { el.innerHTML = `<p style="color:var(--muted);padding:8px">${t('no_activities')}</p>`; return; }
-  el.innerHTML = activities.map(a => `
-    <div class="activity-item">
-      <div class="act-icon ${a.type}">${ICONS[a.type]}</div>
-      <div class="act-body">
-        <div class="act-meta"><strong>${t('act_' + a.type)}</strong>${a.contact_name ? ` · ${esc(a.contact_name)}` : ''} · ${fmtDate(a.created_at)}</div>
-        ${a.logged_by_name ? `<div class="act-logged-by">${t('logged_by')} ${esc(a.logged_by_name)} · <span class="act-logged-email">${esc(a.logged_by_email||'')}</span></div>` : ''}
-        <div class="act-content">${esc(a.content)}</div>
-      </div>
-      <button class="btn btn-sm btn-danger btn-icon" onclick="deleteActivity(${a.id})">✕</button>
-    </div>`).join('');
-}
-
-async function deleteActivity(id) { await api.del(`/api/activities/${id}`); loadActivities(); }
+// The Activities page lives in activities.js.

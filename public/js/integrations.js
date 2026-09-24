@@ -410,7 +410,7 @@ async function saveIntegration(silent = false) {
     msgEl.textContent = res.error;
     msgEl.className   = 'workspace-name-msg error';
   } else {
-    msgEl.textContent = '✓ Saved';
+    msgEl.textContent = 'Saved';
     msgEl.className   = 'workspace-name-msg success';
   }
   msgEl.classList.remove('hidden');
