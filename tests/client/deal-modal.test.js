@@ -70,6 +70,12 @@ describe('modals.js', () => {
     assert.match(sliceFn(modals, 'setDealStage', 'modals.js'), /getElementById\('df-stage'\)/);
     assert.match(sliceFn(modals, 'updateUrgencyDot', 'modals.js'), /aria-checked/);
   });
+  test('stage select has no empty "No stage" option, and re-clicking the active step never clears it', () => {
+    assert.doesNotMatch(sliceFn(modals, 'populateDealStages', 'modals.js'), /<option value="">/, 'no empty option');
+    const src = sliceFn(modals, 'setDealStage', 'modals.js');
+    assert.doesNotMatch(src, /\?\s*''/, 'no toggle back to the empty value');
+    assert.match(src, /if \(String\(stageSel\.value\) === String\(stageId\)\) return;/);
+  });
   test('a failed save keeps the modal open; opening for a contact fills the contact column', () => {
     const save = sliceFn(modals, 'saveDeal', 'modals.js');
     assert.ok(save.indexOf('saved?.error') >= 0 && save.indexOf('saved?.error') < save.indexOf("closeModal('deal-modal')"), 'error checked before closing');

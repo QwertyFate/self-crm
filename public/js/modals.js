@@ -1416,7 +1416,8 @@ function renderStageStepper() {
 function setDealStage(stageId) {
   const stageSel = document.getElementById('df-stage');
   if (!stageSel) return;
-  stageSel.value = String(stageSel.value) === String(stageId) ? '' : String(stageId);
+  if (String(stageSel.value) === String(stageId)) return;
+  stageSel.value = String(stageId);
   renderStageStepper();
 }
 
@@ -1617,8 +1618,7 @@ async function unlinkObjectFromDeal(dealId, objectId) {
 function populateDealStages(pipelineId, selectedStageId) {
   const pipeline = pipelines.find(p => p.id === pipelineId);
   const stageSel = document.getElementById('df-stage');
-  stageSel.innerHTML = `<option value="">${t('opt_no_stage')}</option>` +
-    (pipeline?.stages || []).map(s =>
+  stageSel.innerHTML = (pipeline?.stages || []).map(s =>
       `<option value="${s.id}" ${selectedStageId === s.id ? 'selected' : ''}>${esc(s.name)}</option>`
     ).join('');
   renderStageStepper();
