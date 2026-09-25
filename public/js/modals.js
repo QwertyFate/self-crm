@@ -1399,7 +1399,7 @@ function updateUrgencyDot() {
 
 /* ── Stage stepper: one pill per stage of the selected pipeline ─────────────
    #df-stage stays the source of truth (saveDeal reads it, the board presets
-   it); the stepper only writes to it. Clicking the active stage clears it.  */
+   it); the stepper only writes to it. Re-clicking the active stage is a no-op. */
 function renderStageStepper() {
   const wrap = document.getElementById('df-stage-stepper'), stageSel = document.getElementById('df-stage');
   if (!wrap || !stageSel) return;

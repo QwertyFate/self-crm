@@ -111,6 +111,11 @@ describe('stylesheet', () => {
       assert.ok(css.includes('\n' + r), r);
     }
     assert.match(css, /\.modal-deal \{[^}]*min\(96vw, 1440px\)/);
+    assert.match(css, /\.modal-deal \{[^}]*height: min\(94vh, 1040px\)/, 'the deal modal is taller than the default ladder');
+    assert.match(css, /\.stage-step \{[^}]*min-height: 34px/, 'taller stage pills');
+    assert.match(css, /\.deal-title-input \{[^}]*border: 1px solid var\(--line-strong\)[^}]*background: var\(--surface\)/, 'title input is a visible field');
+    assert.doesNotMatch(css, /\.deal-title-input \{[^}]*border: 1px solid transparent/, 'no invisible border on the title');
+    assert.match(css, /\.modal-deal \.field-grid input, \.modal-deal \.field-grid select, \.modal-deal \.field-grid \.picker-input \{ min-height: 38px; \}/, 'taller controls in the deal form');
     assert.doesNotMatch(css, /\.deal-comment-toggle-btn \{[^}]*opacity: 0/);
     assert.doesNotMatch(css, /^\.urgency-row/m);
     assert.doesNotMatch(css, /^\.deal-modal-header-actions/m);
