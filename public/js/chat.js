@@ -18,6 +18,9 @@ let chatPendingSeq  = 0;
 let chatReadTimer   = null;
 let socket          = null;
 let onlineUsers     = [];
+let chatDraftMentions = [];        // { kind, id, label } picked with /deal or /contact in the current draft ("@Label" in the box)
+let chatLinkCache     = null;      // { deal: [...], contact: [...] } of { kind, id, label, meta }; loaded on the first "/"
+let chatSlash         = null;      // the open slash menu: { mode: 'commands' | 'deal' | 'contact', query, start, rows, active }
 
 /* ── Pure helpers ────────────────────────────────────────────────────────── */
 
@@ -64,6 +67,62 @@ function chatCounter(text) {
   return { show: len >= 1800, left: 2000 - len, over: len > 2000 };
 }
 
+/* ── Mentions: /deal and /contact ───────────────────────────────────────────
+   A picked record sits in the draft as "@Label" and is sent as
+   [[deal:12|Label]] or [[contact:7|Label]]. The transcript renders that token
+   as a link that opens the record. The server stores the string verbatim.  */
+
+// What the caret is on: a bare "/" (the command list), "/deal q" or "/contact q" (a record list), or nothing.
+function parseSlashCommand(text, caret) {
+  const before = String(text || '').slice(0, caret);
+  const rec = before.match(/(?:^|\s)\/(deal|contact)(?:[ \t]([^\n]*))?$/i);
+  if (rec) return { mode: rec[1].toLowerCase(), query: (rec[2] || '').trim(), start: before.length - rec[0].trimStart().length };
+  const cmd = before.match(/(?:^|\s)\/([a-z]*)$/i);
+  if (!cmd) return null;
+  const query = cmd[1].toLowerCase();
+  if (!['deal', 'contact'].some(k => k.startsWith(query))) return null;
+  return { mode: 'commands', query, start: before.length - cmd[0].trimStart().length };
+}
+function filterChatRefs(items, query, limit = 8) {
+  const q = String(query || '').toLowerCase().trim();
+  const hit = i => !q || i.label.toLowerCase().includes(q) || String(i.meta || '').toLowerCase().includes(q);
+  return (items || []).filter(hit).slice(0, limit);
+}
+// A label that survives the token syntax: no brackets, pipes or line breaks, at most 120 characters.
+function chatRefLabel(label) {
+  return String(label || '').replace(/[[\]|\n\r]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+function chatRefToken(kind, id, label) {
+  return `[[${kind}:${Number(id)}|${chatRefLabel(label) || kind}]]`;
+}
+// Draft "@Label" mentions become tokens; a label the user has edited stays plain text.
+function encodeChatMentions(text, drafts) {
+  let out = String(text || '');
+  const list = [...(drafts || [])].sort((a, b) => b.label.length - a.label.length);
+  for (const d of list) {
+    const at = '@' + d.label;
+    const idx = out.indexOf(at);
+    if (idx < 0) continue;
+    out = out.slice(0, idx) + chatRefToken(d.kind, d.id, d.label) + out.slice(idx + at.length);
+  }
+  return out;
+}
+function chatRefHtml(kind, id, label) {
+  const badge = kind === 'deal' ? UI_ICON.folder : `<span class="chat-ref-avatar" aria-hidden="true">${esc(chatInitials(label))}</span>`;
+  const title = t(kind === 'deal' ? 'chat_ref_deal' : 'chat_ref_contact');
+  return `<a href="#" class="chat-ref chat-ref-${kind}" data-kind="${kind}" data-id="${Number(id)}" title="${esc(title)}">${badge}<span>${esc(label)}</span></a>`;
+}
+// Escape and linkify the plain runs; turn [[deal:12|Label]] tokens into record links.
+function renderMessageBody(content) {
+  const src = String(content || '');
+  let out = '', last = 0;
+  for (const m of src.matchAll(/\[\[(deal|contact):(\d+)\|([^\]|\n]{1,120})\]\]/g)) {
+    out += linkify(src.slice(last, m.index)) + chatRefHtml(m[1], m[2], m[3]);
+    last = m.index + m[0].length;
+  }
+  return out + linkify(src.slice(last));
+}
+
 /* ── Rendering ───────────────────────────────────────────────────────────── */
 
 function daySepHtml(iso) { return `<div class="chat-day-sep"><span>${esc(chatDayLabel(iso))}</span></div>`; }
@@ -84,7 +143,7 @@ function messageHtml(msg, plan) {
     ${!me ? (plan.newGroup ? `<div class="chat-avatar hue-${chatHue(msg.user_id)}" aria-hidden="true">${esc(chatInitials(msg.user_name))}</div>` : '<div class="chat-gutter"></div>') : ''}
     <div class="chat-msg-body">
       ${plan.newGroup ? `<div class="chat-msg-head"><span class="chat-author">${me ? t('chat_you') : esc(msg.user_name)}</span>${time}</div>` : ''}
-      <div class="chat-bubble">${linkify(msg.content)}</div>
+      <div class="chat-bubble">${renderMessageBody(msg.content)}</div>
       ${plan.newGroup ? '' : `<div class="chat-msg-side">${time}</div>`}
       ${msg.failed ? `<div class="chat-msg-error"><span>${esc(chatErrorLabel(msg.failed))}</span><button type="button" class="btn btn-sm btn-ghost" onclick="retryChatMessage('${esc(msg.id)}')">${t('chat_retry')}</button></div>` : ''}
     </div>
@@ -239,7 +298,7 @@ function receiveMessages(list) {
 
 function sendChatMessageFromPage() {
   const input = document.getElementById('chat-page-input'); if (!input) return;
-  const content = input.value.trim();
+  const content = encodeChatMentions(input.value.trim(), chatDraftMentions);   // "@Label" drafts go out as [[kind:id|Label]] tokens
   const connected = !!socket?.connected;
   if (!canSend(content, connected)) {
     if (content && !connected) showChatNotice(t('chat_offline'));        // the draft stays in the box
@@ -248,7 +307,7 @@ function sendChatMessageFromPage() {
   }
   hideChatNotice();
   const msg = { id: `tmp-${++chatPendingSeq}`, content, created_at: new Date().toISOString(), user_id: currentUser?.id, user_name: currentUser?.name, pending: true };
-  input.value = ''; autosizeChatInput(); updateSendState();
+  input.value = ''; chatDraftMentions = []; closeSlashMenu(); autosizeChatInput(); updateSendState();
   appendMessages([msg]);
   scrollChatPageBottom();
   emitChatMessage(msg);
@@ -302,10 +361,116 @@ function resolvePending(msg) {
 function initChatComposer() {
   const input = document.getElementById('chat-page-input'); if (!input || input.dataset.bound) return;
   input.dataset.bound = '1';
-  input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessageFromPage(); } });
-  input.addEventListener('input', () => { autosizeChatInput(); updateSendState(); });
+  input.addEventListener('keydown', e => {
+    if (chatSlashKeydown(e)) return;                                   // the slash menu owns arrows, Enter, Tab and Escape while open
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessageFromPage(); }
+  });
+  input.addEventListener('input', () => { autosizeChatInput(); updateSendState(); checkChatSlash(); });
+  input.addEventListener('blur', () => setTimeout(closeSlashMenu, 120));
   document.getElementById('chat-page-send')?.addEventListener('click', sendChatMessageFromPage);
   document.getElementById('chat-jump')?.addEventListener('click', jumpToLatest);
+  // Record links in the transcript: one delegated handler, no inline onclick in the message templates.
+  document.getElementById('chat-page-messages')?.addEventListener('click', e => {
+    const ref = e.target.closest('.chat-ref'); if (!ref) return;
+    e.preventDefault();
+    openChatRef(ref.dataset.kind, ref.dataset.id);
+  });
+}
+// A deal opens its modal; a contact opens its detail view (a modal off the Contacts page). No switchPage: it would drop the transcript.
+function openChatRef(kind, id) {
+  const n = Number(id); if (!n) return;
+  if (kind === 'deal') openDealModal(n);
+  else if (kind === 'contact') openDetail(n);
+}
+
+/* ── Slash menu: /deal and /contact ─────────────────────────────────────── */
+
+async function ensureChatLinkOptions() {
+  if (chatLinkCache) return chatLinkCache;
+  const [dealsRes, contactsRes] = await Promise.all([apiFetchSilent('/api/deals'), apiFetchSilent('/api/contacts?contact_type=contact')]);
+  const dealRows = Array.isArray(dealsRes) ? dealsRes : [], contactRows = Array.isArray(contactsRes) ? contactsRes : [];
+  chatLinkCache = {
+    deal:    dealRows.map(d => ({ kind: 'deal', id: d.id, label: chatRefLabel(d.title), meta: [d.contact_name, d.stage_name].filter(Boolean).join(' · ') })).filter(r => r.label),
+    contact: contactRows.map(c => ({ kind: 'contact', id: c.id, label: chatRefLabel(c.name), meta: [c.company, c.email].filter(Boolean).join(' · ') })).filter(r => r.label),
+  };
+  return chatLinkCache;
+}
+function slashMenuEl() { return document.getElementById('chat-slash-menu'); }
+function closeSlashMenu() { chatSlash = null; slashMenuEl()?.remove(); }
+async function checkChatSlash() {
+  const input = document.getElementById('chat-page-input'); if (!input) return;
+  let parsed = parseSlashCommand(input.value, input.selectionStart);
+  if (!parsed) { closeSlashMenu(); return; }
+  let rows;
+  if (parsed.mode === 'commands') {
+    rows = ['deal', 'contact'].filter(k => k.startsWith(parsed.query))
+      .map(k => ({ kind: 'command', id: k, label: `/${k}`, meta: t(k === 'deal' ? 'chat_cmd_deal_hint' : 'chat_cmd_contact_hint') }));
+  } else {
+    const cache = await ensureChatLinkOptions();
+    parsed = parseSlashCommand(input.value, input.selectionStart);     // the draft may have moved on while the lists loaded
+    if (!parsed) { closeSlashMenu(); return; }
+    if (parsed.mode === 'commands') return;                             // a later keystroke already drew the command list
+    rows = filterChatRefs(cache[parsed.mode], parsed.query);
+  }
+  const active = chatSlash?.mode === parsed.mode ? Math.min(chatSlash.active, Math.max(rows.length - 1, 0)) : 0;
+  chatSlash = { ...parsed, rows, active };
+  renderSlashMenu();
+}
+function renderSlashMenu() {
+  const host = document.querySelector('.chat-composer-row'); if (!host || !chatSlash) return;
+  let el = slashMenuEl();
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'chat-slash-menu'; el.className = 'chat-slash-menu mention-autocomplete'; el.setAttribute('role', 'listbox');
+    el.addEventListener('mousedown', e => e.preventDefault());        // keep the textarea focused
+    el.addEventListener('click', e => { const item = e.target.closest('.mention-item[data-idx]'); if (item && chatSlash) pickSlashRow(chatSlash.rows[Number(item.dataset.idx)]); });
+    host.appendChild(el);
+  }
+  const { rows, active } = chatSlash;
+  const lead = r => r.kind === 'command' ? `<span class="chat-slash-cmd">${esc(r.label)}</span>`
+    : r.kind === 'deal' ? `<span class="chat-slash-kind" aria-hidden="true">${UI_ICON.folder}</span>`
+    : `<span class="mention-item-avatar" aria-hidden="true">${esc(chatInitials(r.label))}</span>`;
+  el.innerHTML = rows.length
+    ? rows.map((r, i) => `<div class="mention-item${i === active ? ' active' : ''}" role="option" aria-selected="${i === active}" data-idx="${i}">
+        ${lead(r)}
+        <span class="chat-slash-text"><span class="mention-item-name">${esc(r.kind === 'command' ? r.meta : r.label)}</span>${r.kind !== 'command' && r.meta ? `<span class="chat-slash-meta">${esc(r.meta)}</span>` : ''}</span>
+      </div>`).join('')
+    : `<div class="mention-item chat-slash-empty">${esc(t('no_matches'))}</div>`;
+  el.querySelector('.mention-item.active')?.scrollIntoView({ block: 'nearest' });
+}
+function moveSlashActive(delta) {
+  if (!chatSlash?.rows.length) return;
+  chatSlash.active = (chatSlash.active + delta + chatSlash.rows.length) % chatSlash.rows.length;
+  renderSlashMenu();
+}
+// True when the key was consumed by the menu (so Enter does not send while it is open).
+function chatSlashKeydown(e) {
+  if (!chatSlash) return false;
+  if (e.key === 'ArrowDown') { e.preventDefault(); moveSlashActive(1); return true; }
+  if (e.key === 'ArrowUp')   { e.preventDefault(); moveSlashActive(-1); return true; }
+  if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); closeSlashMenu(); return true; }
+  if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault();
+    if (chatSlash.rows.length) pickSlashRow(chatSlash.rows[chatSlash.active]); else closeSlashMenu();
+    return true;
+  }
+  return false;
+}
+// Replace the "/deal query" text with the pick: a command becomes "/deal " (straight into its list), a record becomes "@Label ".
+function pickSlashRow(row) {
+  const input = document.getElementById('chat-page-input'); if (!input || !chatSlash || !row) return;
+  const { start } = chatSlash;
+  const caret = input.selectionStart;
+  let insert;
+  if (row.kind === 'command') insert = `/${row.id} `;
+  else { insert = `@${row.label} `; chatDraftMentions.push({ kind: row.kind, id: row.id, label: row.label }); }
+  input.value = input.value.slice(0, start) + insert + input.value.slice(caret);
+  const pos = start + insert.length;
+  input.setSelectionRange(pos, pos);
+  input.focus();
+  closeSlashMenu();
+  autosizeChatInput(); updateSendState();
+  if (row.kind === 'command') checkChatSlash();
 }
 function autosizeChatInput() {
   const input = document.getElementById('chat-page-input'); if (!input) return;
@@ -315,8 +480,9 @@ function autosizeChatInput() {
 function updateSendState() {
   const input = document.getElementById('chat-page-input'), send = document.getElementById('chat-page-send'), counter = document.getElementById('chat-counter');
   if (!input) return;
-  const c = chatCounter(input.value);
-  if (send) send.disabled = !canSend(input.value, !!socket?.connected);
+  const encoded = encodeChatMentions(input.value, chatDraftMentions);   // the cap applies to what is actually sent
+  const c = chatCounter(encoded);
+  if (send) send.disabled = !canSend(encoded, !!socket?.connected);
   if (counter) {
     counter.classList.toggle('hidden', !c.show);
     counter.classList.toggle('over', c.over);
@@ -361,4 +527,5 @@ async function loadChatPage() {
 function leaveChatPage() {
   chatPageOpen = false;
   clearTimeout(chatReadTimer);
+  closeSlashMenu(); chatDraftMentions = []; chatLinkCache = null;
 }

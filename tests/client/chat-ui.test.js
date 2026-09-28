@@ -41,7 +41,8 @@ describe('chat.js', () => {
     }
     for (const fn of ['chatHue', 'chatInitials', 'chatTime', 'chatDayLabel', 'linkify', 'groupPlan', 'canSend', 'chatCounter', 'messageHtml', 'renderTranscript',
                       'appendMessages', 'prependMessages', 'loadOlderMessages', 'renderPresence', 'markChatRead', 'sendChatMessageFromPage', 'retryChatMessage',
-                      'loadChatPage', 'leaveChatPage', 'initChatSocket', 'refreshChatBadge', 'updateChatBadge']) {
+                      'loadChatPage', 'leaveChatPage', 'initChatSocket', 'refreshChatBadge', 'updateChatBadge',
+                      'parseSlashCommand', 'encodeChatMentions', 'renderMessageBody', 'openChatRef', 'chatSlashKeydown']) {
       assert.match(chat, new RegExp(`^(async )?function ${fn}\\(`, 'm'), fn);
     }
   });
@@ -112,7 +113,8 @@ describe('copy and stylesheet', () => {
   test('every chat key exists in both dictionaries', () => {
     for (const k of ['nav_chat', 'page_chat', 'chat_placeholder', 'chat_send', 'chat_online_one', 'chat_online_n', 'chat_nobody_online', 'chat_you', 'chat_today', 'chat_yesterday',
                      'chat_empty_title', 'chat_empty_hint', 'chat_load_error', 'chat_retry', 'chat_history_start', 'chat_loading_older', 'chat_new_messages', 'chat_unread_divider',
-                     'chat_reconnecting', 'chat_offline', 'chat_not_sent', 'chat_too_long', 'chat_rate_limited', 'chat_chars_left']) {
+                     'chat_reconnecting', 'chat_offline', 'chat_not_sent', 'chat_too_long', 'chat_rate_limited', 'chat_chars_left',
+                     'chat_cmd_deal_hint', 'chat_cmd_contact_hint', 'chat_ref_deal', 'chat_ref_contact']) {
       assert.ok(k in dict.en && k in dict.de, k);
     }
     for (const k of ['send', 'arrowDown']) assert.match(core, new RegExp(`^\\s*${k}:\\s*'<svg`, 'm'), `UI_ICON.${k}`);

@@ -4,3 +4,4 @@ node_modules
 .claude
 ADMIN_ROLE_CHANGES.md
 DEAL_MODAL_CHANGES.md
+CHAT_MENTIONS_CHANGES.md
