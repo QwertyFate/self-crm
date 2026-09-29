@@ -1,4 +1,15 @@
 let intgData = null;
+let currentIntgTab = 'webhook';   // remembered for the session, like the Settings rail
+
+// The page reuses the Settings rail markup. Scoped to this page so the two rails
+// (same class names) never toggle each other.
+function switchIntgTab(tab) {
+  currentIntgTab = tab;
+  const root = document.getElementById('page-integrations');
+  if (!root) return;
+  root.querySelectorAll('.settings-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+  root.querySelectorAll('.settings-pane').forEach(pane => pane.classList.toggle('active', pane.id === `intg-pane-${tab}`));
+}
 
 const INTG_BUILTIN_FIELDS = [
   { key: 'name',    label: 'Name',    placeholder: 'full_name'     },
@@ -180,15 +191,15 @@ function showIntgGuide(id) {
     <div class="intg-guide-header">
       <div class="intg-guide-logo-sm">${platform.logo}</div>
       <div>
-        <div class="intg-guide-title-text">${platform.name}</div>
-        <div class="intg-guide-subtitle">Setup Guide</div>
+        <div class="intg-guide-title-text">${esc(platform.name)}</div>
+        <div class="intg-guide-subtitle">${esc(t('intg_setup_guide'))}</div>
       </div>
     </div>
-    <div style="margin:16px 0;padding:12px;background:var(--bg-secondary);border-radius:4px;border-left:3px solid var(--primary)">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Webhook URL</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <code style="flex:1;word-break:break-all;font-size:12px">${webhookUrl}</code>
-        <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${webhookUrl}');alert('Copied to clipboard!')">Copy</button>
+    <div class="intg-guide-url">
+      <div class="intg-guide-url-label">${esc(t('intg_guide_url'))}</div>
+      <div class="intg-guide-url-row">
+        <code>${esc(webhookUrl)}</code>
+        <button class="btn btn-sm" onclick="copyIntgText(this, this.previousElementSibling.textContent)">${esc(t('btn_copy'))}</button>
       </div>
     </div>
     <ol class="intg-guide-steps">${steps}</ol>
@@ -196,13 +207,15 @@ function showIntgGuide(id) {
     <div class="intg-json-block">
       <div class="intg-json-header">
         <span>${platform.jsonLabel}</span>
-        <button class="intg-copy-btn" onclick="copyIntgJson(this)">Copy</button>
+        <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)">${esc(t('btn_copy'))}</button>
       </div>
       <pre class="intg-code">${json}</pre>
     </div>`;
 }
 
 async function loadIntegrations() {
+  loadEngineSettings();
+  switchIntgTab(currentIntgTab);
   const intgFieldMap = document.getElementById('intg-field-map');
   if (intgFieldMap) intgFieldMap.innerHTML = '';
 
@@ -239,13 +252,13 @@ async function loadIntegrations() {
     ).join('');
 
   const assigneeEl = document.getElementById('intg-assignee');
-  assigneeEl.innerHTML = `<option value="">— Not set (assigned to self) —</option>` +
+  assigneeEl.innerHTML = `<option value="">${esc(t('opt_assignee_self'))}</option>` +
     members.map(m =>
       `<option value="${m.id}" ${webhook.default_assignee_id == m.id ? 'selected' : ''}>${esc(m.name)}</option>`
     ).join('');
 
   renderIntgPlatforms();
-  if (!activeGuideId) showIntgGuide('make');
+  showIntgGuide(activeGuideId || 'make');   // re-render the open guide too (language switch re-runs this loader)
   loadIntgLogs();
 }
 
@@ -261,10 +274,10 @@ function renderIntgFieldMap(fieldMap) {
   activeCustomKeys = [...new Set([...savedCustomKeys, ...activeCustomKeys])];
 
   el.innerHTML = `
-    <div class="intg-map-section-label">Built-in fields</div>
+    <div class="intg-map-section-label">${esc(t('intg_builtin_fields'))}</div>
     ${INTG_BUILTIN_FIELDS.map(f => renderFieldRow(f.key, f.label, f.placeholder, fieldMap[f.key] || '', false)).join('')}
 
-    ${activeCustomKeys.length ? `<div class="intg-map-section-label" style="margin-top:14px">Custom fields</div>` : ''}
+    ${activeCustomKeys.length ? `<div class="intg-map-section-label">${esc(t('intg_custom_fields'))}</div>` : ''}
     ${activeCustomKeys.map(key => {
       const cf = customFields.find(f => f.field_key === key);
       if (!cf) return '';
@@ -273,20 +286,20 @@ function renderIntgFieldMap(fieldMap) {
 
     <div class="intg-map-add-row">
       <select id="intg-add-field-select" class="form-control intg-add-select">
-        <option value="">+ Add custom field…</option>
+        <option value="">${esc(t('intg_add_field_ph'))}</option>
         ${customFields
           .filter(f => !activeCustomKeys.includes(f.field_key))
           .map(f => `<option value="${f.field_key}">${esc(f.name)}</option>`)
           .join('')}
       </select>
-      <button class="btn btn-sm" onclick="intgAddField()">Add</button>
+      <button class="btn btn-sm" onclick="intgAddField()">${UI_ICON.plus}<span>${esc(t('add_btn'))}</span></button>
     </div>`;
 }
 
 function renderFieldRow(key, label, placeholder, value, isCustom) {
   const displayVal = value || placeholder;
   const removeBtn  = isCustom
-    ? `<button class="intg-map-remove" onclick="intgRemoveField('${key}')" title="Remove">×</button>`
+    ? `<button class="intg-map-remove" onclick="intgRemoveField('${key}')" title="${esc(t('btn_delete'))}">${UI_ICON.remove}</button>`
     : '<span></span>';
   return `
     <div class="intg-map-row">
@@ -299,9 +312,7 @@ function renderFieldRow(key, label, placeholder, value, isCustom) {
           readonly
           onblur="intgKeyBlur(this)"
           oninput="refreshGuideJson()" />
-        <button class="intg-key-edit-btn" onclick="intgToggleKeyEdit(this)" title="Edit key">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg>
-        </button>
+        <button class="btn btn-sm btn-icon intg-key-edit-btn" onclick="intgToggleKeyEdit(this)" title="${esc(t('intg_edit_key'))}">${UI_ICON.edit}</button>
       </div>
       ${removeBtn}
     </div>`;
@@ -373,7 +384,7 @@ function loadIntgStages() {
   const pipeline   = intgData.pipelines.find(p => p.id === pipelineId);
   const stages     = intgData.stages.filter(s => s.pipeline_name === pipeline?.name);
   document.getElementById('intg-stage').innerHTML =
-    `<option value="">— No stage —</option>` +
+    `<option value="">${esc(t('opt_no_stage'))}</option>` +
     stages.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
 }
 
@@ -398,8 +409,8 @@ async function saveIntegration(silent = false) {
     const el = document.getElementById('intg-field-map');
     if (el) {
       const tip = document.createElement('div');
-      tip.style.cssText = 'font-size:11px;color:var(--primary);text-align:right;margin-top:4px';
-      tip.textContent = '✓ Auto-saved';
+      tip.className = 'intg-autosaved';
+      tip.textContent = t('intg_autosaved');
       el.parentNode.insertBefore(tip, el.nextSibling);
       setTimeout(() => tip.remove(), 2000);
     }
@@ -422,13 +433,13 @@ function copyWebhookUrl() {
   navigator.clipboard.writeText(url).then(() => {
     const btn = event.target;
     const orig = btn.textContent;
-    btn.textContent = 'Copied!';
+    btn.textContent = t('copied');
     setTimeout(() => btn.textContent = orig, 1500);
   });
 }
 
 async function regenerateWebhookKey() {
-  if (!confirm('This will invalidate your current webhook URL. Any active Zapier/Make scenarios will need to be updated. Continue?')) return;
+  if (!confirm(t('intg_confirm_regen_url'))) return;
   const res = await api.post('/api/integrations/settings/regenerate-key', {});
   if (res.error) { alert(res.error); return; }
   const origin = intgData?.base_url || window.location.origin;
@@ -440,7 +451,7 @@ async function loadIntgLogs() {
   const data = await api.get('/api/integrations/logs');
   const el   = document.getElementById('intg-logs');
   if (!data || data.error || !data.logs.length) {
-    el.innerHTML = '<p class="settings-hint">No activity yet.</p>';
+    el.innerHTML = `<p class="empty-inline">${esc(t('intg_no_activity'))}</p>`;
     return;
   }
   el.innerHTML = data.logs.map(l => {
@@ -462,24 +473,28 @@ async function loadIntgLogs() {
           ).join('')}
         </div>
         ${hasSkips ? `<div class="intg-log-skipped">
-          Fields not found in payload: ${Object.keys(skipped).map(k => `<code>${esc(k)}</code>`).join(', ')}
-          — check that your field mapping keys match the incoming payload.
+          ${esc(t('intg_fields_missing'))} ${Object.keys(skipped).map(k => `<code>${esc(k)}</code>`).join(', ')}
+          ${esc(t('intg_fields_missing_hint'))}
         </div>` : ''}` : ''}
-      <div class="intg-log-raw-toggle" onclick="this.nextElementSibling.classList.toggle('hidden')">View raw payload</div>
+      <div class="intg-log-raw-toggle" onclick="this.nextElementSibling.classList.toggle('hidden')">${esc(t('intg_view_raw'))}</div>
       <pre class="intg-log-raw hidden">${esc(JSON.stringify(l.payload || {}, null, 2))}</pre>
     </div>`;
   }).join('');
 }
 
-function copyIntgJson(btn) {
-  const pre  = btn.closest('.intg-json-block').querySelector('pre');
-  const text = pre.textContent.trim();
-  const done = () => { const o = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = o, 1500); };
+// Copies `text` and flashes the button label; used by the guide URL and the sample payload.
+function copyIntgText(btn, text) {
+  const done = () => { const o = btn.textContent; btn.textContent = t('copied'); setTimeout(() => btn.textContent = o, 1500); };
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
   } else {
     fallbackCopy(text, done);
   }
+}
+
+function copyIntgJson(btn) {
+  const pre = btn.closest('.intg-json-block').querySelector('pre');
+  copyIntgText(btn, pre.textContent.trim());
 }
 
 function fallbackCopy(text, cb) {
@@ -490,4 +505,139 @@ function fallbackCopy(text, cb) {
   ta.focus(); ta.select();
   try { document.execCommand('copy'); cb(); } catch(e) {}
   document.body.removeChild(ta);
+}
+
+/* ── Upgrads Engine card (outgoing vertrag.unterschrieben webhook) ─────────── */
+
+let engineData = null;
+
+async function loadEngineSettings() {
+  const data = await api.get('/api/engine/settings');
+  if (!data || data.error || !data.engine) return;
+  engineData = data;
+  const e = data.engine;
+  const urlEl    = document.getElementById('engine-url');    if (urlEl)    urlEl.value = e.engine_url || '';
+  const activeEl = document.getElementById('engine-active'); if (activeEl) activeEl.checked = !!e.active;
+  const secretEl = document.getElementById('engine-secret'); if (secretEl) secretEl.value = maskSecret(e.webhook_secret);
+  const stagesEl = document.getElementById('engine-stages'); if (stagesEl) stagesEl.innerHTML = renderEngineStages(data.stages || [], e.trigger_stage_ids || []);
+  setEngineReadOnly(!data.can_manage);
+  loadEngineDeliveries();
+}
+
+// Only the last four characters are ever shown; the full value stays in engineData.
+function maskSecret(v) {
+  if (!v) return '—';
+  return '••••••••' + String(v).slice(-4);
+}
+
+function setEngineReadOnly(readOnly) {
+  const card = document.getElementById('engine-card'); if (!card) return;
+  card.querySelectorAll('.engine-manage-input, #engine-stages input').forEach(el => { el.disabled = readOnly; });
+  card.querySelectorAll('.engine-manage').forEach(el => el.classList.toggle('hidden', readOnly));
+  const hint = document.getElementById('engine-readonly-hint'); if (hint) hint.classList.toggle('hidden', !readOnly);
+}
+
+// Same chip markup as the Analytics won/lost pickers, grouped by pipeline.
+function renderEngineStages(stages, selectedIds) {
+  const selected = (selectedIds || []).map(Number);
+  const groups = [], byKey = {};
+  for (const s of stages || []) {
+    const key = s.pipeline_id != null ? String(s.pipeline_id) : String(s.pipeline_name || '');
+    if (!byKey[key]) { byKey[key] = { name: s.pipeline_name || '', stages: [] }; groups.push(byKey[key]); }
+    byKey[key].stages.push(s);
+  }
+  if (!groups.length) return `<p class="settings-hint">${esc(t('engine_no_stages'))}</p>`;
+  return groups.map(g => `
+    <div class="analytics-pipeline-group">
+      <div class="analytics-pipeline-sep">${esc(g.name)}</div>
+      <div class="analytics-stage-chips">
+        ${g.stages.map(s => `<label class="analytics-stage-option"><input type="checkbox" data-id="${Number(s.id)}"${selected.includes(Number(s.id)) ? ' checked' : ''}><span class="col-dot" style="--stage:${esc(s.color || '')}"></span>${esc(s.name)}</label>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function getEngineTriggerIds() {
+  return [...document.querySelectorAll('#engine-stages input[data-id]:checked')].map(el => parseInt(el.dataset.id, 10)).filter(n => n > 0);
+}
+
+function showEngineMsg(text, ok) {
+  const msgEl = document.getElementById('engine-msg'); if (!msgEl) return;
+  msgEl.textContent = text;
+  msgEl.className   = 'workspace-name-msg ' + (ok ? 'success' : 'error');
+  setTimeout(() => msgEl.classList.add('hidden'), ok ? 2500 : 6000);
+}
+
+async function saveEngineSettings(silent = false) {
+  const res = await api.patch('/api/engine/settings', {
+    engine_url:        document.getElementById('engine-url').value.trim(),
+    active:            document.getElementById('engine-active').checked,
+    trigger_stage_ids: getEngineTriggerIds(),
+  });
+  if (res.error) {
+    // The server refused (e.g. activating without a URL): undo the toggle so the UI tells the truth.
+    if (engineData?.engine) document.getElementById('engine-active').checked = !!engineData.engine.active;
+    showEngineMsg(res.error, false);
+    return;
+  }
+  if (engineData) engineData.engine = { ...engineData.engine, ...res.engine, webhook_secret: engineData.engine.webhook_secret };
+  if (!silent) showEngineMsg(t('engine_saved'), true);
+}
+
+function copyEngineSecret(btn) {
+  const secret = engineData?.engine?.webhook_secret;
+  if (!secret) return;
+  const done = () => { const o = btn.textContent; btn.textContent = t('copied'); setTimeout(() => btn.textContent = o, 1500); };
+  if (navigator.clipboard) navigator.clipboard.writeText(secret).then(done).catch(() => fallbackCopy(secret, done));
+  else fallbackCopy(secret, done);
+}
+
+async function regenerateEngineSecret() {
+  if (!confirm(t('engine_confirm_regen_secret'))) return;
+  const res = await api.post('/api/engine/settings/regenerate-secret', {});
+  if (res.error) { showEngineMsg(res.error, false); return; }
+  if (engineData?.engine) engineData.engine.webhook_secret = res.webhook_secret;
+  const secretEl = document.getElementById('engine-secret'); if (secretEl) secretEl.value = maskSecret(res.webhook_secret);
+}
+
+async function sendEngineTestEvent(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.post('/api/engine/test-event', {});
+    if (res.error) { showEngineMsg(res.error, false); return; }
+    const d = res.delivery || {};
+    if (d.status === 'success') showEngineMsg(t('engine_test_ok'), true);
+    else showEngineMsg(`${t('engine_test_failed')} ${d.last_error || ''}`.trim(), false);
+    loadEngineDeliveries();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function loadEngineDeliveries() {
+  const el = document.getElementById('engine-deliveries'); if (!el) return;
+  const data = await api.get('/api/engine/deliveries');
+  const list = data && !data.error ? (data.deliveries || []) : [];
+  if (!list.length) { el.innerHTML = `<p class="empty-inline">${esc(t('engine_no_deliveries'))}</p>`; return; }
+  el.innerHTML = list.map(engineDeliveryHtml).join('');
+}
+
+function engineDeliveryHtml(d) {
+  const status = ['success', 'failed', 'pending'].includes(d.status) ? d.status : 'pending';
+  const label  = d.deal_title || d.event || '';
+  const meta   = [
+    `${Number(d.attempts) || 0} ${t('engine_attempts')}`,
+    d.last_status_code ? `HTTP ${Number(d.last_status_code)}` : '',
+    d.contact_name || '',
+  ].filter(Boolean).map(m => `<span>${esc(m)}</span>`).join('');
+  return `<div class="intg-log-entry${status === 'failed' ? ' error' : ''}">
+    <div class="intg-log-entry-header">
+      <span class="intg-log-badge ${status}">${esc(t('engine_status_' + status))}</span>
+      <span class="intg-log-time">${esc(new Date(d.created_at).toLocaleString())}</span>
+      <span class="intg-log-contact">${esc(label)}</span>
+      <span class="engine-delivery-meta">${meta}</span>
+    </div>
+    ${d.last_error ? `<div class="intg-log-skipped">${esc(d.last_error)}</div>` : ''}
+    <div class="intg-log-raw-toggle" onclick="this.nextElementSibling.classList.toggle('hidden')">${esc(t('engine_view_payload'))}</div>
+    <pre class="intg-log-raw hidden">${esc(JSON.stringify(d.payload || {}, null, 2))}</pre>
+  </div>`;
 }

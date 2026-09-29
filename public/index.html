@@ -1020,68 +1020,217 @@
         </div>
       </section>
 
-      <!-- ── Integrations page ── -->
-      <section id="page-integrations" class="page page-reading page-scroll">
+      <!-- ── Integrations page ──
+           Same shell as Settings: a tab rail on the left, one pane per tab. Every pane holds
+           settings-cards with the same anatomy: header (name + on/off switch) → hint →
+           body of hairline-separated sections → save bar. switchIntgTab() (integrations.js)
+           toggles .active on the tabs and panes, scoped to this page. -->
+      <section id="page-integrations" class="page page-reading">
         <div class="page-header">
-          <h1>Integrations</h1>
+          <div>
+            <h1><svg class="ic" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span data-i18n="page_integrations">Integrations</span></h1>
+            <p class="page-sub" data-i18n="hint_page_integrations">Connect the tools that send you leads, and the Upgrads Engine that handles signed contracts.</p>
+          </div>
         </div>
-        <div class="settings-stack">
+
+        <div class="settings-layout">
+        <nav class="settings-tabs">
+          <button class="settings-tab" data-tab="webhook"    onclick="switchIntgTab('webhook')"    data-i18n="intg_tab_webhook">Lead webhook</button>
+          <button class="settings-tab" data-tab="platforms"  onclick="switchIntgTab('platforms')"  data-i18n="intg_tab_platforms">Platforms</button>
+          <button class="settings-tab" data-tab="activity"   onclick="switchIntgTab('activity')"   data-i18n="intg_tab_activity">Recent leads</button>
+          <div class="settings-tab-sep" aria-hidden="true"></div>
+          <button class="settings-tab" data-tab="engine"     onclick="switchIntgTab('engine')"     data-i18n="intg_tab_engine">Upgrads Engine</button>
+          <button class="settings-tab" data-tab="deliveries" onclick="switchIntgTab('deliveries')" data-i18n="intg_tab_deliveries">Deliveries</button>
+        </nav>
+
+        <div class="settings-tab-body">
+
+          <!-- ── Lead webhook ── -->
+          <div id="intg-pane-webhook" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="intg_pane_webhook">Lead webhook</h2>
+              <p class="settings-tab-hint" data-i18n="intg_pane_webhook_hint">Other tools push new leads into this workspace through this URL.</p>
+            </div>
+            <div class="intg-stack">
 
           <div class="settings-card">
             <div class="settings-card-header">
-              <h2>Incoming Webhook</h2>
-              <label class="intg-toggle-label"><input type="checkbox" id="intg-active" onchange="saveIntegration()"> Active</label>
+              <h2 data-i18n="intg_webhook_title">Webhook connection</h2>
+              <label class="switch-row"><input type="checkbox" id="intg-active" class="switch" onchange="saveIntegration()"> <span data-i18n="intg_active">Active</span></label>
             </div>
-            <p class="settings-hint">Send leads from Zapier, Make.com, Facebook, or any tool to this URL and a contact (and optionally a deal) will be created automatically.</p>
-            <div class="intg-url-row">
-              <label class="intg-label">Your Webhook URL</label>
-              <div class="intg-url-box">
-                <input type="text" id="intg-url" readonly class="intg-url-input" />
-                <button class="btn btn-sm" onclick="copyWebhookUrl()">Copy</button>
-                <button class="btn btn-sm" onclick="regenerateWebhookKey()">Regenerate</button>
+            <p class="settings-hint" data-i18n="intg_webhook_hint">Send leads from Zapier, Make.com, Facebook or any other tool to this URL. Each lead becomes a contact, and optionally a deal.</p>
+            <div class="settings-card-body">
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="intg_url_label">Your webhook URL</h3>
+                  <p class="intg-section-hint" data-i18n="intg_url_hint">Paste this URL into the tool that sends the leads.</p>
+                </div>
+                <div class="intg-url-box">
+                  <input type="text" id="intg-url" readonly class="intg-url-input" />
+                  <button class="btn btn-sm" onclick="copyWebhookUrl()" data-i18n="btn_copy">Copy</button>
+                  <button class="btn btn-sm" onclick="regenerateWebhookKey()" data-i18n="btn_regenerate">Regenerate</button>
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="intg_mapping_title">Field mapping</h3>
+                  <p class="intg-section-hint" data-i18n="intg_mapping_hint">Which key in the incoming JSON fills which contact field. Use dots for nested keys, for example data.email.</p>
+                </div>
+                <div id="intg-field-map" class="intg-field-map"></div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="intg_autodeal_title">Auto-create a deal</h3>
+                  <p class="intg-section-hint" data-i18n="intg_autodeal_hint">Start a deal in your pipeline for every lead that arrives.</p>
+                </div>
+                <label class="switch-row"><input type="checkbox" id="intg-create-deal" class="switch" onchange="toggleIntgDeal(); saveIntegration(true)"> <span data-i18n="intg_autodeal_toggle">Create a deal for every incoming lead</span></label>
+                <div id="intg-deal-options" class="hidden intg-fields">
+                  <div class="intg-field"><label for="intg-pipeline" data-i18n="lbl_pipeline">Pipeline</label><select id="intg-pipeline" class="form-control" onchange="loadIntgStages(); saveIntegration(true)"></select></div>
+                  <div class="intg-field"><label for="intg-stage" data-i18n="lbl_stage">Stage</label><select id="intg-stage" class="form-control" onchange="saveIntegration(true)"></select></div>
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="intg_assignee_title">Default assignee</h3>
+                  <p class="intg-section-hint" data-i18n="intg_assignee_hint">Who new contacts from this webhook are assigned to.</p>
+                </div>
+                <div class="intg-field">
+                  <select id="intg-assignee" class="form-control" onchange="saveIntegration(true)">
+                    <option value="" data-i18n="opt_assignee_self">Not set (assigned to yourself)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="settings-card-actions">
+                <button class="btn btn-primary btn-sm" onclick="saveIntegration()" data-i18n="btn_save_changes">Save changes</button>
+                <span id="intg-msg" class="workspace-name-msg hidden"></span>
               </div>
             </div>
-            <div class="intg-section-title intg-section-gap">Field Mapping</div>
-            <p class="settings-hint">Map incoming JSON keys to contact fields. Use dot notation for nested keys (e.g. <code>data.email</code>).</p>
-            <div id="intg-field-map" class="intg-field-map"></div>
-            <div class="intg-section-title intg-section-gap">Auto-create Deal</div>
-            <div class="intg-row intg-row-gap">
-              <label class="intg-toggle-label"><input type="checkbox" id="intg-create-deal" onchange="toggleIntgDeal(); saveIntegration(true)"> Create a deal for every incoming lead</label>
-            </div>
-            <div id="intg-deal-options" class="hidden">
-              <div class="intg-row"><label class="intg-label">Pipeline</label><select id="intg-pipeline" class="form-control" onchange="loadIntgStages(); saveIntegration(true)"></select></div>
-              <div class="intg-row"><label class="intg-label">Stage</label><select id="intg-stage" class="form-control" onchange="saveIntegration(true)"></select></div>
-            </div>
+          </div>
 
-            <!-- Default Assignee -->
-            <div class="intg-row intg-section-gap">
-              <label class="intg-label">Default Assignee (for all incoming contacts)</label>
-              <select id="intg-assignee" class="form-control" onchange="saveIntegration(true)">
-                <option value="">— Not set (assigned to self) —</option>
-              </select>
-            </div>
-
-            <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
-              <button class="btn btn-primary btn-sm" onclick="saveIntegration()">Save</button>
-              <span id="intg-msg" class="workspace-name-msg hidden"></span>
             </div>
           </div>
 
+          <!-- ── Platforms ── -->
+          <div id="intg-pane-platforms" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="intg_pane_platforms">Connect a platform</h2>
+              <p class="settings-tab-hint" data-i18n="intg_pane_platforms_hint">Setup steps and a sample payload for the tool you send leads from.</p>
+            </div>
+            <div class="intg-stack">
+
           <div class="settings-card">
-            <div class="settings-card-header"><h2>How to connect platforms</h2></div>
-            <div class="intg-two-panel">
-              <div class="intg-platform-list" id="intg-platform-list"></div>
-              <div class="intg-guide-panel" id="intg-guide-panel">
-                <p class="settings-hint" style="padding:16px">Select a platform on the left to see the setup guide.</p>
+            <div class="settings-card-header"><h2 data-i18n="intg_platforms_title">Setup guides</h2></div>
+            <p class="settings-hint" data-i18n="intg_platforms_hint">Pick the tool you send leads from to see the setup steps and a sample payload.</p>
+            <div class="settings-card-body">
+              <div class="intg-two-panel">
+                <div class="intg-platform-list" id="intg-platform-list"></div>
+                <div class="intg-guide-panel" id="intg-guide-panel">
+                  <p class="empty-inline" data-i18n="intg_pick_platform">Select a platform on the left to see its setup guide.</p>
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="settings-card">
-            <div class="settings-card-header"><h2>Recent Activity</h2><button class="btn btn-sm" onclick="loadIntgLogs()">Refresh</button></div>
-            <div id="intg-logs"><p class="settings-hint">No activity yet.</p></div>
+            </div>
           </div>
 
+          <!-- ── Recent leads ── -->
+          <div id="intg-pane-activity" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="intg_pane_activity">Recent leads</h2>
+              <p class="settings-tab-hint" data-i18n="intg_pane_activity_hint">What this webhook received and what was captured from each lead.</p>
+            </div>
+            <div class="intg-stack">
+
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="intg_activity_title">Received leads</h2>
+              <button class="btn btn-sm" onclick="loadIntgLogs()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg><span data-i18n="btn_refresh">Refresh</span></button>
+            </div>
+            <p class="settings-hint" data-i18n="intg_activity_hint">The last 50 leads this webhook received and what was captured from each.</p>
+            <div class="settings-card-body">
+              <div id="intg-logs" class="intg-logs"><p class="empty-inline" data-i18n="intg_no_activity">No leads received yet. Send a test from your platform and it will show up here.</p></div>
+            </div>
+          </div>
+
+            </div>
+          </div>
+
+          <!-- ── Upgrads Engine: outgoing vertrag.unterschrieben webhook (routes/engine.js, utils/engine.js) ── -->
+          <div id="intg-pane-engine" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="intg_pane_engine">Upgrads Engine</h2>
+              <p class="settings-tab-hint" data-i18n="intg_pane_engine_hint">The Engine is told the moment a contract is signed.</p>
+            </div>
+            <div class="intg-stack">
+
+          <div class="settings-card" id="engine-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="engine_title">Engine connection</h2>
+              <label class="switch-row"><input type="checkbox" id="engine-active" class="switch engine-manage-input" onchange="saveEngineSettings(true)"> <span data-i18n="engine_active">Active</span></label>
+            </div>
+            <p class="settings-hint" data-i18n="engine_hint">When a deal moves into one of the trigger stages, a signed vertrag.unterschrieben event is sent to the Engine URL.</p>
+            <p class="settings-hint hidden" id="engine-readonly-hint" data-i18n="engine_readonly_hint">Only owners and admins can change these settings.</p>
+            <div class="settings-card-body">
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="engine_url_label">Engine URL</h3>
+                  <p class="intg-section-hint" data-i18n="engine_url_hint">Where the event is sent. Must start with https://.</p>
+                </div>
+                <div class="intg-field"><input type="url" id="engine-url" class="form-control engine-manage-input" placeholder="https://engine.example.com/webhooks/crm" /></div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="engine_stages_label">Trigger stages</h3>
+                  <p class="intg-section-hint" data-i18n="engine_stages_hint">Moving a deal into any of these stages sends the event. Preselected from your Won stages in Analytics.</p>
+                </div>
+                <div id="engine-stages" class="engine-stage-groups"></div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="engine_secret_label">Webhook secret</h3>
+                  <p class="intg-section-hint" data-i18n="engine_secret_hint">Share this with the Engine team. Every request is signed with it (X-Upgrads-Signature).</p>
+                </div>
+                <div class="intg-url-box">
+                  <input type="text" id="engine-secret" readonly class="intg-url-input" />
+                  <button class="btn btn-sm engine-manage" onclick="copyEngineSecret(this)" data-i18n="btn_copy">Copy</button>
+                  <button class="btn btn-sm engine-manage" onclick="regenerateEngineSecret()" data-i18n="btn_regenerate">Regenerate</button>
+                </div>
+              </div>
+              <div class="settings-card-actions">
+                <button class="btn btn-primary btn-sm engine-manage" onclick="saveEngineSettings()" data-i18n="btn_save_changes">Save changes</button>
+                <button class="btn btn-sm engine-manage" onclick="sendEngineTestEvent(this)" data-i18n="engine_btn_test">Send test event</button>
+                <span id="engine-msg" class="workspace-name-msg hidden"></span>
+              </div>
+            </div>
+          </div>
+
+            </div>
+          </div>
+
+          <!-- ── Deliveries ── -->
+          <div id="intg-pane-deliveries" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="intg_pane_deliveries">Deliveries</h2>
+              <p class="settings-tab-hint" data-i18n="intg_pane_deliveries_hint">Every event sent to the Engine, with its outcome.</p>
+            </div>
+            <div class="intg-stack">
+
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="engine_deliveries_title">Sent events</h2>
+              <button class="btn btn-sm" onclick="loadEngineDeliveries()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg><span data-i18n="btn_refresh">Refresh</span></button>
+            </div>
+            <p class="settings-hint" data-i18n="engine_deliveries_hint">Attempts and the last response from the Engine for each event.</p>
+            <div class="settings-card-body">
+              <div id="engine-deliveries" class="engine-deliveries"><p class="empty-inline" data-i18n="engine_no_deliveries">No events sent yet.</p></div>
+            </div>
+          </div>
+
+            </div>
+          </div>
+
+        </div>
         </div>
       </section>
 

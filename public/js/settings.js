@@ -4,8 +4,10 @@ let taskStatusDragIdx = null;
 
 function switchSettingsTab(tab) {
   currentSettingsTab = tab;
-  document.querySelectorAll('.settings-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
-  document.querySelectorAll('.settings-pane').forEach(pane => pane.classList.toggle('active', pane.id === `settings-pane-${tab}`));
+  // Scoped to this page: the Integrations page reuses the same rail classes (switchIntgTab).
+  const root = document.getElementById('page-settings') || document;
+  root.querySelectorAll('.settings-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+  root.querySelectorAll('.settings-pane').forEach(pane => pane.classList.toggle('active', pane.id === `settings-pane-${tab}`));
   if (tab === 'tasks') loadTaskSettings();
 }
 
