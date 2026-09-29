@@ -220,9 +220,11 @@ async function openDealModalForContact(contactId) {
   await openDealModal(null);
   const sel = document.getElementById('df-contact');
   if (sel) sel.value = contactId;
+  onDealContactChange();               // renders the contact panel (was skipped)
+  suggestDealFromContact(contactId);   // suggests the title + derives the rest
 }
 
-function truncateActivityPreview(html, maxChars = 120, maxLines = 3) {
+function truncateActivityPreview(html, maxChars = 800, maxLines = 11) {
   const div = document.createElement('div');
   div.innerHTML = html;
   let text = div.innerText;
@@ -673,6 +675,53 @@ document.addEventListener('input', e => {
   mentionTimeout = setTimeout(() => checkForMention(editor), 180);
 });
 
+// ── Pasting into a note ───────────────────────────────────────────────────────
+// Pasted notes arrive with the source's own colours, fonts and sizes (black text
+// on white from Word, Google Docs or a web page), which is unreadable on the dark
+// theme — the black text stays black. Keep only the author's structure and let the
+// app's theme own the presentation.
+const NOTE_PASTE_KEEP = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'BR', 'P', 'DIV', 'UL', 'OL', 'LI', 'A']);
+const NOTE_PASTE_DROP = new Set(['SCRIPT', 'STYLE', 'HEAD', 'META', 'LINK', 'IFRAME', 'OBJECT',
+  'EMBED', 'NOSCRIPT', 'TEMPLATE', 'SVG', 'IMG', 'VIDEO', 'AUDIO']);
+
+function sanitizePastedNote(html) {
+  const box = document.createElement('div');
+  box.innerHTML = html;
+  box.querySelectorAll('*').forEach(el => {
+    const tag = el.tagName.toUpperCase();
+    if (NOTE_PASTE_DROP.has(tag)) { el.remove(); return; }          // no text worth keeping
+    const href = tag === 'A' ? (el.getAttribute('href') || '') : '';
+    [...el.attributes].forEach(attr => el.removeAttribute(attr.name));   // style, color, font, class…
+    if (tag === 'A') {
+      if (/^(https?:|mailto:)/i.test(href)) {
+        el.setAttribute('href', href);
+        el.setAttribute('target', '_blank');
+        el.setAttribute('rel', 'noopener');
+      } else {
+        el.replaceWith(...el.childNodes);                          // unsafe href -> plain text
+      }
+      return;
+    }
+    if (!NOTE_PASTE_KEEP.has(tag)) {
+      // Unknown wrappers (tables, <font>, <span>…) keep their text; a table row ends a line.
+      const tail = tag === 'TR' ? [document.createElement('br')] : [];
+      el.replaceWith(...el.childNodes, ...tail);
+    }
+  });
+  return box.innerHTML;
+}
+
+document.addEventListener('paste', e => {
+  const editor = e.target.closest?.('.note-editor, .inline-edit-content');
+  if (!editor || !editor.isContentEditable || !e.clipboardData) return;
+  e.preventDefault();
+  const html = e.clipboardData.getData('text/html');
+  const inserted = html
+    ? sanitizePastedNote(html)
+    : esc(e.clipboardData.getData('text/plain')).replace(/\n/g, '<br>');
+  document.execCommand('insertHTML', false, inserted);
+});
+
 document.addEventListener('keydown', e => {
   if (!mentionEl) return;
   const editor = e.target.closest('.note-editor, .inline-edit-content');
@@ -800,7 +849,7 @@ function selectMention(editor, item) {
   editor.focus();
 }
 
-const DEAL_NOTE_PREVIEW_LINES = 3;
+const DEAL_NOTE_PREVIEW_LINES = 11;
 
 function _countNoteLines(html = '') {
   const raw = String(html || '');
@@ -1129,6 +1178,19 @@ function cancelContactPanelEdit(contactId) {
 function onDealContactChange() {
   const contactId = parseInt(document.getElementById('df-contact').value) || null;
   renderContactPanelReadOnly(contacts.find(c => c.id === contactId) || null);
+}
+
+// When a deal is created from a contact, suggest that contact's name as the deal
+// title and fill in the fields we can derive from them. Anything already typed wins.
+function suggestDealFromContact(contactId) {
+  const contact = contacts.find(c => c.id === Number(contactId));
+  if (!contact) return;
+
+  const titleEl = document.getElementById('df-title');
+  if (titleEl && !titleEl.value.trim()) titleEl.value = (contact.name || '').trim();
+
+  const assigneeEl = document.getElementById('df-assignee');
+  if (assigneeEl && contact.assigned_to) assigneeEl.value = String(contact.assigned_to);
 }
 
 function updateUrgencyDot() {

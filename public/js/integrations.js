@@ -211,7 +211,7 @@ async function loadIntegrations() {
   if (!data || data.error) return;
   intgData = data;
 
-  const { webhook, pipelines, stages } = data;
+  const { webhook, pipelines } = data;
   const origin = data.base_url || window.location.origin;
 
   document.getElementById('intg-url').value =
@@ -229,14 +229,7 @@ async function loadIntegrations() {
     `<option value="${p.id}" ${webhook.pipeline_id == p.id ? 'selected' : ''}>${esc(p.name)}</option>`
   ).join('');
 
-  const stageEl = document.getElementById('intg-stage');
-  const filteredStages = stages.filter(s =>
-    !pipelineEl.value || s.pipeline_name === pipelines.find(p => p.id == pipelineEl.value)?.name
-  );
-  stageEl.innerHTML = `<option value="">— No stage —</option>` +
-    filteredStages.map(s =>
-      `<option value="${s.id}" ${webhook.stage_id == s.id ? 'selected' : ''}>${esc(s.name)}</option>`
-    ).join('');
+  renderIntgStageOptions(webhook.stage_id);
 
   const assigneeEl = document.getElementById('intg-assignee');
   assigneeEl.innerHTML = `<option value="">— Not set (assigned to self) —</option>` +
@@ -367,19 +360,47 @@ function refreshGuideJson() {
   if (activeGuideId) showIntgGuide(activeGuideId);
 }
 
+// Stage choices for the auto-deal block. While "Create a deal for every incoming
+// lead" is on there is no "no stage" choice: a stage is required, so the first one
+// of the selected pipeline is preselected.
+function renderIntgStageOptions(selectedStageId) {
+  const stageEl = document.getElementById('intg-stage');
+  if (!stageEl || !intgData) return;
+
+  const dealOn     = document.getElementById('intg-create-deal').checked;
+  const pipelineId = parseInt(document.getElementById('intg-pipeline').value);
+  const pipeline   = (intgData?.pipelines || []).find(p => p.id === pipelineId);
+  const stages     = (intgData?.stages || []).filter(s => !pipeline || s.pipeline_name === pipeline.name);
+
+  if (!dealOn) {
+    stageEl.innerHTML = `<option value="">— No stage —</option>` +
+      stages.map(s => `<option value="${s.id}"${selectedStageId == s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+    return;
+  }
+
+  if (!stages.length) {
+    // Only reachable for a pipeline without stages: nothing to pick, so say so
+    // instead of silently offering a deal without a stage.
+    stageEl.innerHTML = `<option value="" disabled selected>— No stages in this pipeline —</option>`;
+    return;
+  }
+
+  stageEl.innerHTML = stages.map(s =>
+    `<option value="${s.id}"${selectedStageId == s.id ? ' selected' : ''}>${esc(s.name)}</option>`
+  ).join('');
+
+  if (!stageEl.value) stageEl.value = String(stages[0].id);   // a stage is required
+}
+
 function loadIntgStages() {
   if (!intgData) return;
-  const pipelineId = parseInt(document.getElementById('intg-pipeline').value);
-  const pipeline   = intgData.pipelines.find(p => p.id === pipelineId);
-  const stages     = intgData.stages.filter(s => s.pipeline_name === pipeline?.name);
-  document.getElementById('intg-stage').innerHTML =
-    `<option value="">— No stage —</option>` +
-    stages.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  renderIntgStageOptions(null);
 }
 
 function toggleIntgDeal() {
   const on = document.getElementById('intg-create-deal').checked;
   document.getElementById('intg-deal-options').classList.toggle('hidden', !on);
+  renderIntgStageOptions(document.getElementById('intg-stage').value);
 }
 
 async function saveIntegration(silent = false) {

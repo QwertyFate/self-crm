@@ -191,10 +191,21 @@ router.post('/receive/:key', async (req, res) => {
 
     let dealId = null;
     if (wh.create_deal && wh.pipeline_id) {
+      // Auto-created deals always land in a stage: when none is configured (or the
+      // saved stage was deleted, the FK is ON DELETE SET NULL) use the pipeline's
+      // first one. Mirrors the import route's default-stage lookup.
+      let stageId = wh.stage_id || null;
+      if (!stageId) {
+        const { rows: [firstStage] } = await pool.query(
+          'SELECT id FROM pipeline_stages WHERE pipeline_id=$1 ORDER BY position ASC LIMIT 1',
+          [wh.pipeline_id]
+        );
+        stageId = firstStage?.id || null;
+      }
       const { rows: [deal] } = await pool.query(
         `INSERT INTO deals (workspace_id, contact_id, pipeline_id, stage_id, title)
          VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-        [wid, contact.id, wh.pipeline_id, wh.stage_id || null, `Lead: ${name || email}`]
+        [wid, contact.id, wh.pipeline_id, stageId, contact.name]
       );
       dealId = deal.id;
     }

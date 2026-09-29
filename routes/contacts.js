@@ -107,7 +107,7 @@ router.post('/import', async (req, res, next) => {
         if (shouldCreateDeal && pipelineId && contactId) {
           await client.query(
             'INSERT INTO deals (workspace_id, contact_id, pipeline_id, stage_id, title) VALUES ($1,$2,$3,$4,$5)',
-            [req.workspaceId, contactId, pipelineId, defaultStageId || null, `Deal: ${row.name.trim()}`]
+            [req.workspaceId, contactId, pipelineId, defaultStageId || null, row.name.trim()]
           );
           dealsCreated++;
         }
