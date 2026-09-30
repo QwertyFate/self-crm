@@ -436,6 +436,41 @@ async function initDb() {
     if (e.code !== '42710') throw e;
   }
 
+  // Upgrads Engine: per-workspace outgoing webhook settings and the delivery log (utils/engine.js).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_engine (
+      id                SERIAL PRIMARY KEY,
+      workspace_id      INTEGER NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+      engine_url        TEXT,
+      active            BOOLEAN NOT NULL DEFAULT false,
+      trigger_stage_ids JSONB NOT NULL DEFAULT '[]',
+      webhook_secret    TEXT NOT NULL,
+      created_at        TIMESTAMPTZ DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS engine_deliveries (
+      id               SERIAL PRIMARY KEY,
+      workspace_id     INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      event            TEXT NOT NULL,
+      event_id         TEXT NOT NULL UNIQUE,
+      deal_id          INTEGER REFERENCES deals(id)    ON DELETE SET NULL,
+      contact_id       INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+      url              TEXT NOT NULL,
+      payload          JSONB NOT NULL,
+      raw_body         TEXT NOT NULL,
+      status           TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','success','failed')),
+      attempts         INTEGER NOT NULL DEFAULT 0,
+      last_status_code INTEGER,
+      last_error       TEXT,
+      next_attempt_at  TIMESTAMPTZ,
+      delivered_at     TIMESTAMPTZ,
+      created_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS engine_deliveries_ws_created_idx ON engine_deliveries (workspace_id, created_at DESC)`);
+
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');
   if (wsCount === 0 && piCount === 0) {

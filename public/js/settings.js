@@ -1,15 +1,20 @@
-let currentSettingsTab = 'general';
+let currentSettingsTab = 'workspace';   // owners start on Workspace; loadSettings() moves members to My preferences
 let taskFields = [];
 let taskStatusDragIdx = null;
 
 function switchSettingsTab(tab) {
   currentSettingsTab = tab;
-  document.querySelectorAll('.settings-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
-  document.querySelectorAll('.settings-pane').forEach(pane => pane.classList.toggle('active', pane.id === `settings-pane-${tab}`));
+  const root = document.getElementById('page-settings') || document;   // the Integrations page has its own rail
+  root.querySelectorAll('.settings-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+  root.querySelectorAll('.settings-pane').forEach(pane => pane.classList.toggle('active', pane.id === `settings-pane-${tab}`));
   if (tab === 'tasks') loadTaskSettings();
 }
 
 async function loadSettings() {
+  // The Workspace tab holds owner-only cards: hide it for members and never leave them on it.
+  const isOwner = currentUser?.role === 'owner';
+  document.getElementById('settings-tab-workspace')?.classList.toggle('hidden', !isOwner);
+  if (!isOwner && currentSettingsTab === 'workspace') currentSettingsTab = 'preferences';
   [stages, fields] = await Promise.all([api.get('/api/stages'), api.get('/api/fields')]);
   renderTimezoneSetting();
   renderFieldsList(); renderContactColumnSettings(); renderContactStagesList();
@@ -33,9 +38,8 @@ async function loadSettings() {
   loadNotifPrefs();
   switchSettingsTab(currentSettingsTab);
   // Owners and admins can issue invite codes; only owners may pick the role a code grants.
-  const isOwner = currentUser?.role === 'owner';
   const canManageInvites = isOwner || currentUser?.role === 'admin';
-  document.getElementById('invites-card').classList.toggle('hidden', !canManageInvites);
+  document.getElementById('invites-card')?.classList.toggle('hidden', !canManageInvites);
   const inviteRoleSelect = document.getElementById('invite-role-select');
   if (inviteRoleSelect) {
     inviteRoleSelect.classList.toggle('hidden', !isOwner);
@@ -45,9 +49,10 @@ async function loadSettings() {
   if (canManageInvites) loadInvites();
   if (isOwner) {
     const wsCard = document.getElementById('workspace-name-card');
-    wsCard.classList.remove('hidden');
-    document.getElementById('workspace-name-input').value = currentWorkspace?.name || '';
-    document.getElementById('workspace-name-msg').classList.add('hidden');
+    if (wsCard) wsCard.classList.remove('hidden');
+    const wsInput = document.getElementById('workspace-name-input');
+    if (wsInput) wsInput.value = currentWorkspace?.name || '';
+    document.getElementById('workspace-name-msg')?.classList.add('hidden');
 
     const meRes = await api.get('/api/auth/me');
     const workspaceCount = meRes?.workspaces?.length || 1;
@@ -58,7 +63,7 @@ async function loadSettings() {
       deleteCard.classList.add('hidden');
     }
   } else {
-    document.getElementById('workspace-name-card').classList.add('hidden');
+    document.getElementById('workspace-name-card')?.classList.add('hidden');
     const deleteCard = document.getElementById('delete-workspace-card');
     if (deleteCard) deleteCard.classList.add('hidden');
   }
@@ -71,20 +76,20 @@ async function saveWorkspaceName() {
   const res = await api.patch('/api/workspace/name', { name });
   if (res.error) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); return; }
   currentWorkspace.name = res.name; document.getElementById('sidebar-workspace').textContent = res.name;
-  msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden');
+  msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden');
   setTimeout(() => msgEl.classList.add('hidden'), 2500);
 }
 
 function renderPipelinesSettings() {
   const el = document.getElementById('pipelines-list'); if (!el) return;
-  if (!pipelines.length) { el.innerHTML = `<p style="color:var(--muted);font-size:13px;padding:8px 0">No pipelines yet.</p>`; return; }
+  if (!pipelines.length) { el.innerHTML = `<p class="settings-empty">${t('no_pipelines_yet')}</p>`; return; }
   el.innerHTML = pipelines.map(p => `
     <div class="pipeline-settings-row">
       <div class="pipeline-settings-header">
-        <span class="row-label" style="font-weight:600">📌 ${esc(p.name)}</span>
-        <div style="display:flex;gap:4px">
-          <button class="btn btn-sm btn-ghost btn-icon" onclick="editPipeline(${p.id},'${esc(p.name).replace(/'/g,'&apos;')}')">✏️</button>
-          <button class="btn btn-sm btn-danger btn-icon" onclick="deletePipeline(${p.id})">✕</button>
+        <span class="row-label row-label-strong pipeline-name">${UI_ICON.pin} ${esc(p.name)}</span>
+        <div class="row-actions">
+          <button class="btn btn-sm btn-ghost btn-icon" onclick="editPipeline(${p.id},'${esc(p.name).replace(/'/g,'&apos;')}')" title="${t('btn_edit')}" aria-label="${t('btn_edit')}">${UI_ICON.edit}</button>
+          <button class="btn btn-sm btn-danger btn-icon" onclick="deletePipeline(${p.id})" title="${t('btn_delete')}" aria-label="${t('btn_delete')}">${UI_ICON.remove}</button>
         </div>
       </div>
       <div class="pipeline-stages-list">
@@ -92,16 +97,18 @@ function renderPipelinesSettings() {
           <div class="settings-row pipeline-stage-row" draggable="true"
             ondragstart="pipelineStageDragStart(event,${p.id},${i})"
             ondragover="pipelineStageDragOver(event)" ondrop="pipelineStageDrop(event,${p.id},${i})">
-            <span class="drag-handle">⠿</span>
-            <span class="row-dot" style="background:${s.color}"></span>
+            <span class="drag-handle">${UI_ICON.drag}</span>
+            <span class="row-dot" style="background:${esc(s.color)}"></span>
             <span class="row-label">${esc(s.name)}</span>
             <div class="row-actions">
-              <button class="btn btn-sm btn-ghost btn-icon" onclick="editPipelineStage(${p.id},${s.id},'${esc(s.name).replace(/'/g,'&apos;')}','${s.color}')">✏️</button>
-              <button class="btn btn-sm btn-danger btn-icon" onclick="deletePipelineStage(${p.id},${s.id})">✕</button>
+              <button class="btn btn-sm btn-ghost btn-icon" onclick="editPipelineStage(${p.id},${s.id},'${esc(s.name).replace(/'/g,'&apos;')}','${esc(s.color)}')" title="${t('btn_edit')}" aria-label="${t('btn_edit')}">${UI_ICON.edit}</button>
+              <button class="btn btn-sm btn-danger btn-icon" onclick="deletePipelineStage(${p.id},${s.id})" title="${t('btn_delete')}" aria-label="${t('btn_delete')}">${UI_ICON.remove}</button>
             </div>
           </div>`).join('')}
-        <button class="btn btn-sm btn-ghost" style="margin-top:6px" onclick="addPipelineStage(${p.id})">+ Add stage</button>
       </div>
+      <div class="settings-card-body"><div class="settings-card-actions">
+        <button class="btn btn-sm btn-ghost" onclick="addPipelineStage(${p.id})">${UI_ICON.plus}<span>${t('add_stage_btn')}</span></button>
+      </div></div>
     </div>`).join('');
 }
 
@@ -166,13 +173,13 @@ async function deletePipelineStage(pipelineId, stageId) {
 
 function renderDealFieldsList() {
   const el = document.getElementById('deal-fields-list'); if (!el) return;
-  if (!dealFields.length) { el.innerHTML = `<li style="color:var(--muted);font-size:13px;padding:6px 10px">No deal fields yet.</li>`; return; }
+  if (!dealFields.length) { el.innerHTML = `<li class="settings-empty">${t('no_deal_fields_yet')}</li>`; return; }
   el.innerHTML = dealFields.map(f => `
     <li class="settings-row">
-      <span class="row-label">${esc(f.name)}</span><span class="row-sub">${f.type}</span>
+      <span class="row-label">${esc(f.name)}</span><span class="row-sub">${esc(f.type)}</span>
       <div class="row-actions">
-        <button class="btn btn-sm btn-ghost btn-icon" onclick="openDealFieldModal(${f.id})">✏️</button>
-        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteDealField(${f.id})">✕</button>
+        <button class="btn btn-sm btn-ghost btn-icon" onclick="openDealFieldModal(${f.id})" title="${t('btn_edit')}" aria-label="${t('btn_edit')}">${UI_ICON.edit}</button>
+        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteDealField(${f.id})" title="${t('btn_delete')}" aria-label="${t('btn_delete')}">${UI_ICON.remove}</button>
       </div>
     </li>`).join('');
 }
@@ -225,29 +232,16 @@ async function saveWaTemplate() {
   if (btn) { btn.disabled = false; btn.textContent = t('btn_save'); }
   if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
   currentWorkspace.whatsapp_template = template;
-  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
-function renderStagesList() {
-  document.getElementById('stages-list').innerHTML = stages.map((s, i) => `
-    <li class="settings-row" draggable="true" data-id="${s.id}"
-      ondragstart="stageDragStart(event,${i})" ondragover="stageDragOver(event)" ondrop="stageDrop(event,${i})">
-      <span class="drag-handle">⠿</span>
-      <span class="row-dot" style="background:${s.color}"></span>
-      <span class="row-label">${esc(s.name)}</span>
-      <div class="row-actions">
-        <button class="btn btn-sm btn-ghost btn-icon" onclick="openStageModal(${s.id})">✏️</button>
-        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteStage(${s.id})">✕</button>
-      </div>
-    </li>`).join('');
-}
 function stageDragStart(e, i) { dragStageIdx = i; e.dataTransfer.effectAllowed = 'move'; }
 function stageDragOver(e) { e.preventDefault(); }
 async function stageDrop(e, targetIdx) {
   e.preventDefault(); if (dragStageIdx === null || dragStageIdx === targetIdx) return;
   const moved = stages.splice(dragStageIdx, 1)[0]; stages.splice(targetIdx, 0, moved); dragStageIdx = null;
-  renderStagesList(); await api.patch('/api/stages/reorder', { ids: stages.map(s => s.id) });
+  renderContactStagesList(); await api.patch('/api/stages/reorder', { ids: stages.map(s => s.id) });
 }
 function openStageModal(id) {
   document.getElementById('stage-form').reset(); document.getElementById('stage-id').value = id || '';
@@ -279,30 +273,31 @@ async function deleteStage(id) {
 function renderContactStagesList() {
   const el = document.getElementById('contact-stages-list');
   if (!el) return;
-  if (!stages.length) { el.innerHTML = '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No stages yet</li>'; return; }
+  if (!stages.length) { el.innerHTML = `<li class="settings-empty">${t('no_stages_yet')}</li>`; return; }
   el.innerHTML = stages.map((s, i) => `
-    <li class="settings-row" draggable="true" data-id="${s.id}"
+    <li class="settings-row pipeline-stage-row" draggable="true" data-id="${s.id}"
       ondragstart="stageDragStart(event,${i})" ondragover="stageDragOver(event)" ondrop="stageDrop(event,${i})">
-      <span class="drag-handle">⠿</span>
-      <span class="row-dot" style="background:${s.color}"></span>
+      <span class="drag-handle">${UI_ICON.drag}</span>
+      <span class="row-dot" style="background:${esc(s.color)}"></span>
       <span class="row-label">${esc(s.name)}</span>
       <div class="row-actions">
-        <button class="btn btn-sm btn-ghost btn-icon" onclick="openStageModal(${s.id})">✏️</button>
-        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteStage(${s.id})">✕</button>
+        <button class="btn btn-sm btn-ghost btn-icon" onclick="openStageModal(${s.id})" title="${t('btn_edit')}" aria-label="${t('btn_edit')}">${UI_ICON.edit}</button>
+        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteStage(${s.id})" title="${t('btn_delete')}" aria-label="${t('btn_delete')}">${UI_ICON.remove}</button>
       </div>
     </li>`).join('');
 }
 
 function renderFieldsList() {
   const el = document.getElementById('fields-list');
-  if (!fields.length) { el.innerHTML = `<li style="color:var(--muted);font-size:13px;padding:6px 10px">${t('no_fields')}</li>`; return; }
+  if (!el) return;
+  if (!fields.length) { el.innerHTML = `<li class="settings-empty">${t('no_fields')}</li>`; return; }
   el.innerHTML = fields.map(f => `
     <li class="settings-row">
       <span class="row-label">${esc(f.name)}</span>
-      <span class="row-sub">${f.type}${f.type==='dropdown'?` (${f.options.length} opts)`:''}</span>
+      <span class="row-sub">${esc(f.type)}${f.type === 'dropdown' ? ` (${(f.options || []).length} opts)` : ''}</span>
       <div class="row-actions">
-        <button class="btn btn-sm btn-ghost btn-icon" onclick="openFieldModal(${f.id})">✏️</button>
-        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteField(${f.id})">✕</button>
+        <button class="btn btn-sm btn-ghost btn-icon" onclick="openFieldModal(${f.id})" title="${t('btn_edit')}" aria-label="${t('btn_edit')}">${UI_ICON.edit}</button>
+        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteField(${f.id})" title="${t('btn_delete')}" aria-label="${t('btn_delete')}">${UI_ICON.remove}</button>
       </div>
     </li>`).join('');
 }
@@ -345,12 +340,12 @@ function renderContactColumnSettings() {
   el.innerHTML = cols.map((col, i) => `
     <li class="settings-row col-cfg-row" draggable="true"
       ondragstart="colDragStart(event,${i})" ondragover="colDragOver(event)" ondrop="colDrop(event,${i})" ondragleave="colDragLeave(event)">
-      <span class="drag-handle">⠿</span>
+      <span class="drag-handle">${UI_ICON.drag}</span>
       <span class="row-label">${col.label()}</span>
       <label class="col-vis-toggle"><input type="checkbox" ${col.visible ? 'checked' : ''} onchange="colToggleVisible(${i},this.checked)" /></label>
     </li>`).join('');
 }
-function colDragStart(e, i) { colDragIdx = i; e.dataTransfer.effectAllowed = 'move'; e.currentTarget.classList.add('dragging'); }
+function colDragStart(e, i) { colDragIdx = i; e.dataTransfer.effectAllowed = 'move'; }
 function colDragOver(e)  { e.preventDefault(); e.currentTarget.classList.add('col-drag-over'); }
 function colDragLeave(e) { e.currentTarget.classList.remove('col-drag-over'); }
 function colDrop(e, targetIdx) {
@@ -372,7 +367,7 @@ async function saveContactColumns() {
   if (btn) { btn.disabled = false; btn.textContent = t('btn_save'); }
   if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
   contactColumns = toSave; currentWorkspace.contact_columns = toSave;
-  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500); filterContacts();
 }
 
@@ -394,17 +389,18 @@ async function saveKanbanFields() {
 
 async function loadInvites() {
   const codes = await api.get('/api/invites');
-  document.getElementById('invites-list').innerHTML = codes.length
+  const el = document.getElementById('invites-list'); if (!el) return;
+  el.innerHTML = Array.isArray(codes) && codes.length
     ? codes.map(c => `
       <li class="settings-row">
-        <span class="invite-code-val ${c.used ? 'invite-used' : ''}">${c.code}</span>
-        <span class="member-role role-${c.role}">${roleLabel(c.role)}</span>
+        <span class="invite-code-val ${c.used ? 'invite-used' : ''}">${esc(c.code)}</span>
+        <span class="member-role role-${esc(c.role)}">${roleLabel(c.role)}</span>
         ${c.used
-          ? `<span class="row-sub">Used by ${esc(c.used_by_name||'someone')}</span>`
-          : `<button class="btn btn-sm" onclick="copyCode('${c.code}')">Copy</button>
-             <button class="btn btn-sm btn-danger btn-icon" onclick="deleteInviteCode(${c.id})">✕</button>`}
+          ? `<span class="row-sub">${t('used_by')} ${esc(c.used_by_name||'someone')}</span>`
+          : `<button class="btn btn-sm" onclick="copyCode('${esc(c.code)}')">${t('copy_btn')}</button>
+             <button class="btn btn-sm btn-danger btn-icon" onclick="deleteInviteCode(${c.id})" title="${t('btn_delete')}" aria-label="${t('btn_delete')}">${UI_ICON.remove}</button>`}
       </li>`).join('')
-    : '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No invite codes yet.</li>';
+    : `<li class="settings-empty">${t('no_invites_yet')}</li>`;
 }
 async function generateInviteCode() {
   const sel  = document.getElementById('invite-role-select');
@@ -418,11 +414,12 @@ function copyCode(code) { navigator.clipboard.writeText(code).then(() => alert(`
 
 async function loadMembers() {
   const list = await api.get('/api/workspace/members');
-  document.getElementById('members-list').innerHTML = list.map(m => `
+  const el = document.getElementById('members-list'); if (!el) return;
+  el.innerHTML = (Array.isArray(list) ? list : []).map(m => `
     <li class="settings-row">
-      <div class="member-avatar">${esc(m.name[0].toUpperCase())}</div>
-      <div style="flex:1;min-width:0">
-        <div class="row-label">${esc(m.name)}${m.id === currentUser?.id ? ' <span style="color:var(--muted);font-weight:400">(you)</span>' : ''}</div>
+      <div class="member-avatar">${esc((m.name || '?')[0].toUpperCase())}</div>
+      <div class="member-main">
+        <div class="row-label">${esc(m.name)}${m.id === currentUser?.id ? ` <span class="member-you">${t('you_marker')}</span>` : ''}</div>
         <div class="row-sub">${esc(m.email)}</div>
       </div>
       ${currentUser?.role === 'owner' && m.id !== currentUser?.id && m.role !== 'owner'
@@ -430,8 +427,8 @@ async function loadMembers() {
              <option value="member"${m.role === 'member' ? ' selected' : ''}>${roleLabel('member')}</option>
              <option value="admin"${m.role === 'admin' ? ' selected' : ''}>${roleLabel('admin')}</option>
            </select>
-           <button class="btn btn-sm btn-danger btn-icon" onclick="removeMember(${m.id}, '${esc(m.name)}')">Remove</button>`
-        : `<span class="member-role role-${m.role}">${roleLabel(m.role)}</span>`}
+           <button class="btn btn-sm btn-danger" onclick="removeMember(${m.id}, '${esc(m.name).replace(/'/g,'&apos;')}')">${t('remove_btn')}</button>`
+        : `<span class="member-role role-${esc(m.role)}">${roleLabel(m.role)}</span>`}
     </li>`).join('');
 }
 async function changeMemberRole(id, role) {
@@ -494,12 +491,12 @@ function renderTaskStatusesList() {
       ondragover="taskStatusDragOver(event)"
       ondrop="taskStatusDrop(event,${i})"
       ondragleave="colDragLeave(event)">
-      <span class="drag-handle">⠿</span>
-      <span class="row-dot" style="background:${s.color}"></span>
+      <span class="drag-handle">${UI_ICON.drag}</span>
+      <span class="row-dot" style="background:${esc(s.color)}"></span>
       <span class="row-label">${esc(s.label)}</span>
       <div class="row-actions">
-        <button class="btn btn-sm btn-ghost btn-icon" onclick="openTaskStatusModal('${s.key}')">✏️</button>
-        ${statuses.length > 1 ? `<button class="btn btn-sm btn-danger btn-icon" onclick="deleteTaskStatus('${s.key}')">✕</button>` : ''}
+        <button class="btn btn-sm btn-ghost btn-icon" onclick="openTaskStatusModal('${esc(s.key)}')" title="${t('btn_edit')}" aria-label="${t('btn_edit')}">${UI_ICON.edit}</button>
+        ${statuses.length > 1 ? `<button class="btn btn-sm btn-danger btn-icon" onclick="deleteTaskStatus('${esc(s.key)}')" title="${t('btn_delete')}" aria-label="${t('btn_delete')}">${UI_ICON.remove}</button>` : ''}
       </div>
     </li>`).join('');
 }
@@ -566,7 +563,7 @@ async function saveTaskStatuses() {
     return;
   }
   if (currentWorkspace) currentWorkspace.task_statuses = res.statuses;
-  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
   if (document.getElementById('page-tasks')?.classList.contains('active')) renderTasksCurrent();
 }
@@ -574,14 +571,14 @@ async function saveTaskStatuses() {
 function renderTaskFieldsList() {
   const el = document.getElementById('task-fields-list');
   if (!el) return;
-  if (!taskFields.length) { el.innerHTML = '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No fields yet.</li>'; return; }
+  if (!taskFields.length) { el.innerHTML = `<li class="settings-empty">${t('no_task_fields_yet')}</li>`; return; }
   el.innerHTML = taskFields.map(f => `
     <li class="settings-row">
       <span class="row-label">${esc(f.name)}</span>
-      <span class="row-sub">${f.type}</span>
+      <span class="row-sub">${esc(f.type)}</span>
       <div class="row-actions">
-        <button class="btn btn-sm btn-ghost btn-icon" onclick="openTaskFieldModal(${f.id})">✏️</button>
-        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteTaskField(${f.id})">✕</button>
+        <button class="btn btn-sm btn-ghost btn-icon" onclick="openTaskFieldModal(${f.id})" title="${t('btn_edit')}" aria-label="${t('btn_edit')}">${UI_ICON.edit}</button>
+        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteTaskField(${f.id})" title="${t('btn_delete')}" aria-label="${t('btn_delete')}">${UI_ICON.remove}</button>
       </div>
     </li>`).join('');
 }

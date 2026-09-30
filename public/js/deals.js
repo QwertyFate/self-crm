@@ -103,7 +103,7 @@ function renderDealColumnSettings() {
   el.innerHTML = cols.map((col, i) => `
     <li class="settings-row col-cfg-row" draggable="true"
       ondragstart="dealColDragStart(event,${i})" ondragover="colDragOver(event)" ondrop="dealColDrop(event,${i})" ondragleave="colDragLeave(event)">
-      <span class="drag-handle">⠿</span>
+      <span class="drag-handle">${UI_ICON.drag}</span>
       <span class="row-label">${col.label()}</span>
       <label class="col-vis-toggle">
         <input type="checkbox" ${col.visible ? 'checked' : ''} onchange="dealColToggle(${i},this.checked)" />
@@ -135,7 +135,7 @@ async function saveDealColumns() {
   if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
   dealColumns = toSave;
   if (currentUser) currentUser.deal_columns = toSave;
-  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
   renderDealsList();
 }

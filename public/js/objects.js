@@ -12,7 +12,7 @@ async function saveSupplierName() {
   currentWorkspace.supplier_name = res.name;
   updateSuppliersNav();
   if (currentContactType === 'supplier') updateContactsPageHeader();
-  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
@@ -29,6 +29,8 @@ function updateObjectsNav() {
   // Keep the plus icon: only the label inside the button changes.
   if (btn)   { const span = btn.querySelector('span'); if (span) span.textContent = `Add ${singular}`; }
   if (tab)   tab.textContent   = name;
+  const paneTitle = document.getElementById('settings-objects-pane-title');   // heading of the settings section for this list
+  if (paneTitle) paneTitle.textContent = name;
   if (search) search.placeholder = `Search ${name.toLowerCase()}…`;
 }
 
@@ -405,13 +407,13 @@ async function navigateToDeal(dealId) {
 
 function renderObjectFieldsList() {
   const el = document.getElementById('object-fields-list'); if (!el) return;
-  if (!objectFields.length) { el.innerHTML = '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No fields yet.</li>'; return; }
+  if (!objectFields.length) { el.innerHTML = `<li class="settings-empty">${t('no_fields')}</li>`; return; }
   el.innerHTML = objectFields.map(f => `
     <li class="settings-row">
-      <span class="row-label">${esc(f.name)}</span><span class="row-sub">${f.type}</span>
+      <span class="row-label">${esc(f.name)}</span><span class="row-sub">${esc(f.type)}</span>
       <div class="row-actions">
-        <button class="btn btn-sm btn-ghost btn-icon" onclick="openObjectFieldModal(${f.id})">✏️</button>
-        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteObjectField(${f.id})">✕</button>
+        <button class="btn btn-sm btn-ghost btn-icon" title="${t('btn_edit')}" aria-label="${t('btn_edit')}" onclick="openObjectFieldModal(${f.id})">${UI_ICON.edit}</button>
+        <button class="btn btn-sm btn-danger btn-icon" title="${t('btn_delete')}" aria-label="${t('btn_delete')}" onclick="deleteObjectField(${f.id})">${UI_ICON.remove}</button>
       </div>
     </li>`).join('');
 }
@@ -475,7 +477,7 @@ function renderObjectColumnSettings() {
   el.innerHTML = cols.map((col, i) => `
     <li class="settings-row col-cfg-row" draggable="true"
       ondragstart="objColDragStart(event,${i})" ondragover="colDragOver(event)" ondrop="objColDrop(event,${i})" ondragleave="colDragLeave(event)">
-      <span class="drag-handle">⠿</span>
+      <span class="drag-handle">${UI_ICON.drag}</span>
       <span class="row-label">${col.label()}</span>
       <label class="col-vis-toggle"><input type="checkbox" ${col.visible?'checked':''} onchange="objColToggle(${i},this.checked)" /></label>
     </li>`).join('');
@@ -496,7 +498,7 @@ async function saveObjectColumns(){
   if(btn){btn.disabled=false;btn.textContent=t('btn_save');}
   if(res.error){if(msgEl){msgEl.textContent=res.error;msgEl.className='workspace-name-msg error';msgEl.classList.remove('hidden');}return;}
   objectColumns=toSave; currentWorkspace.object_columns=toSave;
-  if(msgEl){msgEl.textContent='✓ Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
+  if(msgEl){msgEl.textContent='Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
   setTimeout(()=>msgEl?.classList.add('hidden'),2500); renderObjectsCurrent();
 }
 async function saveObjectTypeName(){
@@ -505,7 +507,7 @@ async function saveObjectTypeName(){
   const res=await api.patch('/api/workspace/object-name',{name});
   if(res.error){if(msgEl){msgEl.textContent=res.error;msgEl.className='workspace-name-msg error';msgEl.classList.remove('hidden');}return;}
   currentWorkspace.object_name=res.name; updateObjectsNav();
-  if(msgEl){msgEl.textContent='✓ Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
+  if(msgEl){msgEl.textContent='Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
   setTimeout(()=>msgEl?.classList.add('hidden'),2500);
 }
 
@@ -536,7 +538,7 @@ async function saveMiroUrl() {
   const res = await api.patch('/api/workspace/miro-url', { url });
   if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
   currentWorkspace.miro_url = url; updateBoardNavVisibility();
-  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
