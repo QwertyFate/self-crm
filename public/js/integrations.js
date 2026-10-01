@@ -1,10 +1,21 @@
 let intgData = null;
+let currentIntgTab = 'webhook';   // remembered for the session, like the Settings rail
+
+// The page reuses the Settings rail markup. Scoped to this page so the two rails
+// (same class names) never toggle each other.
+function switchIntgTab(tab) {
+  currentIntgTab = tab;
+  const root = document.getElementById('page-integrations');
+  if (!root) return;
+  root.querySelectorAll('.settings-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+  root.querySelectorAll('.settings-pane').forEach(pane => pane.classList.toggle('active', pane.id === `intg-pane-${tab}`));
+}
 
 const INTG_BUILTIN_FIELDS = [
-  { key: 'name',    label: 'Name',    placeholder: 'full_name'     },
-  { key: 'email',   label: 'Email',   placeholder: 'email'         },
-  { key: 'phone',   label: 'Phone',   placeholder: 'phone_number'  },
-  { key: 'company', label: 'Company', placeholder: 'company'       },
+  { key: 'name',    labelKey: 'lbl_name',    placeholder: 'full_name'     },
+  { key: 'email',   labelKey: 'lbl_email',   placeholder: 'email'         },
+  { key: 'phone',   labelKey: 'lbl_phone',   placeholder: 'phone_number'  },
+  { key: 'company', labelKey: 'lbl_company', placeholder: 'company'       },
 ];
 
 const INTG_PLATFORMS = [
@@ -180,30 +191,33 @@ function showIntgGuide(id) {
     <div class="intg-guide-header">
       <div class="intg-guide-logo-sm">${platform.logo}</div>
       <div>
-        <div class="intg-guide-title-text">${platform.name}</div>
-        <div class="intg-guide-subtitle">Setup Guide</div>
+        <div class="intg-guide-title-text">${esc(platform.name)}</div>
+        <div class="intg-guide-subtitle">${esc(t('intg_setup_guide'))}</div>
       </div>
     </div>
-    <div style="margin:16px 0;padding:12px;background:var(--bg-secondary);border-radius:4px;border-left:3px solid var(--primary)">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Webhook URL</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <code style="flex:1;word-break:break-all;font-size:12px">${webhookUrl}</code>
-        <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${webhookUrl}');alert('Copied to clipboard!')">Copy</button>
+    <div class="intg-guide-url">
+      <div class="intg-guide-url-label">${esc(t('intg_guide_url'))}</div>
+      <div class="intg-guide-url-row">
+        <code>${esc(webhookUrl)}</code>
+        <button class="btn btn-sm" onclick="copyIntgText(this, this.previousElementSibling.textContent)">${esc(t('btn_copy'))}</button>
       </div>
     </div>
     <ol class="intg-guide-steps">${steps}</ol>
     ${noteHtml}
     <div class="intg-json-block">
       <div class="intg-json-header">
-        <span>${platform.jsonLabel}</span>
-        <button class="intg-copy-btn" onclick="copyIntgJson(this)">Copy</button>
+        <span>${esc(platform.jsonLabel)}</span>
+        <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)">${esc(t('btn_copy'))}</button>
       </div>
       <pre class="intg-code">${json}</pre>
     </div>`;
 }
 
+// The Engine card loads on its own and the remembered rail tab is re-applied first, so neither is
+// blocked by the lead-webhook early return below.
 async function loadIntegrations() {
-  loadEngineSettings();   // the Engine card loads on its own; never blocked by the lead-webhook early return below
+  loadEngineSettings();
+  switchIntgTab(currentIntgTab);
   const intgFieldMap = document.getElementById('intg-field-map');
   if (intgFieldMap) intgFieldMap.innerHTML = '';
 
@@ -233,13 +247,13 @@ async function loadIntegrations() {
   renderIntgStageOptions(webhook.stage_id);
 
   const assigneeEl = document.getElementById('intg-assignee');
-  assigneeEl.innerHTML = `<option value="">— Not set (assigned to self) —</option>` +
+  assigneeEl.innerHTML = `<option value="">${esc(t('opt_assignee_self'))}</option>` +
     members.map(m =>
       `<option value="${m.id}" ${webhook.default_assignee_id == m.id ? 'selected' : ''}>${esc(m.name)}</option>`
     ).join('');
 
   renderIntgPlatforms();
-  if (!activeGuideId) showIntgGuide('make');
+  showIntgGuide(activeGuideId || 'make');   // re-render the open guide too (language switch re-runs this loader)
   loadIntgLogs();
 }
 
@@ -255,10 +269,10 @@ function renderIntgFieldMap(fieldMap) {
   activeCustomKeys = [...new Set([...savedCustomKeys, ...activeCustomKeys])];
 
   el.innerHTML = `
-    <div class="intg-map-section-label">Built-in fields</div>
-    ${INTG_BUILTIN_FIELDS.map(f => renderFieldRow(f.key, f.label, f.placeholder, fieldMap[f.key] || '', false)).join('')}
+    <div class="intg-map-section-label">${esc(t('intg_builtin_fields'))}</div>
+    ${INTG_BUILTIN_FIELDS.map(f => renderFieldRow(f.key, t(f.labelKey), f.placeholder, fieldMap[f.key] || '', false)).join('')}
 
-    ${activeCustomKeys.length ? `<div class="intg-map-section-label" style="margin-top:14px">Custom fields</div>` : ''}
+    ${activeCustomKeys.length ? `<div class="intg-map-section-label">${esc(t('intg_custom_fields'))}</div>` : ''}
     ${activeCustomKeys.map(key => {
       const cf = customFields.find(f => f.field_key === key);
       if (!cf) return '';
@@ -267,20 +281,20 @@ function renderIntgFieldMap(fieldMap) {
 
     <div class="intg-map-add-row">
       <select id="intg-add-field-select" class="form-control intg-add-select">
-        <option value="">+ Add custom field…</option>
+        <option value="">${esc(t('intg_add_field_ph'))}</option>
         ${customFields
           .filter(f => !activeCustomKeys.includes(f.field_key))
           .map(f => `<option value="${f.field_key}">${esc(f.name)}</option>`)
           .join('')}
       </select>
-      <button class="btn btn-sm" onclick="intgAddField()">Add</button>
+      <button class="btn btn-sm" onclick="intgAddField()">${UI_ICON.plus}<span>${esc(t('add_btn'))}</span></button>
     </div>`;
 }
 
 function renderFieldRow(key, label, placeholder, value, isCustom) {
   const displayVal = value || placeholder;
   const removeBtn  = isCustom
-    ? `<button class="intg-map-remove" onclick="intgRemoveField('${key}')" title="Remove">×</button>`
+    ? `<span class="intg-map-end"><span class="intg-map-custom-tag">${esc(t('intg_custom_tag'))}</span><button class="intg-map-remove" onclick="intgRemoveField('${key}')" title="${esc(t('btn_delete'))}" aria-label="${esc(t('btn_delete'))}">${UI_ICON.remove}</button></span>`
     : '<span></span>';
   return `
     <div class="intg-map-row">
@@ -293,9 +307,7 @@ function renderFieldRow(key, label, placeholder, value, isCustom) {
           readonly
           onblur="intgKeyBlur(this)"
           oninput="refreshGuideJson()" />
-        <button class="intg-key-edit-btn" onclick="intgToggleKeyEdit(this)" title="Edit key">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg>
-        </button>
+        <button class="btn btn-sm btn-icon intg-key-edit-btn" onclick="intgToggleKeyEdit(this)" title="${esc(t('intg_edit_key'))}" aria-label="${esc(t('intg_edit_key'))}">${UI_ICON.edit}</button>
       </div>
       ${removeBtn}
     </div>`;
@@ -374,7 +386,7 @@ function renderIntgStageOptions(selectedStageId) {
   const stages     = (intgData?.stages || []).filter(s => !pipeline || s.pipeline_name === pipeline.name);
 
   if (!dealOn) {
-    stageEl.innerHTML = `<option value="">— No stage —</option>` +
+    stageEl.innerHTML = `<option value="">${esc(t('opt_no_stage'))}</option>` +
       stages.map(s => `<option value="${s.id}"${selectedStageId == s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
     return;
   }
@@ -382,7 +394,7 @@ function renderIntgStageOptions(selectedStageId) {
   if (!stages.length) {
     // Only reachable for a pipeline without stages: nothing to pick, so say so
     // instead of silently offering a deal without a stage.
-    stageEl.innerHTML = `<option value="" disabled selected>— No stages in this pipeline —</option>`;
+    stageEl.innerHTML = `<option value="" disabled selected>${esc(t('intg_no_stages_in_pipeline'))}</option>`;
     return;
   }
 
@@ -420,8 +432,8 @@ async function saveIntegration(silent = false) {
     const el = document.getElementById('intg-field-map');
     if (el) {
       const tip = document.createElement('div');
-      tip.style.cssText = 'font-size:11px;color:var(--primary);text-align:right;margin-top:4px';
-      tip.textContent = '✓ Auto-saved';
+      tip.className = 'intg-autosaved';
+      tip.textContent = t('intg_autosaved');
       el.parentNode.insertBefore(tip, el.nextSibling);
       setTimeout(() => tip.remove(), 2000);
     }
@@ -432,7 +444,7 @@ async function saveIntegration(silent = false) {
     msgEl.textContent = res.error;
     msgEl.className   = 'workspace-name-msg error';
   } else {
-    msgEl.textContent = '✓ Saved';
+    msgEl.textContent = t('msg_saved');
     msgEl.className   = 'workspace-name-msg success';
   }
   msgEl.classList.remove('hidden');
@@ -444,13 +456,13 @@ function copyWebhookUrl() {
   navigator.clipboard.writeText(url).then(() => {
     const btn = event.target;
     const orig = btn.textContent;
-    btn.textContent = 'Copied!';
+    btn.textContent = t('copied');
     setTimeout(() => btn.textContent = orig, 1500);
   });
 }
 
 async function regenerateWebhookKey() {
-  if (!confirm('This will invalidate your current webhook URL. Any active Zapier/Make scenarios will need to be updated. Continue?')) return;
+  if (!confirm(t('intg_confirm_regen_url'))) return;
   const res = await api.post('/api/integrations/settings/regenerate-key', {});
   if (res.error) { alert(res.error); return; }
   const origin = intgData?.base_url || window.location.origin;
@@ -462,7 +474,7 @@ async function loadIntgLogs() {
   const data = await api.get('/api/integrations/logs');
   const el   = document.getElementById('intg-logs');
   if (!data || data.error || !data.logs.length) {
-    el.innerHTML = '<p class="settings-hint">No activity yet.</p>';
+    el.innerHTML = `<p class="empty-inline">${esc(t('intg_no_activity'))}</p>`;
     return;
   }
   el.innerHTML = data.logs.map(l => {
@@ -473,7 +485,7 @@ async function loadIntgLogs() {
 
     return `<div class="intg-log-entry${l.status === 'error' ? ' error' : ''}">
       <div class="intg-log-entry-header">
-        <span class="intg-log-badge ${l.status}">${l.status}</span>
+        <span class="intg-log-badge ${l.status}">${esc(t('intg_log_' + l.status))}</span>
         <span class="intg-log-time">${new Date(l.created_at).toLocaleString()}</span>
         <span class="intg-log-contact">${l.contact_name ? esc(l.contact_name) : (l.error ? esc(l.error) : '—')}</span>
       </div>
@@ -484,24 +496,28 @@ async function loadIntgLogs() {
           ).join('')}
         </div>
         ${hasSkips ? `<div class="intg-log-skipped">
-          Fields not found in payload: ${Object.keys(skipped).map(k => `<code>${esc(k)}</code>`).join(', ')}
-          — check that your field mapping keys match the incoming payload.
+          ${esc(t('intg_fields_missing'))} ${Object.keys(skipped).map(k => `<code>${esc(k)}</code>`).join(', ')}
+          ${esc(t('intg_fields_missing_hint'))}
         </div>` : ''}` : ''}
-      <div class="intg-log-raw-toggle" onclick="this.nextElementSibling.classList.toggle('hidden')">View raw payload</div>
+      <div class="intg-log-raw-toggle" onclick="this.nextElementSibling.classList.toggle('hidden')">${esc(t('intg_view_raw'))}</div>
       <pre class="intg-log-raw hidden">${esc(JSON.stringify(l.payload || {}, null, 2))}</pre>
     </div>`;
   }).join('');
 }
 
-function copyIntgJson(btn) {
-  const pre  = btn.closest('.intg-json-block').querySelector('pre');
-  const text = pre.textContent.trim();
-  const done = () => { const o = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = o, 1500); };
+// Copies `text` and flashes the button label; used by the guide URL and the sample payload.
+function copyIntgText(btn, text) {
+  const done = () => { const o = btn.textContent; btn.textContent = t('copied'); setTimeout(() => btn.textContent = o, 1500); };
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
   } else {
     fallbackCopy(text, done);
   }
+}
+
+function copyIntgJson(btn) {
+  const pre = btn.closest('.intg-json-block').querySelector('pre');
+  copyIntgText(btn, pre.textContent.trim());
 }
 
 function fallbackCopy(text, cb) {
@@ -623,7 +639,7 @@ async function loadEngineDeliveries() {
   const el = document.getElementById('engine-deliveries'); if (!el) return;
   const data = await api.get('/api/engine/deliveries');
   const list = data && !data.error ? (data.deliveries || []) : [];
-  if (!list.length) { el.innerHTML = `<p class="settings-hint">${esc(t('engine_no_deliveries'))}</p>`; return; }
+  if (!list.length) { el.innerHTML = `<p class="empty-inline">${esc(t('engine_no_deliveries'))}</p>`; return; }
   el.innerHTML = list.map(engineDeliveryHtml).join('');
 }
 

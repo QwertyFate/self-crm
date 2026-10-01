@@ -99,12 +99,17 @@ describe('stylesheet', () => {
     assert.match(css, /^\.settings-layout \{[^}]*grid-template-columns: 208px minmax\(0, 1fr\)/m);
     for (const t of TABS) assert.match(css, new RegExp(`\\.settings-tab\\[data-tab="${t}"\\]::before \\{`), `icon for ${t}`);
     assert.match(css, /^\.settings-tab::before \{[^}]*mask-repeat/m);
-    assert.match(css, /^\.settings-grid \{[^}]*grid-template-columns: 1fr;[^}]*max-width: 760px/m);
+    assert.match(css, /^\.settings-grid \{[^}]*grid-template-columns: 1fr;[^}]*max-width: var\(--rail-content-max\)/m);
+    assert.match(css, /^\.page-rail \{[^}]*--rail-content-max: 1080px/m, 'one named width for both rail pages');
+    assert.match(css, /^\.settings-pane-head \{[^}]*max-width: var\(--rail-content-max\)/m);
+    assert.match(css, /^\.page-rail \.workspace-name-input \{[^}]*max-width: 520px/m, 'single-line inputs do not stretch across the whole card');
     assert.match(css, /^\.settings-pane-title \{/m);
-    assert.match(css, /^#page-settings \.workspace-name-msg\.success \{[^}]*background: var\(--success-wash\)/m, 'the pill is scoped to the settings page');
+    assert.match(css, /^\.page-rail \.workspace-name-msg\.success \{[^}]*background: var\(--success-wash\)/m, 'the pill is scoped to the rail pages (Settings, Integrations)');
     assert.match(css, /^\.settings-row \.row-actions \{ opacity: \.6; \}/m);
     assert.match(css, /^\.settings-tab-sep \{/m);
-    assert.match(css, /^#pref-dark-toggle \{[^}]*appearance: none/m);
+    assert.match(css, /^input\[type="checkbox"\]\.switch,\n#pref-dark-toggle \{[^}]*appearance: none/m, 'the Appearance switch rule is shared with other switches, at a weight that beats the global checkbox rule');
+    assert.doesNotMatch(css, /^\.switch(?![-\w])/m, 'no bare .switch selector: the global input[type="checkbox"] rule would outrank it');
+    assert.match(html, /<section id="page-settings" class="page page-rail">/);
   });
   test('the reference rules are there verbatim; the previous rail and row system are gone', () => {
     assert.match(css, /\.settings-tab-body \{[^}]*padding-top: 0;/);

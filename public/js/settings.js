@@ -15,14 +15,32 @@ async function loadSettings() {
   const isOwner = currentUser?.role === 'owner';
   document.getElementById('settings-tab-workspace')?.classList.toggle('hidden', !isOwner);
   if (!isOwner && currentSettingsTab === 'workspace') currentSettingsTab = 'preferences';
-  [stages, fields] = await Promise.all([api.get('/api/stages'), api.get('/api/fields')]);
+  // Owners and admins can issue invite codes; only owners may pick the role a code grants.
+  const canManageInvites = isOwner || currentUser?.role === 'admin';
+
+  // Every request the page needs starts at once: the global loader counts them as one
+  // batch (one bar, one paint) instead of a blink per card. `/api/auth/me` is fetched once
+  // and reused for the Tasks statuses and the delete-workspace check.
+  const [stageRows, fieldRows, objectFieldRows, pipelineRows, dealFieldRows, taskFieldRows, me, memberRows, inviteRows] = await Promise.all([
+    api.get('/api/stages'),
+    api.get('/api/fields'),
+    api.get('/api/object-fields'),
+    api.get('/api/pipelines'),
+    api.get('/api/deal-fields'),
+    api.get('/api/task-fields'),
+    api.get('/api/auth/me'),
+    api.get('/api/workspace/members'),
+    canManageInvites ? api.get('/api/invites') : null,
+  ]);
+  stages = stageRows; fields = fieldRows;
+
   renderTimezoneSetting();
   renderFieldsList(); renderContactColumnSettings(); renderContactStagesList();
   const waEl = document.getElementById('wa-template-input');
   if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? 'Hi {{name}}, ';
   const miroEl = document.getElementById('miro-url-input');
   if (miroEl) miroEl.value = currentWorkspace?.miro_url || '';
-  objectFields  = await api.get('/api/object-fields');
+  objectFields  = objectFieldRows;
   objectColumns = currentWorkspace?.object_columns || [];
   renderObjectFieldsList(); renderObjectColumnSettings();
   if (currentUser?.role === 'owner') {
@@ -31,14 +49,12 @@ async function loadSettings() {
     const supCard = document.getElementById('supplier-name-card');
     if (supCard) { supCard.classList.remove('hidden'); document.getElementById('supplier-name-input').value = currentWorkspace?.supplier_name || 'Suppliers'; }
   }
-  pipelines  = await api.get('/api/pipelines');
-  dealFields = await api.get('/api/deal-fields');
+  pipelines  = pipelineRows;
+  dealFields = dealFieldRows;
   renderPipelinesSettings(); renderDealFieldsList(); renderDealColumnSettings();
-  await loadTaskSettings();
+  loadTaskSettings(me, taskFieldRows);
   loadNotifPrefs();
   switchSettingsTab(currentSettingsTab);
-  // Owners and admins can issue invite codes; only owners may pick the role a code grants.
-  const canManageInvites = isOwner || currentUser?.role === 'admin';
   document.getElementById('invites-card')?.classList.toggle('hidden', !canManageInvites);
   const inviteRoleSelect = document.getElementById('invite-role-select');
   if (inviteRoleSelect) {
@@ -46,7 +62,7 @@ async function loadSettings() {
     inviteRoleSelect.title = t('lbl_invite_role');
     inviteRoleSelect.querySelectorAll('option').forEach(o => { o.textContent = roleLabel(o.value); });
   }
-  if (canManageInvites) loadInvites();
+  if (canManageInvites) loadInvites(inviteRows);
   if (isOwner) {
     const wsCard = document.getElementById('workspace-name-card');
     if (wsCard) wsCard.classList.remove('hidden');
@@ -54,8 +70,7 @@ async function loadSettings() {
     if (wsInput) wsInput.value = currentWorkspace?.name || '';
     document.getElementById('workspace-name-msg')?.classList.add('hidden');
 
-    const meRes = await api.get('/api/auth/me');
-    const workspaceCount = meRes?.workspaces?.length || 1;
+    const workspaceCount = me?.workspaces?.length || 1;
     const deleteCard = document.getElementById('delete-workspace-card');
     if (deleteCard && workspaceCount > 1) {
       deleteCard.classList.remove('hidden');
@@ -67,7 +82,7 @@ async function loadSettings() {
     const deleteCard = document.getElementById('delete-workspace-card');
     if (deleteCard) deleteCard.classList.add('hidden');
   }
-  loadMembers();
+  loadMembers(memberRows);
 }
 
 async function saveWorkspaceName() {
@@ -387,8 +402,8 @@ async function saveKanbanFields() {
   kanbanFields = checked; currentWorkspace.kanban_fields = checked; alert('Kanban fields saved.');
 }
 
-async function loadInvites() {
-  const codes = await api.get('/api/invites');
+async function loadInvites(prefetched) {
+  const codes = prefetched ?? await api.get('/api/invites');
   const el = document.getElementById('invites-list'); if (!el) return;
   el.innerHTML = Array.isArray(codes) && codes.length
     ? codes.map(c => `
@@ -412,8 +427,8 @@ async function generateInviteCode() {
 async function deleteInviteCode(id) { await api.del(`/api/invites/${id}`); await loadInvites(); }
 function copyCode(code) { navigator.clipboard.writeText(code).then(() => alert(`Copied: ${code}`)); }
 
-async function loadMembers() {
-  const list = await api.get('/api/workspace/members');
+async function loadMembers(prefetched) {
+  const list = prefetched ?? await api.get('/api/workspace/members');
   const el = document.getElementById('members-list'); if (!el) return;
   el.innerHTML = (Array.isArray(list) ? list : []).map(m => `
     <li class="settings-row">
@@ -453,12 +468,15 @@ async function deleteWorkspace() {
   window.location.href = '/';
 }
 
-async function loadTaskSettings() {
+// Called with the rows loadSettings() already fetched, or bare (Tasks tab click, status save) to fetch its own.
+async function loadTaskSettings(prefetchedMe, prefetchedFields) {
   try {
-    const [me, tf] = await Promise.all([
-      api.get('/api/auth/me'),
-      api.get('/api/task-fields'),
-    ]);
+    const [me, tf] = prefetchedMe !== undefined
+      ? [prefetchedMe, prefetchedFields]
+      : await Promise.all([
+          api.get('/api/auth/me'),
+          api.get('/api/task-fields'),
+        ]);
     if (me?.workspace?.task_statuses) {
       currentWorkspace.task_statuses = me.workspace.task_statuses;
     }

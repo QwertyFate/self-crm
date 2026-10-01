@@ -28,14 +28,11 @@ const F = loadFns('public/js/integrations.js',
   { state: { currentLang: 'en', engineData: null }, extra });
 
 describe('markup', () => {
-  test('one engine card inside the Integrations page, between the lead webhook card and the platform guides', () => {
+  test('one engine card, in the Engine pane of the Integrations page; the Settings page carries nothing of it', () => {
     assert.equal(count(html, 'id="engine-card"'), 1);
     assert.ok(cardStart > 0, 'card is inside #page-integrations');
-    const afterWebhook = page.indexOf('id="intg-msg"');
-    const guides       = page.indexOf('How to connect platforms');
-    assert.ok(afterWebhook > 0 && guides > 0, 'sibling cards found');
-    assert.ok(cardStart > afterWebhook, 'engine card comes after the lead webhook card');
-    assert.ok(cardStart < guides, 'engine card comes before the platform guides');
+    assert.ok(page.indexOf('id="intg-pane-engine"') > 0 && page.indexOf('id="intg-pane-engine"') < cardStart, 'engine card sits in its own pane');
+    assert.ok(page.indexOf('id="intg-pane-deliveries"') < page.indexOf('id="engine-deliveries"'), 'the deliveries list is in the Deliveries pane');
     const settingsStart = html.indexOf('<section id="page-settings"');
     const settings = html.slice(settingsStart, html.indexOf('</section>', settingsStart));
     assert.ok(!settings.includes('engine-'), 'settings page untouched');
