@@ -35,6 +35,11 @@ function startClock() {
   clockTimer = setInterval(updateClock, 1000);
 }
 
+function stopClock() {
+  clearInterval(clockTimer);
+  clockTimer = null;
+}
+
 function updateClock() {
   const el = document.getElementById('sidebar-clock');
   if (!el) return;

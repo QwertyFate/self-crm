@@ -61,7 +61,7 @@ function showApp() {
   loadNotifPrefs();
   startNotifPolling();
   startClock();
-  loadDeals();
+  switchPage('deals');   // every entry lands on a freshly loaded Deals page, never on whatever page the previous user left active
   initChatSocket();
   refreshChatBadge();
   setTimeout(maybeStartGuide, 800);
@@ -129,6 +129,7 @@ async function handleLogin(e) {
   kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = data.workspace.contact_columns || [];
   dealColumns      = Array.isArray(data.user?.deal_columns) ? data.user.deal_columns : [];
+  objectColumns    = data.workspace.object_columns  || [];
   showApp();
 }
 
@@ -370,8 +371,7 @@ async function handleResetPassword(e) {
 async function logout(e) {
   e?.preventDefault();
   await api.post('/api/auth/logout', {});
-  currentUser = currentWorkspace = null;
-  contacts = stages = fields = activities = members = [];
+  resetClientState();
   showAuth();
 }
 
@@ -401,6 +401,34 @@ async function switchPage(page) {
 }
 
 function invalidate() { contacts = []; stages = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }
+
+// Puts the browser back to the state it has on a fresh page load, so a login in the
+// same tab (no reload) can never show anything of the previous user's workspace:
+// background work stops, every workspace-scoped value returns to its initial value,
+// and the per-workspace storage keys go. Browser preferences (language, theme,
+// view modes, the guide flag) stay.
+function resetClientState() {
+  stopNotifPolling(); stopClock();
+  if (socket) { socket.disconnect(); socket = null; }
+  onlineUsers = []; chatOldestId = null; chatNewestId = null; chatOpen = false; chatPageOpen = false; chatLoadingMore = false;
+  updateChatBadge(0);
+  currentUser = null; currentWorkspace = null;
+  contacts = []; stages = []; fields = []; activities = []; members = [];
+  pipelines = []; deals = []; dealFields = []; dealColumns = []; currentPipelineId = null; dragDealId = null;
+  kanbanFields = ['company', 'email']; dealKanbanFields = ['contact', 'value']; contactColumns = []; colWidths = {};
+  objects = []; objectFields = []; objectColumns = []; objCurrentPage = 1;
+  tasks = []; taskProjects = []; currentProjectId = null; currentListId = null; currentProject = null; taskFields = []; taskLinkOptionsCache = null; collapsedTasks = new Set();
+  analyticsData = null; trendRawData = null; calEvents = [];
+  intgData = null; engineData = null; activeGuideId = null; activeCustomKeys = [];
+  currentSettingsTab = 'workspace'; currentIntgTab = 'webhook';
+  currentContactType = 'contact'; filteredContacts = []; kanbanAllContacts = []; selectedContactIds = new Set(); selectionModeOn = false;
+  currentPage = 1; sortKey = null; sortDir = 'asc'; activeFilters = {}; filterPanelOpen = false;
+  notifPanelOpen = false;
+  const notifList = document.getElementById('notif-list'); if (notifList) notifList.innerHTML = '';
+  document.getElementById('notif-panel')?.classList.add('hidden');
+  localStorage.removeItem('lastTaskListId');
+  Object.keys(localStorage).filter(k => k.startsWith('proj-collapsed-')).forEach(k => localStorage.removeItem(k));
+}
 async function ensureStages()   { if (!stages.length)   stages   = await api.get('/api/stages'); }
 async function ensureFields()   { if (!fields.length)   fields   = await api.get('/api/fields'); }
 async function ensureContacts() { if (!contacts.length) contacts = await api.get('/api/contacts'); }

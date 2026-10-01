@@ -127,6 +127,7 @@ async function saveNotifPrefs() {
 }
 
 function startNotifPolling() {
+  clearInterval(notifPollTimer);   // a second login in the same tab replaces the poller instead of stacking one
   loadNotifications(false);
   notifPollTimer = setInterval(() => { loadNotifications(false); }, 30000);
 }
