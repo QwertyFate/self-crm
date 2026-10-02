@@ -58,6 +58,11 @@ const webhookKeyLimiter = rateLimit({
   keyGenerator: (req) => req.params.key || 'unknown',
 });
 
+// Express's json() default body limit is 100kb, too small for a CSV contact import
+// sent as a JSON array of rows; raise it just for that route (body-parser skips
+// re-parsing a request whose body it already read, so the global json() below still
+// applies to every other route at the default, smaller limit).
+app.use('/api/contacts/import', express.json({ limit: '10mb' }));
 app.use(express.json());
 
 const sessionMiddleware = session({
@@ -118,6 +123,9 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
 
 app.use((err, req, res, next) => {
   console.error(err);
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'That request is too large. Try importing fewer rows at once.' });
+  }
   res.status(500).json({ error: 'Internal server error' });
 });
 

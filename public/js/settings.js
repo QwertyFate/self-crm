@@ -90,7 +90,7 @@ async function saveWorkspaceName() {
   const name = input.value.trim(); if (!name) return;
   const res = await api.patch('/api/workspace/name', { name });
   if (res.error) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); return; }
-  currentWorkspace.name = res.name; document.getElementById('sidebar-workspace').textContent = res.name;
+  currentWorkspace.name = res.name; setSidebarWorkspace(res.name);
   msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden');
   setTimeout(() => msgEl.classList.add('hidden'), 2500);
 }

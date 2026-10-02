@@ -103,8 +103,7 @@ async function loadTourFlag() {
   } catch {
     tourEnabled = false;
   }
-  // The Help / Tour button only exists while the tour is enabled.
-  document.getElementById('guide-help-btn')?.closest('li')?.classList.toggle('hidden', !tourEnabled);
+  // The "Start the product tour" entry of the top-bar help menu reads this flag (openHelpMenu in core.js).
   return tourEnabled;
 }
 
@@ -161,7 +160,14 @@ async function showGuideStep(idx) {
   document.getElementById('guide-step-counter').textContent = `${idx + 1} of ${GUIDE_STEPS.length}`;
 
   document.getElementById('guide-prev-btn').style.visibility = idx === 0 ? 'hidden' : '';
-  document.getElementById('guide-next-btn').textContent = idx === GUIDE_STEPS.length - 1 ? 'Finish' : 'Next →';
+  // Sets the button's own label and icon without touching its siblings — a
+  // plain `.textContent =` here used to wipe out the arrow icon entirely,
+  // from the very first step onward (fixed; see DESIGN_PRO_CHANGES.md Part 15).
+  const isLast = idx === GUIDE_STEPS.length - 1;
+  const nextBtn = document.getElementById('guide-next-btn');
+  nextBtn.innerHTML = isLast
+    ? `<span>Finish</span>${icon('check', 'ic-sm')}`
+    : `<span>Next</span>${icon('chevron-right', 'ic-sm')}`;
 
   document.getElementById('guide-dots').innerHTML = GUIDE_STEPS.map((_, i) =>
     `<span class="guide-dot${i === idx ? ' active' : ''}"></span>`

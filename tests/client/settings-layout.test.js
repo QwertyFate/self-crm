@@ -24,7 +24,7 @@ describe('tabs', () => {
     assert.match(section, /<button class="settings-tab" data-tab="objects" onclick="switchSettingsTab\('objects'\)" id="settings-tab-objects">[^<]*<\/button>/, 'Listings label is a bare text button set by updateObjectsNav');
   });
   test('the sidebar clock still jumps to Preferences', () => {
-    assert.match((html.match(/<div class="sidebar-clock"[^>]*>/) || [''])[0], /switchSettingsTab\('preferences'\)/);
+    assert.match((html.match(/<span class="sidebar-clock[^"]*"[^>]*>/) || [''])[0], /switchSettingsTab\('preferences'\)/);
   });
 });
 

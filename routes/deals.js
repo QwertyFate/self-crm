@@ -32,7 +32,7 @@ router.get('/', async (req, res, next) => {
     if (contact_id)  { params.push(contact_id);  filter += ` AND d.contact_id  = $${params.length}`; }
     const { rows } = await pool.query(`
       SELECT d.*,
-             c.name  AS contact_name,  c.email AS contact_email, c.phone AS contact_phone,
+             c.name  AS contact_name,  c.email AS contact_email, c.phone AS contact_phone, c.company AS contact_company,
              s.name  AS supplier_name_val,
              ps.name AS stage_name,    ps.color AS stage_color,
              u.name  AS assigned_to_name
@@ -52,7 +52,7 @@ router.get('/:id', async (req, res, next) => {
   try {
     const { rows: [deal] } = await pool.query(`
       SELECT d.*,
-             c.name  AS contact_name,  c.email AS contact_email, c.phone AS contact_phone,
+             c.name  AS contact_name,  c.email AS contact_email, c.phone AS contact_phone, c.company AS contact_company,
              s.name  AS supplier_name_val,
              ps.name AS stage_name,    ps.color AS stage_color,
              u.name  AS assigned_to_name

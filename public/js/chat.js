@@ -274,7 +274,7 @@ function renderMessagesToPage(messages, prepend = false) {
   let lastUser = null;
 
   if (!prepend && el.innerHTML) {
-    const lastMsg = el.querySelectorAll('.chat-msg:not(.chat-day-sep)');
+    const lastMsg = el.querySelectorAll('.msg:not(.chat-day-sep)');
     if (lastMsg.length > 0) {
       const lastMsgEl = lastMsg[lastMsg.length - 1];
       const prevDaySep = lastMsgEl.previousElementSibling;
@@ -284,6 +284,9 @@ function renderMessagesToPage(messages, prepend = false) {
     }
   }
 
+  // Message rows follow the reference's flat .msg convention (00b): avatar once per
+  // run of consecutive messages from the same sender, a grouped row's own time shows
+  // only on hover (.gtime), same-day messages are separated by one .chat-day-sep.
   messages.forEach((msg) => {
     const isMe = msg.user_id === myId;
     const msgDate = msg.created_at;
@@ -298,12 +301,11 @@ function renderMessagesToPage(messages, prepend = false) {
     lastUser = msg.user_id;
 
     html += `
-      <div class="chat-msg${isMe ? ' me' : ''}${grouped ? ' grouped' : ''}" data-id="${msg.id}" data-created="${msg.created_at}">
-        ${!isMe && !grouped ? `<div class="chat-avatar">${chatAvatar(msg.user_name)}</div>` : ''}
-        ${!isMe && grouped ? `<div class="chat-avatar-spacer"></div>` : ''}
-        <div class="chat-bubble-wrap">
-          ${!grouped ? `<div class="chat-meta">${isMe ? 'You' : esc(msg.user_name)} <span class="chat-time">${chatTimeLabel(msg.created_at)}</span></div>` : ''}
-          <div class="chat-bubble">${esc(msg.content)}</div>
+      <div class="msg${grouped ? ' grouped' : ''}" data-id="${msg.id}" data-created="${msg.created_at}">
+        ${grouped ? `<span class="gtime">${chatTimeLabel(msg.created_at)}</span>` : avatar(msg.user_name)}
+        <div>
+          ${!grouped ? `<div><span class="who">${isMe ? 'You' : esc(msg.user_name)}</span><span class="when">${chatTimeLabel(msg.created_at)}</span></div>` : ''}
+          <div class="ch-text">${esc(msg.content)}</div>
         </div>
       </div>`;
   });

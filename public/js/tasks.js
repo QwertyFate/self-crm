@@ -94,12 +94,12 @@ function renderProjectNav() {
     return `
       <div class="tasks-proj-item" id="proj-item-${p.id}">
         <div class="tasks-proj-header" onclick="toggleProjectExpand(${p.id})">
-          <span class="tasks-proj-chevron${isOpen ? ' open' : ''}">▶</span>
+          <span class="tasks-proj-chevron${isOpen ? ' open' : ''}">${icon('chevron-right', 'ic-sm')}</span>
           <span class="tasks-proj-dot" style="background:${esc(p.color)}"></span>
           <span class="tasks-proj-name">${esc(p.name)}</span>
           <span class="tasks-proj-actions" onclick="event.stopPropagation()">
-            <button onclick="openProjectModal(${p.id})" title="Edit">✏️</button>
-            <button onclick="deleteProject(${p.id})" title="Delete" style="color:var(--danger)">✕</button>
+            <button onclick="openProjectModal(${p.id})" title="Edit">${icon('pencil', 'ic-sm')}</button>
+            <button onclick="deleteProject(${p.id})" title="Delete" style="color:var(--danger)">${icon('x', 'ic-sm')}</button>
           </span>
         </div>
         <div class="tasks-proj-lists" id="proj-lists-${p.id}" ${isOpen ? '' : 'style="display:none"'}>
@@ -109,14 +109,14 @@ function renderProjectNav() {
               data-project-id="${p.id}"
               data-list-id="${l.id}"
               onclick="selectListById(${p.id}, ${l.id})">
-              <span>📋</span>
+              <span>${icon('list', 'ic-sm')}</span>
               <span class="tasks-list-item-name">${esc(l.name)}</span>
               <span class="tasks-list-actions" onclick="event.stopPropagation()">
-                <button onclick="openListModal(${p.id},${l.id},'${esc(l.name).replace(/'/g,'&apos;')}')" title="Rename">✏️</button>
-                <button onclick="deleteList(${l.id})" title="Delete" style="color:var(--danger)">✕</button>
+                <button onclick="openListModal(${p.id},${l.id},'${esc(l.name).replace(/'/g,'&apos;')}')" title="Rename">${icon('pencil', 'ic-sm')}</button>
+                <button onclick="deleteList(${l.id})" title="Delete" style="color:var(--danger)">${icon('x', 'ic-sm')}</button>
               </span>
             </div>`).join('')}
-          <button class="tasks-add-list-btn" onclick="openListModal(${p.id})">+ Add list</button>
+          <button class="tasks-add-list-btn" onclick="openListModal(${p.id})">${icon('plus', 'ic-sm')}Add list</button>
         </div>
       </div>`;
   }).join('');
@@ -232,8 +232,8 @@ function populateTaskAssigneeFilter() {
 function setTaskView(mode, save = true) {
   taskViewMode = mode;
   if (save) localStorage.setItem('taskViewMode', mode);
-  document.getElementById('task-view-list')?.classList.toggle('active',   mode === 'list');
-  document.getElementById('task-view-kanban')?.classList.toggle('active', mode === 'kanban');
+  document.getElementById('task-view-list')?.setAttribute('aria-pressed', String(mode === 'list'));
+  document.getElementById('task-view-kanban')?.setAttribute('aria-pressed', String(mode === 'kanban'));
   document.getElementById('tasks-list-view')?.classList.toggle('hidden',  mode === 'kanban');
   document.getElementById('tasks-kanban-view')?.classList.toggle('hidden', mode === 'list');
   renderTasksCurrent();
@@ -293,16 +293,16 @@ function taskListRow(t, isSubtask = false, subMap = {}) {
   return `
     <div class="task-row${isDone ? ' done-row' : ''}${isSubtask ? ' subtask-row' : ''}" id="task-row-${t.id}">
       ${!isSubtask ? `<button class="task-expand-btn${hasSubtasks ? '' : ''}" id="expand-${t.id}"
-        onclick="toggleSubtasksRow(event,${t.id})" ${!hasSubtasks ? 'style="visibility:hidden"' : ''}>▶</button>`
+        onclick="toggleSubtasksRow(event,${t.id})" ${!hasSubtasks ? 'style="visibility:hidden"' : ''}>${icon('chevron-right', 'ic-sm')}</button>`
         : '<span style="width:18px;flex-shrink:0"></span>'}
-      <div class="task-check${isDone ? ' done' : ''}" onclick="toggleTaskDone(event,${t.id},${isDone})">${isDone ? '✓' : ''}</div>
+      <div class="task-check${isDone ? ' done' : ''}" onclick="toggleTaskDone(event,${t.id},${isDone})">${isDone ? icon('check', 'ic-sm') : ''}</div>
       <div class="task-title${isDone ? ' done' : ''}" onclick="openTaskModal(${t.id})">${esc(t.title)}</div>
       <div class="task-meta">
-        ${hasSubtasks && !isSubtask ? `<span class="task-subtask-count">⊞ ${t.subtask_done||0}/${t.subtask_count}</span>` : ''}
+        ${hasSubtasks && !isSubtask ? `<span class="task-subtask-count">${icon('check-square', 'ic-sm')} ${t.subtask_done||0}/${t.subtask_count}</span>` : ''}
         <span class="priority-badge priority-${t.priority}">${PRIORITY_LABELS[t.priority]}</span>
         ${t.assigned_to_name ? `<span class="task-assignee-chip">${esc(t.assigned_to_name)}</span>` : ''}
-        ${dueStr ? `<span class="task-due${isOverdue ? ' overdue' : ''}">${isOverdue ? '⚠ ' : ''}${dueStr}</span>` : ''}
-        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteTask(event,${t.id})" title="Delete">✕</button>
+        ${dueStr ? `<span class="task-due${isOverdue ? ' overdue' : ''}">${isOverdue ? icon('alert', 'ic-sm') + ' ' : ''}${dueStr}</span>` : ''}
+        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteTask(event,${t.id})" title="Delete">${icon('x', 'ic-sm')}</button>
       </div>
     </div>
     <div class="subtask-rows hidden" id="subtasks-of-${t.id}">${subRows}</div>`;
@@ -371,14 +371,14 @@ function taskKanbanCard(t, subMap = {}, colStatus) {
       <div style="display:flex;align-items:flex-start;gap:4px">
         ${hasSubtasks ? `<button class="task-subtask-toggle${isCollapsed ? '' : ' open'}"
           onclick="event.stopPropagation();toggleKanbanSubtasks(${t.id})"
-          title="${isCollapsed ? 'Expand' : 'Collapse'} subtasks">▶</button>` : ''}
+          title="${isCollapsed ? 'Expand' : 'Collapse'} subtasks">${icon('chevron-right', 'ic-sm')}</button>` : ''}
         <div class="task-card-title${isDone ? ' done' : ''}" style="flex:1">${esc(t.title)}</div>
       </div>
       <div class="task-card-meta">
         <span class="priority-badge priority-${t.priority}">${PRIORITY_LABELS[t.priority]}</span>
-        ${subtasks.length ? `<span class="task-card-sub">⊞ ${subtasks.filter(s=>s.status===(getActiveTaskStatuses().at(-1)?.key||'done')).length}/${subtasks.length}</span>` : ''}
+        ${subtasks.length ? `<span class="task-card-sub">${icon('check-square', 'ic-sm')} ${subtasks.filter(s=>s.status===(getActiveTaskStatuses().at(-1)?.key||'done')).length}/${subtasks.length}</span>` : ''}
         ${t.assigned_to_name ? `<span class="task-assignee-chip">${esc(t.assigned_to_name)}</span>` : ''}
-        ${dueStr ? `<span class="task-due${isOverdue ? ' overdue' : ''}">${isOverdue ? '⚠ ' : ''}${dueStr}</span>` : ''}
+        ${dueStr ? `<span class="task-due${isOverdue ? ' overdue' : ''}">${isOverdue ? icon('alert', 'ic-sm') + ' ' : ''}${dueStr}</span>` : ''}
       </div>
     </div>
     ${subtaskCards}`;
@@ -423,483 +423,9 @@ async function toggleTaskDone(e, taskId, isDone) {
 
 async function deleteTask(e, taskId) {
   e.stopPropagation();
-  if (!confirm('Delete this task and all its subtasks?')) return;
+  const ok = await ui.confirm({ title: 'Delete this task?', message: 'Its subtasks are deleted with it. This cannot be undone.', confirmLabel: 'Delete task', danger: true });
+  if (!ok) return;
   await api.del(`/api/tasks/${taskId}`);
   tasks = tasks.filter(t => t.id !== taskId && t.parent_id !== taskId);
   renderTasksCurrent();
-}
-
-let currentTaskId = null;
-
-function renderTaskFieldInput(f, value = '') {
-  const id = `tfield-${f.field_key}`;
-  if (f.type === 'dropdown') return `<select id="${id}">
-    <option value="">— Select —</option>
-    ${(f.options||[]).map(o => `<option value="${esc(o)}"${value===o?' selected':''}>${esc(o)}</option>`).join('')}
-  </select>`;
-  const typeMap = { text:'text', email:'email', phone:'tel', number:'number', date:'date', url:'url' };
-  return `<input type="${typeMap[f.type]||'text'}" id="${id}" value="${esc(value)}" />`;
-}
-
-async function openTaskModal(id, ctx = null) {
-  await ensureMembers();
-  if (!taskFields.length) taskFields = await api.get('/api/task-fields');
-  if (!taskProjects.length) {
-    try { taskProjects = await api.get('/api/task-projects'); } catch (e) { taskProjects = []; }
-  }
-
-  let taskEdit = null;
-
-  document.getElementById('task-form').reset();
-  document.getElementById('task-id').value        = id || '';
-  document.getElementById('task-parent-id').value = '';
-  document.getElementById('task-modal-title').textContent = id ? 'Edit Task' : 'Add Task';
-  document.getElementById('task-delete-btn').style.display = id ? '' : 'none';
-  document.getElementById('task-deal-id').value = '';
-  document.getElementById('task-contact-id').value = '';
-
-  const statuses = getActiveTaskStatuses();
-  document.getElementById('task-status').innerHTML =
-    statuses.map(s => `<option value="${s.key}">${esc(s.label)}</option>`).join('');
-
-  document.getElementById('task-assignee').innerHTML =
-    `<option value="">— Unassigned —</option>` +
-    members.map(m => `<option value="${m.id}"${m.id === currentUser?.id && !id ? ' selected' : ''}>${esc(m.name)}</option>`).join('');
-
-  const sideCol = document.getElementById('task-side-col');
-  const subSection = document.getElementById('task-subtasks-section');
-
-  if (id) {
-    currentTaskId = id;
-    const t = await api.get(`/api/tasks/${id}`);
-    taskEdit = t;
-    document.getElementById('task-title').value       = t.title;
-    document.getElementById('task-description').value = t.description || '';
-    document.getElementById('task-status').value      = t.status;
-    document.getElementById('task-priority').value    = t.priority;
-    document.getElementById('task-assignee').value    = t.assigned_to || '';
-    document.getElementById('task-due-date').value    = t.due_date ? t.due_date.slice(0,10) : '';
-
-    document.getElementById('task-custom-fields').innerHTML = taskFields.map(f =>
-      `<div class="form-group"><label>${esc(f.name)}</label>${renderTaskFieldInput(f, t.custom_data?.[f.field_key] ?? '')}</div>`
-    ).join('');
-
-    if (sideCol)    sideCol.style.display    = '';
-    if (subSection) subSection.style.display = '';
-    renderSubtasksList(t.subtasks || [], id);
-  } else {
-    currentTaskId = null;
-    document.getElementById('task-status').value = statuses[0]?.key || 'todo';
-
-    document.getElementById('task-custom-fields').innerHTML = taskFields.map(f =>
-      `<div class="form-group"><label>${esc(f.name)}</label>${renderTaskFieldInput(f, '')}</div>`
-    ).join('');
-
-    if (sideCol)    sideCol.style.display    = '';
-    if (subSection) subSection.style.display = 'none';
-  }
-
-  setupTaskModalContext(taskEdit, ctx);
-
-  document.getElementById('task-modal').classList.remove('hidden');
-}
-
-let taskOpenLinks = { dealId: null, dealTitle: null, contactId: null, contactName: null };
-
-function populateTaskProjectSelect(selectedProjectId) {
-  const sel = document.getElementById('task-project');
-  if (!sel) return;
-  sel.innerHTML = '<option value="">— No project —</option>' +
-    taskProjects.map(p =>
-      `<option value="${p.id}"${p.id === selectedProjectId ? ' selected' : ''}>${esc(p.name)}</option>`
-    ).join('');
-}
-
-function populateTaskListSelect(projectId, selectedListId) {
-  const sel = document.getElementById('task-list');
-  if (!sel) return;
-  const project = taskProjects.find(p => p.id === projectId);
-  const lists   = project?.lists || [];
-  sel.innerHTML = '<option value="">— No list —</option>' +
-    lists.map(l =>
-      `<option value="${l.id}"${l.id === selectedListId ? ' selected' : ''}>${esc(l.name)}</option>`
-    ).join('');
-}
-
-function onTaskProjectChange() {
-  populateTaskListSelect(parseInt(document.getElementById('task-project')?.value) || null, null);
-}
-
-function setupTaskModalContext(taskEdit, ctx) {
-  hideTaskLinkPicker();
-  let projectId = null, listId = null;
-  if (taskEdit) {
-    projectId = taskEdit.project_id || currentProjectId || null;
-    listId    = taskEdit.list_id    || currentListId    || null;
-  } else {
-    projectId = currentProjectId || (taskProjects[0]?.id) || null;
-    listId    = currentListId;
-    if (!listId && projectId) listId = (taskProjects.find(p => p.id === projectId)?.lists || [])[0]?.id || null;
-  }
-  populateTaskProjectSelect(projectId);
-  populateTaskListSelect(projectId, listId);
-
-  const links = taskEdit
-    ? {
-        dealId:     taskEdit.deal_id     || null,
-        dealTitle:  taskEdit.deal_title  || null,
-        contactId:  taskEdit.contact_id  || null,
-        contactName: taskEdit.contact_name || null,
-      }
-    : (ctx || {});
-  renderTaskLinks(links);
-}
-
-function renderTaskLinks(links = {}) {
-  taskOpenLinks = {
-    dealId:     links.dealId     || null,
-    dealTitle:  links.dealTitle  || null,
-    contactId:  links.contactId  || null,
-    contactName: links.contactName || null,
-  };
-  document.getElementById('task-deal-id').value    = taskOpenLinks.dealId || '';
-  document.getElementById('task-contact-id').value = taskOpenLinks.contactId || '';
-
-  const el = document.getElementById('task-links');
-  if (!el) return;
-  const rows = [];
-  if (taskOpenLinks.dealId) {
-    rows.push(`<div class="task-link-row">
-      <span class="task-link-k">Deal</span>
-      <a class="task-link-a" onclick="openLinkedTaskObject('deal',${taskOpenLinks.dealId})" title="Open deal">${esc(taskOpenLinks.dealTitle || `Deal #${taskOpenLinks.dealId}`)}</a>
-      <button type="button" class="task-link-clear" onclick="clearTaskLink('deal')" title="Unlink deal">×</button>
-    </div>`);
-  }
-  if (taskOpenLinks.contactId) {
-    rows.push(`<div class="task-link-row">
-      <span class="task-link-k">Contact</span>
-      <a class="task-link-a" onclick="openLinkedTaskObject('contact',${taskOpenLinks.contactId})" title="Open contact">${esc(taskOpenLinks.contactName || `Contact #${taskOpenLinks.contactId}`)}</a>
-      <button type="button" class="task-link-clear" onclick="clearTaskLink('contact')" title="Unlink contact">×</button>
-    </div>`);
-  }
-  el.innerHTML = rows.length
-    ? rows.join('')
-    : '<span class="task-link-empty">Not linked to a deal or contact.</span>';
-}
-
-function clearTaskLink(kind) {
-  const links = { ...taskOpenLinks };
-  if (kind === 'deal')    { links.dealId = null;    links.dealTitle = null; }
-  if (kind === 'contact') { links.contactId = null; links.contactName = null; }
-  renderTaskLinks(links);
-}
-
-let taskLinkOptionsCache = null;
-
-async function ensureTaskLinkOptions() {
-  if (taskLinkOptionsCache) return taskLinkOptionsCache;
-  const [deals, contacts] = await Promise.all([
-    api.get('/api/deals'),
-    api.get('/api/contacts?contact_type=contact'),
-  ]);
-  taskLinkOptionsCache = { deals: deals || [], contacts: contacts || [] };
-  return taskLinkOptionsCache;
-}
-
-function hideTaskLinkPicker() {
-  const picker = document.getElementById('task-link-picker');
-  if (picker) picker.style.display = 'none';
-}
-
-async function toggleTaskLinkPicker() {
-  const picker = document.getElementById('task-link-picker');
-  if (!picker) return;
-  if (picker.style.display !== 'none') { picker.style.display = 'none'; return; }
-
-  picker.style.display = 'flex';
-  const { deals, contacts } = await ensureTaskLinkOptions();
-
-  const dealSel = document.getElementById('task-link-deal');
-  if (dealSel) {
-    dealSel.innerHTML = '<option value="">— No deal —</option>' +
-      deals.map(d => `<option value="${d.id}"${taskOpenLinks.dealId === d.id ? ' selected' : ''}>${esc(d.title || 'Deal #' + d.id)}</option>`).join('');
-  }
-  const contactSel = document.getElementById('task-link-contact');
-  if (contactSel) {
-    contactSel.innerHTML = '<option value="">— No contact —</option>' +
-      contacts.map(c => `<option value="${c.id}"${taskOpenLinks.contactId === c.id ? ' selected' : ''}>${esc(c.name)}</option>`).join('');
-  }
-}
-
-function cancelTaskLinkPicker() {
-  hideTaskLinkPicker();
-}
-
-function confirmTaskLink() {
-  const dealSel    = document.getElementById('task-link-deal');
-  const contactSel = document.getElementById('task-link-contact');
-  const dealVal    = parseInt(dealSel?.value, 10) || null;
-  const contactVal = parseInt(contactSel?.value, 10) || null;
-  if (!dealVal && !contactVal) { alert('Select a deal or contact to link.'); return; }
-
-  const links = { ...taskOpenLinks };
-  const options = taskLinkOptionsCache || { deals: [], contacts: [] };
-  if (dealVal) {
-    links.dealId    = dealVal;
-    links.dealTitle = options.deals.find(d => d.id === dealVal)?.title || null;
-  }
-  if (contactVal) {
-    links.contactId    = contactVal;
-    links.contactName  = options.contacts.find(c => c.id === contactVal)?.name || null;
-  }
-  renderTaskLinks(links);
-  hideTaskLinkPicker();
-}
-
-function openLinkedTaskObject(kind, id) {
-  closeModal('task-modal');
-  if (kind === 'deal')    openDealModal(id);
-  else                    openDetail(id);
-}
-
-async function openTaskModalForContact(contactId) {
-  let contactName = null;
-  try {
-    const c = await api.get(`/api/contacts/${contactId}`);
-    if (c && !c.error) contactName = c.name;
-  } catch (e) { /* optional */ }
-  openTaskModal(null, { contactId: contactId || null, contactName });
-}
-
-function renderSubtasksList(subtasks, parentId) {
-  const el = document.getElementById('task-subtasks-list');
-  if (!el) return;
-  el.innerHTML = subtasks.map(s => `
-    <div class="subtask-item" id="subtask-item-${s.id}">
-      <input type="checkbox" ${s.status === (getActiveTaskStatuses().at(-1)?.key||'done') ? 'checked' : ''}
-        onchange="toggleSubtaskDone(${s.id}, this.checked, ${parentId})" />
-      <span class="subtask-item-title${s.status === (getActiveTaskStatuses().at(-1)?.key||'done') ? ' done' : ''}">${esc(s.title)}</span>
-      <button type="button" class="btn btn-sm btn-danger btn-icon" style="padding:1px 5px"
-        onclick="deleteSubtask(${s.id}, ${parentId})">✕</button>
-    </div>`).join('') || `<p style="color:var(--muted);font-size:12px">No subtasks yet.</p>`;
-}
-
-async function addSubtask() {
-  const input = document.getElementById('new-subtask-input');
-  const title = input?.value.trim();
-  if (!title || !currentTaskId) return;
-  const statuses = getActiveTaskStatuses();
-  await api.post('/api/tasks', {
-    title, parent_id: currentTaskId,
-    project_id: currentProjectId, list_id: currentListId,
-    status: statuses[0]?.key || 'todo', priority: 'medium',
-  });
-  input.value = '';
-  const fresh = await api.get(`/api/tasks/${currentTaskId}`);
-  renderSubtasksList(fresh.subtasks || [], currentTaskId);
-  const t = tasks.find(t => t.id === currentTaskId);
-  if (t) t.subtask_count = fresh.subtasks.length;
-}
-
-async function toggleSubtaskDone(subtaskId, done, parentId) {
-  const statuses = getActiveTaskStatuses();
-  const doneKey  = statuses.at(-1)?.key || 'done';
-  const firstKey = statuses[0]?.key     || 'todo';
-  await api.patch(`/api/tasks/${subtaskId}/status`, { status: done ? doneKey : firstKey });
-  const el = document.querySelector(`#subtask-item-${subtaskId} .subtask-item-title`);
-  if (el) el.classList.toggle('done', done);
-  const fresh = await api.get(`/api/tasks/${parentId}`);
-  const parent = tasks.find(t => t.id === parentId);
-  if (parent) parent.subtask_done = fresh.subtasks.filter(s => s.status === doneKey).length;
-  renderTasksCurrent();
-}
-
-async function deleteSubtask(subtaskId, parentId) {
-  if (!confirm('Delete this subtask?')) return;
-  await api.del(`/api/tasks/${subtaskId}`);
-  const fresh = await api.get(`/api/tasks/${parentId}`);
-  renderSubtasksList(fresh.subtasks || [], parentId);
-  const parent = tasks.find(t => t.id === parentId);
-  if (parent) {
-    const doneKey = getActiveTaskStatuses().at(-1)?.key || 'done';
-    parent.subtask_count = fresh.subtasks.length;
-    parent.subtask_done  = fresh.subtasks.filter(s => s.status === doneKey).length;
-  }
-  renderTasksCurrent();
-}
-
-async function saveTask(e) {
-  e.preventDefault();
-  const id = document.getElementById('task-id').value;
-  const custom_data = Object.fromEntries(
-    taskFields.map(f => [f.field_key, document.getElementById(`tfield-${f.field_key}`)?.value || ''])
-  );
-  const payload = {
-    title:       document.getElementById('task-title').value,
-    description: document.getElementById('task-description').value,
-    status:      document.getElementById('task-status').value,
-    priority:    document.getElementById('task-priority').value,
-    assigned_to: document.getElementById('task-assignee').value || null,
-    due_date:    document.getElementById('task-due-date').value || null,
-    project_id:  document.getElementById('task-project').value || currentProjectId || null,
-    list_id:     document.getElementById('task-list').value || null,
-    deal_id:     document.getElementById('task-deal-id').value || null,
-    contact_id:  document.getElementById('task-contact-id').value || null,
-    custom_data,
-  };
-  if (id) await api.put(`/api/tasks/${id}`, payload);
-  else    await api.post('/api/tasks', payload);
-  closeModal('task-modal');
-  if (currentListId) {
-    tasks = await api.get(`/api/tasks?list_id=${currentListId}`);
-    renderTasksCurrent();
-  }
-}
-
-async function deleteTaskFromModal() {
-  const id = document.getElementById('task-id').value;
-  if (!id || !confirm('Delete this task and all its subtasks?')) return;
-  await api.del(`/api/tasks/${id}`);
-  closeModal('task-modal');
-  tasks = tasks.filter(t => t.id !== Number(id) && t.parent_id !== Number(id));
-  renderTasksCurrent();
-}
-
-const VIEWABLE_TYPES = [
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'application/msword', 'application/vnd.ms-excel', 'application/vnd.ms-powerpoint',
-  'text/plain', 'text/csv',
-];
-const IMAGE_TYPES = ['image/png','image/jpeg','image/gif','image/webp','image/svg+xml'];
-
-function fileIcon(type) {
-  if (IMAGE_TYPES.includes(type))      return '🖼';
-  if (type === 'application/pdf')      return '📄';
-  if (type.includes('word'))           return '📝';
-  if (type.includes('sheet') || type.includes('excel')) return '📊';
-  if (type.includes('presentation') || type.includes('powerpoint')) return '📑';
-  if (type.includes('text'))           return '📃';
-  return '📎';
-}
-
-function fmtSize(bytes) {
-  if (bytes < 1024)       return bytes + ' B';
-  if (bytes < 1048576)    return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / 1048576).toFixed(1) + ' MB';
-}
-
-async function loadTaskAttachments(taskId) {
-  const listEl  = document.getElementById('task-attachments-list');
-  const viewEl  = document.getElementById('task-file-viewer');
-  const errEl   = document.getElementById('task-attach-error');
-  if (!listEl) return;
-  errEl?.classList.add('hidden');
-  viewEl?.classList.add('hidden');
-
-  try {
-    const attachments = await api.get(`/api/tasks/${taskId}/attachments`);
-    renderAttachmentList(attachments, taskId);
-  } catch {
-    if (listEl) listEl.innerHTML = '';
-  }
-}
-
-function renderAttachmentList(attachments, taskId) {
-  const el = document.getElementById('task-attachments-list');
-  if (!el) return;
-  if (!attachments.length) { el.innerHTML = ''; return; }
-  el.innerHTML = attachments.map(a => `
-    <div class="task-attach-item" id="attach-${a.id}">
-      <span class="task-attach-icon">${fileIcon(a.file_type)}</span>
-      <span class="task-attach-name" title="${esc(a.file_name)}">${esc(a.file_name)}</span>
-      <span class="task-attach-size">${fmtSize(a.file_size)}</span>
-      <div class="task-attach-actions">
-        ${(VIEWABLE_TYPES.includes(a.file_type) || IMAGE_TYPES.includes(a.file_type))
-          ? `<button type="button" class="btn btn-sm btn-ghost" onclick="viewAttachment('${esc(a.file_url)}','${esc(a.file_type)}','${esc(a.file_name)}')">View</button>`
-          : ''}
-        <a href="${esc(a.file_url)}" download="${esc(a.file_name)}" class="btn btn-sm btn-ghost" target="_blank">↓</a>
-        <button type="button" class="btn btn-sm btn-danger btn-icon" onclick="deleteAttachment(${taskId},${a.id})">✕</button>
-      </div>
-    </div>`).join('');
-}
-
-function viewAttachment(url, type, name) {
-  const viewEl = document.getElementById('task-file-viewer');
-  if (!viewEl) return;
-
-  let content;
-  if (IMAGE_TYPES.includes(type)) {
-    content = `<img src="${esc(url)}" alt="${esc(name)}" />`;
-  } else {
-    const encoded = encodeURIComponent(url);
-    content = `<iframe src="https://docs.google.com/viewer?url=${encoded}&embedded=true" loading="lazy"></iframe>`;
-  }
-
-  viewEl.innerHTML = `
-    <div class="task-viewer-bar">
-      <span>${esc(name)}</span>
-      <button type="button" class="btn btn-sm btn-ghost" onclick="document.getElementById('task-file-viewer').classList.add('hidden')">✕ Close</button>
-    </div>
-    ${content}`;
-  viewEl.classList.remove('hidden');
-  viewEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-async function deleteAttachment(taskId, attachmentId) {
-  if (!confirm('Delete this attachment?')) return;
-  const res = await api.del(`/api/tasks/${taskId}/attachments/${attachmentId}`);
-  if (res.error) { alert(res.error); return; }
-  document.getElementById(`attach-${attachmentId}`)?.remove();
-}
-
-function taskAttachDragOver(e) { e.preventDefault(); document.getElementById('task-drop-zone')?.classList.add('drag-over'); }
-function taskAttachDragLeave(e) { document.getElementById('task-drop-zone')?.classList.remove('drag-over'); }
-function taskAttachDrop(e) {
-  e.preventDefault();
-  document.getElementById('task-drop-zone')?.classList.remove('drag-over');
-  const files = Array.from(e.dataTransfer.files);
-  if (files.length) uploadAttachments(files);
-}
-function taskAttachFileChange(e) {
-  const files = Array.from(e.target.files);
-  if (files.length) uploadAttachments(files);
-  e.target.value = '';
-}
-
-async function uploadAttachments(files) {
-  const taskId = document.getElementById('task-id').value;
-  if (!taskId) { alert('Save the task first before adding attachments.'); return; }
-
-  const errEl  = document.getElementById('task-attach-error');
-  const dropEl = document.getElementById('task-drop-zone');
-  errEl?.classList.add('hidden');
-
-  const MAX = 10 * 1024 * 1024;
-  const oversized = files.filter(f => f.size > MAX);
-  if (oversized.length) {
-    if (errEl) { errEl.textContent = `File too large: ${oversized.map(f=>f.name).join(', ')} (max 10 MB)`; errEl.classList.remove('hidden'); }
-    return;
-  }
-
-  if (dropEl) { dropEl.style.opacity = '.5'; dropEl.style.pointerEvents = 'none'; }
-
-  const uploaded = [];
-  for (const file of files) {
-    const form = new FormData();
-    form.append('file', file);
-    try {
-      const res = await fetch(`/api/tasks/${taskId}/attachments`, { method: 'POST', body: form });
-      const json = await res.json();
-      if (json.error) { if (errEl) { errEl.textContent = json.error; errEl.classList.remove('hidden'); } }
-      else uploaded.push(json);
-    } catch {
-      if (errEl) { errEl.textContent = 'Upload failed. Check your Supabase Storage configuration.'; errEl.classList.remove('hidden'); }
-    }
-  }
-
-  if (dropEl) { dropEl.style.opacity = ''; dropEl.style.pointerEvents = ''; }
-  if (uploaded.length) await loadTaskAttachments(taskId);
 }

@@ -23,11 +23,21 @@ function updateContactsPageHeader() {
   const name = isSupplier ? (currentWorkspace?.supplier_name || 'Suppliers') : 'Contacts';
   const singular = name.replace(/s$/i, '');
   const h1  = document.querySelector('#page-contacts .page-header h1');
-  const btn  = document.querySelector('#page-contacts .page-header .btn-primary');
+  const btnLabel = document.querySelector('#list-add-btn span');
   const search = document.getElementById('contact-search');
   if (h1)  h1.textContent = name;
-  if (btn) btn.textContent = `+ Add ${singular}`;
+  if (btnLabel) btnLabel.textContent = `Add ${singular}`;
   if (search) search.placeholder = `Search ${name.toLowerCase()}…`;
+}
+
+// Toolbar's more menu: the same CSV import/export the old two buttons called.
+function openContactsMoreMenu(anchor) {
+  const isSupplier = currentContactType === 'supplier';
+  const noun = isSupplier ? (currentWorkspace?.supplier_name || 'Suppliers').toLowerCase() : 'contacts';
+  ui.menu(anchor, [
+    { label: t('import_csv'), icon: 'upload', onSelect: () => openImportModal() },
+    { label: t('export_csv'), icon: 'download', onSelect: () => exportContactsCSV() },
+  ], { align: 'right' });
 }
 
 function loadColWidths() { colWidths = { ...(currentUser?.column_widths || {}) }; }
@@ -127,10 +137,8 @@ function renderContactsTable(list) {
       const col   = visibleCols.find(c => c.key === k);
       const label = k === '_name' ? t('col_name') : col?.label() || '';
       const isActive = sortKey === k;
-      const icon = isActive
-        ? `<span class="sort-icon active">${sortDir === 'asc' ? '↑' : '↓'}</span>`
-        : `<span class="sort-icon">⇅</span>`;
-      return `<th data-col-key="${k}" class="sortable-col${isActive ? ' sort-active' : ''}" onclick="toggleSort('${k}')">${label}${icon}</th>`;
+      const arrow = isActive ? icon(sortDir === 'asc' ? 'arrow-up' : 'arrow-down', 'ic-sm') : '';
+      return `<th data-col-key="${k}" class="sortable-col${isActive ? ' sort-active' : ''}" onclick="toggleSort('${k}')">${label}${arrow}</th>`;
     }).join('')}
   </tr>`;
 
@@ -149,7 +157,7 @@ function renderContactsTable(list) {
         return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'phone','phone')" title="${esc(c.phone||'')}">${esc(c.phone||'')||dash}</td>`;
       if (col.key === 'stage_id') {
         const stage = stages.find(s => s.id === c.stage_id);
-        const badge = stage ? `<span class="stage-badge"><span class="stage-badge-dot" style="background:${stage.color}"></span>${esc(stage.name)}</span>` : dash;
+        const badge = stage ? `<span class="stage-pill"><i style="background:${stage.color}"></i>${esc(stage.name)}</span>` : dash;
         return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'stage_id','stage')">${badge}</td>`;
       }
       if (col.key === 'assigned_to')
@@ -164,8 +172,7 @@ function renderContactsTable(list) {
     return `<tr>
       ${selectionModeOn ? `<td style="text-align:center"><input type="checkbox" class="contact-checkbox" data-contact-id="${c.id}" onchange="toggleContactSelection(${c.id}, this.checked)" /></td>` : ''}
       <td class="name-cell" title="${esc(c.name)}">
-        ${waHref ? `<a class="btn-wa-inline" href="${waHref}" target="_blank" rel="noopener" title="WhatsApp ${esc(c.name)}">${WA_SVG}</a>` : ''}
-        <strong class="contact-name-link" onclick="openDetail(${c.id})">${esc(c.name)}</strong>
+        <div class="person">${avatar(c.name)}<div style="min-width:0"><strong class="contact-name-link truncate" title="${esc(c.name)}" onclick="openDetail(${c.id})" style="display:block">${esc(c.name)}</strong><div class="p-sub truncate">${c.company ? esc(c.company) : dash}</div></div>${waHref ? `<a class="btn-wa-inline" href="${waHref}" target="_blank" rel="noopener" title="WhatsApp ${esc(c.name)}" style="margin-left:auto">${WA_SVG}</a>` : ''}</div>
       </td>
       ${cells}
     </tr>`;
@@ -333,21 +340,23 @@ function renderPagination(total) {
   const start = (currentPage - 1) * PAGE_SIZE + 1, end = Math.min(currentPage * PAGE_SIZE, total);
   const pages = buildPageNumbers(currentPage, totalPages);
   el.innerHTML = `
-    <span class="pagination-info">Showing ${start}–${end} of ${total}</span>
-    <div class="pagination-controls">
-      <button class="page-btn" onclick="goToPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>
-      ${pages.map(p => p === '…'
-        ? '<span class="page-ellipsis">…</span>'
-        : `<button class="page-btn${p===currentPage?' active':''}" onclick="goToPage(${p})">${p}</button>`
-      ).join('')}
-      <button class="page-btn" onclick="goToPage(${currentPage+1})" ${currentPage===totalPages?'disabled':''}>›</button>
+    <div class="table-foot" style="margin-top:-1px;border:1px solid var(--border);border-top:0">
+      <span class="tnum">Showing ${start}–${end} of ${total}</span>
+      <nav class="ct-pg" aria-label="Pagination">
+        <button type="button" onclick="goToPage(${currentPage-1})" aria-label="Previous page" ${currentPage===1?'disabled':''}><span class="ct-flip">${icon('chevron-right')}</span></button>
+        ${pages.map(p => p === '…'
+          ? '<span class="gap" aria-hidden="true">…</span>'
+          : `<button type="button" onclick="goToPage(${p})" ${p===currentPage?'aria-current="page"':''}>${p}</button>`
+        ).join('')}
+        <button type="button" onclick="goToPage(${currentPage+1})" aria-label="Next page" ${currentPage===totalPages?'disabled':''}>${icon('chevron-right')}</button>
+      </nav>
     </div>`;
 }
 
 function toggleFilterPanel() {
   filterPanelOpen = !filterPanelOpen;
   document.getElementById('filter-panel')?.classList.toggle('hidden', !filterPanelOpen);
-  document.getElementById('filter-toggle-btn')?.classList.toggle('active', filterPanelOpen);
+  document.getElementById('filter-toggle-btn')?.classList.toggle('on', filterPanelOpen);
   if (filterPanelOpen) renderFilterPanel();
 }
 
@@ -482,9 +491,7 @@ function renderFilterChips() {
         label = esc(v);
       }
 
-      chips.push(`<span class="filter-chip"><span class="filter-chip-label">${prefix}:</span> ${label}
-        <button class="filter-chip-remove" onclick="removeFilterChip('${removeKey}','${v.replace(/'/g, '&apos;')}')">✕</button>
-      </span>`);
+      chips.push(`<button type="button" class="chip on"><span>${prefix}: ${label}</span><span class="x" onclick="removeFilterChip('${removeKey}','${v.replace(/'/g, '&apos;')}')">${icon('x', 'ic-sm')}</span></button>`);
     });
   }
   el.innerHTML = chips.join('');
@@ -537,15 +544,18 @@ function toggleSelectAll(isChecked) {
 }
 
 function updateBulkDeleteButton() {
-  const section = document.getElementById('bulk-delete-section');
-  const countEl = document.getElementById('bulk-delete-count');
-  if (!section || !countEl) return;
-  if (selectedContactIds.size > 0) {
-    section.classList.remove('hidden');
-    countEl.textContent = `${selectedContactIds.size} selected`;
-  } else {
-    section.classList.add('hidden');
-  }
+  const el = document.getElementById('contacts-bulkbar');
+  if (!el) return;
+  const n = selectedContactIds.size;
+  el.innerHTML = n ? `<div class="bulkbar" role="toolbar" aria-label="Bulk actions"><b>${n} selected</b><button class="btn btn-sm" type="button" onclick="openBulkDeleteModal()">${t('btn_delete')}</button><button class="btn btn-sm" type="button" style="margin-left:auto" onclick="clearContactSelection()">Clear selection</button></div>` : '';
+}
+
+function clearContactSelection() {
+  selectedContactIds.clear();
+  document.querySelectorAll('.contact-checkbox').forEach(cb => { cb.checked = false; });
+  const selectAllCb = document.getElementById('select-all-checkbox');
+  if (selectAllCb) selectAllCb.checked = false;
+  updateBulkDeleteButton();
 }
 
 function openBulkDeleteModal() {

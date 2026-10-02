@@ -47,12 +47,15 @@ function showApp() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   window.history.replaceState({}, '', window.location.pathname);
-  document.getElementById('sidebar-workspace').textContent = currentWorkspace?.name || '';
+  setSidebarWorkspace(currentWorkspace?.name);
   const settingsLabel = document.getElementById('settings-workspace-label');
   if (settingsLabel) settingsLabel.textContent = currentWorkspace?.name || '';
   document.getElementById('sidebar-user').textContent = currentUser?.name || '';
   const av = document.getElementById('sidebar-user-avatar');
   if (av) av.textContent = (currentUser?.name || '?')[0].toUpperCase();
+  const roleEl = document.getElementById('sidebar-user-role');
+  if (roleEl) roleEl.textContent = currentUser?.role ? (t(`role_${currentUser.role}`) === `role_${currentUser.role}` ? currentUser.role : t(`role_${currentUser.role}`)) : '';
+  applyRailState();
   applyTranslations();
   loadColWidths();
   updateBoardNavVisibility();
@@ -191,7 +194,7 @@ async function loadWorkspacesPage() {
         <div class="ws-page-role">${roleLabel(w.role)}</div>
       </div>
       <div class="ws-page-card-footer">
-        <span class="ws-page-open-btn">${isActive ? 'Currently open' : 'Switch →'}</span>
+        <span class="ws-page-open-btn">${isActive ? 'Currently open' : `Switch ${icon('arrow-up-right', 'ic-sm')}`}</span>
       </div>
     </div>`;
   }).join('');
@@ -199,14 +202,14 @@ async function loadWorkspacesPage() {
   grid.innerHTML = cards + `
     <div class="ws-page-card ws-page-add" onclick="openAddWorkspaceChoice()">
       <div class="ws-page-card-banner ws-page-add-banner">
-        <div class="ws-page-add-icon">+</div>
+        <div class="ws-page-add-icon">${icon('plus')}</div>
       </div>
       <div class="ws-page-card-body">
         <div class="ws-page-name">Add a Workspace</div>
         <div class="ws-page-role">Join or create</div>
       </div>
       <div class="ws-page-card-footer">
-        <span class="ws-page-open-btn">Get started →</span>
+        <span class="ws-page-open-btn">Get started ${icon('arrow-up-right', 'ic-sm')}</span>
       </div>
     </div>`;
 }
@@ -222,7 +225,7 @@ async function switchWorkspace(workspaceId) {
   kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = data.workspace.contact_columns || [];
   objectColumns    = data.workspace.object_columns  || [];
-  document.getElementById('sidebar-workspace').textContent = data.workspace.name || '';
+  setSidebarWorkspace(data.workspace.name);
   const settingsLabel = document.getElementById('settings-workspace-label');
   if (settingsLabel) settingsLabel.textContent = data.workspace.name || '';
   invalidate();
@@ -305,7 +308,7 @@ async function handleJoinWorkspace(e) {
   kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = data.workspace.contact_columns || [];
   objectColumns    = data.workspace.object_columns  || [];
-  document.getElementById('sidebar-workspace').textContent = data.workspace.name || '';
+  setSidebarWorkspace(data.workspace.name);
   invalidate();
   loadWorkspacesPage();
   switchPage('workspaces');
@@ -375,14 +378,16 @@ async function logout(e) {
   showAuth();
 }
 
-document.querySelectorAll('.sidebar-nav a[data-page]').forEach(link => {
+document.querySelectorAll('.sb-link[data-page]').forEach(link => {
   link.addEventListener('click', e => { e.preventDefault(); switchPage(link.dataset.page); });
 });
 
 async function switchPage(page) {
-  document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+  document.querySelectorAll('.sb-link[data-page]').forEach(a => a.removeAttribute('aria-current'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelector(`.sidebar-nav a[data-page="${page}"]`)?.classList.add('active');
+  document.querySelector(`.sb-link[data-page="${page}"]`)?.setAttribute('aria-current', 'page');
+  setCrumbs(page);
+  ui.closePopover();
   const pageElId = page === 'suppliers' ? 'page-contacts' : `page-${page}`;
   document.getElementById(pageElId)?.classList.add('active');
   if (page === 'deals')      { closeSidePanel(); await loadDeals(); }
@@ -417,7 +422,7 @@ function resetClientState() {
   pipelines = []; deals = []; dealFields = []; dealColumns = []; currentPipelineId = null; dragDealId = null;
   kanbanFields = ['company', 'email']; dealKanbanFields = ['contact', 'value']; contactColumns = []; colWidths = {};
   objects = []; objectFields = []; objectColumns = []; objCurrentPage = 1;
-  tasks = []; taskProjects = []; currentProjectId = null; currentListId = null; currentProject = null; taskFields = []; taskLinkOptionsCache = null; collapsedTasks = new Set();
+  tasks = []; taskProjects = []; currentProjectId = null; currentListId = null; currentProject = null; taskFields = []; collapsedTasks = new Set();
   analyticsData = null; trendRawData = null; calEvents = [];
   intgData = null; engineData = null; activeGuideId = null; activeCustomKeys = [];
   currentSettingsTab = 'workspace'; currentIntgTab = 'webhook';
@@ -433,3 +438,4 @@ async function ensureStages()   { if (!stages.length)   stages   = await api.get
 async function ensureFields()   { if (!fields.length)   fields   = await api.get('/api/fields'); }
 async function ensureContacts() { if (!contacts.length) contacts = await api.get('/api/contacts'); }
 async function ensureMembers()  { if (!members.length)  members  = await api.get('/api/workspace/members'); }
+async function ensurePipelines() { if (!pipelines.length) pipelines = await api.get('/api/pipelines'); }

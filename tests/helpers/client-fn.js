@@ -65,13 +65,15 @@ function sliceConst(rel, name) {
   return src.slice(start, end) + ';';
 }
 
-function loadFns(rel, names, { state = {}, extra = '' } = {}) {
+// `expose` names functions defined in `extra` (test-side probes such as a
+// snapshot of the sandbox state) that the result should also return.
+function loadFns(rel, names, { state = {}, extra = '', expose = [] } = {}) {
   const src  = read(rel);
   const keys = Object.keys(state);
   const decl = keys.map(k => `let ${k} = ${JSON.stringify(state[k] ?? null)};`).join('\n');
   const setter = `function __set(k, v) { switch (k) { ${keys.map(k => `case ${JSON.stringify(k)}: ${k} = v; break;`).join(' ')} default: throw new Error('unknown state: ' + k); } }`;
   const fns = names.map(n => sliceFn(src, n, rel)).join('\n');
-  const body = `${decl}\n${extra}\n${fns}\n${setter}\nreturn { ${[...names, '__set'].join(', ')} };`;
+  const body = `${decl}\n${extra}\n${fns}\n${setter}\nreturn { ${[...names, ...expose, '__set'].join(', ')} };`;
   return new Function(body)();   // eslint-disable-line no-new-func
 }
 

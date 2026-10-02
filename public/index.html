@@ -4,14 +4,99 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Upgrads CRM</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" />
   <meta name="theme-color" content="#18345D" />
   <meta name="color-scheme" content="light dark" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
+  <!-- Icon sprite (reference/pro/src/icons.svg): <svg class="ic"><use href="#i-…"/></svg>, or icon('name') in scripts -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+<symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></symbol>
+<symbol id="i-arrow-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+<symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+<symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+<symbol id="i-at-sign" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></symbol>
+<symbol id="i-bar-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+<symbol id="i-board" viewBox="0 0 24 24"><path d="M6 5v11"/><path d="M12 5v6"/><path d="M18 5v14"/></symbol>
+<symbol id="i-briefcase" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></symbol>
+<symbol id="i-building" viewBox="0 0 24 24"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-check-square" viewBox="0 0 24 24"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></symbol>
+<symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-chevron-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+<symbol id="i-chevrons-up-down" viewBox="0 0 24 24"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></symbol>
+<symbol id="i-circle-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+<symbol id="i-columns" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
+<symbol id="i-contacts" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+<symbol id="i-deals" viewBox="0 0 24 24"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></symbol>
+<symbol id="i-display" viewBox="0 0 24 24"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+<symbol id="i-ellipsis" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+<symbol id="i-ellipsis-v" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></symbol>
+<symbol id="i-enter" viewBox="0 0 24 24"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></symbol>
+<symbol id="i-external" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+<symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
+<symbol id="i-hash" viewBox="0 0 24 24"><line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/></symbol>
+<symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+<symbol id="i-kanban" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="3" height="9"/><rect x="14" y="7" width="3" height="5"/></symbol>
+<symbol id="i-keyboard" viewBox="0 0 24 24"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></symbol>
+<symbol id="i-log-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></symbol>
+<symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+<symbol id="i-map-pin" viewBox="0 0 24 24"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 12h16"/><path d="M4 6h16"/><path d="M4 18h16"/></symbol>
+<symbol id="i-message" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+<symbol id="i-message-circle" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+<symbol id="i-note" viewBox="0 0 24 24"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/></symbol>
+<symbol id="i-panel-left" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></symbol>
+<symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+<symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+<symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+<symbol id="i-presentation" viewBox="0 0 24 24"><path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+<symbol id="i-sort" viewBox="0 0 24 24"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></symbol>
+<symbol id="i-status-done" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 4.5-5"/></symbol>
+<symbol id="i-status-open" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></symbol>
+<symbol id="i-status-progress" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7a5 5 0 0 1 0 10z" fill="currentColor"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+<symbol id="i-table" viewBox="0 0 24 24"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+<symbol id="i-tasks" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></symbol>
+<symbol id="i-trending-up" viewBox="0 0 24 24"><path d="M22 7l-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/></symbol>
+<symbol id="i-truck" viewBox="0 0 24 24"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a2 2 0 0 0-.42-1.23l-2.1-2.7A2 2 0 0 0 17.9 9H14v8h2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></symbol>
+<symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+<symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></symbol>
+</svg>
 
   <!-- Global loading bar -->
   <div id="loading-bar"><div id="loading-bar-fill"></div></div>
@@ -49,7 +134,7 @@
             <button type="submit" class="btn btn-primary auth-submit">Access panel</button>
           </form>
           <div class="auth-link-row" style="margin-top:16px">
-            <a href="/" onclick="location.href='/'"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back to app</span></a>
+            <a href="/" onclick="location.href='/'"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back to app</span></a>
           </div>
         </div>
 
@@ -57,12 +142,12 @@
         <div id="admin-view-panel" class="hidden">
           <div class="admin-panel-header">
             <p class="admin-panel-title" style="margin:0">Platform Invites</p>
-            <button class="btn btn-primary btn-sm" onclick="adminGenerateCode()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Generate</span></button>
+            <button class="btn btn-primary btn-sm" onclick="adminGenerateCode()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span>Generate</span></button>
           </div>
           <p class="admin-panel-sub">One-time codes that allow someone to create a new workspace on signup.</p>
           <div id="admin-invites-list" class="admin-invites-list"></div>
           <div class="auth-link-row" style="margin-top:18px">
-            <a href="#" onclick="adminLogout(event)">Log out of admin</a>
+            <a href="#" onclick="adminLogout(event)"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-log-out"/></svg><span>Log out of admin</span></a>
           </div>
         </div>
 
@@ -166,7 +251,7 @@
             <button type="submit" class="btn btn-primary auth-submit" id="forgot-btn">Send reset link</button>
           </form>
           <div class="auth-link-row">
-            <a href="#" onclick="showMainAuth(event)"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back to log in</span></a>
+            <a href="#" onclick="showMainAuth(event)"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back to log in</span></a>
           </div>
         </div>
 
@@ -187,7 +272,7 @@
             <button type="submit" class="btn btn-primary auth-submit">Set password</button>
           </form>
           <div class="auth-link-row">
-            <a href="#" onclick="showMainAuth(event)"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back to log in</span></a>
+            <a href="#" onclick="showMainAuth(event)"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back to log in</span></a>
           </div>
         </div>
 
@@ -211,12 +296,12 @@
             <button type="submit" class="btn btn-primary auth-submit">Join workspace</button>
           </form>
           <div class="auth-link-row">
-            <a href="#" onclick="closeJoinWorkspace(event)"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back</span></a>
+            <a href="#" onclick="closeJoinWorkspace(event)"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back</span></a>
           </div>
         </div>
 
         <div class="admin-link-row">
-          <a href="/?admin" class="admin-link"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Admin</span></a>
+          <a href="/?admin" class="admin-link"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg><span>Admin</span></a>
         </div>
 
       </div>
@@ -227,127 +312,105 @@
        MAIN APP
   ══════════════════════════════════════ -->
   <div id="app" class="hidden">
-    <nav class="sidebar">
-      <div class="sidebar-top">
-        <img src="/images/logo.png" alt="Logo" class="sidebar-logo" />
-        <button class="ws-switcher" id="ws-switcher" onclick="switchPage('workspaces')">
-          <div class="workspace-name" id="sidebar-workspace"></div>
-          <svg class="ws-switcher-arrow" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M4 6l4 4 4-4"/></svg>
+    <nav class="sidebar" aria-label="Main">
+      <div class="sb-brand">
+        <img src="/images/logo.png" alt="Upgrads" class="sb-full" />
+        <button class="iconbtn sb-toggle" type="button" onclick="toggleRail()" title="Collapse sidebar" aria-label="Collapse sidebar"><svg class="ic" aria-hidden="true"><use href="#i-panel-left"/></svg></button>
+      </div>
+
+      <!-- Workspace button: name + the user's timezone clock (per-user, editable in Settings → Preferences) -->
+      <button class="sb-ws" id="ws-switcher" onclick="switchPage('workspaces')" type="button" title="Workspaces">
+        <span class="sb-ws-badge" id="sidebar-workspace-badge"></span>
+        <span class="grow">
+          <span class="sb-ws-name" id="sidebar-workspace"></span>
+          <span class="sidebar-clock sb-ws-meta" id="sidebar-clock" title="Click to change timezone" onclick="event.stopPropagation(); switchSettingsTab('preferences'); switchPage('settings')"></span>
+        </span>
+        <span class="sb-chev"><svg class="ic" aria-hidden="true"><use href="#i-chevrons-up-down"/></svg></span>
+      </button>
+
+      <div class="sb-scroll sidebar-main">
+        <div class="sb-label" data-i18n="sb_workspace">Workspace</div>
+        <a href="#" class="sb-link" data-page="deals" aria-current="page"><svg class="ic" aria-hidden="true"><use href="#i-kanban"/></svg><span class="sb-text" data-i18n="nav_deals">Deals</span></a>
+        <a href="#" class="sb-link" data-page="contacts"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg><span class="sb-text" data-i18n="nav_contacts">Contacts</span></a>
+        <a href="#" class="sb-link" data-page="suppliers" id="nav-suppliers-link"><svg class="ic" aria-hidden="true"><use href="#i-truck"/></svg><span class="sb-text" id="nav-suppliers-label">Suppliers</span></a>
+        <a href="#" class="sb-link" data-page="tasks"><svg class="ic" aria-hidden="true"><use href="#i-check-square"/></svg><span class="sb-text" data-i18n="nav_tasks">Tasks</span></a>
+
+        <div class="sb-label" data-i18n="sb_tools">Tools</div>
+        <a href="#" class="sb-link" data-page="chat"><svg class="ic" aria-hidden="true"><use href="#i-message"/></svg><span class="sb-text" data-i18n="nav_chat">Team Chat</span><span class="sb-count alert hidden" id="chat-badge">0</span></a>
+        <a href="#" class="sb-link" data-page="activities"><svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg><span class="sb-text" data-i18n="nav_activities">Activities</span></a>
+        <a href="#" class="sb-link" data-page="calendar"><svg class="ic" aria-hidden="true"><use href="#i-calendar"/></svg><span class="sb-text" data-i18n="nav_calendar">Calendar</span></a>
+        <a href="#" class="sb-link" data-page="objects" id="nav-objects-link"><svg class="ic" aria-hidden="true"><use href="#i-building"/></svg><span class="sb-text" id="nav-objects-label">Listings</span></a>
+        <a href="#" class="sb-link" data-page="board" id="nav-board-link"><svg class="ic" aria-hidden="true"><use href="#i-presentation"/></svg><span class="sb-text" data-i18n="nav_board">Board</span></a>
+        <a href="#" class="sb-link" data-page="analytics"><svg class="ic" aria-hidden="true"><use href="#i-bar-chart"/></svg><span class="sb-text" data-i18n="nav_analytics">Analytics</span></a>
+        <a href="#" class="sb-link" data-page="integrations"><svg class="ic" aria-hidden="true"><use href="#i-plug"/></svg><span class="sb-text" data-i18n="nav_integrations">Integrations</span></a>
+      </div>
+
+      <div class="sb-foot">
+        <a href="#" class="sb-link" data-page="settings"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg><span class="sb-text" data-i18n="nav_settings">Settings</span></a>
+        <!-- User button: opens Settings / Dark mode / Log out -->
+        <button class="sb-user" id="sidebar-user-btn" onclick="openUserMenu(this)" type="button" aria-haspopup="menu">
+          <span class="sidebar-user-avatar" id="sidebar-user-avatar"></span>
+          <span class="who"><b id="sidebar-user"></b><span id="sidebar-user-role"></span></span>
         </button>
-        <!-- User timezone clock (defaults to Germany, per-user editable) -->
-        <div class="sidebar-clock" id="sidebar-clock" title="Click to change timezone" onclick="switchSettingsTab('preferences'); switchPage('settings')"></div>
-      </div>
-
-      <!-- Main nav — grows to push footer down -->
-      <div class="sidebar-main">
-        <div class="sidebar-section-label">Workspace</div>
-        <ul class="sidebar-nav">
-          <li><a href="#" data-page="deals" class="active"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="18" rx="1.5"/><rect x="14" y="3" width="7" height="11" rx="1.5"/></svg><span data-i18n="nav_deals">Deals</span></a></li>
-          <li><a href="#" data-page="contacts"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span data-i18n="nav_contacts">Contacts</span></a></li>
-          <li><a href="#" data-page="suppliers" id="nav-suppliers-link"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a2 2 0 0 0-.42-1.23l-2.1-2.7A2 2 0 0 0 17.9 9H14v8h2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg><span id="nav-suppliers-label">Suppliers</span></a></li>
-          <li><a href="#" data-page="tasks"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Tasks</span></a></li>
-        </ul>
-
-        <div class="sidebar-section-label">Tools</div>
-        <ul class="sidebar-nav">
-          <li><a href="#" data-page="chat">
-            <div style="position:relative;display:inline-flex">
-              <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-              <span class="chat-badge hidden" id="chat-badge">0</span>
-            </div>
-            <span>Team Chat</span>
-          </a></li>
-          <li><a href="#" data-page="activities"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span data-i18n="nav_activities">Activities</span></a></li>
-          <li><a href="#" data-page="calendar"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Calendar</span></a></li>
-          <li><a href="#" data-page="objects" id="nav-objects-link"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg><span id="nav-objects-label">Listings</span></a></li>
-          <li><a href="#" data-page="board" id="nav-board-link"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg><span data-i18n="nav_board">Board</span></a></li>
-          <li><a href="#" data-page="analytics"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15v3M12 10v8M17 6v12"/></svg><span>Analytics</span></a></li>
-          <li><a href="#" data-page="integrations"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22v-5"/><path d="M9 8V2M15 8V2"/><path d="M18 8v3a6 6 0 0 1-12 0V8z"/></svg><span>Integrations</span></a></li>
-        </ul>
-      </div>
-
-      <!-- Footer — sticks to bottom -->
-      <div class="sidebar-footer">
-        <ul class="sidebar-nav">
-          <!-- Help / Tour button — revealed only when the tour is enabled in the admin console -->
-          <li id="guide-help-item" class="hidden">
-            <button class="notif-bell-btn" id="guide-help-btn" onclick="startGuide()" title="Help / Tour">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-              <span>Help</span>
-            </button>
-          </li>
-          <!-- Bell notification button -->
-          <li>
-            <button class="notif-bell-btn" onclick="toggleNotifPanel()" id="notif-bell-btn">
-              <div style="position:relative;display:inline-flex">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                <span class="notif-badge hidden" id="notif-badge">0</span>
-              </div>
-              <span>Notifications</span>
-            </button>
-          </li>
-          <li><a href="#" data-page="settings">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" style="flex-shrink:0">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            <span data-i18n="nav_settings">Settings</span>
-          </a></li>
-          <li>
-            <button class="dark-toggle" onclick="toggleDarkMode()" id="dark-toggle-btn">
-              <div class="toggle-track" id="dark-toggle-track">
-                <div class="toggle-thumb"></div>
-              </div>
-              <span id="dark-toggle-label" data-i18n="dark_mode">Dark mode</span>
-            </button>
-          </li>
-        </ul>
-        <div class="sidebar-user-row">
-          <div class="sidebar-user-avatar" id="sidebar-user-avatar"></div>
-          <div class="sidebar-user" id="sidebar-user"></div>
-          <a href="#" onclick="logout(event)" class="sidebar-logout-btn" title="Log out" aria-label="Log out"><svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg></a>
-        </div>
       </div>
     </nav>
 
-    <!-- Notification panel -->
-    <div id="notif-panel" class="notif-panel hidden">
-      <div class="notif-panel-header">
-        <span class="notif-panel-title">Notifications</span>
-        <div style="display:flex;gap:6px;align-items:center">
-          <button class="btn btn-sm btn-ghost" onclick="markAllNotifRead()" style="font-size:11px">Mark all read</button>
-          <button class="btn btn-sm btn-ghost" onclick="clearReadNotifs()" style="font-size:11px">Clear</button>
-          <button class="close-btn" onclick="toggleNotifPanel()" style="font-size:18px">&times;</button>
+    <div class="main">
+      <header class="topbar">
+        <div class="crumbs" id="crumbs"></div>
+        <button class="search-trigger" onclick="openPalette()" type="button" aria-label="Search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><span class="grow" data-i18n="topbar_search">Go to a page…</span><span class="kbd-wrap"><span class="kbd">Ctrl K</span></span></button>
+        <div class="topbar-actions">
+          <button class="btn btn-primary" id="topbar-new-btn" onclick="openNewMenu(this)" type="button" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="topbar_new">New</span></button>
+          <button class="iconbtn" id="notif-bell-btn" onclick="toggleNotifPanel()" type="button" aria-label="Notifications" title="Notifications"><svg class="ic" aria-hidden="true"><use href="#i-bell"/></svg><span class="notif-badge hidden" id="notif-badge">0</span></button>
+          <button class="iconbtn" id="guide-help-btn" onclick="openHelpMenu(this)" type="button" aria-label="Help" title="Help" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg></button>
         </div>
-      </div>
-      <div id="notif-list" class="notif-list"></div>
-    </div>
+      </header>
 
-    <main class="content">
+      <!-- Notification panel: a popover under the bell -->
+      <div id="notif-panel" class="notif-panel hidden">
+        <div class="notif-panel-header">
+          <span class="notif-panel-title">Notifications</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn btn-sm btn-ghost" onclick="markAllNotifRead()">Mark all read</button>
+            <button class="btn btn-sm btn-ghost" onclick="clearReadNotifs()">Clear</button>
+            <button class="iconbtn" onclick="toggleNotifPanel()" aria-label="Close" style="width:28px;height:28px"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+          </div>
+        </div>
+        <div id="notif-list" class="notif-list"></div>
+      </div>
+
+    <main class="view">
 
       <!-- ── Deals ── -->
       <section id="page-deals" class="page active">
         <div class="page-header">
-          <h1 data-i18n="nav_deals">Deals</h1>
+          <div>
+            <h1 class="page-title" data-i18n="nav_deals">Deals</h1>
+            <p class="page-sub" id="deals-page-sub"></p>
+          </div>
           <div class="page-actions">
-            <div class="view-toggle">
-              <button class="view-toggle-btn active" id="deal-view-kanban" onclick="setDealView('kanban')" title="Kanban view">
-                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="0" width="6" height="6" rx="1"/><rect x="8" y="0" width="6" height="6" rx="1"/><rect x="0" y="8" width="6" height="6" rx="1"/><rect x="8" y="8" width="6" height="6" rx="1"/></svg>
-              </button>
-              <button class="view-toggle-btn" id="deal-view-list" onclick="setDealView('list')" title="List view">
-                <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="1" width="14" height="2.5" rx="1.25"/><rect x="0" y="5.75" width="14" height="2.5" rx="1.25"/><rect x="0" y="10.5" width="14" height="2.5" rx="1.25"/></svg>
-              </button>
+            <select id="deals-pipeline-select" class="btn btn-secondary deals-pipeline-select" onchange="onPipelineChange()"></select>
+            <div class="seg" role="group" aria-label="View">
+              <button id="deal-view-kanban" aria-pressed="true" onclick="setDealView('kanban')" type="button"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-kanban"/></svg><span data-i18n="view_board">Board</span></button>
+              <button id="deal-view-list" aria-pressed="false" onclick="setDealView('list')" type="button"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-list"/></svg><span data-i18n="view_list">List</span></button>
             </div>
-            <select id="deals-pipeline-select" class="deals-pipeline-select" onchange="onPipelineChange()"></select>
-            <button class="btn btn-primary" onclick="openDealModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_deal">Add Deal</span></button>
+            <button class="btn btn-secondary btn-icon" onclick="openDealsMoreMenu(this)" type="button" aria-label="More actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
+            <button class="btn btn-primary" onclick="openDealModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="add_deal">Add deal</span></button>
           </div>
         </div>
-        <div id="deals-board" class="pipeline-board"></div>
-        <div id="deals-list-view" class="table-wrap hidden">
-          <table class="table" id="deals-table">
-            <thead id="deals-thead"></thead>
-            <tbody id="deals-tbody"></tbody>
-          </table>
+        <!-- Summary (KPIs + value by stage), toolbar, then the board or the list. All filled by deals.js. -->
+        <section id="deals-summary" class="card summary hidden" aria-label="Pipeline summary"></section>
+        <div id="deals-toolbar" class="toolbar"></div>
+        <div id="deals-board" class="board"></div>
+        <div id="deals-list-view" class="deals-list hidden">
+          <div id="deals-bulkbar"></div>
+          <div class="table-wrap">
+            <table class="table" id="deals-table">
+              <thead id="deals-thead"></thead>
+              <tbody id="deals-tbody"></tbody>
+            </table>
+          </div>
+          <div id="deals-list-foot" class="table-foot"></div>
         </div>
       </section>
 
@@ -358,24 +421,18 @@
           <div class="page-header">
             <h1 data-i18n="page_contacts">Contacts</h1>
             <div class="page-actions">
-              <button class="btn btn-primary" id="list-add-btn" onclick="openContactModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="add_contact">Add Contact</span></button>
+              <button class="btn btn-secondary btn-icon" onclick="openContactsMoreMenu(this)" type="button" aria-label="More actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
+              <button class="btn btn-primary" id="list-add-btn" onclick="openContactModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="add_contact">Add Contact</span></button>
             </div>
           </div>
           <div class="toolbar">
             <input type="text" id="contact-search" data-i18n-ph="search_ph" placeholder="Search contacts…" oninput="onContactSearch()" />
             <div class="toolbar-actions">
-              <button class="btn btn-sm" id="select-mode-btn" onclick="toggleSelectMode()"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Select</span></button>
-              <div id="bulk-delete-section" class="hidden hstack">
-                <span id="bulk-delete-count" class="text-xs text-muted"></span>
-                <button class="btn btn-sm btn-danger" onclick="openBulkDeleteModal()" title="Delete selected"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg><span>Delete</span></button>
-              </div>
-              <button class="btn btn-sm filter-toggle-btn" id="filter-toggle-btn" onclick="toggleFilterPanel()">
-                <svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>Filter</span> <span id="filter-badge" class="filter-badge hidden">0</span>
-              </button>
-              <button class="btn btn-sm" onclick="openImportModal()"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 9l5-5 5 5"/><path d="M12 4v12"/></svg><span data-i18n="import_csv">Import CSV</span></button>
-              <button class="btn btn-sm" onclick="exportContactsCSV()"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 11l5 5 5-5"/><path d="M12 16V4"/></svg><span data-i18n="export_csv">Export CSV</span></button>
+              <button class="btn btn-sm" id="select-mode-btn" onclick="toggleSelectMode()"><svg class="ic" aria-hidden="true"><use href="#i-check"/></svg><span>Select</span></button>
+              <button class="chip" id="filter-toggle-btn" onclick="toggleFilterPanel()" type="button"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-filter"/></svg><span data-i18n="filter_btn">Filter</span> <span id="filter-badge" class="badge badge-info hidden">0</span></button>
             </div>
           </div>
+          <div id="contacts-bulkbar"></div>
           <div id="filter-panel" class="filter-panel hidden"></div>
           <div id="filter-chips" class="filter-chips hidden"></div>
           <div id="contacts-table-wrap" class="table-wrap">
@@ -391,7 +448,7 @@
         <div id="contact-side-panel" class="contact-side-panel hidden">
           <div class="side-panel-header">
             <span class="side-panel-name" id="side-panel-name"></span>
-            <button class="close-btn" onclick="closeSidePanel()">×</button>
+            <button class="iconbtn" onclick="closeSidePanel()" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
           </div>
           <div id="side-panel-body" class="side-panel-body"></div>
         </div>
@@ -411,7 +468,7 @@
           <input type="text" class="chat-input" id="chat-page-input" placeholder="Message your team..." autocomplete="off"
                  onkeydown="if(event.key==='Enter'){sendChatMessageFromPage();event.preventDefault()}" />
           <button class="chat-send-btn" onclick="sendChatMessageFromPage()" title="Send" aria-label="Send message">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            <svg class="ic" aria-hidden="true"><use href="#i-send"/></svg>
           </button>
         </div>
       </section>
@@ -419,20 +476,24 @@
       <!-- ── Activities ── -->
       <section id="page-activities" class="page">
         <div class="page-header">
-          <h1 data-i18n="page_activities">Activities</h1>
-          <button class="btn btn-primary" onclick="openActivityModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="log_activity">Log Activity</span></button>
+          <div><h1 data-i18n="page_activities">Activities</h1><p class="page-sub" id="activities-page-sub"></p></div>
+          <div class="page-actions">
+            <button class="btn btn-secondary btn-icon" onclick="openActivitiesMoreMenu(this)" type="button" aria-label="More actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
+            <button class="btn btn-primary" onclick="openActivityModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="log_activity">Log Activity</span></button>
+          </div>
         </div>
+        <div id="activities-toolbar" class="toolbar"></div>
         <div id="activities-list" class="activities-list"></div>
       </section>
 
       <!-- ── Calendar ── -->
       <section id="page-calendar" class="page">
         <div class="page-header">
-          <h1><svg class="ic" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> Calendar</h1>
+          <h1><svg class="ic" aria-hidden="true"><use href="#i-calendar"/></svg> Calendar</h1>
           <div class="page-actions">
             <button class="btn btn-sm" onclick="calendarGoToday()">Today</button>
-            <button class="btn btn-icon btn-sm" onclick="calendarPrevMonth()" aria-label="Previous month"><svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
-            <button class="btn btn-icon btn-sm" onclick="calendarNextMonth()" aria-label="Next month"><svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+            <button class="btn btn-icon btn-sm" onclick="calendarPrevMonth()" aria-label="Previous month"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
+            <button class="btn btn-icon btn-sm" onclick="calendarNextMonth()" aria-label="Next month"><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
             <span id="calendar-month-label" class="calendar-month-label"></span>
           </div>
         </div>
@@ -445,9 +506,10 @@
           <h1 id="objects-page-title">Listings</h1>
           <div class="page-actions">
             <button class="btn" id="add-object-column-btn" onclick="openObjectFieldModal()" title="Add a new property (column) to every listing">
-              <svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="M15 4v16"/></svg><span>Add column</span>
+              <svg class="ic" aria-hidden="true"><use href="#i-columns"/></svg><span>Add column</span>
             </button>
-            <button class="btn btn-primary" id="add-object-btn" onclick="openObjectModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add</span></button>
+            <button class="btn btn-secondary btn-icon" onclick="openObjectsMoreMenu(this)" type="button" aria-label="More actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
+            <button class="btn btn-primary" id="add-object-btn" onclick="openObjectModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span>Add</span></button>
           </div>
         </div>
         <div class="toolbar">
@@ -455,7 +517,7 @@
           <div class="toolbar-actions">
             <span id="object-count" class="text-xs text-muted"></span>
             <button class="btn btn-sm hidden" id="object-search-clear" onclick="clearObjectSearch()">
-              <svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg><span>Clear</span>
+              <svg class="ic" aria-hidden="true"><use href="#i-x"/></svg><span>Clear</span>
             </button>
           </div>
         </div>
@@ -475,7 +537,7 @@
         <div class="tasks-sidebar">
           <div class="tasks-sidebar-header">
             <span class="tasks-sidebar-title">Projects</span>
-            <button class="btn btn-sm btn-primary" onclick="openProjectModal()" title="New project">+</button>
+            <button class="btn btn-sm btn-primary" onclick="openProjectModal()" title="New project"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></button>
           </div>
           <div id="tasks-project-nav" class="tasks-project-nav"></div>
         </div>
@@ -485,7 +547,7 @@
           <!-- Empty state when no project selected -->
           <div id="tasks-empty-state" class="tasks-empty-state">
             <p>Select a project and list from the sidebar,<br>or create a new project to get started.</p>
-            <button class="btn btn-primary" onclick="openProjectModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New Project</span></button>
+            <button class="btn btn-primary" onclick="openProjectModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span>New Project</span></button>
           </div>
 
           <!-- Active list content (hidden until list selected) -->
@@ -496,15 +558,11 @@
                 <h1 id="tasks-main-title" style="margin:0">Tasks</h1>
               </div>
               <div class="page-actions">
-                <div class="view-toggle">
-                  <button class="view-toggle-btn active" id="task-view-list" onclick="setTaskView('list')" title="List view">
-                    <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="1" width="14" height="2.5" rx="1.25"/><rect x="0" y="5.75" width="14" height="2.5" rx="1.25"/><rect x="0" y="10.5" width="14" height="2.5" rx="1.25"/></svg>
-                  </button>
-                  <button class="view-toggle-btn" id="task-view-kanban" onclick="setTaskView('kanban')" title="Kanban view">
-                    <svg viewBox="0 0 14 14" fill="currentColor" width="14" height="14"><rect x="0" y="0" width="6" height="14" rx="1"/><rect x="8" y="0" width="6" height="14" rx="1"/></svg>
-                  </button>
+                <div class="seg" role="group" aria-label="View">
+                  <button class="view-toggle-btn" aria-pressed="true" id="task-view-list" onclick="setTaskView('list')" title="List view"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-list"/></svg></button>
+                  <button class="view-toggle-btn" aria-pressed="false" id="task-view-kanban" onclick="setTaskView('kanban')" title="Kanban view"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-kanban"/></svg></button>
                 </div>
-                <button class="btn btn-primary" onclick="openTaskModal()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add Task</span></button>
+                <button class="btn btn-primary" onclick="openTaskModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span>Add Task</span></button>
               </div>
             </div>
             <div class="toolbar">
@@ -541,19 +599,19 @@
             <h1 class="analytics-title">Analytics</h1>
             <p class="analytics-sub" id="analytics-period"></p>
           </div>
-          <button class="btn btn-sm" onclick="openAnalyticsConfig()">Configure Metrics</button>
+          <button class="btn btn-sm" onclick="openAnalyticsConfig()"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-settings"/></svg><span>Configure Metrics</span></button>
         </div>
 
         <div id="analytics-main-sections" style="padding-left:24px;margin-left:-24px">
           <!-- Stat cards -->
           <div class="analytics-draggable-section" id="analytics-sec-stats" data-section-id="stats">
-            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
+            <div class="section-drag-handle" title="Drag to reorder section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
             <div class="analytics-cards" id="analytics-cards"></div>
           </div>
 
           <!-- Win / Loss bar -->
           <div class="analytics-draggable-section" id="analytics-sec-winloss" data-section-id="winloss">
-            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
+            <div class="section-drag-handle" title="Drag to reorder section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
             <div class="analytics-section" id="analytics-winloss-section">
               <div class="analytics-section-title">Deal Outcomes</div>
               <div class="analytics-winloss">
@@ -565,7 +623,7 @@
 
           <!-- By pipeline -->
           <div class="analytics-draggable-section" id="analytics-sec-pipeline" data-section-id="pipeline">
-            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
+            <div class="section-drag-handle" title="Drag to reorder section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
             <div class="analytics-section">
               <div class="analytics-section-title">Deals by Pipeline</div>
               <div id="analytics-by-pipeline"></div>
@@ -574,7 +632,7 @@
 
           <!-- Trend charts -->
           <div class="analytics-draggable-section" id="analytics-sec-trends" data-section-id="trends">
-            <div class="section-drag-handle" title="Drag to reorder section">⠿</div>
+            <div class="section-drag-handle" title="Drag to reorder section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
             <div class="analytics-section">
               <div class="analytics-trend-header">
                 <div class="analytics-section-title" style="margin:0">Trends</div>
@@ -593,9 +651,9 @@
       <!-- Analytics config modal -->
       <div id="analytics-config-modal" class="modal-overlay hidden">
         <div class="modal" style="max-width:720px">
-          <div class="modal-header">
-            <h2>Configure Metrics</h2>
-            <button class="close-btn" onclick="closeAnalyticsConfig()">&times;</button>
+          <div class="modal-head">
+            <h2 class="modal-title">Configure Metrics</h2>
+            <button class="iconbtn" onclick="closeAnalyticsConfig()" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
           </div>
           <div class="modal-body">
             <div class="analytics-config-group">
@@ -618,8 +676,8 @@
             </div>
             <div id="analytics-config-msg" class="workspace-name-msg hidden"></div>
           </div>
-          <div class="modal-footer">
-            <button class="btn" onclick="closeAnalyticsConfig()">Cancel</button>
+          <div class="modal-foot">
+            <button class="btn btn-secondary" onclick="closeAnalyticsConfig()">Cancel</button>
             <button class="btn btn-primary" onclick="saveAnalyticsConfig()">Save</button>
           </div>
         </div>
@@ -1237,33 +1295,33 @@
               <h1>Workspaces</h1>
               <p class="text-muted">Switch between your workspaces or create a new one.</p>
             </div>
-            <button class="btn btn-primary" onclick="openCreateWorkspaceModal()" style="flex-shrink: 0;"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New Workspace</span></button>
+            <button class="btn btn-primary" onclick="openCreateWorkspaceModal()" style="flex-shrink: 0;"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span>New Workspace</span></button>
           </div>
         </div>
         <div id="workspaces-grid" class="ws-page-grid"></div>
       </section>
 
     </main>
+    </div><!-- /.main -->
   </div>
-
 
   <!-- ══════════════════════════════════════ MODALS ══════════════════════════════════════ -->
 
   <!-- Join Workspace Modal -->
   <div id="join-workspace-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2>Join a Workspace</h2>
-        <button class="close-btn" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title">Join a Workspace</h2>
+        <button class="iconbtn" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form onsubmit="handleJoinWorkspace(event)">
-        <div class="form-group">
-          <label>Workspace Invite Code <span class="req">*</span></label>
+        <div class="field">
+          <label class="label">Workspace Invite Code <span class="req">*</span></label>
           <input type="text" id="join-ws-code" placeholder="Paste invite code here" autocomplete="off" required />
         </div>
         <div id="join-ws-error" class="auth-error hidden" style="margin:0 22px 10px"></div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')">Cancel</button>
           <button type="submit" class="btn btn-primary">Join Workspace</button>
         </div>
       </form>
@@ -1272,16 +1330,16 @@
 
   <!-- Add Workspace Choice Modal -->
   <div id="add-workspace-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2>Add a Workspace</h2>
-        <button class="close-btn" onclick="document.getElementById('add-workspace-modal').classList.add('hidden')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title">Add a Workspace</h2>
+        <button class="iconbtn" onclick="document.getElementById('add-workspace-modal').classList.add('hidden')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <div class="modal-body">
         <div class="add-ws-choices">
           <button class="add-ws-choice" onclick="pickAddWorkspace('join')">
             <div class="add-ws-choice-icon" style="background:color-mix(in srgb,#3b82f6 12%,transparent);color:#3b82f6">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+              <svg class="ic" style="width:24px;height:24px" aria-hidden="true"><use href="#i-enter"/></svg>
             </div>
             <div>
               <div class="add-ws-choice-title">Join a workspace</div>
@@ -1290,7 +1348,7 @@
           </button>
           <button class="add-ws-choice" onclick="pickAddWorkspace('create')">
             <div class="add-ws-choice-icon" style="background:color-mix(in srgb,#10b981 12%,transparent);color:#10b981">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              <svg class="ic" style="width:24px;height:24px" aria-hidden="true"><use href="#i-plus"/></svg>
             </div>
             <div>
               <div class="add-ws-choice-title">Create a workspace</div>
@@ -1304,24 +1362,24 @@
 
   <!-- Create Workspace Modal -->
   <div id="create-workspace-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2>Create New Workspace</h2>
-        <button class="close-btn" onclick="closeCreateWorkspaceModal()">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title">Create New Workspace</h2>
+        <button class="iconbtn" onclick="closeCreateWorkspaceModal()" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form onsubmit="handleCreateWorkspace(event)">
-        <div class="form-group">
-          <label>Workspace Name <span class="req">*</span></label>
+        <div class="field">
+          <label class="label">Workspace Name <span class="req">*</span></label>
           <input type="text" id="cw-name" placeholder="e.g. Acme Sales" required />
         </div>
-        <div class="form-group">
-          <label>Platform Invite Code <span class="req">*</span></label>
+        <div class="field">
+          <label class="label">Platform Invite Code <span class="req">*</span></label>
           <input type="text" id="cw-code" placeholder="Paste platform code here" autocomplete="off" />
           <span class="text-xs text-muted">Get a code from the admin panel (yoursite.com/?admin)</span>
         </div>
         <div id="cw-error" class="auth-error hidden" style="margin:0 22px 10px"></div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeCreateWorkspaceModal()">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeCreateWorkspaceModal()">Cancel</button>
           <button type="submit" class="btn btn-primary">Create Workspace</button>
         </div>
       </form>
@@ -1330,19 +1388,19 @@
 
   <!-- Bulk Delete Confirmation Modal -->
   <div id="bulk-delete-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2>Confirm Delete</h2>
-        <button class="close-btn" onclick="closeModal('bulk-delete-modal')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title">Confirm Delete</h2>
+        <button class="iconbtn" onclick="closeModal('bulk-delete-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
-      <div style="padding:20px;background:var(--card-bg)">
-        <p id="bulk-delete-message" style="margin-bottom:16px;color:var(--text)"></p>
-        <p style="color:var(--muted);font-size:13px;margin-bottom:12px">To confirm, type the number of contacts you want to delete:</p>
-        <input type="text" id="bulk-delete-confirm-input" placeholder="e.g., 5" style="width:100%;margin-bottom:16px" />
-        <div class="hstack" style="justify-content:flex-end">
-          <button class="btn" onclick="closeModal('bulk-delete-modal')">Cancel</button>
-          <button class="btn btn-danger" onclick="confirmBulkDelete()">Delete</button>
-        </div>
+      <div class="modal-body">
+        <p id="bulk-delete-message"></p>
+        <p class="help">To confirm, type the number of contacts you want to delete:</p>
+        <input type="text" id="bulk-delete-confirm-input" placeholder="e.g., 5" />
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" onclick="closeModal('bulk-delete-modal')">Cancel</button>
+        <button class="btn btn-danger" onclick="confirmBulkDelete()">Delete</button>
       </div>
     </div>
   </div>
@@ -1350,51 +1408,40 @@
   <!-- Contact Modal -->
   <div id="contact-modal" class="modal-overlay hidden">
     <div class="modal">
-      <div class="modal-header">
-        <h2 id="contact-modal-title">Add Contact</h2>
-        <button class="close-btn" onclick="closeModal('contact-modal')">&times;</button>
+      <div class="modal-head">
+        <h2 class="modal-title" id="contact-modal-title">Add Contact</h2>
+        <button class="iconbtn" onclick="closeModal('contact-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="contact-form" onsubmit="saveContact(event)">
         <input type="hidden" id="contact-id" />
         <input type="hidden" id="cf-type" value="contact" />
         <div class="modal-body" id="contact-modal-body">
-          <div class="form-group"><label for="cf-name"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="cf-name" required /></div>
-          <div class="form-group"><label for="cf-company" data-i18n="lbl_company">Company</label><input type="text" id="cf-company" /></div>
-          <div class="form-group"><label for="cf-email" data-i18n="lbl_email">Email</label><input type="email" id="cf-email" /></div>
-          <div class="form-group"><label for="cf-phone" data-i18n="lbl_phone">Phone</label><input type="tel" id="cf-phone" /></div>
-          <div class="form-group"><label for="cf-stage" data-i18n="lbl_stage">Stage</label><select id="cf-stage"></select></div>
-          <div class="form-group"><label for="cf-assignee" data-i18n="lbl_assignee">Assignee</label><select id="cf-assignee"></select></div>
-          <div id="cf-custom-fields" class="form-stack"></div>
+          <div class="field"><label class="label" for="cf-name"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="cf-name" required /></div>
+          <div class="field"><label class="label" for="cf-company" data-i18n="lbl_company">Company</label><input type="text" id="cf-company" /></div>
+          <div class="field"><label class="label" for="cf-email" data-i18n="lbl_email">Email</label><input type="email" id="cf-email" /></div>
+          <div class="field"><label class="label" for="cf-phone" data-i18n="lbl_phone">Phone</label><input type="tel" id="cf-phone" /></div>
+          <div class="field"><label class="label" for="cf-stage" data-i18n="lbl_stage">Stage</label><select id="cf-stage"></select></div>
+          <div class="field"><label class="label" for="cf-assignee" data-i18n="lbl_assignee">Assignee</label><select id="cf-assignee"></select></div>
+          <div id="cf-custom-fields" class="col"></div>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('contact-modal')" data-i18n="btn_cancel">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('contact-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Contact Detail Modal -->
-  <div id="detail-modal" class="modal-overlay hidden">
-    <div class="modal modal-wide">
-      <div class="modal-header">
-        <h2 id="detail-title"></h2>
-        <button class="close-btn" onclick="closeModal('detail-modal')">&times;</button>
-      </div>
-      <div id="detail-body"></div>
-    </div>
-  </div>
-
   <!-- Activity Modal -->
   <div id="activity-modal" class="modal-overlay hidden">
     <div class="modal">
-      <div class="modal-header">
-        <h2>Log Activity</h2>
-        <button class="close-btn" onclick="closeModal('activity-modal')">&times;</button>
+      <div class="modal-head">
+        <h2 class="modal-title">Log Activity</h2>
+        <button class="iconbtn" onclick="closeModal('activity-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="activity-form" onsubmit="saveActivity(event)">
         <div class="modal-body">
-          <div class="form-group"><label for="act-type" data-i18n="lbl_type">Type</label>
+          <div class="field"><label class="label" for="act-type" data-i18n="lbl_type">Type</label>
             <select id="act-type">
               <option value="note" data-i18n="act_note">Note</option>
               <option value="call" data-i18n="act_call">Call</option>
@@ -1402,11 +1449,11 @@
               <option value="whatsapp" data-i18n="act_whatsapp">WhatsApp</option>
             </select>
           </div>
-          <div class="form-group"><label for="act-contact" data-i18n="lbl_contact">Contact</label><select id="act-contact"></select></div>
-          <div class="form-group"><label for="act-content"><span data-i18n="lbl_content">Content</span> <span class="req">*</span></label><textarea id="act-content" rows="8" required></textarea></div>
+          <div class="field"><label class="label" for="act-contact" data-i18n="lbl_contact">Contact</label><select id="act-contact"></select></div>
+          <div class="field"><label class="label" for="act-content"><span data-i18n="lbl_content">Content</span> <span class="req">*</span></label><textarea id="act-content" rows="8" required></textarea></div>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('activity-modal')" data-i18n="btn_cancel">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('activity-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
         </div>
       </form>
@@ -1415,25 +1462,25 @@
 
   <!-- Add Existing Contact to Kanban Modal -->
   <div id="kanban-add-contact-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2>Add Contact to Kanban</h2>
-        <button class="close-btn" onclick="closeModal('kanban-add-contact-modal')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title">Add Contact to Kanban</h2>
+        <button class="iconbtn" onclick="closeModal('kanban-add-contact-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="kanban-add-form" onsubmit="confirmAddContactToKanban(event)">
         <div class="modal-body">
-          <div class="form-group">
-            <label for="kanban-contact-search" style="display:block">Select Contact</label>
+          <div class="field">
+            <label class="label" for="kanban-contact-search" style="display:block">Select Contact</label>
             <input type="text" id="kanban-contact-search" placeholder="Search contacts…" style="width:100%" oninput="filterKanbanContacts()" />
             <select id="kanban-contact-select" style="width:100%;max-height:140px" required></select>
           </div>
-          <div class="form-group">
-            <label for="kanban-stage-select">Select Stage</label>
+          <div class="field">
+            <label class="label" for="kanban-stage-select">Select Stage</label>
             <select id="kanban-stage-select" style="width:100%" required></select>
           </div>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('kanban-add-contact-modal')">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('kanban-add-contact-modal')">Cancel</button>
           <button type="submit" class="btn btn-primary">Add</button>
         </div>
       </form>
@@ -1442,19 +1489,19 @@
 
   <!-- Stage Modal -->
   <div id="stage-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2 id="stage-modal-title">Add Stage</h2>
-        <button class="close-btn" onclick="closeModal('stage-modal')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title" id="stage-modal-title">Add Stage</h2>
+        <button class="iconbtn" onclick="closeModal('stage-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="stage-form" onsubmit="saveStage(event)">
         <input type="hidden" id="stage-id" />
         <div class="modal-body">
-          <div class="form-group"><label for="stage-name"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="stage-name" required /></div>
-          <div class="form-group"><label for="stage-color" data-i18n="lbl_color">Color</label><input type="color" id="stage-color" value="#4f6ef7" /></div>
+          <div class="field"><label class="label" for="stage-name"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="stage-name" required /></div>
+          <div class="field"><label class="label" for="stage-color" data-i18n="lbl_color">Color</label><input type="color" id="stage-color" value="#4f6ef7" /></div>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('stage-modal')" data-i18n="btn_cancel">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('stage-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
         </div>
       </form>
@@ -1463,17 +1510,17 @@
 
   <!-- Field Modal -->
   <div id="field-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2 id="field-modal-title">Add Field</h2>
-        <button class="close-btn" onclick="closeModal('field-modal')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title" id="field-modal-title">Add Field</h2>
+        <button class="iconbtn" onclick="closeModal('field-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="field-form" onsubmit="saveField(event)">
         <input type="hidden" id="field-id" />
         <div class="modal-body">
-          <div class="form-group"><label for="field-name"><span data-i18n="lbl_field_label">Label</span> <span class="req">*</span></label><input type="text" id="field-name" required autocomplete="off" oninput="autoKey()" /></div>
-          <div class="form-group"><label for="field-key" data-i18n="lbl_key">Key</label><input type="text" id="field-key" readonly style="opacity:.55" /></div>
-          <div class="form-group"><label for="field-type" data-i18n="lbl_type">Type</label>
+          <div class="field"><label class="label" for="field-name"><span data-i18n="lbl_field_label">Label</span> <span class="req">*</span></label><input type="text" id="field-name" required autocomplete="off" oninput="autoKey()" /></div>
+          <div class="field"><label class="label" for="field-key" data-i18n="lbl_key">Key</label><input type="text" id="field-key" readonly style="opacity:.55" /></div>
+          <div class="field"><label class="label" for="field-type" data-i18n="lbl_type">Type</label>
             <select id="field-type" onchange="toggleDropdownOptions()">
               <option value="text">Text</option>
               <option value="email">Email</option>
@@ -1484,13 +1531,13 @@
               <option value="dropdown">Dropdown</option>
             </select>
           </div>
-          <div class="form-group hidden" id="field-options-group">
-            <label for="field-options" data-i18n="lbl_options">Options (one per line)</label>
+          <div class="field hidden" id="field-options-group">
+            <label class="label" for="field-options" data-i18n="lbl_options">Options (one per line)</label>
             <textarea id="field-options" rows="4" placeholder="Option A&#10;Option B&#10;Option C"></textarea>
           </div>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('field-modal')" data-i18n="btn_cancel">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('field-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
         </div>
       </form>
@@ -1500,52 +1547,41 @@
   <!-- Object Modal (create/edit) -->
   <div id="object-modal" class="modal-overlay hidden">
     <div class="modal" style="max-width:560px">
-      <div class="modal-header">
-        <h2 id="object-modal-title">Add</h2>
-        <button class="close-btn" onclick="closeModal('object-modal')">&times;</button>
+      <div class="modal-head">
+        <h2 class="modal-title" id="object-modal-title">Add</h2>
+        <button class="iconbtn" onclick="closeModal('object-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="object-form" onsubmit="saveObject(event)">
         <input type="hidden" id="object-id" />
         <div class="modal-body" id="object-modal-body">
-          <div class="form-group">
-            <label for="obj-name" id="obj-name-label">Name <span class="req">*</span></label>
+          <div class="field">
+            <label class="label" for="obj-name" id="obj-name-label">Name <span class="req">*</span></label>
             <input type="text" id="obj-name" autocomplete="off" required />
           </div>
-          <div id="obj-custom-fields" class="form-grid-2"></div>
+          <div id="obj-custom-fields" class="field-row"></div>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('object-modal')" data-i18n="btn_cancel">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('object-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Object Detail Modal -->
-  <div id="object-detail-modal" class="modal-overlay hidden">
-    <div class="modal modal-wide">
-      <div class="modal-header">
-        <h2 id="object-detail-title"></h2>
-        <button class="close-btn" onclick="closeModal('object-detail-modal')">&times;</button>
-      </div>
-      <div id="object-detail-body" class="modal-body"></div>
-    </div>
-  </div>
-
   <!-- Object Field Modal -->
   <div id="object-field-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2 id="object-field-modal-title">Add Field</h2>
-        <button class="close-btn" onclick="closeModal('object-field-modal')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title" id="object-field-modal-title">Add Field</h2>
+        <button class="iconbtn" onclick="closeModal('object-field-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="object-field-form" onsubmit="saveObjectField(event)">
         <input type="hidden" id="objf-id" />
         <div class="modal-body">
           <p class="text-xs text-muted" id="objf-hint">Each field becomes a column in the list and a property on every item.</p>
-          <div class="form-group"><label for="objf-name">Label <span class="req">*</span></label><input type="text" id="objf-name" required autocomplete="off" oninput="autoObjectFieldKey()" /></div>
-          <div class="form-group"><label for="objf-key" data-i18n="lbl_key">Key</label><input type="text" id="objf-key" readonly style="opacity:.55" /></div>
-          <div class="form-group"><label for="objf-type" data-i18n="lbl_type">Type</label>
+          <div class="field"><label class="label" for="objf-name">Label <span class="req">*</span></label><input type="text" id="objf-name" required autocomplete="off" oninput="autoObjectFieldKey()" /></div>
+          <div class="field"><label class="label" for="objf-key" data-i18n="lbl_key">Key</label><input type="text" id="objf-key" readonly style="opacity:.55" /></div>
+          <div class="field"><label class="label" for="objf-type" data-i18n="lbl_type">Type</label>
             <select id="objf-type" onchange="toggleObjectFieldOptions()">
               <option value="text">Text</option><option value="number">Number</option>
               <option value="dropdown">Dropdown</option><option value="date">Date</option>
@@ -1553,238 +1589,14 @@
               <option value="phone">Phone</option>
             </select>
           </div>
-          <div class="form-group hidden" id="objf-options-group">
-            <label for="objf-options" data-i18n="lbl_options">Options (one per line)</label>
+          <div class="field hidden" id="objf-options-group">
+            <label class="label" for="objf-options" data-i18n="lbl_options">Options (one per line)</label>
             <textarea id="objf-options" rows="4" placeholder="Option A&#10;Option B"></textarea>
           </div>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('object-field-modal')" data-i18n="btn_cancel">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('object-field-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Deal Modal -->
-  <div id="deal-modal" class="modal-overlay hidden">
-    <div class="modal modal-deal" style="width:min(96vw,1800px);max-width:none;max-height:88vh">
-      <div class="modal-header">
-        <h2 id="deal-modal-title">Add Deal</h2>
-        <div class="hstack" style="gap:8px">
-          <button type="button" class="btn btn-sm" id="deal-add-task-btn" onclick="addTaskFromDeal()" style="display:none">＋ Task</button>
-          <button class="close-btn" onclick="closeModal('deal-modal')">&times;</button>
-        </div>
-      </div>
-
-      <div class="deal-modal-columns">
-
-        <!-- ── Left: Deal fields ── -->
-        <div class="deal-modal-col">
-          <div class="deal-col-label">Deal</div>
-          <form id="deal-form" onsubmit="saveDeal(event)">
-            <input type="hidden" id="deal-id" />
-            <div class="form-group"><label data-i18n="lbl_deal_title">Title <span class="req">*</span></label><input type="text" id="df-title" required /></div>
-            <div class="form-group"><label data-i18n="lbl_contact">Contact</label><select id="df-contact" onchange="onDealContactChange()"></select></div>
-            <div class="form-group"><label id="df-supplier-label">Supplier</label><select id="df-supplier"></select></div>
-            <div class="form-group"><label>Pipeline <span class="req">*</span></label><select id="df-pipeline" onchange="onDealPipelineChange()" required></select></div>
-            <div class="form-group"><label data-i18n="lbl_stage">Stage</label><select id="df-stage"></select></div>
-            <div class="form-group"><label data-i18n="lbl_deal_value">Value</label><input type="number" id="df-value" min="0" step="0.01" /></div>
-            <div class="form-group">
-              <label>Urgency</label>
-              <div style="display:flex;gap:8px;align-items:center">
-                <span id="df-urgency-dot" style="width:14px;height:14px;border-radius:50%;border:2px solid var(--line);background:transparent;flex-shrink:0"></span>
-                <select id="df-urgency" style="flex:1" onchange="updateUrgencyDot()">
-                  <option value="0">— No urgency —</option>
-                  <option value="1">Low</option>
-                  <option value="2">Medium</option>
-                  <option value="3">High</option>
-                  <option value="4">Very urgent</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-group"><label data-i18n="lbl_assignee">Assignee</label><select id="df-assignee"></select></div>
-            <div id="df-custom-fields"></div>
-          </form>
-        </div>
-
-        <!-- ── Middle: Contact panel, with linked Listings below it ── -->
-        <div class="deal-modal-col deal-col-contact">
-          <div id="deal-contact-panel">
-            <div class="deal-col-label">Contact</div>
-            <div class="contact-panel-empty">No contact linked</div>
-          </div>
-
-          <div class="deal-object-panel">
-            <div class="eyebrow" id="deal-object-panel-label">Listings</div>
-            <div id="deal-object-panel-body" class="object-panel-body"></div>
-          </div>
-        </div>
-
-        <!-- ── Right: Notes panel (timeline) ── -->
-        <div class="deal-modal-col deal-col-notes" id="deal-notes-panel">
-          <div class="deal-col-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:22px">
-            <span>Notes</span>
-            <div class="hstack-tight">
-              <button type="button" class="btn btn-sm btn-primary" onclick="toggleDealNoteForm()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Add Note</span></button>
-              <button type="button" class="btn btn-sm" onclick="toggleShowAllDealNotes()" id="deal-show-all-btn">Show All</button>
-            </div>
-          </div>
-          <div id="deal-notes-container" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
-            <!-- Collapsible add-note form -->
-            <div id="deal-note-form-wrapper" class="deal-note-form-wrapper hidden">
-              <input type="hidden" id="deal-activity-deal-id" />
-              <select id="deal-activity-type" class="activity-type-select">
-                <option value="note">Note</option>
-                <option value="call">Call</option>
-                <option value="email">Email</option>
-                <option value="whatsapp">WhatsApp</option>
-              </select>
-              <div class="note-editor-toolbar" id="deal-toolbar">
-                <button type="button" class="fmt-btn" onclick="formatDealNote('bold')" title="Bold"><strong>B</strong></button>
-                <button type="button" class="fmt-btn" onclick="formatDealNote('italic')" title="Italic"><em>I</em></button>
-                <button type="button" class="fmt-btn" onclick="formatDealNote('underline')" title="Underline"><u>U</u></button>
-                <div class="fmt-divider"></div>
-                <button type="button" class="fmt-btn" onclick="formatDealNote('insertUnorderedList')" title="List">• List</button>
-                <button type="button" class="fmt-btn" onclick="formatDealNote('createLink')" title="Link" aria-label="Insert link"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></button>
-                <button type="button" class="fmt-btn" onclick="formatDealNote('removeFormat')" title="Clear formatting" aria-label="Clear formatting"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
-              </div>
-              <div class="hstack note-date-row">
-                <label class="eyebrow">Date</label>
-                <input type="date" id="deal-activity-date" disabled />
-                <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);cursor:pointer;flex-shrink:0;white-space:nowrap" title="Save this note without a date — it won't appear on the calendar">
-                  <input type="checkbox" id="deal-activity-no-date" checked onchange="toggleNoDate(this)" /> No date
-                </label>
-              </div>
-              <div id="deal-activity-content" class="note-editor" contenteditable="true" placeholder="Add note, call, or email…"
-                onkeydown="if(event.key==='Enter' && event.ctrlKey){event.preventDefault();saveDealActivity();}"></div>
-              <div class="hstack note-form-actions">
-                <button type="button" class="btn btn-primary" id="deal-log-btn" style="flex:1" onclick="saveDealActivity()">Log (Ctrl+Enter)</button>
-                <button type="button" class="btn" onclick="toggleDealNoteForm()">Cancel</button>
-              </div>
-            </div>
-            <!-- Timeline list -->
-            <div id="deal-activities-list" class="deal-timeline" style="flex:1;overflow-y:auto;padding:12px 22px;"></div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Sticky footer -->
-      <div class="modal-actions deal-modal-footer">
-        <button type="button" class="btn btn-danger" id="deal-delete-btn" onclick="deleteDealFromModal()" style="display:none">Delete Deal</button>
-        <div class="hstack">
-          <button type="button" class="btn" onclick="closeModal('deal-modal')" data-i18n="btn_cancel">Cancel</button>
-          <button type="submit" form="deal-form" class="btn btn-primary" data-i18n="btn_save">Save Deal</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Task Modal -->
-  <div id="task-modal" class="modal-overlay hidden">
-    <div class="modal" style="width:min(92vw,1100px);max-width:none;max-height:88vh;overflow-y:auto">
-      <div class="modal-header">
-        <h2 id="task-modal-title">Add Task</h2>
-        <button class="close-btn" onclick="closeModal('task-modal')">&times;</button>
-      </div>
-      <form id="task-form" onsubmit="saveTask(event)">
-        <input type="hidden" id="task-id" />
-        <input type="hidden" id="task-parent-id" />
-        <div class="modal-body" style="display:grid;grid-template-columns:1.2fr 1fr;gap:24px;padding:24px">
-          <div style="display:flex;flex-direction:column;gap:12px">
-            <div class="form-group" style="grid-column:1/-1">
-              <label>Title <span class="req">*</span></label>
-              <input type="text" id="task-title" required />
-            </div>
-            <div class="form-group" style="grid-column:1/-1">
-              <label>Description</label>
-              <textarea id="task-description" rows="3" style="resize:vertical"></textarea>
-            </div>
-            <div class="form-group">
-              <label>Status</label>
-              <select id="task-status">
-                <option value="todo">Todo</option>
-                <option value="in_progress">In Progress</option>
-                <option value="in_review">In Review</option>
-                <option value="done">Done</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Priority</label>
-              <select id="task-priority">
-                <option value="low">Low</option>
-                <option value="medium" selected>Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Assignee</label>
-              <select id="task-assignee"></select>
-            </div>
-            <div class="form-group">
-              <label>Due Date</label>
-              <input type="date" id="task-due-date" />
-            </div>
-            <div class="form-group">
-              <label>Project</label>
-              <select id="task-project" onchange="onTaskProjectChange()"><option value="">— No project —</option></select>
-            </div>
-            <div class="form-group">
-              <label>List</label>
-              <select id="task-list"><option value="">— No list —</option></select>
-            </div>
-            <div id="task-custom-fields"></div>
-          </div>
-          <!-- Right column: linked (always) + subtasks (when editing) -->
-          <div id="task-side-col" style="display:flex;flex-direction:column;gap:24px">
-
-            <!-- Linked deal / contact -->
-            <div class="task-side-section" style="display:flex;flex-direction:column;gap:12px">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-                <div class="eyebrow" style="margin:0">Linked Deal / Contact</div>
-                <button type="button" class="btn btn-sm" id="task-link-btn" onclick="toggleTaskLinkPicker()">+ Link</button>
-              </div>
-              <div id="task-links" style="display:flex;flex-direction:column;gap:8px"></div>
-              <div id="task-link-picker" style="display:none;flex-direction:column;gap:8px;border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--surface-sunken)">
-                <div class="form-group" style="margin:0">
-                  <label>Deal</label>
-                  <select id="task-link-deal"><option value="">— No deal —</option></select>
-                </div>
-                <div class="form-group" style="margin:0">
-                  <label>Contact</label>
-                  <select id="task-link-contact"><option value="">— No contact —</option></select>
-                </div>
-                <div class="hstack" style="justify-content:flex-end;margin-top:2px">
-                  <button type="button" class="btn btn-sm" onclick="cancelTaskLinkPicker()">Cancel</button>
-                  <button type="button" class="btn btn-sm btn-primary" onclick="confirmTaskLink()">Link</button>
-                </div>
-              </div>
-              <input type="hidden" id="task-deal-id" />
-              <input type="hidden" id="task-contact-id" />
-            </div>
-
-            <!-- Subtasks (only when editing) -->
-            <div id="task-subtasks-section" class="task-side-section" style="display:flex;flex-direction:column;gap:12px">
-              <div class="eyebrow" style="margin:0">Subtasks</div>
-              <div id="task-subtasks-list"></div>
-              <div class="form-group" style="flex-direction:row;gap:6px;margin:0">
-                <input type="text" id="new-subtask-input" placeholder="Add subtask…"
-                  style="flex:1;width:auto"
-                  onkeydown="if(event.key==='Enter'){event.preventDefault();addSubtask();}" />
-                <button type="button" class="btn btn-sm btn-primary" style="flex-shrink:0" onclick="addSubtask()">Add</button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn btn-danger" id="task-delete-btn" onclick="deleteTaskFromModal()" style="display:none">Delete</button>
-          <div class="hstack">
-            <button type="button" class="btn" onclick="closeModal('task-modal')">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Task</button>
-          </div>
         </div>
       </form>
     </div>
@@ -1792,19 +1604,19 @@
 
   <!-- Task Status Modal -->
   <div id="task-status-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2 id="task-status-modal-title">Add Status</h2>
-        <button class="close-btn" onclick="closeModal('task-status-modal')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title" id="task-status-modal-title">Add Status</h2>
+        <button class="iconbtn" onclick="closeModal('task-status-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="task-status-form" onsubmit="saveTaskStatus(event)">
         <input type="hidden" id="ts-key-hidden" />
         <div class="modal-body">
-          <div class="form-group"><label for="ts-label">Label <span class="req">*</span></label><input type="text" id="ts-label" required autocomplete="off" /></div>
-          <div class="form-group"><label for="ts-color">Color</label><input type="color" id="ts-color" value="#94a3b8" /></div>
+          <div class="field"><label class="label" for="ts-label">Label <span class="req">*</span></label><input type="text" id="ts-label" required autocomplete="off" /></div>
+          <div class="field"><label class="label" for="ts-color">Color</label><input type="color" id="ts-color" value="#94a3b8" /></div>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('task-status-modal')">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('task-status-modal')">Cancel</button>
           <button type="submit" class="btn btn-primary">Save</button>
         </div>
       </form>
@@ -1813,17 +1625,17 @@
 
   <!-- Task Field Modal -->
   <div id="task-field-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2 id="task-field-modal-title">Add Task Field</h2>
-        <button class="close-btn" onclick="closeModal('task-field-modal')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title" id="task-field-modal-title">Add Task Field</h2>
+        <button class="iconbtn" onclick="closeModal('task-field-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="task-field-form" onsubmit="saveTaskField(event)">
         <input type="hidden" id="tff-id" />
         <div class="modal-body">
-          <div class="form-group"><label for="tff-name">Label <span class="req">*</span></label><input type="text" id="tff-name" required autocomplete="off" oninput="autoTaskFieldKey()" /></div>
-          <div class="form-group"><label for="tff-key">Key</label><input type="text" id="tff-key" required /></div>
-          <div class="form-group"><label for="tff-type">Type</label>
+          <div class="field"><label class="label" for="tff-name">Label <span class="req">*</span></label><input type="text" id="tff-name" required autocomplete="off" oninput="autoTaskFieldKey()" /></div>
+          <div class="field"><label class="label" for="tff-key">Key</label><input type="text" id="tff-key" required /></div>
+          <div class="field"><label class="label" for="tff-type">Type</label>
             <select id="tff-type" onchange="toggleTaskFieldOptions()">
               <option value="text">Text</option>
               <option value="number">Number</option>
@@ -1832,13 +1644,13 @@
               <option value="url">URL</option>
             </select>
           </div>
-          <div class="form-group hidden" id="tff-options-group">
-            <label for="tff-options">Options (one per line)</label>
+          <div class="field hidden" id="tff-options-group">
+            <label class="label" for="tff-options">Options (one per line)</label>
             <textarea id="tff-options" rows="4"></textarea>
           </div>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('task-field-modal')">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('task-field-modal')">Cancel</button>
           <button type="submit" class="btn btn-primary">Save</button>
         </div>
       </form>
@@ -1847,56 +1659,56 @@
 
   <!-- Project Modal -->
   <div id="project-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2 id="project-modal-title">New Project</h2>
-        <button class="close-btn" onclick="closeModal('project-modal')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title" id="project-modal-title">New Project</h2>
+        <button class="iconbtn" onclick="closeModal('project-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
-      <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
-        <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="project-name-input" /></div>
-        <div class="form-group"><label>Color</label><input type="color" id="project-color-input" value="#3b82f6" /></div>
-        <div id="project-error" style="color:var(--danger);font-size:13px;display:none"></div>
-        <div class="modal-actions">
-          <button class="btn" onclick="closeModal('project-modal')">Cancel</button>
-          <button class="btn btn-primary" onclick="saveProject()">Save</button>
-        </div>
+      <div class="modal-body">
+        <div class="field"><label class="label">Name <span class="req">*</span></label><input type="text" id="project-name-input" /></div>
+        <div class="field"><label class="label">Color</label><input type="color" id="project-color-input" value="#3b82f6" /></div>
+        <div id="project-error" class="error-text" style="display:none"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" onclick="closeModal('project-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveProject()">Save</button>
       </div>
     </div>
   </div>
 
   <!-- New List Modal -->
   <div id="list-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2 id="list-modal-title">New List</h2>
-        <button class="close-btn" onclick="closeModal('list-modal')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title" id="list-modal-title">New List</h2>
+        <button class="iconbtn" onclick="closeModal('list-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
-      <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+      <div class="modal-body">
         <input type="hidden" id="list-project-id" />
         <input type="hidden" id="list-edit-id" />
-        <div class="form-group"><label>Name <span class="req">*</span></label><input type="text" id="list-name-input" /></div>
-        <div class="modal-actions">
-          <button class="btn" onclick="closeModal('list-modal')">Cancel</button>
-          <button class="btn btn-primary" onclick="saveList()">Save</button>
-        </div>
+        <div class="field"><label class="label">Name <span class="req">*</span></label><input type="text" id="list-name-input" /></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" onclick="closeModal('list-modal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveList()">Save</button>
       </div>
     </div>
   </div>
 
   <!-- New Pipeline Modal -->
   <div id="new-pipeline-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2 id="pipeline-modal-title">New Pipeline</h2>
-        <button class="close-btn" onclick="closeModal('new-pipeline-modal')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title" id="pipeline-modal-title">New Pipeline</h2>
+        <button class="iconbtn" onclick="closeModal('new-pipeline-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="new-pipeline-form" onsubmit="saveNewPipeline(event)">
         <input type="hidden" id="pipeline-edit-id" />
         <div class="modal-body">
-          <div class="form-group"><label for="pipeline-name-input">Name <span class="req">*</span></label><input type="text" id="pipeline-name-input" required autocomplete="off" /></div>
+          <div class="field"><label class="label" for="pipeline-name-input">Name <span class="req">*</span></label><input type="text" id="pipeline-name-input" required autocomplete="off" /></div>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('new-pipeline-modal')" data-i18n="btn_cancel">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('new-pipeline-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
         </div>
       </form>
@@ -1905,30 +1717,30 @@
 
   <!-- Deal Field Modal -->
   <div id="deal-field-modal" class="modal-overlay hidden">
-    <div class="modal modal-sm">
-      <div class="modal-header">
-        <h2 id="deal-field-modal-title">Add Deal Field</h2>
-        <button class="close-btn" onclick="closeModal('deal-field-modal')">&times;</button>
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title" id="deal-field-modal-title">Add Deal Field</h2>
+        <button class="iconbtn" onclick="closeModal('deal-field-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="deal-field-form" onsubmit="saveDealField(event)">
         <input type="hidden" id="deal-field-id" />
         <div class="modal-body">
-          <div class="form-group"><label for="dff-name">Label <span class="req">*</span></label><input type="text" id="dff-name" required autocomplete="off" oninput="autoDealFieldKey()" /></div>
-          <div class="form-group"><label for="dff-key" data-i18n="lbl_key">Key</label><input type="text" id="dff-key" readonly style="opacity:.55" /></div>
-          <div class="form-group"><label for="dff-type" data-i18n="lbl_type">Type</label>
+          <div class="field"><label class="label" for="dff-name">Label <span class="req">*</span></label><input type="text" id="dff-name" required autocomplete="off" oninput="autoDealFieldKey()" /></div>
+          <div class="field"><label class="label" for="dff-key" data-i18n="lbl_key">Key</label><input type="text" id="dff-key" readonly style="opacity:.55" /></div>
+          <div class="field"><label class="label" for="dff-type" data-i18n="lbl_type">Type</label>
             <select id="dff-type" onchange="toggleDealFieldOptions()">
               <option value="text">Text</option><option value="number">Number</option>
               <option value="dropdown">Dropdown</option><option value="date">Date</option>
               <option value="url">URL</option>
             </select>
           </div>
-          <div class="form-group hidden" id="dff-options-group">
-            <label for="dff-options" data-i18n="lbl_options">Options (one per line)</label>
+          <div class="field hidden" id="dff-options-group">
+            <label class="label" for="dff-options" data-i18n="lbl_options">Options (one per line)</label>
             <textarea id="dff-options" rows="4" placeholder="Option A&#10;Option B"></textarea>
           </div>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn" onclick="closeModal('deal-field-modal')" data-i18n="btn_cancel">Cancel</button>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('deal-field-modal')" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
         </div>
       </form>
@@ -1937,10 +1749,10 @@
 
   <!-- Import CSV Modal -->
   <div id="import-modal" class="modal-overlay hidden">
-    <div class="modal modal-wide">
-      <div class="modal-header">
-        <h2>Import Contacts from CSV</h2>
-        <button class="close-btn" onclick="closeModal('import-modal')">&times;</button>
+    <div class="modal lg">
+      <div class="modal-head">
+        <h2 class="modal-title">Import Contacts from CSV</h2>
+        <button class="iconbtn" onclick="closeModal('import-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
 
       <!-- Step 1: Upload -->
@@ -1948,7 +1760,7 @@
         <div class="import-step-body">
           <div class="import-upload-area" onclick="document.getElementById('import-file-input').click()"
                ondragover="event.preventDefault()" ondrop="handleImportDrop(event)">
-            <div class="import-upload-icon"><svg class="ic" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
+            <div class="import-upload-icon"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg></div>
             <p>Drag &amp; drop a CSV here, or <span class="import-browse-link">browse</span></p>
             <p class="import-upload-hint">First row must be column headers</p>
             <input type="file" id="import-file-input" accept=".csv,text/csv" style="display:none" onchange="handleImportFile(event)" />
@@ -2013,10 +1825,11 @@
             <span>Maps to CRM field</span>
           </div>
           <div id="import-map-rows" class="import-map-rows"></div>
+          <div id="import-run-error" class="error-text" style="display:none"></div>
         </div>
 
-        <div class="modal-actions">
-          <button class="btn" onclick="importBack()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back</span></button>
+        <div class="modal-foot">
+          <button class="btn btn-secondary" onclick="importBack()"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back</span></button>
           <button class="btn btn-primary" id="import-run-btn" onclick="runImport()">Import contacts</button>
         </div>
       </div>
@@ -2025,11 +1838,11 @@
       <div id="import-step-done" class="import-step hidden">
         <div class="import-step-body">
           <div class="import-done">
-            <div class="import-done-icon"><svg class="ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg></div>
+            <div class="import-done-icon"><svg class="ic" aria-hidden="true"><use href="#i-circle-check"/></svg></div>
             <p id="import-done-text"></p>
           </div>
         </div>
-        <div class="modal-actions">
+        <div class="modal-foot">
           <button class="btn btn-primary" onclick="closeModal('import-modal');loadContacts()">Done</button>
         </div>
       </div>
@@ -2060,8 +1873,8 @@
       <div class="guide-tooltip-footer">
         <div id="guide-dots" class="guide-dots"></div>
         <div class="guide-nav-btns">
-          <button id="guide-prev-btn" class="btn btn-sm" onclick="guidePrev()"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg><span>Back</span></button>
-          <button id="guide-next-btn" class="btn btn-sm btn-primary" onclick="guideNext()"><span>Next</span><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg></button>
+          <button id="guide-prev-btn" class="btn btn-sm" onclick="guidePrev()"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg><span>Back</span></button>
+          <button id="guide-next-btn" class="btn btn-sm btn-primary" onclick="guideNext()"><span>Next</span><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
         </div>
       </div>
     </div>
@@ -2073,5 +1886,6 @@
   <script src="js/chat.js"></script>
   <script src="js/guide.js"></script>
   <script src="js/admin-import.js"></script>
+  <script src="js/detail-views.js"></script>
 </body>
 </html>

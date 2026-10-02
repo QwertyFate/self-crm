@@ -1,5 +1,6 @@
 let calViewDate = new Date();
 let calEvents = [];
+let dayModal = null;
 
 function switchPageCalendar() {
   renderCalendar();
@@ -86,15 +87,9 @@ function stripHtml(html) {
 }
 
 async function openDayModal(dateStr) {
+  if (dayModal) dayModal.close();
   const dayEvents = calEvents.filter(e => e.event_date === dateStr);
-
-  document.getElementById('day-events-modal')?.remove();
-
   const dateLabel = `${dateStr.slice(5, 7)}-${dateStr.slice(8, 10)}-${dateStr.slice(0, 4)}`;
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.id = 'day-events-modal';
-  modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
 
   const items = dayEvents.length
     ? dayEvents.map(e => `
@@ -104,28 +99,16 @@ async function openDayModal(dateStr) {
           <div class="day-event-body">
             <div class="day-event-title">${esc(e.contact_name || 'Activity')}${e.deal_title ? ` — ${esc(e.deal_title)}` : ''}</div>
             <div class="day-event-content">${esc(stripHtml(e.content || '').slice(0, 200))}</div>
-            ${e.deal_id ? `<button class="btn btn-sm" onclick="openCalendarEvent(${e.id})">Open Deal</button>` : ''}
+            ${e.deal_id ? `<button class="btn btn-sm" onclick="openCalendarEvent(${e.id})">${icon('external')}Open Deal</button>` : ''}
           </div>
         </div>
       `).join('')
     : `<p class="day-events-empty">No notes scheduled for this day.</p>`;
 
-  modal.innerHTML = `
-    <div class="modal" style="max-width:640px;width:92vw;max-height:85vh;display:flex;flex-direction:column">
-      <div class="modal-header" style="flex-shrink:0">
-        <h2>${dateLabel}</h2>
-        <button class="close-btn" onclick="document.getElementById('day-events-modal')?.remove()">&times;</button>
-      </div>
-      <div class="day-events-list" style="flex:1;overflow-y:auto;padding:16px 24px;display:flex;flex-direction:column;gap:8px">
-        ${items}
-      </div>
-      <div style="padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:16px;align-items:center;font-size:12px;color:var(--muted)">
-        <span style="display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:3px;background:#22c55e;display:inline-block"></span> Completed</span>
-        <span style="display:flex;align-items:center;gap:6px"><span style="width:12px;height:12px;border-radius:3px;background:#ef4444;display:inline-block"></span> Not done yet</span>
-      </div>
-    </div>`;
-
-  document.body.appendChild(modal);
+  dayModal = ui.modal({ title: dateLabel, size: 'md',
+    body: `<div class="day-events-list" style="display:flex;flex-direction:column;gap:8px">${items}</div>`,
+    footer: `<div class="legend grow"><span><i style="background:var(--success)"></i> Completed</span><span><i style="background:var(--danger)"></i> Not done yet</span></div><button class="btn btn-secondary" data-close>Close</button>`,
+    onClose: () => { dayModal = null; } });
 }
 
 async function toggleActivityComplete(activityId, completed) {
@@ -145,7 +128,7 @@ function openCalendarEvent(activityId) {
   const ev = calEvents.find(e => e.id === activityId);
   if (!ev) return;
   if (ev.deal_id) {
-    document.getElementById('day-events-modal')?.remove();
+    if (dayModal) dayModal.close();
     openDealModal(ev.deal_id);
   }
 }

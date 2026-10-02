@@ -28,9 +28,6 @@ function fmtCurrency(n) {
 }
 
 async function loadAnalytics() {
-  const mainSections = document.getElementById('analytics-main-sections');
-  if (mainSections) mainSections.innerHTML = '';
-
   const data = await api.get('/api/analytics/summary');
   if (!data || data.error) return;
   analyticsData = data;
@@ -102,7 +99,7 @@ function renderAnalyticsCards(d) {
     const content = getStatCardContent(id, d);
     return `
     <div class="analytics-card" draggable="true" data-stat-id="${id}">
-      <div class="analytics-card-drag">⠿</div>
+      <div class="analytics-card-drag">${icon('grip', 'ic-sm')}</div>
       <div class="analytics-card-accent" style="background:${def.color}"></div>
       <div class="analytics-card-label">${def.label}</div>
       <div class="analytics-card-value">${content.value}</div>
@@ -203,6 +200,7 @@ function saveLayoutConfig() {
 
 function renderWinLoss(d) {
   const section = document.getElementById('analytics-winloss-section');
+  if (!section) return;
   const total   = d.won_deals + d.lost_deals + d.open_deals;
   section.style.display = '';
   if (total === 0) {
@@ -233,6 +231,7 @@ function renderWinLoss(d) {
 
 function renderByPipeline(d) {
   const el       = document.getElementById('analytics-by-pipeline');
+  if (!el) return;
   const hasValue = d.config.value_field != null;
   if (!d.by_pipeline.length) { el.innerHTML = '<p style="color:var(--muted)">No pipelines yet.</p>'; return; }
   const maxCount = Math.max(...d.by_pipeline.map(p => parseInt(p.cnt) || 0), 1);
@@ -290,7 +289,7 @@ function renderTrendCards() {
     return `
     <div class="trend-card" draggable="true" data-card-id="${id}">
       <div class="trend-card-header">
-        <div class="trend-drag-handle" title="Drag to reorder">⠿</div>
+        <div class="trend-drag-handle" title="Drag to reorder">${icon('grip', 'ic-sm')}</div>
         <div class="trend-card-title">${def.title}</div>
         <div class="trend-view-btns">
           <button class="trend-view-btn${view==='line'   ? ' active':''}" onclick="setCardView('${id}','line')"   title="Line">╱</button>

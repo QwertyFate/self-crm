@@ -122,10 +122,7 @@ function renderObjectsTable(list, q = '') {
       return `<tr>
         <td class="name-cell" title="${esc(o.name)}"><strong class="contact-name-link" onclick="openObjectDetail(${o.id})">${esc(o.name)}</strong></td>
         ${cells}
-        <td style="white-space:nowrap">
-          <button class="btn btn-sm btn-ghost" onclick="openObjectModal(${o.id})">Edit</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteObject(${o.id})">Delete</button>
-        </td>
+        <td style="white-space:nowrap"><button class="iconbtn" style="width:28px;height:28px" onclick="openObjectKebab(this,${o.id})" aria-label="Actions for ${esc(o.name)}" aria-haspopup="menu">${icon('ellipsis')}</button></td>
       </tr>`;
     }).join('');
   }
@@ -136,13 +133,37 @@ function renderObjectsTable(list, q = '') {
   if (!pagEl) return;
   if (!total) { pagEl.innerHTML = ''; return; }
   const s = (objCurrentPage - 1) * PAGE_SIZE + 1, e = Math.min(objCurrentPage * PAGE_SIZE, total);
-  pagEl.innerHTML = `<span class="pagination-info">Showing ${s}–${e} of ${total}</span>` + (totalPages > 1
-    ? `<div class="pagination-controls">
-        <button class="page-btn" onclick="objGoToPage(${objCurrentPage-1})" ${objCurrentPage===1?'disabled':''}>‹</button>
-        ${buildPageNumbers(objCurrentPage, totalPages).map(p => p==='…'?'<span class="page-ellipsis">…</span>':`<button class="page-btn${p===objCurrentPage?' active':''}" onclick="objGoToPage(${p})">${p}</button>`).join('')}
-        <button class="page-btn" onclick="objGoToPage(${objCurrentPage+1})" ${objCurrentPage===totalPages?'disabled':''}>›</button>
-      </div>`
+  pagEl.innerHTML = `<span class="tnum">Showing ${s}–${e} of ${total}</span>` + (totalPages > 1
+    ? `<nav class="ct-pg" aria-label="Pagination">
+        <button type="button" onclick="objGoToPage(${objCurrentPage-1})" aria-label="Previous page" ${objCurrentPage===1?'disabled':''}><span class="ct-flip">${icon('chevron-right')}</span></button>
+        ${buildPageNumbers(objCurrentPage, totalPages).map(p => p==='…'?'<span class="gap" aria-hidden="true">…</span>':`<button type="button" onclick="objGoToPage(${p})" ${p===objCurrentPage?'aria-current="page"':''}>${p}</button>`).join('')}
+        <button type="button" onclick="objGoToPage(${objCurrentPage+1})" aria-label="Next page" ${objCurrentPage===totalPages?'disabled':''}>${icon('chevron-right')}</button>
+      </nav>`
     : '');
+}
+
+function openObjectKebab(anchor, id) {
+  ui.menu(anchor, [
+    { label: t('btn_edit'), icon: 'pencil', onSelect: () => openObjectModal(id) },
+    { sep: true },
+    { label: t('btn_delete'), icon: 'trash', danger: true, onSelect: () => deleteObject(id) },
+  ], { align: 'right' });
+}
+
+function exportObjectsCsv() {
+  const visCols = effectiveObjectColumns().filter(c => c.visible);
+  const typeName = currentWorkspace?.object_name || 'Listings';
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const head = [typeName.replace(/s$/i, '') + ' name', ...visCols.map(c => c.label()), 'Created'];
+  const rows = objects.map(o => [o.name, ...visCols.map(c => c.key === 'created_at' ? fmtDate(o.created_at) : (o.custom_data?.[c.key] ?? '')), fmtDate(o.created_at)].map(q).join(','));
+  const csv = [head.map(q).join(','), ...rows].join('\n');
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }));
+  link.download = `${typeName.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link); link.click(); link.remove();
+}
+function openObjectsMoreMenu(anchor) {
+  ui.menu(anchor, [{ label: t('export_csv'), icon: 'download', onSelect: () => exportObjectsCsv() }], { align: 'right' });
 }
 
 // Toolbar feedback: how many rows matched + a Clear button while searching.
@@ -189,7 +210,7 @@ async function openObjectModal(id) {
   if (nameLabel) nameLabel.innerHTML = `${esc(typeName)} name <span class="req">*</span>`;
   document.getElementById('obj-custom-fields').innerHTML = objectFields.length
     ? objectFields.map(f =>
-        `<div class="form-group"><label for="dfield-${f.field_key}">${esc(f.name)}</label>${renderDealFieldInput(f,'')}</div>`
+        `<div class="field"><label class="label" for="dfield-${f.field_key}">${esc(f.name)}</label>${renderDealFieldInput(f,'')}</div>`
       ).join('')
     : '<p class="text-xs text-muted">No extra fields set up yet — the name is all that is needed.</p>';
   if (id) {
@@ -214,7 +235,8 @@ async function saveObject(e) {
 
 async function deleteObject(id) {
   const singular = (currentWorkspace?.object_name || 'Listing').replace(/s$/i,'');
-  if (!confirm(`Delete this ${singular.toLowerCase()}?`)) return;
+  const ok = await ui.confirm({ title: `Delete this ${singular.toLowerCase()}?`, message: 'Links to deals and contacts are removed with it. This cannot be undone.', confirmLabel: 'Delete', danger: true });
+  if (!ok) return;
   await api.del(`/api/objects/${id}`);
   objects = objects.filter(o => o.id !== id); renderObjectsCurrent();
 }
@@ -227,182 +249,72 @@ async function openObjectDetail(id) {
   ]);
   if (!objectFields.length) objectFields = await api.get('/api/object-fields');
   if (!deals.length) deals = await api.get('/api/deals');
+  if (!pipelines.length) pipelines = await api.get('/api/pipelines');
 
-  document.getElementById('object-detail-title').textContent = obj.name;
-
+  const S = { obj };
   const supplierLabel = currentWorkspace?.supplier_name || 'Suppliers';
+  const stageOfDeal = d => (pipelines.find(p => p.id === d.pipeline_id)?.stages || []).find(s => s.id === d.stage_id);
 
-  const fieldHtml = objectFields.map(f => {
-    const v = obj.custom_data?.[f.field_key];
-    return v ? `<div class="detail-item"><label>${esc(f.name)}</label><span>${esc(v)}</span></div>` : '';
-  }).join('') || '<p class="text-xs text-muted">No details recorded yet.</p>';
+  function detailsCard() {
+    const rows = objectFields.map(f => { const v = S.obj.custom_data?.[f.field_key]; return v ? `<dt>${esc(f.name)}</dt><dd>${esc(v)}</dd>` : ''; }).join('');
+    return `<section class="card" aria-label="Details"><div class="card-header"><h2 class="card-title">Details</h2></div>
+      <div class="card-body">${rows ? `<dl class="kv" style="margin:0">${rows}</dl>` : '<p class="muted">No details recorded yet.</p>'}</div></section>`;
+  }
+  function peopleCard() {
+    const linked = S.obj.contacts || [];
+    const rows = linked.map(c => `<li class="list-item"><div class="person">${avatar(c.name)}<div style="min-width:0"><div class="p-name truncate">${esc(c.name)}${c.company ? ` <span class="muted">${esc(c.company)}</span>` : ''}</div>
+        <div class="p-sub">${c.contact_type === 'supplier' ? esc(supplierLabel.replace(/s$/i, '')) : 'Contact'}${c.email ? ` · ${esc(c.email)}` : ''}</div></div></div>
+      <button class="iconbtn" data-act="unlink-contact" data-id="${c.id}" aria-label="Unlink ${esc(c.name)}">${icon('x')}</button></li>`).join('');
+    return `<section class="card" aria-label="Contacts and ${esc(supplierLabel)}"><div class="card-header"><h2 class="card-title">Contacts &amp; ${esc(supplierLabel)}</h2>
+        <button class="btn btn-ghost btn-sm" data-act="link-contact">${icon('plus')}Link</button></div>
+      ${rows ? `<ul class="list">${rows}</ul>` : '<div class="card-body"><p class="muted">No contacts or suppliers linked.</p></div>'}</section>`;
+  }
+  function dealsCard() {
+    const linked = S.obj.deals || [];
+    const rows = linked.map(d => { const st = stageOfDeal(d); return `<li class="list-item clickable" data-act="open-deal" data-id="${d.id}"><div class="grow" style="min-width:0"><div class="p-name truncate">${esc(d.title)}</div>
+        <div class="p-sub">${st ? `<span class="stage-pill"><i style="background:${esc(st.color)}"></i>${esc(st.name)}</span>` : 'No stage'}${d.value != null ? ` · ${fmtEUR(d.value)}` : ''}</div></div>
+      <button class="iconbtn" data-act="unlink-deal" data-id="${d.id}" aria-label="Unlink ${esc(d.title)}">${icon('x')}</button></li>`; }).join('');
+    return `<section class="card" aria-label="Deals"><div class="card-header"><h2 class="card-title">Deals</h2>
+        <button class="btn btn-ghost btn-sm" data-act="link-deal">${icon('plus')}Link</button></div>
+      ${rows ? `<ul class="list">${rows}</ul>` : '<div class="card-body"><p class="muted">No deals linked.</p></div>'}</section>`;
+  }
+  function render() { m.body.innerHTML = `<div class="col" style="gap:16px">${detailsCard()}${peopleCard()}${dealsCard()}</div>`; }
 
-  const linkedContactIds = new Set((obj.contacts || []).map(c => c.id));
-  const contactRows = (obj.contacts || []).map(c => `
-    <div class="contact-deal-row" style="cursor:pointer">
-      <div style="flex:1">
-        <div class="contact-deal-title">${esc(c.name)}${c.company ? ` <span style="font-size:11px;color:var(--muted)">${esc(c.company)}</span>` : ''}</div>
-        <div class="contact-deal-meta">
-          <span style="font-size:11px;color:var(--muted)">${c.contact_type === 'supplier' ? esc(supplierLabel.replace(/s$/i,'')) : 'Contact'}</span>
-          ${c.email ? `<span style="font-size:11px;color:var(--muted)">${esc(c.email)}</span>` : ''}
-        </div>
-      </div>
-      <button class="btn btn-sm btn-danger btn-icon" onclick="unlinkContactFromObject(${id},${c.id})">✕</button>
-    </div>`).join('') || '<p style="color:var(--muted);font-size:12px;padding:4px 0">No contacts or suppliers linked.</p>';
+  const m = ui.modal({ title: obj.name, size: 'lg', body: '<div></div>',
+    footer: `<button class="btn btn-danger-ghost" data-act="delete" style="margin-right:auto">${icon('trash')}Delete</button><button class="btn btn-secondary" data-act="edit">${icon('pencil')}Edit</button><button class="btn btn-secondary" data-close>Close</button>` });
 
-  const availablePeople = [...allContacts, ...allSuppliers].filter(c => !linkedContactIds.has(c.id));
-
-  const linkedDealIds = new Set((obj.deals || []).map(d => d.id));
-  const dealRows = (obj.deals || []).map(d => `
-    <div class="contact-deal-row" style="cursor:pointer" onclick="navigateToDeal(${d.id})">
-      <div class="contact-deal-title">${esc(d.title)}</div>
-      <div class="contact-deal-meta">
-        ${d.stage_name ? `<span class="contact-deal-stage" style="border-color:${d.stage_color||'var(--border)'}">${esc(d.stage_name)}</span>` : ''}
-        ${d.pipeline_name ? `<span style="font-size:11px;color:var(--muted)">${esc(d.pipeline_name)}</span>` : ''}
-        ${d.value != null ? `<span class="contact-deal-value">€ ${Number(d.value).toLocaleString()}</span>` : ''}
-      </div>
-    </div>`).join('') || '<p style="color:var(--muted);font-size:12px;padding:4px 0">No deals linked.</p>';
-
-  document.getElementById('object-detail-body').innerHTML = `
-    <div class="detail-section"><div class="detail-grid">${fieldHtml}</div></div>
-
-    <div class="detail-section">
-      <div class="detail-section-header"><h3>Contacts & ${esc(supplierLabel)}</h3></div>
-      <div class="contact-deals-list" id="obj-detail-contact-rows">${contactRows}</div>
-      <div class="object-panel-add" style="margin-top:10px;align-items:flex-start">
-        <div class="deal-search-wrap">
-          <input type="text" id="obj-contact-search" placeholder="Search contacts or ${esc(supplierLabel.toLowerCase())}…"
-            autocomplete="off" oninput="filterObjectContactSearch(${id})" onfocus="filterObjectContactSearch(${id})" />
-          <div class="deal-search-dropdown hidden" id="obj-contact-dropdown"></div>
-        </div>
-        <button class="btn btn-sm btn-primary" onclick="linkContactToObject(${id})" style="flex-shrink:0">Link</button>
-      </div>
-    </div>
-
-    <div class="detail-section">
-      <div class="detail-section-header"><h3>Deals</h3></div>
-      <div class="contact-deals-list" id="obj-detail-deal-rows">${dealRows}</div>
-      <div class="object-panel-add" style="margin-top:10px;align-items:flex-start">
-        <div class="deal-search-wrap">
-          <input type="text" id="obj-deal-search" placeholder="Search deals by name or contact…"
-            autocomplete="off" oninput="filterDealSearch(${id})" onfocus="filterDealSearch(${id})" />
-          <div class="deal-search-dropdown hidden" id="obj-deal-dropdown"></div>
-        </div>
-        <button class="btn btn-sm btn-primary" onclick="linkDealToObject(${id})" style="flex-shrink:0">Link</button>
-      </div>
-    </div>
-
-    <div class="detail-actions">
-      <button class="btn btn-danger btn-sm" onclick="deleteObject(${id});closeModal('object-detail-modal')">Delete</button>
-      <button class="btn btn-sm" onclick="closeModal('object-detail-modal');openObjectModal(${id})">Edit</button>
-    </div>`;
-
-  const contactInput = document.getElementById('obj-contact-search');
-  contactInput._availablePeople = availablePeople;
-  contactInput._selectedContactId = null;
-
-  const dealInput = document.getElementById('obj-deal-search');
-  dealInput._availableDeals = deals.filter(d => !linkedDealIds.has(d.id));
-  dealInput._selectedDealId = null;
-
-  // The dropdowns live inside the scrolling modal body, so close them when it scrolls.
-  const detailBody = document.getElementById('object-detail-body');
-  if (detailBody) detailBody.onscroll = () => {
-    document.querySelectorAll('.deal-search-dropdown').forEach(dd => dd.classList.add('hidden'));
+  async function reload() { S.obj = await api.get(`/api/objects/${id}`); render(); }
+  const A = {
+    'link-contact': el => {
+      const linkedIds = new Set((S.obj.contacts || []).map(c => c.id));
+      const available = [...allContacts, ...allSuppliers].filter(c => !linkedIds.has(c.id));
+      if (!available.length) return ui.toast('Everyone is already linked.');
+      ui.select(el, available.map(c => ({ value: c.id, label: c.company ? `${c.name}, ${c.company}` : c.name })), null, async v => {
+        const res = await api.post(`/api/objects/${id}/contacts`, { contact_id: v }); if (res?.error) return ui.toast(res.error);
+        await reload(); ui.toast('Linked');
+      });
+    },
+    'unlink-contact': async el => { const res = await api.del(`/api/objects/${id}/contacts/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); await reload(); ui.toast('Unlinked'); },
+    'link-deal': el => {
+      const linkedIds = new Set((S.obj.deals || []).map(d => d.id));
+      const available = deals.filter(d => !linkedIds.has(d.id));
+      if (!available.length) return ui.toast('Every deal is already linked.');
+      ui.select(el, available.map(d => ({ value: d.id, label: d.contact_name ? `${d.title} — ${d.contact_name}` : d.title })), null, async v => {
+        const res = await api.post(`/api/objects/${id}/deals`, { deal_id: v }); if (res?.error) return ui.toast(res.error);
+        deals = await api.get('/api/deals'); await reload(); ui.toast('Linked');
+      });
+    },
+    'unlink-deal': async el => { const res = await api.del(`/api/objects/${id}/deals/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); deals = await api.get('/api/deals'); await reload(); ui.toast('Unlinked'); },
+    'open-deal': el => { m.close(); openDealDetail(+el.dataset.id); },
+    delete: async () => { m.close(); await deleteObject(id); },
+    edit: () => { m.close(); openObjectModal(id); },
   };
-
-  document.getElementById('object-detail-modal').classList.remove('hidden');
-}
-
-function positionDropdown(input, dropdown) {
-  const rect = input.getBoundingClientRect();
-  dropdown.style.top   = `${rect.bottom + 2}px`;
-  dropdown.style.left  = `${rect.left}px`;
-  dropdown.style.width = `${rect.width}px`;
-}
-
-function filterObjectContactSearch(objectId) {
-  document.getElementById('obj-deal-dropdown')?.classList.add('hidden');
-
-  const input = document.getElementById('obj-contact-search'), dropdown = document.getElementById('obj-contact-dropdown');
-  if (!input || !dropdown) return;
-  positionDropdown(input, dropdown);
-
-  const q = input.value.toLowerCase().trim(), available = input._availablePeople || [];
-  const results = q
-    ? available.filter(c => c.name.toLowerCase().includes(q) || (c.company||'').toLowerCase().includes(q) || (c.email||'').toLowerCase().includes(q)).slice(0, 8)
-    : available.slice(0, 5);
-  const supplierLabel = currentWorkspace?.supplier_name || 'Suppliers';
-  dropdown.innerHTML = results.length
-    ? results.map(c => `
-        <div class="deal-search-item" onclick="selectObjectContactItem(${c.id}, ${objectId})">
-          <div class="dsi-title">${esc(c.name)}${c.company ? ` · ${esc(c.company)}` : ''}</div>
-          <div class="dsi-meta">${c.contact_type === 'supplier' ? esc(supplierLabel.replace(/s$/i,'')) : 'Contact'}${c.email ? ` · ${esc(c.email)}` : ''}</div>
-        </div>`).join('')
-    : `<div class="deal-search-item dsi-empty">${q ? 'No matches' : 'No contacts available to link'}</div>`;
-  dropdown.classList.remove('hidden');
-}
-
-function selectObjectContactItem(contactId, objectId) {
-  const input = document.getElementById('obj-contact-search'), dropdown = document.getElementById('obj-contact-dropdown');
-  const person = (input?._availablePeople || []).find(c => c.id === contactId);
-  if (!person || !input) return;
-  input.value = person.name + (person.company ? ` · ${person.company}` : '');
-  input._selectedContactId = contactId;
-  dropdown?.classList.add('hidden');
-}
-
-async function linkContactToObject(objectId) {
-  const input = document.getElementById('obj-contact-search'), contactId = input?._selectedContactId;
-  if (!contactId) return;
-  await api.post(`/api/objects/${objectId}/contacts`, { contact_id: contactId });
-  await openObjectDetail(objectId);
-}
-
-async function unlinkContactFromObject(objectId, contactId) {
-  await api.del(`/api/objects/${objectId}/contacts/${contactId}`);
-  await openObjectDetail(objectId);
-}
-
-function filterDealSearch(objectId) {
-  document.getElementById('obj-contact-dropdown')?.classList.add('hidden');
-
-  const input = document.getElementById('obj-deal-search'), dropdown = document.getElementById('obj-deal-dropdown');
-  if (!input || !dropdown) return;
-  positionDropdown(input, dropdown);
-
-  const q = input.value.toLowerCase().trim(), available = input._availableDeals || [];
-  const results = q
-    ? available.filter(d => d.title.toLowerCase().includes(q) || (d.contact_name || '').toLowerCase().includes(q)).slice(0, 8)
-    : available.slice(0, 5);
-  dropdown.innerHTML = results.length
-    ? results.map(d => `
-        <div class="deal-search-item" data-id="${d.id}" onclick="selectDealSearchItem(${d.id}, ${objectId})">
-          <div class="dsi-title">${esc(d.title)}</div>
-          <div class="dsi-meta">${d.contact_name ? esc(d.contact_name) + (d.stage_name ? ' · ' : '') : ''}${d.stage_name ? esc(d.stage_name) : ''}</div>
-        </div>`).join('')
-    : `<div class="deal-search-item dsi-empty">${q ? 'No matching deals' : 'No deals available to link'}</div>`;
-  dropdown.classList.remove('hidden');
-}
-
-function selectDealSearchItem(dealId, objectId) {
-  const input = document.getElementById('obj-deal-search'), dropdown = document.getElementById('obj-deal-dropdown');
-  const deal = (input?._availableDeals || []).find(d => d.id === dealId);
-  if (!deal || !input) return;
-  input.value = deal.title + (deal.contact_name ? ` — ${deal.contact_name}` : '');
-  input._selectedDealId = dealId; dropdown?.classList.add('hidden');
-}
-
-async function linkDealToObject(objectId) {
-  const input = document.getElementById('obj-deal-search'), dealId = input?._selectedDealId;
-  if (!dealId) return;
-  await api.post(`/api/objects/${objectId}/deals`, { deal_id: dealId });
-  objects = await api.get('/api/objects'); deals = await api.get('/api/deals');
-  await openObjectDetail(objectId);
+  on(m.el, 'click', '[data-act]', (e, el) => { const fn = A[el.dataset.act]; if (fn) fn(el); });
+  render();
 }
 
 async function navigateToDeal(dealId) {
-  closeModal('object-detail-modal'); switchPage('deals'); await openDealModal(dealId);
+  await openDealDetail(dealId);
 }
 
 function renderObjectFieldsList() {
@@ -520,14 +432,25 @@ function loadBoard() {
   const el = document.getElementById('board-content'), url = currentWorkspace?.miro_url;
   if (!el) return;
   el.innerHTML = '';
-  if (!url) { el.innerHTML = `<div class="board-empty"><p>No Miro board linked yet.</p><p>Go to <strong>Settings → General → Miro Board</strong> and paste your embed URL.</p></div>`; return; }
+  if (!url) {
+    el.innerHTML = `<div class="board-empty bd-empty">
+      <div class="hero">${icon('board')}</div>
+      <h2>No Miro board linked yet</h2>
+      <ol class="bd-steps">
+        <li>Open <strong>Settings → General → Miro Board</strong>.</li>
+        <li>In Miro, choose <strong>Share → Embed</strong> and copy the link.</li>
+        <li>Paste it there and save — this page will show it from then on.</li>
+      </ol>
+    </div>`;
+    return;
+  }
   const boardUrl = getMiroBoardUrl(url);
   el.innerHTML = `
     <div class="board-topbar">
-      <span class="board-topbar-hint">⚠️ Seeing a login page or 403? Google blocks login inside iframes. Open Miro in a new tab, log in, then click Reload.</span>
+      <span class="board-topbar-hint">${icon('alert', 'ic-sm')} Seeing a login page or 403? Google blocks login inside iframes. Open Miro in a new tab, log in, then click Reload.</span>
       <div style="display:flex;gap:8px;flex-shrink:0">
-        <button class="btn btn-sm" onclick="reloadMiroIframe()">🔄 Reload</button>
-        <a class="btn btn-sm btn-primary" href="${esc(boardUrl)}" target="_blank" rel="noopener">Open in Miro ↗</a>
+        <button class="btn btn-sm" onclick="reloadMiroIframe()">${icon('refresh', 'ic-sm')}Reload</button>
+        <a class="btn btn-sm btn-primary" href="${esc(boardUrl)}" target="_blank" rel="noopener">${icon('arrow-up-right', 'ic-sm')}Open in Miro</a>
       </div>
     </div>
     <iframe id="miro-iframe" src="${esc(url)}" class="miro-iframe" allow="fullscreen; clipboard-read; clipboard-write" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
@@ -542,22 +465,99 @@ async function saveMiroUrl() {
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
-async function loadActivities() {
-  const el = document.getElementById('activities-list');
-  if (el) el.innerHTML = '';
+// Toolbar/feed state for the Activities page: search, type, and who logged it.
+let activitiesUI = { q: '', type: null, by: null };
 
+async function loadActivities() {
+  await ensureMembers();
   activities = await api.get('/api/activities');
+  renderActivities();
+}
+
+function visibleActivities() {
+  const q = activitiesUI.q.trim().toLowerCase();
+  return activities.filter(a => {
+    if (activitiesUI.type && a.type !== activitiesUI.type) return false;
+    if (activitiesUI.by != null && a.created_by !== activitiesUI.by) return false;
+    if (q && !`${a.content || ''} ${a.contact_name || ''}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+
+function renderActivities() {
+  const sub = document.getElementById('activities-page-sub');
+  if (sub) {
+    const weekMs = 7 * 86400000, week = activities.filter(a => Date.now() - new Date(a.created_at).getTime() < weekMs).length;
+    sub.textContent = tf('activities_logged', { n: activities.length, m: week });
+  }
+  renderActivitiesToolbar();
+  renderActivitiesFeed();
+}
+
+function renderActivitiesToolbar() {
+  const el = document.getElementById('activities-toolbar');
+  if (!el) return;
+  const active = document.activeElement && document.activeElement.id === 'activities-q';
+  const types = [...new Set(activities.map(a => a.type))];
+  const any = activitiesUI.q || activitiesUI.type || activitiesUI.by != null;
+  el.innerHTML = `<div class="input-group" style="width:260px">${icon('search')}<input class="input" id="activities-q" type="search" placeholder="${esc(t('search_activities'))}" value="${esc(activitiesUI.q)}" aria-label="${esc(t('search_activities'))}" oninput="onActivitiesSearch(this.value)"></div>
+    ${activitiesChip('type', types)}${activitiesChip('by', members)}
+    ${any ? `<button class="btn btn-ghost btn-sm" type="button" onclick="clearActivitiesFilters()">${esc(t('clear_filters'))}</button>` : ''}`;
+  if (active) { const q = document.getElementById('activities-q'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+}
+function activitiesChip(key, opts) {
+  const v = activitiesUI[key], on = v != null && v !== '';
+  const txt = on ? (key === 'type' ? t('act_' + v) : (members.find(m => m.id === v)?.name || '')) : '';
+  return `<button class="chip ${on ? 'on' : ''}" type="button" onclick="openActivitiesChip(this,'${key}')" aria-haspopup="menu">${esc(t('chip_' + (key === 'by' ? 'person' : key)))}${on ? ': ' + esc(txt) : ''}${icon('chevron-down', 'ic-sm')}</button>`;
+}
+function openActivitiesChip(anchor, key) {
+  const opts = key === 'type' ? [...new Set(activities.map(a => a.type))].map(v => ({ value: v, label: t('act_' + v) }))
+    : members.map(m => ({ value: m.id, label: m.name }));
+  ui.select(anchor, [{ value: null, label: t('filter_all') }, ...opts], activitiesUI[key], v => { activitiesUI[key] = v; renderActivities(); });
+}
+let activitiesSearchTimer = null;
+function onActivitiesSearch(value) {
+  activitiesUI.q = value;
+  clearTimeout(activitiesSearchTimer);
+  activitiesSearchTimer = setTimeout(() => { renderActivitiesToolbar(); renderActivitiesFeed(); }, 120);
+}
+function clearActivitiesFilters() { activitiesUI = { q: '', type: null, by: null }; renderActivities(); }
+
+function renderActivitiesFeed() {
+  const el = document.getElementById('activities-list');
+  if (!el) return;
+  const rows = visibleActivities();
   if (!activities.length) { el.innerHTML = `<p style="color:var(--muted);padding:8px">${t('no_activities')}</p>`; return; }
-  el.innerHTML = activities.map(a => `
+  if (!rows.length) { el.innerHTML = `<div class="empty">${icon('search')}<b>${esc(t('no_activities_match'))}</b></div>`; return; }
+  el.innerHTML = rows.map(a => `
     <div class="activity-item">
-      <div class="act-icon ${a.type}">${ICONS[a.type]}</div>
+      <div class="act-icon ${a.type}">${icon(a.type)}</div>
       <div class="act-body">
         <div class="act-meta"><strong>${t('act_' + a.type)}</strong>${a.contact_name ? ` · ${esc(a.contact_name)}` : ''} · ${fmtDate(a.created_at)}</div>
         ${a.logged_by_name ? `<div class="act-logged-by">${t('logged_by')} ${esc(a.logged_by_name)} · <span class="act-logged-email">${esc(a.logged_by_email||'')}</span></div>` : ''}
         <div class="act-content">${esc(a.content)}</div>
       </div>
-      <button class="btn btn-sm btn-danger btn-icon" onclick="deleteActivity(${a.id})">✕</button>
+      <button class="iconbtn" onclick="openActivityKebab(this,${a.id})" aria-label="Actions" aria-haspopup="menu">${icon('ellipsis')}</button>
     </div>`).join('');
 }
 
-async function deleteActivity(id) { await api.del(`/api/activities/${id}`); loadActivities(); }
+function openActivityKebab(anchor, id) {
+  ui.menu(anchor, [{ label: t('delete_activity'), icon: 'trash', danger: true, onSelect: () => deleteActivity(id) }], { align: 'right' });
+}
+async function deleteActivity(id) { await api.del(`/api/activities/${id}`); activities = activities.filter(a => a.id !== id); renderActivities(); ui.toast(t('activity_deleted')); }
+
+function exportActivitiesCsv() {
+  const rows = visibleActivities();
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const head = ['Type', 'Contact', 'Logged by', 'Date', 'Content'];
+  const lines = rows.map(a => [t('act_' + a.type), a.contact_name || '', a.logged_by_name || '', a.created_at ? new Date(a.created_at).toISOString().slice(0, 10) : '', a.content || ''].map(q).join(','));
+  const csv = [head.map(q).join(','), ...lines].join('\n');
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }));
+  link.download = `activities-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link); link.click(); link.remove();
+  ui.toast(tf('export_activities_csv', { n: rows.length }));
+}
+function openActivitiesMoreMenu(anchor) {
+  ui.menu(anchor, [{ label: t('export_csv'), icon: 'download', onSelect: () => exportActivitiesCsv() }], { align: 'right' });
+}

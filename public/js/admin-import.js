@@ -27,8 +27,8 @@ async function loadAdminInvites() {
         <span class="admin-invite-date">${fmtDate(inv.created_at)}</span>
       </div>
       <div class="admin-invite-actions">
-        <button class="btn btn-sm btn-ghost" onclick="adminCopyCode('${inv.code}', this)" title="Copy">📋</button>
-        ${!inv.used ? `<button class="btn btn-sm btn-danger" onclick="adminDeleteCode(${inv.id})" title="Delete">✕</button>` : ''}
+        <button class="btn btn-sm btn-ghost" onclick="adminCopyCode('${inv.code}', this)" title="Copy">${icon('copy', 'ic-sm')}</button>
+        ${!inv.used ? `<button class="btn btn-sm btn-danger" onclick="adminDeleteCode(${inv.id})" title="Delete">${icon('x', 'ic-sm')}</button>` : ''}
       </div>
     </div>`).join('');
 }
@@ -40,8 +40,14 @@ async function adminDeleteCode(id) {
   if (!confirm('Delete this invite code?')) return;
   const res = await api.del(`/api/admin/invites/${id}`); if (res.error) { alert(res.error); return; } loadAdminInvites();
 }
+// Swaps the button's markup (not just its text), so the sprite icon it
+// normally holds comes back correctly once the "copied" confirmation fades.
 function adminCopyCode(code, btn) {
-  navigator.clipboard.writeText(code).then(() => { const orig = btn.textContent; btn.textContent = '✓'; setTimeout(() => { btn.textContent = orig; }, 1500); });
+  navigator.clipboard.writeText(code).then(() => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = icon('check', 'ic-sm');
+    setTimeout(() => { btn.innerHTML = orig; }, 1500);
+  });
 }
 
 function exportContactsCSV() {
@@ -106,7 +112,7 @@ function autoMapHeader(header) {
 }
 
 async function openImportModal() {
-  await ensureMembers();
+  await Promise.all([ensureMembers(), ensurePipelines()]);
   importData = null; showImportStep('upload');
   const fi = document.getElementById('import-file-input'); if (fi) fi.value = '';
   document.getElementById('import-modal').classList.remove('hidden');
@@ -286,6 +292,12 @@ async function runImport() {
     defaultAssigneeId: assigneeId
   });
   btn.disabled = false; btn.textContent = 'Import contacts';
+  const errEl = document.getElementById('import-run-error');
+  if (res.error) {
+    if (errEl) { errEl.textContent = res.error; errEl.style.display = ''; }
+    return;
+  }
+  if (errEl) errEl.style.display = 'none';
   const dealsCreated = res.deals_created || 0;
   let message = `Successfully imported ${res.imported} contact${res.imported !== 1 ? 's' : ''}.`;
   if (dealsCreated > 0) message += ` Created ${dealsCreated} deal${dealsCreated !== 1 ? 's' : ''}.`;

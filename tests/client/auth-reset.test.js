@@ -17,7 +17,7 @@ const INITIAL = {
   pipelines: [], deals: [], dealFields: [], dealColumns: [], currentPipelineId: null, dragDealId: null,
   kanbanFields: ['company', 'email'], dealKanbanFields: ['contact', 'value'], contactColumns: [], colWidths: {},
   objects: [], objectFields: [], objectColumns: [], objCurrentPage: 1,
-  tasks: [], taskProjects: [], currentProjectId: null, currentListId: null, currentProject: null, taskFields: [], taskLinkOptionsCache: null,
+  tasks: [], taskProjects: [], currentProjectId: null, currentListId: null, currentProject: null, taskFields: [],
   analyticsData: null, trendRawData: null, calEvents: [],
   intgData: null, engineData: null, activeGuideId: null, activeCustomKeys: [],
   currentSettingsTab: 'workspace', currentIntgTab: 'webhook',
@@ -32,7 +32,7 @@ const SEEDED = {
   pipelines: [{ id: 11 }], deals: [{ id: 5 }], dealFields: [{ id: 2 }], dealColumns: [{ key: 'value', visible: true }], currentPipelineId: 11, dragDealId: 5,
   kanbanFields: ['phone'], dealKanbanFields: ['value'], contactColumns: [{ key: 'email' }], colWidths: { name: 200 },
   objects: [{ id: 3 }], objectFields: [{ id: 4 }], objectColumns: [{ key: 'x' }], objCurrentPage: 3,
-  tasks: [{ id: 9 }], taskProjects: [{ id: 2 }], currentProjectId: 2, currentListId: 7, currentProject: { id: 2 }, taskFields: [{ id: 1 }], taskLinkOptionsCache: { deals: [] },
+  tasks: [{ id: 9 }], taskProjects: [{ id: 2 }], currentProjectId: 2, currentListId: 7, currentProject: { id: 2 }, taskFields: [{ id: 1 }],
   analyticsData: { total: 1 }, trendRawData: { x: 1 }, calEvents: [{ id: 1 }],
   intgData: { webhook: {} }, engineData: { engine: {} }, activeGuideId: 'zapier', activeCustomKeys: ['k'],
   currentSettingsTab: 'team', currentIntgTab: 'engine',
@@ -93,7 +93,7 @@ describe('resetClientState in a sandbox', () => {
     const document = { getElementById: () => null };
     function __snapshot() { return { state: { ${Object.keys(INITIAL).join(', ')} }, calls: __calls, socket, sockDisconnected: __sock.disconnected, storage: Object.keys(localStorage), collapsedTasks: collapsedTasks.size, selectedContactIds: selectedContactIds.size }; }
   `;
-  const F = loadFns('public/js/auth.js', ['resetClientState', '__snapshot'], { state: SEEDED, extra });
+  const F = loadFns('public/js/auth.js', ['resetClientState'], { state: SEEDED, extra, expose: ['__snapshot'] });
 
   test('every workspace-scoped value is back to its fresh-load value', () => {
     F.resetClientState();
