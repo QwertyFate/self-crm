@@ -169,9 +169,10 @@ describe('detail-views.js: the reference contact detail in the side panel (or a 
     assert.match(c, /class="split split-2-1 ct-split"/); assert.match(c, /class="ct-side"/);
     assert.match(c, /class="ct-big">\$\{fmtEUR\(sumVal\(ds\)\)\}/); assert.match(c, /class="ct-mini"/);
   });
-  test('overview: inline-edit grid (ct-fgrid / ct-edit) for name, company, email, phone, custom fields, stage and owner menus', () => {
+  test('overview: inline-edit grid (ct-fgrid / ct-edit) for name, company, email, phone, custom fields and the owner menu (no stage — Part 19)', () => {
     assert.match(c, /<dl class="ct-fgrid">\$\{editable\('name', 'Full name'\)\}\$\{editable\('company', 'Company'\)\}\$\{editable\('email', 'Email'\)\}\$\{editable\('phone', 'Phone'\)\}\$\{fields\.map/);
-    assert.match(c, /class="ct-edit" data-edit="\$\{esc\(key\)\}"/); assert.match(c, /data-edit="stage"/); assert.match(c, /data-edit="owner"/);
+    assert.match(c, /class="ct-edit" data-edit="\$\{esc\(key\)\}"/); assert.match(c, /data-edit="owner"/);
+    assert.doesNotMatch(c, /data-edit="stage"/);
     assert.match(c, /api\.put\(`\/api\/contacts\/\$\{id\}`, payload\(patch\)\)/);
   });
   test('activity tab: seg compose posting to /api/activities, a type filter select, the timeline', () => {
@@ -188,6 +189,42 @@ describe('detail-views.js: the reference contact detail in the side panel (or a 
     assert.match(c, /activePage === 'contacts' \|\| activePage === 'suppliers'/);
     assert.match(c, /document\.getElementById\('side-panel-body'\)/); assert.match(c, /classList\.add\('side-panel-active'\)/);
     assert.match(c, /ui\.modal\(\{ title: sup \? dvSupplierWord\(\) : 'Contact', size: 'xl'/);
+  });
+  test('a deal is clickable across the whole row, in the Deals tab and in the side card (Part 20)', () => {
+    assert.match(c, /<tr class="clickable" data-act="open-deal" data-id="\$\{d\.id\}">/, 'the Deals tab row');
+    assert.match(c, /<div class="ct-mini clickable" data-act="open-deal" data-id="\$\{d\.id\}">/, 'the side card row, not just its title link');
+    assert.match(c, /'open-deal': el => \{ close\(\); openDealDetail\(\+el\.dataset\.id\); \}/);
+  });
+  test('a note can be edited in place: click or double-click the text, or use the pencil (Part 20)', () => {
+    assert.match(c, /data-note="\$\{a\.id\}"/, 'the note text itself is the edit target');
+    assert.match(c, /title="\$\{esc\(t\('click_to_edit'\)\)\}"/);
+    assert.match(c, /data-act="act-edit" data-id="\$\{a\.id\}"/, 'and a visible pencil affordance');
+    // both gestures enter edit mode, and the editor saves on Enter / cancels on Escape
+    assert.match(c, /on\(host, 'click', '\[data-note\]'/);
+    assert.match(c, /on\(host, 'dblclick', '\[data-note\]'/);
+    assert.match(c, /id="ct-aedit"/);
+    assert.match(c, /api\.patch\(`\/api\/activities\/\$\{S\.editAct\}`, \{ content:/);
+    assert.match(c, /'act-save'/); assert.match(c, /'act-cancel'/);
+    assert.match(c, /e\.key === 'Escape'/);
+  });
+  test('the deal detail timeline edits notes the same way: click or double-click the text, next to its Edit button (Part 21)', () => {
+    const d2 = sliceFn(dv, 'openDealDetail', 'detail-views.js');
+    assert.match(d2, /data-note="\$\{a\.id\}"/);
+    assert.match(d2, /on\(root, 'click', '\[data-note\]'/);
+    assert.match(d2, /on\(root, 'dblclick', '\[data-note\]'/);
+  });
+  test('the note editor grows to fit the whole note in both views, and keeps that height across re-renders (Part 21)', () => {
+    const g = sliceFn(dv, 'dvAutoGrow', 'detail-views.js');
+    assert.match(g, /scrollHeight/, 'height follows the content');
+    assert.match(g, /style\.height = 'auto'/, 'reset first so it can shrink again, not only grow');
+    // applied on open, on every keystroke, and after a re-render in both the deal and contact views
+    const d2 = sliceFn(dv, 'openDealDetail', 'detail-views.js');
+    assert.match(d2, /dvAutoGrow\(R\('#dd-act-edit'\)\)/);
+    assert.match(c, /dvAutoGrow\(host\.querySelector\('#ct-aedit'\)\)/);
+    assert.equal((dv.match(/dvAutoGrow\(/g) || []).length >= 5, true, 'wired in both views: open, input and render');
+    // the growing field owns its height, so no inner scrollbar and no manual resize fighting it
+    assert.match(css, /^\.dv-grow \{[^}]*resize: none;[^}]*overflow: hidden;/m);
+    for (const id of ['dd-act-edit', 'ct-aedit']) assert.match(dv, new RegExp(`class="textarea dv-grow" id="${id}"`), id);
   });
   test('More menu: copy email / phone, delete through ui.confirm', () => {
     assert.match(c, /\{ label: 'Copy email', icon: 'copy'/); assert.match(c, /\{ label: 'Copy phone', icon: 'copy'/);

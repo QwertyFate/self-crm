@@ -1,21 +1,17 @@
 let selectedContactIds = new Set();
 let selectionModeOn = false;
-let contactViewMode = 'list';
 let filteredContacts = [];
 
 async function loadContacts() {
   selectedContactIds.clear();
   const contactsBody = document.getElementById('contacts-body');
-  const kanbanBoard = document.getElementById('contacts-kanban-board');
   if (contactsBody) contactsBody.innerHTML = '';
-  if (kanbanBoard) kanbanBoard.innerHTML = '';
 
-  await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
+  await Promise.all([ensureFields(), ensureMembers()]);
   contacts = await api.get(`/api/contacts?contact_type=${currentContactType}`);
   currentPage = 1;
   updateContactsPageHeader();
-  renderFilterChips();
-  setContactViewMode(contactViewMode);
+  filterContacts();
 }
 
 function updateContactsPageHeader() {
@@ -24,11 +20,10 @@ function updateContactsPageHeader() {
   const singular = name.replace(/s$/i, '');
   const h1  = document.querySelector('#page-contacts .page-header h1');
   const btnLabel = document.querySelector('#list-add-btn span');
-  const search = document.getElementById('contact-search');
   if (h1)  h1.textContent = name;
   if (btnLabel) btnLabel.textContent = `Add ${singular}`;
-  if (search) search.placeholder = `Search ${name.toLowerCase()}…`;
 }
+function contactsNoun() { return currentContactType === 'supplier' ? (currentWorkspace?.supplier_name || 'Suppliers').toLowerCase() : t('page_contacts').toLowerCase(); }
 
 // Toolbar's more menu: the same CSV import/export the old two buttons called.
 function openContactsMoreMenu(anchor) {
@@ -70,7 +65,6 @@ function effectiveContactColumns() {
     { key: 'company',     label: () => t('col_company'),    type: 'text',     show: true  },
     { key: 'email',       label: () => t('col_email'),      type: 'email',    show: true  },
     { key: 'phone',       label: () => t('col_phone'),      type: 'phone',    show: true  },
-    { key: 'stage_id',    label: () => t('col_stage'),      type: 'stage',    show: false },
     { key: 'assigned_to', label: () => t('col_assignee'),   type: 'assignee', show: true  },
     { key: 'created_at',  label: () => t('col_created_at'), type: 'date',     show: false },
   ];
@@ -98,7 +92,6 @@ function getSortValue(c, key) {
   if (key === 'company')     return (c.company || '').toLowerCase();
   if (key === 'email')       return (c.email || '').toLowerCase();
   if (key === 'phone')       return (c.phone || '').toLowerCase();
-  if (key === 'stage_id')    return (c.stage_name || '').toLowerCase();
   if (key === 'assigned_to') return (c.assigned_to_name || '').toLowerCase();
   if (key === 'created_at')  return c.created_at ? new Date(c.created_at).getTime() : 0;
   const f = fields.find(f => f.field_key === key);
@@ -146,7 +139,14 @@ function renderContactsTable(list) {
   if (currentPage > totalPages) currentPage = totalPages;
   const pageList = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-  document.getElementById('contacts-body').innerHTML = pageList.map(c => {
+  const emptyRow = () => {
+    const span = colKeys.length + (selectionModeOn ? 1 : 0), noun = contactsNoun();
+    const inner = contactsFilterActive()
+      ? `<div class="empty">${icon('search')}<b>${esc(tf('no_contacts_match', { noun }))}</b><div>${esc(t('try_removing_filter'))}</div><div style="margin-top:14px"><button class="btn btn-secondary" type="button" onclick="clearContactFilters()">${esc(t('clear_filters'))}</button></div></div>`
+      : `<div class="empty">${icon('contacts')}<b>${esc(tf('no_contacts_yet', { noun }))}</b></div>`;
+    return `<tr><td colspan="${span}">${inner}</td></tr>`;
+  };
+  document.getElementById('contacts-body').innerHTML = pageList.length ? pageList.map(c => {
     const dash  = '<span class="muted-dash">—</span>';
     const cells = visibleCols.map(col => {
       if (col.key === 'company')
@@ -155,11 +155,6 @@ function renderContactsTable(list) {
         return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'email','email')" title="${esc(c.email||'')}">${esc(c.email||'')||dash}</td>`;
       if (col.key === 'phone')
         return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'phone','phone')" title="${esc(c.phone||'')}">${esc(c.phone||'')||dash}</td>`;
-      if (col.key === 'stage_id') {
-        const stage = stages.find(s => s.id === c.stage_id);
-        const badge = stage ? `<span class="stage-pill"><i style="background:${stage.color}"></i>${esc(stage.name)}</span>` : dash;
-        return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'stage_id','stage')">${badge}</td>`;
-      }
       if (col.key === 'assigned_to')
         return `<td class="editable-cell" onclick="startInlineEdit(this,${c.id},'assigned_to','assignee')" title="${esc(c.assigned_to_name||'')}">${esc(c.assigned_to_name||'')||dash}</td>`;
       if (col.key === 'created_at')
@@ -176,7 +171,7 @@ function renderContactsTable(list) {
       </td>
       ${cells}
     </tr>`;
-  }).join('');
+  }).join('') : emptyRow();
 
   renderPagination(sorted.length);
 
@@ -214,16 +209,13 @@ function startInlineEdit(td, contactId, fieldKey, fieldType) {
   const contact = contacts.find(c => c.id === contactId);
   if (!contact) return;
   const originalHTML = td.innerHTML;
-  const isSelect = fieldType === 'stage' || fieldType === 'assignee' || fieldType === 'dropdown';
+  const isSelect = fieldType === 'assignee' || fieldType === 'dropdown';
   let el;
 
   if (isSelect) {
     el = document.createElement('select');
     el.className = 'inline-select';
-    if (fieldType === 'stage') {
-      el.innerHTML = `<option value="">${t('opt_no_stage')}</option>` +
-        stages.map(s => `<option value="${s.id}"${contact.stage_id === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
-    } else if (fieldType === 'assignee') {
+    if (fieldType === 'assignee') {
       el.innerHTML = `<option value="">${t('opt_unassigned')}</option>` +
         members.map(m => `<option value="${m.id}"${contact.assigned_to === m.id ? ' selected' : ''}>${esc(m.name)}</option>`).join('');
     } else {
@@ -235,7 +227,7 @@ function startInlineEdit(td, contactId, fieldKey, fieldType) {
     }
     el.onchange = async () => {
       const raw = el.value;
-      const val = (fieldType === 'stage' || fieldType === 'assignee') ? (raw ? parseInt(raw) : null) : (raw || null);
+      const val = fieldType === 'assignee' ? (raw ? parseInt(raw) : null) : (raw || null);
       td.innerHTML = originalHTML; await commitInlineEdit(contactId, fieldKey, fieldType, val);
     };
     el.onkeydown = e => { if (e.key === 'Escape') td.innerHTML = originalHTML; };
@@ -264,10 +256,7 @@ function startInlineEdit(td, contactId, fieldKey, fieldType) {
 async function commitInlineEdit(contactId, fieldKey, fieldType, value) {
   const contact = contacts.find(c => c.id === contactId);
   if (!contact) return;
-  if (fieldType === 'stage') {
-    contact.stage_id = value; const s = stages.find(s => s.id === value);
-    contact.stage_name = s?.name || null; contact.stage_color = s?.color || null;
-  } else if (fieldType === 'assignee') {
+  if (fieldType === 'assignee') {
     contact.assigned_to = value; const m = members.find(m => m.id === value);
     contact.assigned_to_name = m?.name || null;
   } else if (['company','email','phone'].includes(fieldKey)) {
@@ -277,57 +266,211 @@ async function commitInlineEdit(contactId, fieldKey, fieldType, value) {
   }
   await api.put(`/api/contacts/${contactId}`, {
     name: contact.name, company: contact.company, email: contact.email,
-    phone: contact.phone, stage_id: contact.stage_id, assigned_to: contact.assigned_to,
+    phone: contact.phone, assigned_to: contact.assigned_to,
     custom_data: contact.custom_data || {}
   });
   filterContacts();
   if (document.getElementById('page-deals').classList.contains('active')) renderDealsBoard();
 }
 
-function onContactSearch() { currentPage = 1; filterContacts(); }
+let contactsSearchTimer = null;
 
-function filterContacts() {
+/* ---------- filtering: any column the user has, not a fixed set ----------
+   activeFilters = { q, cols: { [columnKey]: value } }. A key present in `cols` means the
+   user added that filter; its value may still be null (chip shown, nothing filtered yet).
+   For an id column (assigned_to) '' means Unassigned; date columns take a range key. */
+const CONTACT_DATE_RANGES = () => [{ value: 'today', label: t('last_today') }, { value: 'week', label: t('last_week') }, { value: 'month', label: t('last_month') }, { value: 'older', label: t('last_older') }, { value: 'never', label: t('last_never') }];
+
+// Everything the user can filter on: the same column set the table draws, minus the name
+// column (that is what the search box is for). Custom fields come along automatically.
+function filterableColumns() {
+  return effectiveContactColumns().filter(c => c.key !== '_name');
+}
+function activeFilterKeys() { return Object.keys(activeFilters.cols || {}); }
+function contactsFilterActive() {
+  return !!(activeFilters.q || Object.values(activeFilters.cols || {}).some(v => v != null && String(v).trim() !== ''));
+}
+function daysSince(ts) {
+  if (!ts) return null;
+  const day = x => { const d = new Date(x); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  return Math.max(0, Math.round((day(Date.now()) - day(ts)) / 864e5));
+}
+function columnValue(c, key) {
+  if (key === 'assigned_to') return c.assigned_to ?? '';
+  if (key === 'created_at')  return c.created_at ?? null;
+  if (['company', 'email', 'phone'].includes(key)) return c[key] ?? '';
+  return c.custom_data?.[key] ?? '';
+}
+function inDateRange(ts, range) {
+  const d = daysSince(ts);
+  if (range === 'today') return d === 0;
+  if (range === 'week')  return d != null && d <= 7;
+  if (range === 'month') return d != null && d <= 30;
+  if (range === 'older') return d != null && d > 30;
+  if (range === 'never') return d == null;
+  return true;
+}
+function visibleContacts() {
+  const q = String(activeFilters.q || '').trim().toLowerCase(), dg = q.replace(/\D/g, ''), cols = activeFilters.cols || {};
+  const byKey = Object.fromEntries(filterableColumns().map(c => [c.key, c]));
+  return contacts.filter(c => {
+    if (q) {
+      const hay = [c.name, c.company, c.email, c.phone].map(x => x || '').join(' ').toLowerCase();
+      if (!hay.includes(q) && !(dg.length >= 3 && String(c.phone || '').replace(/\D/g, '').includes(dg))) return false;
+    }
+    for (const [key, want] of Object.entries(cols)) {
+      if (want == null || want === undefined) continue;             // added, nothing typed or picked yet
+      if (byKey[key]?.type === 'date') { if (!inDateRange(columnValue(c, key), want)) return false; continue; }
+      if (filterKind(key) === 'text') {
+        const needle = String(want).trim().toLowerCase();
+        if (needle && !String(columnValue(c, key)).toLowerCase().includes(needle)) return false;
+        continue;
+      }
+      if (String(columnValue(c, key)) !== String(want)) return false;
+    }
+    return true;
+  });
+}
+// How a column is filtered. A listable set (a dropdown's own options, the team, the date
+// ranges) is a menu. Everything else — email, phone, company, a text/number/url custom
+// field — is a typed field: picking one email out of a list of every address is no better
+// than scrolling the table, so you type part of it instead.
+const FILTER_MENU_TYPES = ['dropdown', 'assignee', 'date'];
+function filterKind(key) {
+  const type = filterableColumns().find(c => c.key === key)?.type;
+  return FILTER_MENU_TYPES.includes(type) ? 'menu' : 'text';
+}
+function filterOptionsFor(key) {
+  const col = filterableColumns().find(c => c.key === key), type = col?.type;
+  const unassigned = { value: '', label: t('detail_unassigned') };
+  if (type === 'assignee') return [unassigned, ...members.map(m => ({ value: m.id, label: m.name + (m.id === currentUser?.id ? ' (you)' : '') }))];
+  if (type === 'dropdown') {
+    const f = fields.find(x => x.field_key === key);
+    return (f?.options || []).map(o => ({ value: o, label: o }));
+  }
+  if (type === 'date') return CONTACT_DATE_RANGES();
+  return [];
+}
+function filterLabelFor(key) { return filterableColumns().find(c => c.key === key)?.label() || key; }
+function filterValueText(key) {
+  const v = activeFilters.cols?.[key];
+  if (v == null) return '';
+  const col = filterableColumns().find(c => c.key === key);
+  if (col?.type === 'assignee') return v === '' ? t('detail_unassigned') : (members.find(m => m.id === v)?.name || '');
+  if (col?.type === 'date') return CONTACT_DATE_RANGES().find(o => o.value === v)?.label || String(v);
+  if (filterKind(key) === 'text') return String(v).trim() ? `"${v}"` : '';
+  return v === '' ? t('detail_unassigned') : String(v);
+}
+function contactsChip(key) {
+  const txt = filterValueText(key), on = txt !== '';
+  return `<button class="chip ${on ? 'on' : ''}" type="button" data-chip="${esc(key)}" onclick="openContactsChip(this,'${esc(key)}')" aria-haspopup="menu">${esc(filterLabelFor(key))}${on ? ': ' + esc(txt) : ''}${icon('chevron-down', 'ic-sm')}</button>`;
+}
+function openContactsChip(anchor, key) {
+  if (filterKind(key) === 'text') return openContactTextFilter(anchor, key);
+  const opts = filterOptionsFor(key), cur = activeFilters.cols?.[key] ?? null;
+  ui.menu(anchor, [
+    { label: t('filter_all'), checked: cur == null, onSelect: () => setContactFilter(key, null) },
+    ...opts.map(o => ({ label: o.label, checked: cur === o.value, onSelect: () => setContactFilter(key, o.value) })),
+    { sep: true },
+    { label: t('remove_filter'), icon: 'x', danger: true, onSelect: () => removeContactFilter(key) },
+  ]);
+}
+// A small popover holding one input: the table narrows as you type (debounced), so finding
+// one email is typing a few characters rather than hunting through every value.
+let contactFilterTimer = null;
+function openContactTextFilter(anchor, key) {
+  const cur = activeFilters.cols?.[key] ?? '';
+  const id = 'ctf-' + key.replace(/[^a-z0-9]+/gi, '-');
+  const pop = ui.popover(anchor, `<div class="ct-filter-pop">
+      <label class="label" for="${id}">${esc(filterLabelFor(key))}</label>
+      <input class="input" id="${id}" type="search" value="${esc(cur ?? '')}" placeholder="${esc(t('filter_contains_ph'))}" autocomplete="off" aria-label="${esc(filterLabelFor(key))}">
+      <button class="btn btn-ghost btn-sm" type="button" data-rm>${icon('x', 'ic-sm')}${esc(t('remove_filter'))}</button>
+    </div>`, { keys: false, width: 260 });
+  const input = pop.el.querySelector('input');
+  input.focus(); input.setSelectionRange(input.value.length, input.value.length);
+  input.addEventListener('input', () => {
+    const v = input.value;
+    clearTimeout(contactFilterTimer);
+    // Keep the toolbar as it is while typing: re-rendering it would replace this popover's
+    // anchor chip and take the caret with it.
+    contactFilterTimer = setTimeout(() => {
+      activeFilters.cols = { ...(activeFilters.cols || {}), [key]: v };
+      currentPage = 1; filterContacts({ skipToolbar: true });
+    }, 140);
+  });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); pop.close(); } });
+  pop.el.querySelector('[data-rm]').addEventListener('click', () => { pop.close(); removeContactFilter(key); });
+  return pop;
+}
+
+// Pick which column to filter on — this is what makes the set of filters follow the user's own columns.
+function openAddFilterMenu(anchor) {
+  const added = activeFilterKeys();
+  ui.menu(anchor, filterableColumns().map(c => ({
+    label: c.label(), checked: added.includes(c.key),
+    onSelect: () => (added.includes(c.key) ? removeContactFilter(c.key) : addContactFilter(c.key)),
+  })), { align: 'right' });
+}
+function addContactFilter(key) {
+  activeFilters.cols = { ...(activeFilters.cols || {}), [key]: filterKind(key) === 'text' ? '' : null };
+  renderContactsToolbar();
+  const chip = document.querySelector(`#contacts-toolbar [data-chip="${key}"]`);
+  if (chip) openContactsChip(chip, key);              // straight into picking a value
+}
+function setContactFilter(key, value) {
+  activeFilters.cols = { ...(activeFilters.cols || {}), [key]: value };
+  currentPage = 1; filterContacts();
+}
+function removeContactFilter(key) {
+  const cols = { ...(activeFilters.cols || {}) }; delete cols[key];
+  activeFilters.cols = cols; currentPage = 1; filterContacts();
+}
+function onContactSearch(value) {
+  activeFilters.q = value; currentPage = 1;
+  clearTimeout(contactsSearchTimer);
+  contactsSearchTimer = setTimeout(filterContacts, 140);
+}
+function clearContactFilters() { activeFilters = {}; currentPage = 1; filterContacts(); }
+function openContactsColumnsMenu(anchor) {
+  const cols = effectiveContactColumns();
+  ui.menu(anchor, cols.map((c, i) => ({ label: c.label(), checked: c.visible, onSelect: async () => {
+    cols[i].visible = !cols[i].visible;
+    contactColumns = cols.map(({ key, visible }) => ({ key, visible }));
+    filterContacts();
+    const res = await api.patch('/api/workspace/contact-columns', { columns: contactColumns });
+    if (!res?.error && currentWorkspace) currentWorkspace.contact_columns = contactColumns;
+  } })), { align: 'right' });
+}
+function renderContactsToolbar() {
+  const el = document.getElementById('contacts-toolbar');
+  if (!el) return;
+  const active = document.activeElement && document.activeElement.id === 'contact-search';
+  const noun = contactsNoun();
+  el.innerHTML = `<div class="input-group ct-search">${icon('search')}<input class="input" id="contact-search" type="search" placeholder="${esc(t('search_ph'))}" value="${esc(activeFilters.q || '')}" aria-label="${esc(t('search_ph'))}" oninput="onContactSearch(this.value)"></div>
+    ${activeFilterKeys().map(k => contactsChip(k)).join('')}
+    <button class="chip" type="button" onclick="openAddFilterMenu(this)" aria-haspopup="menu">${icon('filter')}${esc(t('add_filter'))}</button>
+    ${contactsFilterActive() ? `<button class="btn btn-ghost btn-sm" type="button" onclick="clearContactFilters()">${esc(t('clear_filters'))}</button>` : ''}<span class="grow"></span>
+    <button class="btn btn-secondary btn-sm" type="button" id="select-mode-btn" onclick="toggleSelectMode()" aria-pressed="${selectionModeOn}">${icon('check')}${esc(t('btn_select'))}</button>
+    <button class="btn btn-secondary btn-sm" type="button" onclick="openContactsColumnsMenu(this)" aria-haspopup="menu">${icon('columns')}${esc(t('btn_columns'))}</button>`;
+  updateContactsSubLine();
+  if (active) { const q = document.getElementById('contact-search'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+}
+function updateContactsSubLine() {
+  const sub = document.getElementById('contacts-page-sub');
+  if (!sub) return;
+  const noun = contactsNoun();
+  sub.textContent = contactsFilterActive() ? tf('n_of_items', { a: filteredContacts.length, b: contacts.length, noun }) : tf('n_items', { n: contacts.length, noun });
+}
+
+function filterContacts(opts = {}) {
   selectedContactIds.clear();
   const selectAllCb = document.getElementById('select-all-checkbox');
   if (selectAllCb) selectAllCb.checked = false;
   updateBulkDeleteButton();
 
-  const q = document.getElementById('contact-search').value.toLowerCase();
-  let filtered = contacts.filter(c =>
-    c.name.toLowerCase().includes(q) ||
-    (c.company||'').toLowerCase().includes(q) ||
-    (c.email||'').toLowerCase().includes(q)
-  );
-  for (const [key, values] of Object.entries(activeFilters)) {
-    if (!values?.length) continue;
-
-    if (key.startsWith('keyword:')) {
-      const col = key.substring(8);
-      filtered = filtered.filter(c => {
-        let fieldValue;
-        if (col.startsWith('custom:')) {
-          fieldValue = c.custom_data?.[col.substring(7)];
-        } else {
-          fieldValue = c[col];
-        }
-        const strValue = String(fieldValue || '').toLowerCase();
-        return values.some(keyword => strValue.includes(keyword.toLowerCase()));
-      });
-    } else {
-      filtered = filtered.filter(c => {
-        const cv = key === 'stage_id'    ? (c.stage_id    == null ? '' : String(c.stage_id))
-                 : key === 'assigned_to' ? (c.assigned_to == null ? '' : String(c.assigned_to))
-                 : String(c.custom_data?.[key] ?? '');
-        return values.includes(cv);
-      });
-    }
-  }
-  filteredContacts = filtered;
-  if (contactViewMode === 'kanban') {
-    renderContactsKanban();
-  } else {
-    renderContactsTable(filtered);
-  }
+  filteredContacts = visibleContacts();
+  if (opts.skipToolbar) updateContactsSubLine(); else renderContactsToolbar();
+  renderContactsTable(filteredContacts);
 }
 
 function goToPage(page) { currentPage = page; filterContacts(); }
@@ -353,168 +496,14 @@ function renderPagination(total) {
     </div>`;
 }
 
-function toggleFilterPanel() {
-  filterPanelOpen = !filterPanelOpen;
-  document.getElementById('filter-panel')?.classList.toggle('hidden', !filterPanelOpen);
-  document.getElementById('filter-toggle-btn')?.classList.toggle('on', filterPanelOpen);
-  if (filterPanelOpen) renderFilterPanel();
-}
-
-function isFiltered(key, value) { return (activeFilters[key] || []).includes(value); }
-
-function toggleFilter(key, value) {
-  if (!activeFilters[key]) activeFilters[key] = [];
-  const idx = activeFilters[key].indexOf(value);
-  if (idx >= 0) activeFilters[key].splice(idx, 1); else activeFilters[key].push(value);
-  if (!activeFilters[key].length) delete activeFilters[key];
-  renderFilterPanel(); renderFilterChips(); currentPage = 1; filterContacts();
-}
-
-function addKeywordFilter() {
-  const colEl = document.getElementById('keyword-filter-col');
-  const valEl = document.getElementById('keyword-filter-val');
-  const col = colEl?.value?.trim();
-  const keyword = valEl?.value?.trim();
-  if (!col || !keyword) return;
-
-  const key = `keyword:${col}`;
-  if (!activeFilters[key]) activeFilters[key] = [];
-  if (!activeFilters[key].includes(keyword)) {
-    activeFilters[key].push(keyword);
-  }
-  valEl.value = '';
-  renderFilterPanel(); renderFilterChips(); currentPage = 1; filterContacts();
-}
-
-function removeFilterChip(key, value) {
-  if (activeFilters[key]) {
-    const idx = activeFilters[key].indexOf(value);
-    if (idx >= 0) activeFilters[key].splice(idx, 1);
-    if (!activeFilters[key].length) delete activeFilters[key];
-  }
-  renderFilterPanel(); renderFilterChips(); currentPage = 1; filterContacts();
-}
-
-function clearAllFilters() {
-  activeFilters = {}; renderFilterPanel(); renderFilterChips(); currentPage = 1; filterContacts();
-}
-
-function renderFilterPanel() {
-  const el = document.getElementById('filter-panel');
-  if (!el || !filterPanelOpen) return;
-  const hasFilters = Object.keys(activeFilters).length > 0;
-  const mkOpt = (key, value, label, style = '') => {
-    const on = isFiltered(key, value);
-    return `<button class="filter-opt${on ? ' active' : ''}" style="${style}" onclick="toggleFilter('${key}','${value}')">${label}</button>`;
-  };
-  const sections = [];
-
-  const keywordFilterCol = document.getElementById('keyword-filter-col')?.value || 'name';
-  const keywordFilterVal = document.getElementById('keyword-filter-val')?.value || '';
-  const filterableColumns = [
-    { key: 'name', label: 'Name' },
-    { key: 'email', label: 'Email' },
-    { key: 'company', label: 'Company' },
-    { key: 'phone', label: 'Phone' },
-    ...fields.map(f => ({ key: `custom:${f.field_key}`, label: f.name }))
-  ];
-  const colOpts = filterableColumns.map(col =>
-    `<option value="${col.key}" ${keywordFilterCol === col.key ? 'selected' : ''}>${esc(col.label)}</option>`
-  ).join('');
-  sections.push(`
-    <div class="filter-section">
-      <div class="filter-section-label">Search by Keywords</div>
-      <div style="display:flex;gap:8px;padding:0 12px 12px">
-        <select id="keyword-filter-col" class="form-control" style="flex:0.6" onchange="renderFilterPanel()">
-          ${colOpts}
-        </select>
-        <input type="text" id="keyword-filter-val" class="form-control" style="flex:1" placeholder="Enter keywords..."
-          onkeydown="if(event.key==='Enter') addKeywordFilter()">
-        <button class="btn btn-sm btn-primary" onclick="addKeywordFilter()">Add</button>
-      </div>
-    </div>
-  `);
-
-  if (stages.length) {
-    const opts = [mkOpt('stage_id', '', t('detail_unassigned')),
-      ...stages.map(s => mkOpt('stage_id', String(s.id), esc(s.name),
-        isFiltered('stage_id', String(s.id)) ? `background:${s.color};border-color:${s.color};color:#fff` : `border-color:${s.color}40`
-      ))].join('');
-    sections.push(`<div class="filter-section"><div class="filter-section-label">${t('col_stage')}</div><div class="filter-options">${opts}</div></div>`);
-  }
-  if (members.length) {
-    const opts = [mkOpt('assigned_to', '', t('detail_unassigned')),
-      ...members.map(m => mkOpt('assigned_to', String(m.id), esc(m.name)))].join('');
-    sections.push(`<div class="filter-section"><div class="filter-section-label">${t('col_assignee')}</div><div class="filter-options">${opts}</div></div>`);
-  }
-  fields.filter(f => f.type === 'dropdown' && f.options?.length).forEach(f => {
-    const opts = f.options.map(o => mkOpt(f.field_key, o, esc(o))).join('');
-    sections.push(`<div class="filter-section"><div class="filter-section-label">${esc(f.name)}</div><div class="filter-options">${opts}</div></div>`);
-  });
-  el.innerHTML = `
-    <div class="filter-panel-header">
-      <span class="filter-panel-title">Filters</span>
-      ${hasFilters ? `<button class="btn btn-sm btn-ghost" onclick="clearAllFilters()">Clear all</button>` : ''}
-    </div>
-    <div class="filter-sections">${sections.join('') || '<p style="color:var(--muted);font-size:13px">No filterable fields available.</p>'}</div>`;
-}
-
-function renderFilterChips() {
-  const el = document.getElementById('filter-chips');
-  if (!el) return;
-  const chips = [];
-  for (const [key, values] of Object.entries(activeFilters)) {
-    if (!values?.length) continue;
-    values.forEach(v => {
-      let prefix, label, removeKey = key;
-
-      if (key.startsWith('keyword:')) {
-        const col = key.substring(8);
-        const colName = col.startsWith('custom:')
-          ? fields.find(f => f.field_key === col.substring(7))?.name
-          : col === 'name' ? 'Name'
-            : col === 'email' ? 'Email'
-            : col === 'company' ? 'Company'
-            : col === 'phone' ? 'Phone'
-            : col;
-        prefix = colName;
-        label = `"${esc(v)}"`;
-      } else if (key === 'stage_id') {
-        prefix = t('col_stage');
-        label = v === '' ? t('detail_unassigned') : esc(stages.find(s => String(s.id) === v)?.name || v);
-      } else if (key === 'assigned_to') {
-        prefix = t('col_assignee');
-        label = v === '' ? t('detail_unassigned') : esc(members.find(m => String(m.id) === v)?.name || v);
-      } else {
-        const f = fields.find(f => f.field_key === key);
-        prefix = esc(f?.name || key);
-        label = esc(v);
-      }
-
-      chips.push(`<button type="button" class="chip on"><span>${prefix}: ${label}</span><span class="x" onclick="removeFilterChip('${removeKey}','${v.replace(/'/g, '&apos;')}')">${icon('x', 'ic-sm')}</span></button>`);
-    });
-  }
-  el.innerHTML = chips.join('');
-  el.classList.toggle('hidden', chips.length === 0);
-  const count = Object.values(activeFilters).reduce((n, v) => n + v.length, 0);
-  const badge = document.getElementById('filter-badge');
-  if (badge) { badge.textContent = count; badge.classList.toggle('hidden', count === 0); }
-}
-
 function toggleSelectMode() {
   selectionModeOn = !selectionModeOn;
-  const btn = document.getElementById('select-mode-btn');
-
-  if (selectionModeOn) {
-    if (btn) btn.classList.add('active');
-  } else {
-    if (btn) btn.classList.remove('active');
+  if (!selectionModeOn) {
     selectedContactIds.clear();
     updateBulkDeleteButton();
     const selectAllCb = document.getElementById('select-all-checkbox');
     if (selectAllCb) selectAllCb.checked = false;
   }
-
   filterContacts();
 }
 
@@ -532,7 +521,7 @@ function toggleContactSelection(contactId, isChecked) {
 function toggleSelectAll(isChecked) {
   selectedContactIds.clear();
   if (isChecked) {
-    const sorted = sortContacts(contacts);
+    const sorted = sortContacts(filteredContacts);
     sorted.forEach(c => selectedContactIds.add(c.id));
   }
   document.querySelectorAll('.contact-checkbox').forEach(cb => {
@@ -590,182 +579,4 @@ async function confirmBulkDelete() {
   updateBulkDeleteButton();
   invalidate();
   await loadContacts();
-}
-
-let kanbanAllContacts = [];
-
-async function openKanbanAddContactModal() {
-  kanbanAllContacts = await api.get(`/api/contacts?contact_type=${currentContactType}`);
-
-  const contactSel = document.getElementById('kanban-contact-select');
-  contactSel.innerHTML = kanbanAllContacts.map(c =>
-    `<option value="${c.id}">${esc(c.name)}${c.company ? ` - ${esc(c.company)}` : ''}</option>`
-  ).join('');
-
-  const stageSel = document.getElementById('kanban-stage-select');
-  stageSel.innerHTML = stages.map(s =>
-    `<option value="${s.id}">${esc(s.name)}</option>`
-  ).join('');
-
-  document.getElementById('kanban-contact-search').value = '';
-  document.getElementById('kanban-add-contact-modal').classList.remove('hidden');
-}
-
-function filterKanbanContacts() {
-  const query = document.getElementById('kanban-contact-search').value.toLowerCase();
-  const filtered = kanbanAllContacts.filter(c =>
-    c.name.toLowerCase().includes(query) ||
-    (c.company || '').toLowerCase().includes(query) ||
-    (c.email || '').toLowerCase().includes(query)
-  );
-
-  const sel = document.getElementById('kanban-contact-select');
-  sel.innerHTML = filtered.map(c =>
-    `<option value="${c.id}">${esc(c.name)}${c.company ? ` - ${esc(c.company)}` : ''}</option>`
-  ).join('');
-}
-
-async function confirmAddContactToKanban(e) {
-  e.preventDefault();
-  const contactId = parseInt(document.getElementById('kanban-contact-select').value);
-  const stageId = parseInt(document.getElementById('kanban-stage-select').value);
-
-  if (!contactId || !stageId) {
-    alert('Please select a contact and stage');
-    return;
-  }
-
-  await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: stageId });
-  closeModal('kanban-add-contact-modal');
-  invalidate();
-  await loadContacts();
-}
-
-function setContactViewMode(mode) {
-  contactViewMode = mode;
-  document.getElementById('contacts-kanban-board')?.classList.toggle('hidden', mode === 'list');
-  document.getElementById('contacts-table-wrap')?.classList.toggle('hidden', mode === 'kanban');
-  document.getElementById('contacts-pagination')?.classList.toggle('hidden', mode === 'kanban');
-
-  document.getElementById('contact-view-kanban-btn')?.classList.toggle('active', mode === 'kanban');
-  document.getElementById('contact-view-list-btn')?.classList.toggle('active', mode === 'list');
-
-  document.getElementById('kanban-add-btn')?.classList.toggle('hidden', mode === 'list');
-  document.getElementById('list-add-btn')?.classList.toggle('hidden', mode === 'kanban');
-  document.getElementById('kanban-add-stage-btn')?.classList.toggle('hidden', mode === 'list' || !stages.length);
-  document.getElementById('select-mode-btn')?.classList.toggle('hidden', mode === 'kanban');
-
-  if (mode === 'kanban') {
-    renderContactsKanban();
-  } else {
-    filterContacts();
-  }
-}
-
-let draggedContactId = null;
-
-function renderContactsKanban() {
-  const board = document.getElementById('contacts-kanban-board');
-  if (!board) return;
-
-  const stageList = stages || [];
-  if (!stageList.length) {
-    board.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:center;width:100%;min-height:300px;flex-direction:column;gap:20px">
-        <div style="color:var(--muted);font-size:14px">No stages available</div>
-        <button class="btn btn-primary" onclick="openKanbanStageModal()">+ Add Stage</button>
-      </div>
-    `;
-    return;
-  }
-
-  board.innerHTML = stageList.map(stage => {
-    const contactsToUse = filteredContacts.length ? filteredContacts : contacts;
-    const stageContacts = contactsToUse.filter(c => c.stage_id === stage.id);
-    return `
-      <div class="pipeline-col">
-        <div class="col-header">
-          <span class="col-dot" style="background:${stage.color}"></span>
-          <span class="col-name">${esc(stage.name)}</span>
-          <span class="col-count">${stageContacts.length}</span>
-        </div>
-        <div class="col-cards" ondragover="contactDragOver(event)" ondragleave="contactDragLeave(event)" ondrop="contactDrop(event,${stage.id})">
-          ${stageContacts.length ? stageContacts.map(c => contactCard(c)).join('') : `<div class="col-empty">No contacts</div>`}
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function contactCard(c) {
-  return `
-    <div class="contact-card" draggable="true" data-id="${c.id}"
-      ondragstart="contactDragStart(event,${c.id})" ondragend="contactDragEnd(event)"
-      onclick="openDetail(${c.id})" style="position:relative">
-      <button class="card-remove-btn" onclick="removeContactFromKanban(event,${c.id})" title="Remove from kanban">×</button>
-      <div class="card-name">${esc(c.name)}</div>
-      ${c.company ? `<div class="card-field">${esc(c.company)}</div>` : ''}
-      ${c.assigned_to_name ? `<div class="card-field">→ ${esc(c.assigned_to_name)}</div>` : ''}
-    </div>
-  `;
-}
-
-function contactDragStart(e, id) {
-  draggedContactId = id;
-  e.dataTransfer.effectAllowed = 'move';
-  setTimeout(() => e.target.closest('[draggable]').classList.add('dragging'), 0);
-}
-
-function contactDragEnd(e) {
-  e.target.closest('[draggable]').classList.remove('dragging');
-}
-
-function contactDragOver(e) {
-  e.preventDefault();
-  e.currentTarget.classList.add('drag-over');
-}
-
-function contactDragLeave(e) {
-  e.currentTarget.classList.remove('drag-over');
-}
-
-async function contactDrop(e, stageId) {
-  e.preventDefault();
-  e.currentTarget.classList.remove('drag-over');
-
-  if (!draggedContactId) return;
-
-  const contact = contacts.find(c => c.id === draggedContactId);
-  if (!contact || contact.stage_id === stageId) return;
-
-  contact.stage_id = stageId;
-  const stage = stages.find(s => s.id === stageId);
-  contact.stage_name = stage?.name || null;
-  contact.stage_color = stage?.color || null;
-
-  renderContactsKanban();
-  await api.patch(`/api/contacts/${draggedContactId}/stage`, { stage_id: stageId });
-  draggedContactId = null;
-}
-
-async function removeContactFromKanban(e, contactId) {
-  e.stopPropagation();
-  const contact = contacts.find(c => c.id === contactId);
-  if (!contact) return;
-
-  contact.stage_id = null;
-  contact.stage_name = null;
-  contact.stage_color = null;
-
-  renderContactsKanban();
-  await api.patch(`/api/contacts/${contactId}/stage`, { stage_id: null });
-}
-
-function openKanbanStageModal() {
-  document.getElementById('stage-form').reset();
-  document.getElementById('stage-id').value = '';
-  document.getElementById('stage-color').value = '#4f6ef7';
-  document.getElementById('stage-modal-title').textContent = 'Add Stage';
-  document.getElementById('stage-modal').classList.remove('hidden');
-  document.getElementById('stage-name').focus();
 }

@@ -174,7 +174,9 @@ describe('stylesheet: the reference recipe under the app selectors, plus the ref
     assert.match(css, /^input\[type="checkbox"\]\.switch::after,\n#pref-dark-toggle::after \{[^}]*width: 16px; height: 16px/m);
     assert.match(css, /^input\[type="checkbox"\]\.switch:checked::after,\n#pref-dark-toggle:checked::after \{ transform: translateX\(16px\); \}/m);
     assert.match(css, /^\.view-toggle \{ display: inline-flex; padding: 2px; background: var\(--surface-3\); border-radius: var\(--r-md\); gap: 2px; border: 1px solid var\(--border\); \}/m, 'the view switcher is the reference .seg');
-    assert.match(css, /^\.toolbar input \{[^}]*height: 34px;[^}]*border: 1px solid var\(--border-strong\); border-radius: var\(--r-md\)/m);
+    // Part 18 scoped this to `.toolbar > input` so it stops painting a second magnifier over the
+    // Contacts toolbar's reference `.input-group` search box (whose icon is a real sprite child).
+    assert.match(css, /^\.toolbar > input \{[^}]*height: 34px;[^}]*border: 1px solid var\(--border-strong\); border-radius: var\(--r-md\)/m);
   });
   test('data display and overlays follow the reference', () => {
     assert.match(css, /^\.table thead th, \.table th \{ position: sticky; top: 0; z-index: 2; background: var\(--surface-2\); text-align: left; font-weight: 600; font-size: var\(--fs-sm\); color: var\(--text-3\); padding: 0 12px; height: 38px;/m);

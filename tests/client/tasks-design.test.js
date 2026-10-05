@@ -9,7 +9,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { read, sliceFn } = require('../helpers/client-fn');
+const { read, sliceFn, loadFns } = require('../helpers/client-fn');
 const { ROOT } = require('../helpers/load-route');
 
 const html = read('public/index.html');
@@ -72,5 +72,54 @@ describe('tasks.js: sidebar, list and board renderers use sprite icons, not emoj
   test('the dead attachment/subtask-modal UI (fileIcon, renderSubtasksList, renderAttachmentList, …) is gone (Part 16: see tests/client/detail-views.test.js)', () => {
     for (const fn of ['fileIcon', 'renderSubtasksList', 'renderAttachmentList', 'loadTaskAttachments', 'uploadAttachments', 'viewAttachment', 'deleteAttachment'])
       assert.equal(tasks.split(`function ${fn}(`).length - 1, 0, fn);
+  });
+});
+
+describe("a task's due time on the task list (Part 33)", () => {
+  const t = read('public/js/tasks.js');
+  const dv = read('public/js/detail-views.js');
+  const sandbox = () => loadFns('public/js/tasks.js', ['taskDueAt', 'taskIsOverdue', 'taskDueLabel'], {
+    extra: 'function fmtDate(d) { return "FMT:" + String(d).slice(0, 10); }' });
+
+  test('taskDueAt: a timed task is due at that local time, a whole-day one at the end of its day', () => {
+    const { taskDueAt } = sandbox();
+    const timed = taskDueAt({ due_date: '2026-10-07', due_time: '09:30' });
+    assert.equal(timed.getFullYear(), 2026); assert.equal(timed.getMonth(), 9); assert.equal(timed.getDate(), 7);
+    assert.equal(timed.getHours(), 9); assert.equal(timed.getMinutes(), 30);
+    const allDay = taskDueAt({ due_date: '2026-10-07' });
+    assert.equal(allDay.getHours(), 23); assert.equal(allDay.getMinutes(), 59);
+    assert.equal(taskDueAt({}), null);
+  });
+  test('taskIsOverdue: a task due today is NOT late yet — the old check called it late from 08:00', () => {
+    const { taskIsOverdue } = sandbox();
+    const now = new Date(2026, 9, 7, 10, 0);
+    assert.equal(taskIsOverdue({ due_date: '2026-10-07' }, false, now), false, 'a whole-day task has until midnight');
+    assert.equal(taskIsOverdue({ due_date: '2026-10-07', due_time: '09:30' }, false, now), true, 'a timed one is late once its time passes');
+    assert.equal(taskIsOverdue({ due_date: '2026-10-07', due_time: '14:00' }, false, now), false, 'and not before');
+    assert.equal(taskIsOverdue({ due_date: '2026-10-06' }, false, now), true, 'yesterday is late');
+    assert.equal(taskIsOverdue({ due_date: '2026-10-06' }, true, now), false, 'unless it is done');
+    assert.equal(taskIsOverdue({}, false, now), false);
+  });
+  test('taskDueLabel: the time shows beside the date when there is one', () => {
+    const { taskDueLabel } = sandbox();
+    assert.equal(taskDueLabel({ due_date: '2026-10-07', due_time: '09:30' }), 'FMT:2026-10-07 · 09:30');
+    assert.equal(taskDueLabel({ due_date: '2026-10-07' }), 'FMT:2026-10-07');
+    assert.equal(taskDueLabel({}), '');
+  });
+  test('the list row and the board card both use them, instead of comparing against UTC midnight', () => {
+    for (const fn of ['taskListRow', 'taskKanbanCard']) {
+      const src = sliceFn(t, fn, 'tasks.js');
+      assert.match(src, /taskDueLabel\(t\)/, fn);
+      assert.match(src, /taskIsOverdue\(t, isDone\)/, fn);
+      assert.doesNotMatch(src, /new Date\(t\.due_date\) < new Date\(\)/, `${fn} still has the old comparison`);
+    }
+  });
+  test('the deal and contact task rows stop calling a task due today late, too', () => {
+    assert.doesNotMatch(dv, /new Date\(x\.due_date\) < new Date\(\)/, 'same bug, three more call sites');
+    assert.match(dv, /taskIsOverdue\(x,/);
+  });
+  test("dvDue names the time as well, so the drawer and the deal rows agree with the list", () => {
+    const d = sliceFn(dv, 'dvDue', 'detail-views.js');
+    assert.match(d, /due_time|t\.time/, 'it takes the whole task now, not just a date string');
   });
 });

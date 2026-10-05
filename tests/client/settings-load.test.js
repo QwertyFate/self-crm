@@ -20,7 +20,7 @@ describe('loadSettings fetches everything in one batch', () => {
   });
   test('the batch covers every endpoint the page renders from, each once', () => {
     const batch = load.slice(load.indexOf('Promise.all('), load.indexOf(']);', load.indexOf('Promise.all(')));
-    for (const ep of ['/api/stages', '/api/fields', '/api/object-fields', '/api/pipelines', '/api/deal-fields', '/api/task-fields', '/api/auth/me', '/api/workspace/members', '/api/invites']) {
+    for (const ep of ['/api/fields', '/api/object-fields', '/api/pipelines', '/api/deal-fields', '/api/task-fields', '/api/auth/me', '/api/workspace/members', '/api/invites']) {
       assert.equal(count(batch, `'${ep}'`), 1, ep);
     }
     assert.equal(count(load, "'/api/auth/me'"), 1, 'auth/me is fetched once and reused for the Tasks statuses and the delete-workspace check');

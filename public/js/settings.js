@@ -21,8 +21,7 @@ async function loadSettings() {
   // Every request the page needs starts at once: the global loader counts them as one
   // batch (one bar, one paint) instead of a blink per card. `/api/auth/me` is fetched once
   // and reused for the Tasks statuses and the delete-workspace check.
-  const [stageRows, fieldRows, objectFieldRows, pipelineRows, dealFieldRows, taskFieldRows, me, memberRows, inviteRows] = await Promise.all([
-    api.get('/api/stages'),
+  const [fieldRows, objectFieldRows, pipelineRows, dealFieldRows, taskFieldRows, me, memberRows, inviteRows] = await Promise.all([
     api.get('/api/fields'),
     api.get('/api/object-fields'),
     api.get('/api/pipelines'),
@@ -32,10 +31,10 @@ async function loadSettings() {
     api.get('/api/workspace/members'),
     canManageInvites ? api.get('/api/invites') : null,
   ]);
-  stages = stageRows; fields = fieldRows;
+  fields = fieldRows;
 
   renderTimezoneSetting();
-  renderFieldsList(); renderContactColumnSettings(); renderContactStagesList();
+  renderFieldsList(); renderContactColumnSettings();
   const waEl = document.getElementById('wa-template-input');
   if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? 'Hi {{name}}, ';
   const miroEl = document.getElementById('miro-url-input');
@@ -249,57 +248,6 @@ async function saveWaTemplate() {
   currentWorkspace.whatsapp_template = template;
   if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
-}
-
-function stageDragStart(e, i) { dragStageIdx = i; e.dataTransfer.effectAllowed = 'move'; }
-function stageDragOver(e) { e.preventDefault(); }
-async function stageDrop(e, targetIdx) {
-  e.preventDefault(); if (dragStageIdx === null || dragStageIdx === targetIdx) return;
-  const moved = stages.splice(dragStageIdx, 1)[0]; stages.splice(targetIdx, 0, moved); dragStageIdx = null;
-  renderContactStagesList(); await api.patch('/api/stages/reorder', { ids: stages.map(s => s.id) });
-}
-function openStageModal(id) {
-  document.getElementById('stage-form').reset(); document.getElementById('stage-id').value = id || '';
-  document.getElementById('stage-color').value = '#4f6ef7';
-  document.getElementById('stage-modal-title').textContent = id ? t('edit_stage_title') : t('add_stage_title');
-  if (id) { const s = stages.find(s => s.id === id); document.getElementById('stage-name').value = s.name; document.getElementById('stage-color').value = s.color; }
-  document.getElementById('stage-modal').classList.remove('hidden');
-}
-async function saveStage(e) {
-  e.preventDefault();
-  const id = document.getElementById('stage-id').value;
-  const payload = { name: document.getElementById('stage-name').value, color: document.getElementById('stage-color').value };
-  const res = id ? await api.put(`/api/stages/${id}`, payload) : await api.post('/api/stages', payload);
-  if (res.error) { alert(res.error); return; }
-  closeModal('stage-modal');
-  invalidate();
-  const contactsPage = document.getElementById('page-contacts');
-  if (contactsPage && !contactsPage.classList.contains('hidden')) {
-    await loadContacts();
-  } else {
-    await loadSettings();
-  }
-}
-async function deleteStage(id) {
-  if (!confirm('Delete this stage? Contacts will become unassigned.')) return;
-  await api.del(`/api/stages/${id}`); invalidate(); await loadSettings();
-}
-
-function renderContactStagesList() {
-  const el = document.getElementById('contact-stages-list');
-  if (!el) return;
-  if (!stages.length) { el.innerHTML = `<li class="settings-empty">${t('no_stages_yet')}</li>`; return; }
-  el.innerHTML = stages.map((s, i) => `
-    <li class="settings-row pipeline-stage-row" draggable="true" data-id="${s.id}"
-      ondragstart="stageDragStart(event,${i})" ondragover="stageDragOver(event)" ondrop="stageDrop(event,${i})">
-      <span class="drag-handle">${UI_ICON.drag}</span>
-      <span class="row-dot" style="background:${esc(s.color)}"></span>
-      <span class="row-label">${esc(s.name)}</span>
-      <div class="row-actions">
-        <button class="btn btn-sm btn-ghost btn-icon" onclick="openStageModal(${s.id})" title="${t('btn_edit')}" aria-label="${t('btn_edit')}">${UI_ICON.edit}</button>
-        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteStage(${s.id})" title="${t('btn_delete')}" aria-label="${t('btn_delete')}">${UI_ICON.remove}</button>
-      </div>
-    </li>`).join('');
 }
 
 function renderFieldsList() {

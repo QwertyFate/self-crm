@@ -2,7 +2,7 @@ const express  = require('express');
 const router   = express.Router();
 const bcrypt   = require('bcryptjs');
 const crypto   = require('crypto');
-const { pool, seedDefaultStages, seedDefaultPipeline } = require('../db');
+const { pool, seedDefaultPipeline } = require('../db');
 const { sendPasswordReset } = require('../utils/mailer');
 
 router.get('/me', async (req, res, next) => {

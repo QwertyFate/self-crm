@@ -53,7 +53,7 @@ function sumValue(list) { return list.reduce((s, d) => s + (Number(d.value) || 0
 
 /* ---------- state ---------- */
 // Filters, sort, selection and the summary toggle of the Deals page (per tab; the summary toggle is remembered).
-let dealsUI = { q: '', owner: null, urgency: null, stage: null, sort: { key: 'created_at', dir: -1 }, sel: new Set(), summary: localStorage.getItem('dealsSummary') !== '0' };
+let dealsUI = { q: '', owner: null, urgency: null, stage: null, cf: {}, sort: { key: 'created_at', dir: -1 }, sel: new Set(), summary: localStorage.getItem('dealsSummary') !== '0' };
 let dealsSearchTimer = null;
 
 function currentPipeline() { return pipelines.find(p => p.id === currentPipelineId) || null; }
@@ -65,9 +65,10 @@ function visibleDeals() {
   const q = String(dealsUI.q || '').trim().toLowerCase();
   return deals.filter(d => {
     if (q && !`${d.title || ''} ${d.contact_name || ''} ${d.contact_company || ''}`.toLowerCase().includes(q)) return false;
-    if (dealsUI.owner != null && d.assigned_to !== dealsUI.owner) return false;
+    if (dealsUI.owner != null && (d.assigned_to ?? '') !== dealsUI.owner) return false;
     if (dealsUI.urgency != null && (parseInt(d.urgency, 10) || 0) < dealsUI.urgency) return false;
-    if (dealsUI.stage != null && d.stage_id !== dealsUI.stage) return false;
+    if (dealsUI.stage != null && (d.stage_id ?? '') !== dealsUI.stage) return false;
+    for (const [k, v] of Object.entries(dealsUI.cf || {})) { if (v != null && v !== '' && String(d.custom_data?.[k] ?? '') !== v) return false; }
     return true;
   });
 }
@@ -264,27 +265,50 @@ function renderDealsToolbar() {
   const el = document.getElementById('deals-toolbar');
   if (!el) return;
   const active = document.activeElement && document.activeElement.id === 'deals-q';
-  const any = dealsUI.q || dealsUI.owner != null || dealsUI.urgency != null || dealsUI.stage != null;
+  const any = dealsFilterActive();
   el.innerHTML = `<div class="input-group" style="width:260px">${icon('search')}<input class="input" id="deals-q" type="search" placeholder="${esc(t('search_deals'))}" value="${esc(dealsUI.q)}" aria-label="${esc(t('search_deals'))}" oninput="onDealsSearch(this.value)"></div>
-    ${dealsChip('owner')}${dealsChip('urgency')}${currentPipelineId ? dealsChip('stage') : ''}
+    ${dealsChip('owner')}${dealsChip('urgency')}${currentPipelineId ? dealsChip('stage') : ''}${dealFilterFields().map(f => dealsChip('cf:' + f.field_key, f.name)).join('')}
     ${any ? `<button class="btn btn-ghost btn-sm" type="button" onclick="clearDealsFilters()">${esc(t('clear_filters'))}</button>` : ''}<span class="grow"></span>
     ${dealViewMode === 'list' ? `<button class="btn btn-secondary btn-sm" type="button" onclick="openDealsColumnsMenu(this)" aria-haspopup="menu">${icon('columns')}${esc(t('btn_columns'))}</button>` : ''}
     <button class="btn btn-secondary btn-sm" type="button" onclick="toggleDealsSummary()" aria-pressed="${dealsUI.summary}">${icon('bar-chart')}${esc(t(dealsUI.summary ? 'hide_summary' : 'show_summary'))}</button>`;
   if (active) { const q = document.getElementById('deals-q'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
 }
-function dealsChip(key) {
-  const v = dealsUI[key], on = v != null && v !== '';
+// Custom deal dropdown fields get a chip each — the generic form of the reference's fixed "Source" chip.
+function dealFilterFields() { return dealFields.filter(f => f.type === 'dropdown' && f.options?.length); }
+function dealsFilterActive() {
+  return !!(dealsUI.q || dealsUI.owner != null || dealsUI.urgency != null || dealsUI.stage != null
+    || Object.values(dealsUI.cf || {}).some(v => v != null && v !== ''));
+}
+function dealsChip(key, label) {
+  const cf = key.startsWith('cf:'), v = cf ? dealsUI.cf?.[key.slice(3)] : dealsUI[key];
+  const on = v != null && v !== '' || (!cf && v === '');
   let txt = '';
-  if (on) txt = key === 'owner' ? (members.find(m => m.id === v)?.name || '')
+  if (on) txt = cf ? String(v)
+    : v === '' ? t('detail_unassigned')
+    : key === 'owner' ? (members.find(m => m.id === v)?.name || '')
     : key === 'urgency' ? `${urgencyLabel(urgencyMeta(v))} ${t('or_higher')}`
     : (currentStages().find(s => s.id === v)?.name || '');
-  return `<button class="chip ${on ? 'on' : ''}" type="button" data-chip="${key}" onclick="openDealsChip(this,'${key}')" aria-haspopup="menu">${esc(t('chip_' + key))}${on ? ': ' + esc(txt) : ''}${icon('chevron-down', 'ic-sm')}</button>`;
+  return `<button class="chip ${on ? 'on' : ''}" type="button" data-chip="${esc(key)}" onclick="openDealsChip(this,'${esc(key)}')" aria-haspopup="menu">${esc(label || t('chip_' + key))}${on ? ': ' + esc(txt) : ''}${icon('chevron-down', 'ic-sm')}</button>`;
 }
 function openDealsChip(anchor, key) {
-  const opts = key === 'owner' ? members.map(m => ({ value: m.id, label: m.name }))
-    : key === 'urgency' ? [1, 2, 3, 4].map(i => ({ value: i, label: `${urgencyLabel(urgencyMeta(i))} ${t('or_higher')}` }))
-    : currentStages().map(s => ({ value: s.id, label: s.name }));
-  ui.select(anchor, [{ value: null, label: t('filter_all') }, ...opts], dealsUI[key], v => { dealsUI[key] = v; renderDeals(); });
+  const unassigned = { value: '', label: t('detail_unassigned') };
+  let opts, cur, set;
+  if (key.startsWith('cf:')) {
+    const f = dealFields.find(x => x.field_key === key.slice(3)); if (!f) return;
+    opts = (f.options || []).map(o => ({ value: o, label: o }));
+    cur = dealsUI.cf?.[f.field_key] ?? null;
+    set = v => { dealsUI.cf = { ...(dealsUI.cf || {}), [f.field_key]: v }; };
+  } else if (key === 'owner') {
+    opts = [unassigned, ...members.map(m => ({ value: m.id, label: m.name + (m.id === currentUser?.id ? ' (you)' : '') }))];
+    cur = dealsUI.owner ?? null; set = v => { dealsUI.owner = v; };
+  } else if (key === 'urgency') {
+    opts = [1, 2, 3, 4].map(i => ({ value: i, label: `${urgencyLabel(urgencyMeta(i))} ${t('or_higher')}` }));
+    cur = dealsUI.urgency ?? null; set = v => { dealsUI.urgency = v; };
+  } else {
+    opts = [unassigned, ...currentStages().map(st => ({ value: st.id, label: st.name }))];
+    cur = dealsUI.stage ?? null; set = v => { dealsUI.stage = v; };
+  }
+  ui.select(anchor, [{ value: null, label: t('filter_all') }, ...opts], cur, v => { set(v); renderDeals(); });
 }
 function onDealsSearch(value) {
   dealsUI.q = value;
@@ -292,7 +316,7 @@ function onDealsSearch(value) {
   dealsSearchTimer = setTimeout(renderDeals, 120);
 }
 function clearDealsFilters() {
-  dealsUI.q = ''; dealsUI.owner = dealsUI.urgency = dealsUI.stage = null;
+  dealsUI.q = ''; dealsUI.owner = dealsUI.urgency = dealsUI.stage = null; dealsUI.cf = {};
   renderDeals();
 }
 
@@ -454,7 +478,7 @@ function renderDealsList() {
     return `<td>${dash}</td>`;
   };
   const span = 3 + (showPipeline ? 1 : 0) + visibleCols.length;
-  const filtered = dealsUI.q || dealsUI.owner != null || dealsUI.urgency != null || dealsUI.stage != null;
+  const filtered = dealsFilterActive();
   tbody.innerHTML = rows.length ? rows.map(d => `<tr class="clickable" aria-selected="${sel.has(d.id)}" onclick="if(!event.target.closest('.check,[data-kebab]'))openDealModal(${d.id})">
       <td class="col-check"><label class="check"><input type="checkbox" data-row="${d.id}" aria-label="${esc(d.title)}" onchange="toggleDealSelected(${d.id},this.checked)" ${sel.has(d.id) ? 'checked' : ''}></label></td>
       <td style="max-width:360px"><div class="truncate" style="font-weight:620">${esc(d.title)}</div></td>

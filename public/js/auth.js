@@ -405,7 +405,7 @@ async function switchPage(page) {
   if (page === 'chat')         await loadChatPage();
 }
 
-function invalidate() { contacts = []; stages = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }
+function invalidate() { contacts = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }
 
 // Puts the browser back to the state it has on a fresh page load, so a login in the
 // same tab (no reload) can never show anything of the previous user's workspace:
@@ -418,7 +418,7 @@ function resetClientState() {
   onlineUsers = []; chatOldestId = null; chatNewestId = null; chatOpen = false; chatPageOpen = false; chatLoadingMore = false;
   updateChatBadge(0);
   currentUser = null; currentWorkspace = null;
-  contacts = []; stages = []; fields = []; activities = []; members = [];
+  contacts = []; fields = []; activities = []; members = [];
   pipelines = []; deals = []; dealFields = []; dealColumns = []; currentPipelineId = null; dragDealId = null;
   kanbanFields = ['company', 'email']; dealKanbanFields = ['contact', 'value']; contactColumns = []; colWidths = {};
   objects = []; objectFields = []; objectColumns = []; objCurrentPage = 1;
@@ -426,15 +426,14 @@ function resetClientState() {
   analyticsData = null; trendRawData = null; calEvents = [];
   intgData = null; engineData = null; activeGuideId = null; activeCustomKeys = [];
   currentSettingsTab = 'workspace'; currentIntgTab = 'webhook';
-  currentContactType = 'contact'; filteredContacts = []; kanbanAllContacts = []; selectedContactIds = new Set(); selectionModeOn = false;
-  currentPage = 1; sortKey = null; sortDir = 'asc'; activeFilters = {}; filterPanelOpen = false;
+  currentContactType = 'contact'; filteredContacts = []; selectedContactIds = new Set(); selectionModeOn = false;
+  currentPage = 1; sortKey = null; sortDir = 'asc'; activeFilters = {};
   notifPanelOpen = false;
   const notifList = document.getElementById('notif-list'); if (notifList) notifList.innerHTML = '';
   document.getElementById('notif-panel')?.classList.add('hidden');
   localStorage.removeItem('lastTaskListId');
   Object.keys(localStorage).filter(k => k.startsWith('proj-collapsed-')).forEach(k => localStorage.removeItem(k));
 }
-async function ensureStages()   { if (!stages.length)   stages   = await api.get('/api/stages'); }
 async function ensureFields()   { if (!fields.length)   fields   = await api.get('/api/fields'); }
 async function ensureContacts() { if (!contacts.length) contacts = await api.get('/api/contacts'); }
 async function ensureMembers()  { if (!members.length)  members  = await api.get('/api/workspace/members'); }

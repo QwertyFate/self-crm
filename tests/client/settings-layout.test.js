@@ -32,7 +32,7 @@ describe('what lives where', () => {
   const expect = {
     workspace:    ['workspace-name-card', 'supplier-name-card', 'object-name-card', 'delete-workspace-card'],
     preferences:  ['lang-options', 'pref-dark-toggle', 'timezone-select', 'notif-pref-list'],
-    contacts:     ['fields-list', 'contact-columns-list', 'contact-stages-list', 'wa-template-input'],
+    contacts:     ['fields-list', 'contact-columns-list', 'wa-template-input'],
     deals:        ['pipelines-list', 'deal-fields-list', 'deal-columns-list'],
     objects:      ['object-fields-list', 'object-columns-list'],
     tasks:        ['task-statuses-list', 'task-fields-list'],
@@ -52,9 +52,9 @@ describe('what lives where', () => {
     assert.match(pane('team'), /id="members-list"[\s\S]*id="invites-card"/, 'members before the owner-only invites');
     assert.match(pane('team'), /data-i18n="hint_members"/);
   });
-  test('the Contact stages card (this branch only) follows the reference anatomy', () => {
+  test('the Contact stages card is gone with contact stages (Part 19)', () => {
     const p = pane('contacts');
-    assert.match(p, /<h2 data-i18n="set_contact_stages">[\s\S]{0,400}onclick="openStageModal\(\)"[\s\S]{0,600}<ul id="contact-stages-list" class="settings-list"><\/ul>/);
+    assert.doesNotMatch(p, /set_contact_stages|openStageModal|contact-stages-list/);
   });
   test('every element id the scripts read still exists exactly once', () => {
     for (const id of ['settings-workspace-label', 'settings-tab-objects', 'settings-tab-workspace', 'settings-objects-pane-title',
@@ -64,14 +64,14 @@ describe('what lives where', () => {
       'wa-template-input', 'save-wa-template-btn', 'wa-template-msg', 'miro-url-input', 'miro-url-msg',
       'pipelines-list', 'deal-fields-list', 'deal-columns-list', 'save-deal-cols-btn', 'deal-cols-msg',
       'object-fields-list', 'object-columns-list', 'save-obj-cols-btn', 'obj-cols-msg',
-      'fields-list', 'contact-columns-list', 'save-contact-cols-btn', 'contact-cols-msg', 'contact-stages-list',
+      'fields-list', 'contact-columns-list', 'save-contact-cols-btn', 'contact-cols-msg',
       'invites-card', 'invite-role-select', 'invites-list', 'members-list', 'task-statuses-list', 'task-statuses-msg', 'task-fields-list']) {
       assert.equal((section.match(new RegExp(`id="${id}"`, 'g')) || []).length, 1, id);
     }
     for (const h of ['saveWorkspaceName()', 'deleteWorkspace()', 'saveSupplierName()', 'saveNotifPrefs()', 'saveTimezoneSetting()', 'toggleDarkMode()',
       "insertWaVar('{{name}}')", "insertWaVar('{{company}}')", 'saveWaTemplate()', 'saveMiroUrl()', "setLanguage('en')", "setLanguage('de')",
       'openNewPipelineModal()', 'openDealFieldModal()', 'saveDealColumns()', 'saveObjectTypeName()', 'openObjectFieldModal()', 'saveObjectColumns()',
-      'openFieldModal()', 'saveContactColumns()', 'openStageModal()', 'generateInviteCode()', 'openTaskStatusModal()', 'saveTaskStatuses()', 'openTaskFieldModal()']) {
+      'openFieldModal()', 'saveContactColumns()', 'generateInviteCode()', 'openTaskStatusModal()', 'saveTaskStatuses()', 'openTaskFieldModal()']) {
       assert.ok(section.includes(`="${h}"`), h);
     }
   });
@@ -110,16 +110,14 @@ describe('scripts and styles', () => {
   });
   test('settings.js renders empty states and pipelines without inline spacing and picks the tab by role', () => {
     assert.equal(/padding:6px 10px|margin-top:6px|padding:8px 0|margin:6px 0 2px|display:flex;gap:4px|var\(--muted\)/.test(settings), false);
-    assert.ok((settings.match(/class="settings-empty"/g) || []).length >= 6);
+    assert.ok((settings.match(/class="settings-empty"/g) || []).length >= 5);
     const pipes = sliceFn(settings, 'renderPipelinesSettings', 'settings.js');
     assert.match(pipes, /class="row-label row-label-strong pipeline-name">\$\{UI_ICON\.pin\}/);
     assert.match(pipes, /<div class="settings-card-body"><div class="settings-card-actions">\s*<button class="btn btn-sm btn-ghost" onclick="addPipelineStage/);
     const load = sliceFn(settings, 'loadSettings', 'settings.js');
     assert.match(load, /getElementById\('settings-tab-workspace'\)\?\.classList\.toggle\('hidden', !isOwner\)/);
     assert.match(load, /if \(!isOwner && currentSettingsTab === 'workspace'\) currentSettingsTab = 'preferences';/);
-    assert.match(load, /renderContactStagesList\(\)/);
     assert.match(settings, /^let currentSettingsTab = 'workspace';/m);
-    assert.match(sliceFn(settings, 'stageDrop', 'settings.js'), /renderContactStagesList\(\)/);
     assert.match(read('public/js/core.js'), /getElementById\('pref-dark-toggle'\)/, 'the Appearance toggle follows the theme');
   });
   test('the guided tour still points at existing tabs', () => {

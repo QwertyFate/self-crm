@@ -100,6 +100,45 @@ describe('deals.js: renderers follow the reference', () => {
   });
 });
 
+describe("deals.js: filter chips gain custom dropdown fields and Unassigned (Part 18, parity with Contacts)", () => {
+  test('the toolbar renders a chip per custom deal dropdown field, after the fixed three', () => {
+    const r = sliceFn(deals, 'renderDealsToolbar', 'deals.js');
+    assert.match(r, /dealFilterFields\(\)\.map\(f => dealsChip\('cf:' \+ f\.field_key, f\.name\)\)\.join\(''\)/);
+    assert.match(sliceFn(deals, 'dealFilterFields', 'deals.js'), /dealFields\.filter\(f => f\.type === 'dropdown' && f\.options\?\.length\)/);
+  });
+  test('owner and stage chips offer Unassigned / Not set, and a custom-field chip lists that field\'s options', () => {
+    const o = sliceFn(deals, 'openDealsChip', 'deals.js');
+    assert.match(o, /value: '', label: t\('detail_unassigned'\)/);
+    assert.match(o, /key\.startsWith\('cf:'\)/);
+    assert.match(o, /ui\.select\(anchor, \[\{ value: null, label: t\('filter_all'\) \}, \.\.\.opts\], cur/);
+  });
+  test('visibleDeals (sandbox): owner/stage Unassigned and custom dropdown filters', () => {
+    const extra2 = `
+      const t = k => ({ or_higher: 'or higher', no_contact: 'No contact' })[k] || k;
+      const esc = s => String(s ?? '');
+      const localStorage = { getItem: () => null, setItem() {} };
+      const currentLang = 'en';
+    `;
+    const F = loadFns('public/js/deals.js', ['visibleDeals'], {
+      state: { deals: [], dealsUI: { q: '', owner: null, urgency: null, stage: null, cf: {}, sort: { key: 'created_at', dir: -1 }, sel: [], summary: true } },
+      extra: extra2,
+    });
+    F.__set('deals', [
+      { id: 1, title: 'A', assigned_to: 1, stage_id: 10, urgency: 0, custom_data: { source: 'Referral' } },
+      { id: 2, title: 'B', assigned_to: null, stage_id: null, urgency: 0, custom_data: {} },
+      { id: 3, title: 'C', assigned_to: 2, stage_id: 10, urgency: 0, custom_data: { source: 'Website' } },
+    ]);
+    const ui = patch => F.__set('dealsUI', { q: '', owner: null, urgency: null, stage: null, cf: {}, sort: { key: 'created_at', dir: -1 }, sel: [], summary: true, ...patch });
+    ui({}); assert.deepEqual(F.visibleDeals().map(d => d.id), [1, 2, 3]);
+    ui({ owner: '' }); assert.deepEqual(F.visibleDeals().map(d => d.id), [2], 'empty string = Unassigned');
+    ui({ stage: '' }); assert.deepEqual(F.visibleDeals().map(d => d.id), [2]);
+    ui({ cf: { source: 'Website' } }); assert.deepEqual(F.visibleDeals().map(d => d.id), [3]);
+  });
+  test('clearDealsFilters resets the custom-field map too', () => {
+    assert.match(sliceFn(deals, 'clearDealsFilters', 'deals.js'), /dealsUI\.cf = \{\}/);
+  });
+});
+
 describe('deals.js: the pipeline select drops "All pipelines" in board mode (it always rendered empty there)', () => {
   test('populatePipelineSelect omits the all-pipelines option when dealViewMode is kanban, keeps it in list mode', () => {
     const fn = sliceFn(deals, 'populatePipelineSelect', 'deals.js');
@@ -213,12 +252,15 @@ describe('core.js: shared avatar helper and the new strings', () => {
 });
 
 describe('stylesheet', () => {
-  test('board column body scoped under .col-board; urgency bars; dead deal-card rules gone; contacts kanban kept', () => {
+  test('board column body scoped under .col-board; urgency bars; dead deal-card rules gone; the contacts kanban went with contact stages (Part 19)', () => {
     assert.match(css, /^\.col-board \.col-cards \{ padding: 2px 10px 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 64px; \}/m);
     assert.match(css, /^\.urg-3 \{ background: var\(--warning\); \} \.urg-4 \{ background: var\(--danger\); \}/m);
     assert.match(css, /^#deals-board\.board \{/m); assert.match(css, /^#deals-list-view \{ display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0;/m);
     for (const gone of ['.deal-card', '.deal-value-chip', '.deal-list-row', '.card-urgency-select', '.urgency-select', '.urgency-label']) assert.ok(!css.includes(gone + ' ') && !css.includes(gone + '.') && !css.includes(gone + ','), `${gone} removed`);
-    for (const kept of ['.pipeline-board {', '.pipeline-col {', '.contact-card {', '.col-cards {', '.stage-badge {']) assert.ok(css.includes(kept), kept);
+    // .pipeline-board/.pipeline-col/.contact-card/.col-cards/.stage-badge styled the stage-based
+     // contacts kanban, removed with contact stages in Part 19; the Deals board uses .col-board .col-cards.
+    for (const gone of ['.pipeline-board', '.pipeline-col', '.contact-card', '.stage-badge']) assert.equal(count(css, gone + ' {'), 0, gone);
+    assert.match(css, /^\.col-board \.col-cards \{/m);
     // .urgency-dot was kept for the old deal modal's urgency select (Part 2 note above); that modal
     // is gone as of Part 16 (tests/client/detail-views.test.js), so the rule is dead and removed too.
     assert.ok(!css.includes('.urgency-dot'));

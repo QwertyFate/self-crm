@@ -3,7 +3,6 @@ let currentWorkspace = null;
 let kanbanFields     = ['company', 'email'];
 
 let contacts   = [];
-let stages     = [];
 let fields     = [];
 let activities = [];
 let members    = [];
@@ -23,7 +22,6 @@ let dealColumns       = [];
 let dealColDragIdx    = null;
 let dragDealId        = null;
 let dragContactId    = null;
-let dragStageIdx     = null;
 let colDragIdx     = null;
 let importData     = null;
 let contactColumns = [];
@@ -34,7 +32,6 @@ const PAGE_SIZE    = 25;
 let sortKey        = null;
 let sortDir        = 'asc';
 let activeFilters  = {};
-let filterPanelOpen = false;
 let currentLang   = localStorage.getItem('lang') || 'en';
 
 const TRANSLATIONS = {
@@ -65,10 +62,12 @@ const TRANSLATIONS = {
     no_pipelines:'No pipelines yet. Create one in Settings → Deals.',
     no_deals:'No deals in this stage.',
     dark_mode:'Dark mode', light_mode:'Light mode', logout:'Log out',
-    page_pipeline:'Pipeline', page_contacts:'Contacts', page_activities:'Activities', page_settings:'Settings', filter_btn:'Filter',
+    page_pipeline:'Pipeline', page_contacts:'Contacts', page_activities:'Activities', page_settings:'Settings',
     add_contact:'+ Add Contact', log_activity:'+ Log Activity',
     col_name:'Name', col_company:'Company', col_email:'Email', col_phone:'Phone', col_stage:'Stage', col_assignee:'Assignee', col_created_at:'Date Added',
-    search_ph:'Search contacts…',
+    search_ph:'Search name, company, email or phone', chip_last:'Last contact', last_today:'Today', last_week:'Last 7 days', last_month:'Last 30 days', last_older:'Older than 30 days', last_never:'Never contacted',
+    add_filter:'Filter', remove_filter:'Remove filter', btn_select:'Select',
+    filter_contains_ph:'Type to filter…', click_to_edit:'Click to edit', edit_entry:'Edit entry', delete_entry:'Delete entry', entry_updated:'Entry updated', enter_saves_esc_cancels:'Enter saves · Esc cancels · Shift+Enter for a new line', no_contacts_match:'No {noun} match your filters', no_contacts_yet:'No {noun} yet', n_items:'{n} {noun}', n_of_items:'{a} of {b} {noun}',
     no_activities:'No activities yet.', no_fields:'No custom fields yet.',
     drop_here:'Drop contacts here', unassigned:'Unassigned',
     act_note:'Note', act_call:'Call', act_email:'Email', act_whatsapp:'WhatsApp',
@@ -89,7 +88,6 @@ const TRANSLATIONS = {
     add_btn:'Add', generate_btn:'Generate', save_btn:'Save',
     add_contact_title:'Add Contact', edit_contact_title:'Edit Contact',
     log_activity_title:'Log Activity',
-    add_stage_title:'Add Stage', edit_stage_title:'Edit Stage',
     add_field_title:'Add Field', edit_field_title:'Edit Field',
     lbl_name:'Name', lbl_company:'Company', lbl_email:'Email', lbl_phone:'Phone',
     lbl_stage:'Stage', lbl_assignee:'Assignee', lbl_type:'Type', lbl_contact:'Contact',
@@ -98,7 +96,7 @@ const TRANSLATIONS = {
     btn_cancel:'Cancel', btn_save:'Save', btn_delete:'Delete', btn_view:'View', btn_log:'Log', btn_edit:'Edit',
     detail_stage:'Stage', detail_activities:'Activities',
     detail_log_ph:'Add note, call, or email…', detail_unassigned:'Unassigned',
-    opt_none:'— None —', opt_no_stage:'— No stage —', opt_unassigned:'— Unassigned —',
+    opt_none:'— None —', opt_no_deal_stage:'— No stage —', opt_unassigned:'— Unassigned —',
     lang_en:'English', lang_de:'German',
     role_owner:'Owner', role_admin:'Admin', role_member:'Member', lbl_invite_role:'Role',
     btn_copy:'Copy', btn_regenerate:'Regenerate', btn_refresh:'Refresh', btn_save_changes:'Save changes', copied:'Copied!',
@@ -125,7 +123,7 @@ const TRANSLATIONS = {
     set_appearance:'Appearance', hint_appearance:'Light or dark theme for this browser.', set_danger:'Delete workspace',
     hint_members:'Everyone who has joined this workspace.',
     pane_workspace:'Workspace', hint_pane_workspace:'Name this workspace and what it calls suppliers and listings.',
-    pane_preferences:'My preferences', pane_contacts:'Contacts', hint_pane_contacts:'Custom fields, table columns, contact stages and the WhatsApp template.',
+    pane_preferences:'My preferences', pane_contacts:'Contacts', hint_pane_contacts:'Custom fields, table columns and the WhatsApp template.',
     pane_deals:'Deals', hint_pane_deals:'Pipelines and their stages, deal fields and list columns.',
     hint_pane_objects:'Fields and table columns.', pane_tasks:'Tasks', hint_pane_tasks:'Statuses and custom fields for tasks.',
     pane_team:'Team', hint_pane_team:'Who is in this workspace, and invite codes for new members.',
@@ -138,11 +136,10 @@ const TRANSLATIONS = {
     notif_contacts:'Contacts and suppliers', notif_deals:'Deals', notif_tasks:'Tasks', notif_objects:'Listings', notif_activities:'Activities',
     set_deal_cols:'Deal list columns', hint_deal_cols:'Columns of the deal list view. Drag to reorder. Title is always first.',
     set_object_fields:'Fields', hint_object_fields:'Extra properties on every item in this list.', set_object_cols:'Table columns',
-    set_contact_stages:'Contact stages', hint_contact_stages:'Stages of the contact kanban. Drag to reorder.',
     set_task_statuses:'Task statuses', hint_task_statuses:'Drag to reorder. Statuses are the columns of the task board.',
     set_task_fields:'Custom fields', hint_task_fields:'Extra properties on every task.',
     add_stage_btn:'Add stage', copy_btn:'Copy', remove_btn:'Remove', you_marker:'(you)', used_by:'Used by',
-    no_pipelines_yet:'No pipelines yet.', no_deal_fields_yet:'No deal fields yet.', no_invites_yet:'No invite codes yet.', no_task_fields_yet:'No fields yet.', no_stages_yet:'No stages yet.',
+    no_pipelines_yet:'No pipelines yet.', no_deal_fields_yet:'No deal fields yet.', no_invites_yet:'No invite codes yet.', no_task_fields_yet:'No fields yet.',
     // Integrations page (same shell as Settings): rail tabs, section titles and descriptions, cards
     page_integrations:'Integrations', hint_page_integrations:'Connect the tools that send you leads, and the Upgrads Engine that handles signed contracts.',
     intg_tab_webhook:'Lead webhook', intg_tab_platforms:'Platforms', intg_tab_activity:'Recent leads', intg_tab_engine:'Upgrads Engine', intg_tab_deliveries:'Deliveries',
@@ -194,10 +191,12 @@ const TRANSLATIONS = {
     no_pipelines:'Noch keine Pipelines. Erstelle eine unter Einstellungen → Deals.',
     no_deals:'Keine Deals in dieser Phase.',
     dark_mode:'Dunkelmodus', light_mode:'Hellmodus', logout:'Abmelden',
-    page_pipeline:'Pipeline', page_contacts:'Kontakte', page_activities:'Aktivitäten', page_settings:'Einstellungen', filter_btn:'Filter',
+    page_pipeline:'Pipeline', page_contacts:'Kontakte', page_activities:'Aktivitäten', page_settings:'Einstellungen',
     add_contact:'+ Kontakt hinzufügen', log_activity:'+ Aktivität erfassen',
     col_name:'Name', col_company:'Unternehmen', col_email:'E-Mail', col_phone:'Telefon', col_stage:'Phase', col_assignee:'Zuständig', col_created_at:'Hinzugefügt am',
-    search_ph:'Kontakte suchen…',
+    search_ph:'Name, Unternehmen, E-Mail oder Telefon suchen', chip_last:'Letzter Kontakt', last_today:'Heute', last_week:'Letzte 7 Tage', last_month:'Letzte 30 Tage', last_older:'Älter als 30 Tage', last_never:'Nie kontaktiert',
+    add_filter:'Filter', remove_filter:'Filter entfernen', btn_select:'Auswählen',
+    filter_contains_ph:'Tippen zum Filtern…', click_to_edit:'Zum Bearbeiten klicken', edit_entry:'Eintrag bearbeiten', delete_entry:'Eintrag löschen', entry_updated:'Eintrag aktualisiert', enter_saves_esc_cancels:'Enter speichert · Esc bricht ab · Shift+Enter für eine neue Zeile', no_contacts_match:'Keine {noun} passen zu deinen Filtern', no_contacts_yet:'Noch keine {noun}', n_items:'{n} {noun}', n_of_items:'{a} von {b} {noun}',
     no_activities:'Noch keine Aktivitäten.', no_fields:'Noch keine benutzerdefinierten Felder.',
     drop_here:'Kontakte hierher ziehen', unassigned:'Nicht zugewiesen',
     act_note:'Notiz', act_call:'Anruf', act_email:'E-Mail', act_whatsapp:'WhatsApp',
@@ -218,7 +217,6 @@ const TRANSLATIONS = {
     add_btn:'Hinzufügen', generate_btn:'Generieren', save_btn:'Speichern',
     add_contact_title:'Kontakt hinzufügen', edit_contact_title:'Kontakt bearbeiten',
     log_activity_title:'Aktivität erfassen',
-    add_stage_title:'Phase hinzufügen', edit_stage_title:'Phase bearbeiten',
     add_field_title:'Feld hinzufügen', edit_field_title:'Feld bearbeiten',
     lbl_name:'Name', lbl_company:'Unternehmen', lbl_email:'E-Mail', lbl_phone:'Telefon',
     lbl_stage:'Phase', lbl_assignee:'Zuständig', lbl_type:'Typ', lbl_contact:'Kontakt',
@@ -227,7 +225,7 @@ const TRANSLATIONS = {
     btn_cancel:'Abbrechen', btn_save:'Speichern', btn_delete:'Löschen', btn_view:'Ansehen', btn_log:'Erfassen', btn_edit:'Bearbeiten',
     detail_stage:'Phase', detail_activities:'Aktivitäten',
     detail_log_ph:'Notiz, Anruf oder E-Mail hinzufügen…', detail_unassigned:'Nicht zugewiesen',
-    opt_none:'— Keine —', opt_no_stage:'— Keine Phase —', opt_unassigned:'— Nicht zugewiesen —',
+    opt_none:'— Keine —', opt_no_deal_stage:'— Keine Phase —', opt_unassigned:'— Nicht zugewiesen —',
     lang_en:'Englisch', lang_de:'Deutsch',
     role_owner:'Inhaber', role_admin:'Admin', role_member:'Mitglied', lbl_invite_role:'Rolle',
     btn_copy:'Kopieren', btn_regenerate:'Neu erzeugen', btn_refresh:'Aktualisieren', btn_save_changes:'Änderungen speichern', copied:'Kopiert!',
@@ -254,7 +252,7 @@ const TRANSLATIONS = {
     set_appearance:'Darstellung', hint_appearance:'Helles oder dunkles Design für diesen Browser.', set_danger:'Arbeitsbereich löschen',
     hint_members:'Alle, die diesem Arbeitsbereich beigetreten sind.',
     pane_workspace:'Arbeitsbereich', hint_pane_workspace:'Name des Arbeitsbereichs und Bezeichnungen für Lieferanten und Objekte.',
-    pane_preferences:'Meine Einstellungen', pane_contacts:'Kontakte', hint_pane_contacts:'Eigene Felder, Tabellenspalten, Kontakt-Phasen und die WhatsApp-Vorlage.',
+    pane_preferences:'Meine Einstellungen', pane_contacts:'Kontakte', hint_pane_contacts:'Eigene Felder, Tabellenspalten und die WhatsApp-Vorlage.',
     pane_deals:'Deals', hint_pane_deals:'Pipelines mit Phasen, Deal-Felder und Listenspalten.',
     hint_pane_objects:'Felder und Tabellenspalten.', pane_tasks:'Aufgaben', hint_pane_tasks:'Status und eigene Felder für Aufgaben.',
     pane_team:'Team', hint_pane_team:'Mitglieder dieses Arbeitsbereichs und Einladungscodes für neue Mitglieder.',
@@ -267,11 +265,10 @@ const TRANSLATIONS = {
     notif_contacts:'Kontakte und Lieferanten', notif_deals:'Deals', notif_tasks:'Aufgaben', notif_objects:'Objekte', notif_activities:'Aktivitäten',
     set_deal_cols:'Spalten der Deal-Liste', hint_deal_cols:'Spalten der Deal-Listenansicht. Ziehen zum Sortieren. Titel steht immer zuerst.',
     set_object_fields:'Felder', hint_object_fields:'Zusätzliche Eigenschaften für jeden Eintrag dieser Liste.', set_object_cols:'Tabellenspalten',
-    set_contact_stages:'Kontakt-Phasen', hint_contact_stages:'Phasen des Kontakt-Kanbans. Ziehen zum Sortieren.',
     set_task_statuses:'Aufgabenstatus', hint_task_statuses:'Ziehen zum Sortieren. Status sind die Spalten des Aufgaben-Boards.',
     set_task_fields:'Eigene Felder', hint_task_fields:'Zusätzliche Eigenschaften für jede Aufgabe.',
     add_stage_btn:'Phase hinzufügen', copy_btn:'Kopieren', remove_btn:'Entfernen', you_marker:'(du)', used_by:'Verwendet von',
-    no_pipelines_yet:'Noch keine Pipelines.', no_deal_fields_yet:'Noch keine Deal-Felder.', no_invites_yet:'Noch keine Einladungscodes.', no_task_fields_yet:'Noch keine Felder.', no_stages_yet:'Noch keine Phasen.',
+    no_pipelines_yet:'Noch keine Pipelines.', no_deal_fields_yet:'Noch keine Deal-Felder.', no_invites_yet:'Noch keine Einladungscodes.', no_task_fields_yet:'Noch keine Felder.',
     // Integrationen (gleiche Hülle wie Einstellungen): Reiter, Abschnittstitel und Kurzbeschreibungen, Karten
     page_integrations:'Integrationen', hint_page_integrations:'Verbinde die Tools, die dir Leads schicken, und die Upgrads Engine, die unterschriebene Verträge übernimmt.',
     intg_tab_webhook:'Lead-Webhook', intg_tab_platforms:'Plattformen', intg_tab_activity:'Letzte Leads', intg_tab_engine:'Upgrads Engine', intg_tab_deliveries:'Zustellungen',

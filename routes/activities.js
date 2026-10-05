@@ -94,13 +94,13 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { contact_id, type, content, event_date } = req.body;
+    const { contact_id, type, content, event_date, event_time } = req.body;
     if (!content) return res.status(400).json({ error: 'Content required' });
     if (!['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
     const { rows: [row] } = await pool.query(
-      'INSERT INTO activities (workspace_id, contact_id, type, content, created_by, event_date) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
-      [req.workspaceId, contact_id||null, type, content, req.userId, event_date || null]
+      'INSERT INTO activities (workspace_id, contact_id, type, content, created_by, event_date, event_time) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+      [req.workspaceId, contact_id||null, type, content, req.userId, event_date || null, event_time || null]
     );
 
     const { rows: [actor] } = await pool.query('SELECT name FROM users WHERE id=$1', [req.userId]);
@@ -128,9 +128,9 @@ router.get('/:id', async (req, res, next) => {
 
 router.patch('/:id', async (req, res, next) => {
   try {
-    const { type, content, event_date, completed } = req.body;
+    const { type, content, event_date, event_time, completed } = req.body;
 
-    if (!content && completed === undefined && type === undefined && event_date === undefined) {
+    if (!content && completed === undefined && type === undefined && event_date === undefined && event_time === undefined) {
       return res.status(400).json({ error: 'Nothing to update' });
     }
     if (type && !['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
@@ -140,9 +140,11 @@ router.patch('/:id', async (req, res, next) => {
           type        = COALESCE($1, type),
           content     = COALESCE($2, content),
           event_date  = CASE WHEN $7 THEN NULL ELSE COALESCE($5, event_date) END,
+          event_time  = CASE WHEN $9 THEN NULL ELSE COALESCE($8, event_time) END,
           completed   = COALESCE($6, completed)
         WHERE id=$3 AND workspace_id=$4 RETURNING id`,
-       [type ?? null, content ?? null, req.params.id, req.workspaceId, event_date ?? null, completed ?? null, event_date === null]
+       [type ?? null, content ?? null, req.params.id, req.workspaceId, event_date ?? null, completed ?? null, event_date === null,
+        event_time ?? null, event_time === null]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Activity not found' });
 

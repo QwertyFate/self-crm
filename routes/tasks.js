@@ -15,6 +15,7 @@ router.get('/', async (req, res, next) => {
 
     const { rows } = await pool.query(`
       SELECT t.*,
+             TO_CHAR(t.due_time, 'HH24:MI') AS due_time,
              u.name  AS assigned_to_name,
              cu.name AS created_by_name,
              dl.title  AS deal_title,
@@ -36,7 +37,8 @@ router.get('/', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const { rows: [task] } = await pool.query(`
-      SELECT t.*, u.name AS assigned_to_name,
+      SELECT t.*, TO_CHAR(t.due_time, 'HH24:MI') AS due_time,
+             u.name AS assigned_to_name,
              dl.title AS deal_title, ct.name AS contact_name
       FROM tasks t
       LEFT JOIN users u ON u.id = t.assigned_to
@@ -47,7 +49,7 @@ router.get('/:id', async (req, res, next) => {
     if (!task) return res.status(404).json({ error: 'Not found' });
 
     const { rows: subtasks } = await pool.query(`
-      SELECT t.*, u.name AS assigned_to_name
+      SELECT t.*, TO_CHAR(t.due_time, 'HH24:MI') AS due_time, u.name AS assigned_to_name
       FROM tasks t
       LEFT JOIN users u ON u.id = t.assigned_to
       WHERE t.parent_id = $1
@@ -60,7 +62,7 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { title, description, status, priority, assigned_to, due_date, parent_id, project_id, list_id, deal_id, contact_id } = req.body;
+    const { title, description, status, priority, assigned_to, due_date, due_time, parent_id, project_id, list_id, deal_id, contact_id } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
     const dealId = deal_id ? parseInt(deal_id, 10) || null : null;
     const contactId = contact_id ? parseInt(contact_id, 10) || null : null;
@@ -73,11 +75,11 @@ router.post('/', async (req, res, next) => {
       if (!c) return res.status(400).json({ error: 'Contact not found in this workspace' });
     }
     const { rows: [row] } = await pool.query(
-      `INSERT INTO tasks (workspace_id, parent_id, project_id, list_id, deal_id, contact_id, title, description, status, priority, assigned_to, due_date, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+      `INSERT INTO tasks (workspace_id, parent_id, project_id, list_id, deal_id, contact_id, title, description, status, priority, assigned_to, due_date, due_time, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
       [req.workspaceId, parent_id||null, project_id||null, list_id||null, dealId, contactId,
        title.trim(), description||null, status||'todo', priority||'medium',
-       assigned_to||null, due_date||null, req.userId]
+       assigned_to||null, due_date||null, due_time||null, req.userId]
     );
     if (!parent_id) {
       notify(req.workspaceId, req.userId, {
@@ -93,7 +95,7 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const { title, description, status, priority, assigned_to, due_date, custom_data, project_id, list_id, deal_id, contact_id } = req.body;
+    const { title, description, status, priority, assigned_to, due_date, due_time, custom_data, project_id, list_id, deal_id, contact_id } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
     const dealId = deal_id ? parseInt(deal_id, 10) || null : null;
     const contactId = contact_id ? parseInt(contact_id, 10) || null : null;
@@ -107,12 +109,13 @@ router.put('/:id', async (req, res, next) => {
     }
     const result = await pool.query(
       `UPDATE tasks SET title=$1, description=$2, status=$3, priority=$4,
-       assigned_to=$5, due_date=$6, project_id=$7, list_id=$8,
+       assigned_to=$5, due_date=$6, due_time=$14, project_id=$7, list_id=$8,
        deal_id=$9, contact_id=$10, custom_data=$11, updated_at=NOW()
        WHERE id=$12 AND workspace_id=$13`,
       [title.trim(), description||null, status, priority, assigned_to||null,
        due_date||null, project_id||null, list_id||null,
-       dealId, contactId, JSON.stringify(custom_data||{}), req.params.id, req.workspaceId]
+       dealId, contactId, JSON.stringify(custom_data||{}), req.params.id, req.workspaceId,
+       due_time||null]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });

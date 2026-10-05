@@ -72,7 +72,6 @@ router.get('/defaults', requireAdmin, async (req, res, next) => {
       { key: 'company', label: 'Company', visible: true, isCustom: false },
       { key: 'email', label: 'Email', visible: true, isCustom: false },
       { key: 'phone', label: 'Phone', visible: true, isCustom: false },
-      { key: 'stage_id', label: 'Stage', visible: true, isCustom: false },
       { key: 'assigned_to', label: 'Assignee', visible: true, isCustom: false },
       { key: 'created_at', label: 'Created At', visible: false, isCustom: false },
     ];

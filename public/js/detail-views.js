@@ -37,8 +37,16 @@ function dvActText(s) {
 }
 const dvAgoHours = ts => { if (!ts) return ''; const h = Math.round((Date.now() - new Date(ts).getTime()) / 36e5); return h < 1 ? 'Just now' : h < 24 ? `${h} h ago` : agoDays(ts); };
 const dvWhen = ts => ts ? new Date(ts).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '';
-function dvDue(d) { if (!d) return 'No due date'; const day = x => { const t = new Date(x); t.setHours(0, 0, 0, 0); return t.getTime(); }; const off = Math.round((day(d) - day(Date.now())) / 864e5); return off < 0 ? `${-off} ${-off === 1 ? 'day' : 'days'} overdue` : off === 0 ? 'Due today' : off === 1 ? 'Due tomorrow' : `In ${off} days`; }
+function dvDue(d, due_time) { if (!d) return 'No due date'; const day = x => { const t = new Date(x); t.setHours(0, 0, 0, 0); return t.getTime(); }; const off = Math.round((day(d) - day(Date.now())) / 864e5); const at = String(due_time || '').slice(0, 5), when = at ? ` at ${at}` : '';
+  return off < 0 ? `${-off} ${-off === 1 ? 'day' : 'days'} overdue` : off === 0 ? `Due today${when}` : off === 1 ? `Due tomorrow${when}` : `In ${off} days${when}`; }
 const dvIso = d => d ? String(d).slice(0, 10) : '';
+// An edited note shows all of itself: the field takes the content's height rather than
+// scrolling inside a fixed box. Reset to auto first so it shrinks again when text is deleted.
+function dvAutoGrow(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
 function dvEmpty(ic, title, text = '', action = '') { return `<div class="empty">${icon(ic)}<b>${esc(title)}</b>${text ? `<div>${esc(text)}</div>` : ''}${action ? `<div style="margin-top:14px">${action}</div>` : ''}</div>`; }
 async function dvAllTasks() { const r = await api.get('/api/tasks'); return Array.isArray(r) ? r : []; }
 async function dvContacts(type) { const r = await api.get(`/api/contacts?contact_type=${type}`); return Array.isArray(r) ? r : []; }
@@ -143,7 +151,7 @@ async function openDealDetail(id) {
   const [d, allContacts, allSuppliers, allTasks, objs] = await Promise.all([api.get(`/api/deals/${id}`), dvContacts('contact'), dvContacts('supplier'), dvAllTasks(), api.get('/api/objects')]);
   if (!d || d.error) { ui.toast('That deal no longer exists.'); return; }
   objects = Array.isArray(objs) ? objs : objects;
-  const S = { d, contacts: allContacts, suppliers: allSuppliers, tasks: allTasks.filter(x => x.deal_id === d.id && !x.parent_id), acts: [], tab: 'overview', type: 'note', text: '', textErr: '', filter: null, editAct: null, editText: '', addTask: false, task: { title: '', due_date: '', priority: 'medium', assigned_to: currentUser?.id || '' }, taskErr: '', gone: false };
+  const S = { d, contacts: allContacts, suppliers: allSuppliers, tasks: allTasks.filter(x => x.deal_id === d.id && !x.parent_id), acts: [], tab: 'overview', type: 'note', text: '', textErr: '', filter: null, editAct: null, editText: '', addTask: false, task: { title: '', due_date: '', due_time: '', priority: 'medium', assigned_to: currentUser?.id || '' }, taskErr: '', gone: false };
   const contactOf = () => S.contacts.find(c => c.id === S.d.contact_id) || null;
   const supplierOf = () => S.suppliers.find(c => c.id === S.d.supplier_id) || null;
   const pipe = () => pipelines.find(p => p.id === S.d.pipeline_id) || { name: '', stages: [] };
@@ -216,7 +224,7 @@ async function openDealDetail(id) {
   function miniTasks() {
     const list = S.tasks.filter(x => x.status !== dvDoneKey()).sort((a, b) => (a.due_date || '9') < (b.due_date || '9') ? -1 : 1).slice(0, 3);
     return `<section class="dd-mini" aria-label="Next tasks"><div class="dd-mini-head"><span>Next tasks</span><button class="btn btn-ghost btn-sm" data-act="goto" data-tab="tasks">View all</button></div>
-      ${list.length ? list.map(x => `<div class="dd-mini-row"><div class="grow"><a class="dd-task-title" href="#" data-act="open-task" data-id="${x.id}">${esc(x.title)}</a><div class="dd-task-meta"><span class="${x.due_date && new Date(x.due_date) < new Date() ? 'dd-late' : ''}">${esc(dvDue(x.due_date))}</span>${x.assigned_to_name ? avatar(x.assigned_to_name, 'sm') : ''}</div></div></div>`).join('')
+      ${list.length ? list.map(x => `<div class="dd-mini-row"><div class="grow"><a class="dd-task-title" href="#" data-act="open-task" data-id="${x.id}">${esc(x.title)}</a><div class="dd-task-meta"><span class="${taskIsOverdue(x, false) ? 'dd-late' : ''}">${esc(dvDue(x.due_date, x.due_time))}</span>${x.assigned_to_name ? avatar(x.assigned_to_name, 'sm') : ''}</div></div></div>`).join('')
         : `<div class="dd-mini-empty">No open tasks. <button class="btn btn-ghost btn-sm" data-act="goto-task">Add task</button></div>`}</section>`;
   }
   function miniActs() {
@@ -245,9 +253,9 @@ async function openDealDetail(id) {
     return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main">
       <div class="tl-head"><b>${ty.label}</b>${a.logged_by_name ? `<span class="muted">by ${esc(a.logged_by_name)}</span>` : ''}<span class="dd-tl-time muted" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
         <span class="dd-tl-actions"><button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="Edit entry">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="Delete entry">${icon('trash')}</button></span></div>
-      ${editing ? `<div class="dd-editor"><textarea class="textarea" id="dd-act-edit" rows="3" aria-label="Edit entry">${esc(S.editText)}</textarea>
+      ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="dd-act-edit" rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
           <div class="row" style="justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-act="act-cancel">Cancel</button><button class="btn btn-primary btn-sm" data-act="act-save" data-id="${a.id}">Save</button></div></div>`
-        : `<div class="tl-text dd-pre">${dvActHtml(a.content)}</div>`}</div></div>`;
+        : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActHtml(a.content)}</div>`}</div></div>`;
   }
   function activityHtml() {
     const ty = dvTypeOf(S.type), all = S.acts, list = S.filter ? all.filter(a => a.type === S.filter) : all, c = contactOf();
@@ -264,16 +272,16 @@ async function openDealDetail(id) {
         : dvEmpty('activity', all.length ? 'No entries of this type' : 'No activity yet', all.length ? 'Choose another type or clear the filter.' : c ? 'Log a call, email or note to start the history of this deal.' : 'Link a contact to this deal first.', all.length ? '<button class="btn btn-secondary btn-sm" data-act="tlclear">Clear filter</button>' : '')}`;
   }
   function taskRow(x) {
-    const done = x.status === dvDoneKey(), pr = DV_PRIO[x.priority] || DV_PRIO.medium, st = dvTaskStatuses().find(s => s.key === x.status), late = !done && x.due_date && new Date(x.due_date) < new Date();
+    const done = x.status === dvDoneKey(), pr = DV_PRIO[x.priority] || DV_PRIO.medium, st = dvTaskStatuses().find(s => s.key === x.status), late = taskIsOverdue(x, done);
     return `<li class="dd-task ${done ? 'done' : ''}" data-tid="${x.id}"><label class="check"><input type="checkbox" data-toggle="${x.id}" ${done ? 'checked' : ''} aria-label="${done ? 'Reopen' : 'Complete'} task: ${esc(x.title)}"></label>
       <div class="grow"><a class="dd-task-title" href="#" data-act="open-task" data-id="${x.id}">${esc(x.title)}</a>
-        <div class="dd-task-meta"><span class="badge ${pr[1] ? 'badge-' + pr[1] : ''}">${pr[0]}</span>${st ? `<span>${esc(st.label)}</span>` : ''}<span class="dd-sep"></span><span class="${late ? 'dd-late' : ''}">${esc(done ? 'Done' : dvDue(x.due_date))}</span></div></div>${x.assigned_to_name ? avatar(x.assigned_to_name, 'sm') : ''}</li>`;
+        <div class="dd-task-meta"><span class="badge ${pr[1] ? 'badge-' + pr[1] : ''}">${pr[0]}</span>${st ? `<span>${esc(st.label)}</span>` : ''}<span class="dd-sep"></span><span class="${late ? 'dd-late' : ''}">${esc(done ? 'Done' : dvDue(x.due_date, x.due_time))}</span></div></div>${x.assigned_to_name ? avatar(x.assigned_to_name, 'sm') : ''}</li>`;
   }
   function taskFormHtml() {
     const x = S.task;
     return `<form class="dd-taskform" id="dd-taskform" novalidate aria-label="New task">
       <div class="field"><label class="label" for="dd-task-title">Task <span class="req">*</span></label><input class="input" id="dd-task-title" name="title" value="${esc(x.title)}" placeholder="What needs to be done?" autocomplete="off" ${S.taskErr ? 'aria-invalid="true"' : ''}><div class="error-text" role="alert">${esc(S.taskErr)}</div></div>
-      <div class="field-row-3"><div class="field"><label class="label" for="dd-task-due">Due date</label><input class="input" type="date" id="dd-task-due" name="due_date" value="${esc(x.due_date)}"></div>
+      <div class="field-row-3"><div class="field"><label class="label" for="dd-task-due">Due date</label><input class="input" type="date" id="dd-task-due" name="due_date" value="${esc(x.due_date)}"><input class="input" type="time" id="dd-task-time" name="due_time" value="${esc(x.due_time || '')}" aria-label="Time" style="margin-top:6px"></div>
         <div class="field"><label class="label" for="dd-task-prio">Priority</label><select class="select" id="dd-task-prio" name="priority">${Object.keys(DV_PRIO).map(p => `<option value="${p}" ${x.priority === p ? 'selected' : ''}>${DV_PRIO[p][0]}</option>`).join('')}</select></div>
         <div class="field"><label class="label" for="dd-task-owner">Assignee</label><select class="select" id="dd-task-owner" name="assigned_to"><option value="">Unassigned</option>${members.map(m => `<option value="${m.id}" ${String(x.assigned_to) === String(m.id) ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div></div>
       <div class="row" style="justify-content:flex-end"><button type="button" class="btn btn-secondary btn-sm" data-act="task-cancel">Cancel</button><button type="submit" class="btn btn-primary btn-sm">Add task</button></div></form>`;
@@ -312,7 +320,7 @@ async function openDealDetail(id) {
     return `<section class="card" aria-label="${title}">${head}<div class="card-body">
       <div class="dd-person">${avatar(c.name, 'lg')}<div class="grow" style="min-width:0"><a class="dd-pname truncate" style="display:block" href="#" data-act="open-contact" data-id="${c.id}">${esc(c.name)}</a><div class="muted truncate">${esc(c.company || '')}</div></div></div>
       <div class="dd-lines">${c.email ? `<div>${icon('mail')}<a href="mailto:${esc(c.email)}">${esc(c.email)}</a></div>` : ''}${c.phone ? `<div>${icon('phone')}<a href="tel:${esc(dvDigits(c.phone))}">${esc(c.phone)}</a></div>` : ''}
-        ${c.stage_name ? `<div>${icon('flag')}<span>${esc(c.stage_name)}</span></div>` : ''}${c.assigned_to_name ? `<div>${icon('users')}<span>${esc(c.assigned_to_name)}</span></div>` : ''}</div></div>
+        ${c.assigned_to_name ? `<div>${icon('users')}<span>${esc(c.assigned_to_name)}</span></div>` : ''}</div></div>
       <div class="card-footer"><button class="btn btn-secondary btn-sm" data-act="open-contact" data-id="${c.id}">Open ${kind === 'contact' ? 'contact' : esc(dvSupplierWord().toLowerCase())}${icon('chevron-right', 'ic-sm')}</button></div></section>`;
   }
   function listingCard() {
@@ -351,6 +359,7 @@ async function openDealDetail(id) {
       if (parts.includes('side')) R('#dd-side').innerHTML = sideHtml();
     });
     const title = m.el.querySelector('.modal-title'); if (title) title.textContent = S.d.title;
+    dvAutoGrow(R('#dd-act-edit'));   // a re-render rebuilds the editor, so re-fit it
   }
 
   /* ----- inline editing ----- */
@@ -421,9 +430,9 @@ async function openDealDetail(id) {
   async function submitTask() {
     const x = S.task, title = x.title.trim();
     if (!title) { S.taskErr = 'Enter a task title.'; render('main'); R('#dd-task-title')?.focus(); return; }
-    const res = await api.post('/api/tasks', { title, status: dvFirstKey(), priority: x.priority, due_date: x.due_date || null, assigned_to: x.assigned_to || null, deal_id: S.d.id, contact_id: S.d.contact_id || null });
+    const res = await api.post('/api/tasks', { title, status: dvFirstKey(), priority: x.priority, due_date: x.due_date || null, due_time: x.due_time || null, assigned_to: x.assigned_to || null, deal_id: S.d.id, contact_id: S.d.contact_id || null });
     if (res?.error) return ui.toast(res.error);
-    S.addTask = false; S.taskErr = ''; S.task = { title: '', due_date: '', priority: 'medium', assigned_to: currentUser?.id || '' };
+    S.addTask = false; S.taskErr = ''; S.task = { title: '', due_date: '', due_time: '', priority: 'medium', assigned_to: currentUser?.id || '' };
     S.tasks = (await dvAllTasks()).filter(t2 => t2.deal_id === S.d.id && !t2.parent_id); dvRefreshTasks(); render('main'); ui.toast('Task added');
   }
 
@@ -436,7 +445,7 @@ async function openDealDetail(id) {
     ctype: el => { S.type = el.dataset.type; S.textErr = ''; render('main'); R(`[data-act="ctype"][data-type="${S.type}"]`)?.focus(); },
     tlfilter: el => ui.select(el, [{ value: null, label: 'All types' }, ...DV_ACT_TYPES.map(x => ({ value: x.id, label: x.label, icon: x.icon }))], S.filter, v => { S.filter = v; render('main'); }),
     tlclear: () => { S.filter = null; render('main'); },
-    'act-edit': el => { const a = S.acts.find(x => x.id === +el.dataset.id); S.editAct = a.id; S.editText = dvActText(a.content); render('main'); const ta = R('#dd-act-edit'); ta && (ta.focus(), ta.setSelectionRange(ta.value.length, ta.value.length)); },
+    'act-edit': el => { const a = S.acts.find(x => x.id === +el.dataset.id); if (!a) return; S.editAct = a.id; S.editText = dvActText(a.content); render('main'); const ta = R('#dd-act-edit'); if (ta) { dvAutoGrow(ta); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } },
     'act-cancel': () => { S.editAct = null; render('main'); },
     'act-save': async el => { const ta = R('#dd-act-edit'), v = ta.value.trim(); if (!v) { ta.setAttribute('aria-invalid', 'true'); ta.focus(); return; } const res = await api.patch(`/api/activities/${+el.dataset.id}`, { content: esc(v).replace(/\n/g, '<br>') }); if (res?.error) return ui.toast(res.error); S.editAct = null; await loadActs(); render('main'); ui.toast('Entry updated'); },
     'act-del': el => delAct(+el.dataset.id),
@@ -460,7 +469,16 @@ async function openDealDetail(id) {
     ui.toast(to === dvDoneKey() ? 'Task completed' : 'Task reopened');
   });
   on(root, 'input', '#dd-compose-text', (e, el) => { S.text = el.value; if (S.textErr) { S.textErr = ''; el.removeAttribute('aria-invalid'); const er = R('#dd-compose-err'); er && (er.textContent = ''); } });
-  on(root, 'input', '#dd-act-edit', (e, el) => { S.editText = el.value; el.removeAttribute('aria-invalid'); });
+  on(root, 'input', '#dd-act-edit', (e, el) => { S.editText = el.value; el.removeAttribute('aria-invalid'); dvAutoGrow(el); });
+  // Same gestures as the contact panel: a click opens the editor, a double-click too; a click
+  // that merely ends a text selection is ignored so the selection is not thrown away.
+  const noteEdit = el => A['act-edit']({ dataset: { id: el.dataset.note } });
+  on(root, 'click', '[data-note]', (e, el) => { if (!String(window.getSelection() || '')) noteEdit(el); });
+  on(root, 'dblclick', '[data-note]', (e, el) => noteEdit(el));
+  on(root, 'keydown', '#dd-act-edit', e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.editAct = null; render('main'); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const b = R('[data-act="act-save"]'); b && A['act-save'](b); }
+  });
   on(root, 'input', '#dd-taskform [name]', (e, el) => { S.task[el.name] = el.value; if (el.name === 'title' && S.taskErr) { S.taskErr = ''; el.removeAttribute('aria-invalid'); } });
   on(root, 'change', '#dd-taskform [name]', (e, el) => { S.task[el.name] = el.value; });
   on(root, 'submit', '#dd-compose', e => { e.preventDefault(); submitCompose(); });
@@ -476,24 +494,23 @@ async function openDealDetail(id) {
    CONTACT DETAIL — reference contacts.js detail, in the side panel or a pop window
    ══════════════════════════════════════════════════════════════════════════ */
 async function openContactDetail(id, opts = {}) {
-  await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
+  await Promise.all([ensureFields(), ensureMembers()]);
   const [c, contactDeals, allTasks] = await Promise.all([api.get(`/api/contacts/${id}`), api.get(`/api/deals?contact_id=${id}`), dvAllTasks()]);
   if (!c || c.error) { ui.toast('That contact no longer exists.'); return; }
   if (!pipelines.length) pipelines = await api.get('/api/pipelines');
   const sup = c.contact_type === 'supplier', one = sup ? dvSupplierWord().toLowerCase() : 'contact', plural = sup ? (currentWorkspace?.supplier_name || 'Suppliers') : 'Contacts';
-  const S = { c, deals: Array.isArray(contactDeals) ? contactDeals : [], tasks: allTasks.filter(x => x.contact_id === id && !x.parent_id), tab: 'overview', draft: { type: 'note', text: '', err: false, filter: 'all' } };
+  const S = { c, deals: Array.isArray(contactDeals) ? contactDeals : [], tasks: allTasks.filter(x => x.contact_id === id && !x.parent_id), tab: 'overview', draft: { type: 'note', text: '', err: false, filter: 'all' }, editAct: null, editText: '' };
   const acts = () => S.c.activities || [];
   const stageOfDeal = d => (pipelines.find(p => p.id === d.pipeline_id)?.stages || []).find(s => s.id === d.stage_id);
   const sumVal = a => a.reduce((s, d) => s + (Number(d.value) || 0), 0);
   const tel = () => dvDigits(S.c.phone).length >= 6 ? 'tel:' + dvDigits(S.c.phone) : null;
   const wa = () => waLink(S.c.phone, S.c);
-  const payload = patch => ({ name: S.c.name, company: S.c.company, email: S.c.email, phone: S.c.phone, stage_id: S.c.stage_id, assigned_to: S.c.assigned_to, custom_data: S.c.custom_data || {}, contact_type: S.c.contact_type, ...patch });
+  const payload = patch => ({ name: S.c.name, company: S.c.company, email: S.c.email, phone: S.c.phone, assigned_to: S.c.assigned_to, custom_data: S.c.custom_data || {}, contact_type: S.c.contact_type, ...patch });
   async function commit(patch, msg) {
     const prev = {}; Object.keys(patch).forEach(k => prev[k] = S.c[k]); Object.assign(S.c, patch);
     const res = await api.put(`/api/contacts/${id}`, payload(patch)); if (res?.error) { Object.assign(S.c, prev); render(); return ui.toast(res.error); }
-    if ('stage_id' in patch) { const s = stages.find(x => x.id === patch.stage_id); S.c.stage_name = s?.name || null; S.c.stage_color = s?.color || null; }
     if ('assigned_to' in patch) S.c.assigned_to_name = members.find(x => x.id === patch.assigned_to)?.name || null;
-    const row = contacts.find(x => x.id === id); if (row) Object.assign(row, patch, { stage_name: S.c.stage_name, stage_color: S.c.stage_color, assigned_to_name: S.c.assigned_to_name });
+    const row = contacts.find(x => x.id === id); if (row) Object.assign(row, patch, { assigned_to_name: S.c.assigned_to_name });
     dvRefreshContacts(); render(); if (msg) ui.toast(msg);
   }
 
@@ -503,18 +520,23 @@ async function openContactDetail(id, opts = {}) {
     const ext = key === 'email' && v ? `<a class="ct-ext" href="mailto:${esc(v)}" aria-label="Email ${esc(S.c.name)}" title="Send email">${icon('mail')}</a>` : key === 'phone' && tel() ? `<a class="ct-ext" href="${esc(tel())}" aria-label="Call ${esc(S.c.name)}" title="Call">${icon('phone')}</a>` : '';
     return `<div class="ct-f"><dt>${esc(lbl)}</dt><dd><button class="ct-edit" data-edit="${esc(key)}" title="Click to edit"><span>${shown}</span>${icon('pencil', 'ic-sm')}</button>${ext}</dd></div>`;
   };
-  const actItem = a => { const ty = dvTypeOf(a.type); return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main"><div class="tl-head"><b>${ty.label}</b><span class="muted" style="font-size:var(--fs-sm)">${a.logged_by_name ? 'by ' + esc(a.logged_by_name) : ''}</span><span class="muted" style="margin-left:auto;font-size:var(--fs-sm)" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
-      <span class="dd-tl-actions"><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="Delete entry">${icon('trash')}</button></span></div><div class="tl-text">${dvActHtml(a.content)}</div></div></div>`; };
-  const taskRow = x => { const done = x.status === dvDoneKey(), pr = DV_PRIO[x.priority] || DV_PRIO.medium, late = !done && x.due_date && new Date(x.due_date) < new Date();
+  const actItem = a => {
+    const ty = dvTypeOf(a.type), editing = S.editAct === a.id;
+    return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main"><div class="tl-head"><b>${ty.label}</b><span class="muted" style="font-size:var(--fs-sm)">${a.logged_by_name ? 'by ' + esc(a.logged_by_name) : ''}</span><span class="muted" style="margin-left:auto;font-size:var(--fs-sm)" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
+      <span class="dd-tl-actions"><button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
+      ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="ct-aedit" rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
+          <div class="row-between"><span class="help">${esc(t('enter_saves_esc_cancels'))}</span><span class="row"><button class="btn btn-secondary btn-sm" type="button" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" type="button" data-act="act-save">${esc(t('btn_save'))}</button></span></div></div>`
+        : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActHtml(a.content)}</div>`}</div></div>`;
+  };
+  const taskRow = x => { const done = x.status === dvDoneKey(), pr = DV_PRIO[x.priority] || DV_PRIO.medium, late = taskIsOverdue(x, done);
     return `<li class="list-item"><label class="check round"><input type="checkbox" data-task-toggle="${x.id}" aria-label="Mark ${esc(x.title)} as ${done ? 'not done' : 'done'}" ${done ? 'checked' : ''}></label>
       <div class="grow"><a class="ct-task-title ${done ? 'done' : ''}" href="#" data-act="open-task" data-id="${x.id}">${esc(x.title)}</a>${x.deal_title ? `<div class="muted truncate" style="font-size:var(--fs-sm)">${esc(x.deal_title)}</div>` : ''}</div>
-      ${done ? '<span class="badge badge-success">Done</span>' : late ? `<span class="badge badge-danger">${esc(dvDue(x.due_date))}</span>` : `<span class="muted" style="font-size:var(--fs-sm);white-space:nowrap">${esc(dvDue(x.due_date))}</span>`}
+      ${done ? '<span class="badge badge-success">Done</span>' : late ? `<span class="badge badge-danger">${esc(dvDue(x.due_date, x.due_time))}</span>` : `<span class="muted" style="font-size:var(--fs-sm);white-space:nowrap">${esc(dvDue(x.due_date, x.due_time))}</span>`}
       <span class="badge ${pr[1] ? 'badge-' + pr[1] : ''}">${pr[0]}</span>${x.assigned_to_name ? avatar(x.assigned_to_name, 'sm') : ''}</li>`; };
   function overviewPanel() {
     const a = acts().slice(0, 3), open = S.tasks.filter(x => x.status !== dvDoneKey()).slice(0, 3);
     return `<div class="ct-sec"><div class="ct-sec-head"><div class="section-title">${esc(sup ? dvSupplierWord() : 'Contact')} information</div><span class="help">Click a value to edit, Enter saves, Esc cancels</span></div>
       <dl class="ct-fgrid">${editable('name', 'Full name')}${editable('company', 'Company')}${editable('email', 'Email')}${editable('phone', 'Phone')}${fields.map(f => editable('cf:' + f.field_key, f.name)).join('')}
-        <div class="ct-f"><dt>Stage</dt><dd><button class="ct-edit" data-edit="stage" aria-haspopup="menu" title="Change stage"><span>${S.c.stage_name ? `<span class="stage-pill"><i style="background:${esc(S.c.stage_color || 'var(--border-strong)')}"></i>${esc(S.c.stage_name)}</span>` : '<span class="muted">Not set</span>'}</span>${icon('chevron-down', 'ic-sm')}</button></dd></div>
         <div class="ct-f"><dt>Owner</dt><dd><button class="ct-edit" data-edit="owner" aria-haspopup="menu" title="Change owner"><span class="row" style="gap:8px">${S.c.assigned_to_name ? avatar(S.c.assigned_to_name, 'sm') + esc(S.c.assigned_to_name) : '<span class="muted">Unassigned</span>'}</span>${icon('chevron-down', 'ic-sm')}</button></dd></div></dl></div>
       <div class="ct-sec"><div class="ct-sec-head"><div class="section-title">Latest activity</div>${a.length ? `<button class="btn btn-ghost btn-sm" data-act="tab" data-tab="activity">View all</button>` : ''}</div>
         ${a.length ? `<div class="timeline">${a.map(actItem).join('')}</div>` : `<div class="muted">No activity logged yet. <button class="btn btn-ghost btn-sm" data-act="tab" data-tab="activity" style="height:auto;padding:0 2px;color:var(--link)">Log the first interaction</button></div>`}</div>
@@ -548,11 +570,10 @@ async function openContactDetail(id, opts = {}) {
     return `<div class="ct-side">
       <section class="card" aria-label="Details"><div class="card-header"><h2 class="card-title">Details</h2></div><div class="card-body"><dl class="kv" style="margin:0">
         <dt>Owner</dt><dd>${S.c.assigned_to_name ? `<div class="row" style="gap:8px">${avatar(S.c.assigned_to_name, 'sm')}<span>${esc(S.c.assigned_to_name)}</span></div>` : '<span class="muted">Unassigned</span>'}</dd>
-        <dt>Stage</dt><dd>${S.c.stage_name ? `<span class="stage-pill"><i style="background:${esc(S.c.stage_color || 'var(--border-strong)')}"></i>${esc(S.c.stage_name)}</span>` : '<span class="muted">Not set</span>'}</dd>
         <dt>Created</dt><dd>${esc(fmtDate(S.c.created_at))}</dd><dt>Last contact</dt><dd>${esc(last ? agoDays(last) : 'Never')}</dd></dl></div></section>
       <section class="card" aria-label="Deals"><div class="card-header"><h2 class="card-title">Deals</h2>${ds.length ? `<button class="btn btn-ghost btn-sm" data-act="tab" data-tab="deals">View all</button>` : ''}</div>
         <div class="card-body" style="padding-bottom:${ds.length ? 8 : 18}px"><div class="ct-big">${fmtEUR(sumVal(ds))}</div><div class="muted" style="margin:2px 0 ${ds.length ? 10 : 0}px">${ds.length ? dvPlural(ds.length, 'deal', 'deals') + ' in total' : 'No deals'}</div>
-          ${ds.slice(0, 3).map(d => { const st = stageOfDeal(d); return `<div class="ct-mini"><div class="grow"><a class="ct-name truncate" style="display:block" href="#" data-act="open-deal" data-id="${d.id}">${esc(d.title)}</a>${st ? `<div style="margin-top:4px"><span class="stage-pill"><i style="background:${esc(st.color)}"></i>${esc(st.name)}</span></div>` : ''}</div><span class="tnum strong" style="font-weight:650">${d.value != null ? fmtEURShort(d.value) : ''}</span></div>`; }).join('')}
+          ${ds.slice(0, 3).map(d => { const st = stageOfDeal(d); return `<div class="ct-mini clickable" data-act="open-deal" data-id="${d.id}"><div class="grow"><a class="ct-name truncate" style="display:block" href="#" data-act="open-deal" data-id="${d.id}">${esc(d.title)}</a>${st ? `<div style="margin-top:4px"><span class="stage-pill"><i style="background:${esc(st.color)}"></i>${esc(st.name)}</span></div>` : ''}</div><span class="tnum strong" style="font-weight:650">${d.value != null ? fmtEURShort(d.value) : ''}</span></div>`; }).join('')}
           ${ds.length > 3 ? `<div class="ct-mini"><button class="btn btn-ghost btn-sm" data-act="tab" data-tab="deals" style="margin-left:-10px">+ ${ds.length - 3} more</button></div>` : ''}</div></section></div>`;
   }
   function detailHtml() {
@@ -561,7 +582,7 @@ async function openContactDetail(id, opts = {}) {
     const last = acts()[0]?.created_at, t = tel(), w = wa();
     return `<div class="ct-detail">
       <div class="page-header ct-head"><div class="ct-id">${avatar(S.c.name, 'xl')}<div style="min-width:0"><h1 class="page-title">${esc(S.c.name)}</h1>
-          <div class="ct-meta">${S.c.company ? `<span>${icon('building', 'ic-sm')}${esc(S.c.company)}</span>` : ''}${S.c.stage_name ? `<span>${icon('flag', 'ic-sm')}${esc(S.c.stage_name)}</span>` : ''}<span>${icon('clock', 'ic-sm')}Last contact: ${esc(last ? agoDays(last).toLowerCase() : 'never')}</span></div></div></div>
+          <div class="ct-meta">${S.c.company ? `<span>${icon('building', 'ic-sm')}${esc(S.c.company)}</span>` : ''}<span>${icon('clock', 'ic-sm')}Last contact: ${esc(last ? agoDays(last).toLowerCase() : 'never')}</span></div></div></div>
         <div class="page-actions">${t ? `<a class="btn btn-secondary" href="${esc(t)}">${icon('phone')}Call</a>` : `<button class="btn btn-secondary" disabled title="No phone number on file">${icon('phone')}Call</button>`}
           ${S.c.email ? `<a class="btn btn-secondary" href="mailto:${esc(S.c.email)}">${icon('mail')}Email</a>` : `<button class="btn btn-secondary" disabled title="No email address on file">${icon('mail')}Email</button>`}
           ${w ? `<a class="btn btn-secondary" href="${esc(w)}" target="_blank" rel="noopener">${icon('message-circle')}WhatsApp</a>` : `<button class="btn btn-secondary" disabled title="No phone number on file">${icon('message-circle')}WhatsApp</button>`}
@@ -587,14 +608,18 @@ async function openContactDetail(id, opts = {}) {
     modal.el.querySelector('.modal').classList.add('ct-modal'); host = modal.body;
   }
   if (host._ctOff) host._ctOff.forEach(f => f()); const offs = []; host._ctOff = offs;
-  function render() { const a = document.activeElement, fid = a && host.contains(a) ? a.id : null; host.innerHTML = detailHtml(); if (fid) document.getElementById(fid)?.focus(); }
+  function render() {
+    const a = document.activeElement, fid = a && host.contains(a) ? a.id : null;
+    host.innerHTML = detailHtml();
+    if (fid) document.getElementById(fid)?.focus();
+    dvAutoGrow(host.querySelector('#ct-aedit'));   // a re-render rebuilds the editor, so re-fit it
+  }
   const close = () => { if (modal) modal.close(); else closeSidePanel(); };
 
   /* ----- editing ----- */
   function startEdit(btn, key) {
     const dd = btn.closest('dd');
     if (key === 'owner') return ui.select(btn, [{ value: null, label: 'Unassigned' }, ...members.map(x => ({ value: x.id, label: x.name }))], S.c.assigned_to, v => { if (v !== S.c.assigned_to) commit({ assigned_to: v }, 'Owner updated'); });
-    if (key === 'stage') return ui.select(btn, [{ value: null, label: 'Not set' }, ...stages.map(s => ({ value: s.id, label: s.name }))], S.c.stage_id, v => { if (v !== S.c.stage_id) commit({ stage_id: v }, 'Stage updated'); });
     const isCf = key.startsWith('cf:'), fk = isCf ? key.slice(3) : null, f = isCf ? fields.find(x => x.field_key === fk) : null, cur = isCf ? (S.c.custom_data?.[fk] ?? '') : (S.c[key] || '');
     const lbl = isCf ? f?.name : { name: 'Name', company: 'Company', email: 'Email', phone: 'Phone' }[key];
     if (f?.type === 'dropdown') return ui.select(btn, [{ value: '', label: 'Not set' }, ...(f.options || []).map(o => ({ value: o, label: o }))], cur, v => { if (v !== cur) commit({ custom_data: { ...(S.c.custom_data || {}), [fk]: v } }, `${lbl} updated`); });
@@ -631,6 +656,9 @@ async function openContactDetail(id, opts = {}) {
     'open-deal': el => { close(); openDealDetail(+el.dataset.id); },
     'open-task': el => openTaskDrawer(+el.dataset.id, { onChange: async () => { S.tasks = (await dvAllTasks()).filter(x => x.contact_id === id && !x.parent_id); render(); } }),
     'act-del': async el => { const ok = await ui.confirm({ title: 'Delete this entry?', message: 'The entry is removed from the activity history.', confirmLabel: 'Delete', danger: true }); if (!ok) return; const res = await api.del(`/api/activities/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); ui.toast('Entry deleted'); },
+    'act-edit': el => startNoteEdit(+el.dataset.id),
+    'act-cancel': () => { S.editAct = null; S.editText = ''; render(); },
+    'act-save': () => saveNoteEdit(),
   };
   offs.push(on(host, 'click', '[data-act]', (e, el) => { const fn = A[el.dataset.act]; if (fn) { if (el.tagName === 'A') e.preventDefault(); e.stopPropagation(); fn(el); } }));
   offs.push(on(host, 'click', '[data-edit]', (e, el) => startEdit(el, el.dataset.edit)));
@@ -640,6 +668,31 @@ async function openContactDetail(id, opts = {}) {
   offs.push(on(host, 'change', '#ct-afilter', (e, el) => { S.draft.filter = el.value; render(); host.querySelector('#ct-afilter')?.focus(); }));
   offs.push(on(host, 'submit', '#ct-compose', e => { e.preventDefault(); logActivity(); }));
   offs.push(on(host, 'keydown', '#ct-atext', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); logActivity(); } }));
+  // A note is edited where it sits: one click (or a double-click) on its text opens the editor.
+  function startNoteEdit(aid) {
+    const a = acts().find(x => x.id === aid); if (!a) return;
+    S.editAct = aid; S.editText = dvActText(a.content); render();
+    const ta = host.querySelector('#ct-aedit');
+    if (ta) { dvAutoGrow(ta); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+  }
+  async function saveNoteEdit() {
+    const ta = host.querySelector('#ct-aedit'); if (!ta) return;
+    const v = ta.value.trim();
+    if (!v) { ta.setAttribute('aria-invalid', 'true'); ta.focus(); return; }
+    const res = await api.patch(`/api/activities/${S.editAct}`, { content: esc(v).replace(/\n/g, '<br>') });
+    if (res?.error) return ui.toast(res.error);
+    S.editAct = null; S.editText = '';
+    const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh;
+    render(); ui.toast(t('entry_updated'));
+  }
+  // A click that ends a text selection should not swallow the selection by re-rendering.
+  offs.push(on(host, 'click', '[data-note]', (e, el) => { if (!String(window.getSelection() || '')) startNoteEdit(+el.dataset.note); }));
+  offs.push(on(host, 'dblclick', '[data-note]', (e, el) => startNoteEdit(+el.dataset.note)));
+  offs.push(on(host, 'input', '#ct-aedit', (e, el) => { S.editText = el.value; el.removeAttribute('aria-invalid'); dvAutoGrow(el); }));
+  offs.push(on(host, 'keydown', '#ct-aedit', e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.editAct = null; S.editText = ''; render(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNoteEdit(); }
+  }));
   render();
   return { close, render };
 }
@@ -659,7 +712,7 @@ const dvListOpts = (pid, cur) => { const p = taskProjects.find(x => x.id === Num
 async function openTaskForm(opts = {}) {
   await ensureMembers(); const { dealList, contactList } = await dvTaskLists();
   const fid = 'tkf-' + uid();
-  const init = { project_id: opts.projectId !== undefined ? opts.projectId : (currentProjectId || taskProjects[0]?.id || ''), list_id: opts.listId !== undefined ? opts.listId : (currentListId || ''), status: dvFirstKey(), priority: 'medium', assigned_to: currentUser?.id || '', deal_id: opts.dealId || '', contact_id: opts.contactId || '', due_date: '' };
+  const init = { project_id: opts.projectId !== undefined ? opts.projectId : (currentProjectId || taskProjects[0]?.id || ''), list_id: opts.listId !== undefined ? opts.listId : (currentListId || ''), status: dvFirstKey(), priority: 'medium', assigned_to: currentUser?.id || '', deal_id: opts.dealId || '', contact_id: opts.contactId || '', due_date: '', due_time: '' };
   if (!init.list_id && init.project_id) init.list_id = (taskProjects.find(p => p.id === Number(init.project_id))?.lists || [])[0]?.id || '';
   if (init.deal_id && !init.contact_id) { const d = dealList.find(x => x.id === Number(init.deal_id)); if (d?.contact_id) init.contact_id = d.contact_id; }
   const cf = f => { const id = `${fid}-cf-${f.field_key}`; const typeMap = { text: 'text', email: 'email', phone: 'tel', number: 'number', date: 'date', url: 'url' };
@@ -673,6 +726,7 @@ async function openTaskForm(opts = {}) {
       <div class="field-row"><div class="field"><label class="label" for="${fid}-s">Status</label><select class="select" id="${fid}-s" name="status">${dvTaskStatuses().map(s => dvOpt(s.key, s.label, init.status)).join('')}</select></div>
         <div class="field"><label class="label" for="${fid}-p">Priority</label><select class="select" id="${fid}-p" name="priority">${Object.keys(DV_PRIO).map(p => dvOpt(p, DV_PRIO[p][0], init.priority)).join('')}</select></div></div>
       <div class="field-row"><div class="field"><label class="label" for="${fid}-d">Due date</label><input class="input" type="date" id="${fid}-d" name="due_date" value=""></div>
+        <div class="field"><label class="label" for="${fid}-dt">Time</label><input class="input" type="time" id="${fid}-dt" name="due_time" value=""><span class="hint">Optional. A time puts it on the calendar's hour grid.</span></div>
         <div class="field"><label class="label" for="${fid}-o">Assignee</label><select class="select" id="${fid}-o" name="assigned_to"><option value="">Unassigned</option>${members.map(x => dvOpt(x.id, x.name, init.assigned_to)).join('')}</select></div></div>
       <div class="field-row"><div class="field"><label class="label" for="${fid}-de">Deal</label><select class="select" id="${fid}-de" name="deal_id">${dvOpt('', 'No deal', init.deal_id) + dealList.map(d => dvOpt(d.id, d.title, init.deal_id)).join('')}</select></div>
         <div class="field"><label class="label" for="${fid}-c">Contact</label><select class="select" id="${fid}-c" name="contact_id">${dvOpt('', 'No contact', init.contact_id) + contactList.map(c => dvOpt(c.id, c.name, init.contact_id)).join('')}</select></div></div>
@@ -685,7 +739,7 @@ async function openTaskForm(opts = {}) {
   f.addEventListener('submit', async e => {
     e.preventDefault(); const d = ui.formData(f), tt = d.title.trim();
     if (!tt) { title.setAttribute('aria-invalid', 'true'); err.textContent = 'Enter a title for the task.'; err.hidden = false; title.focus(); return; }
-    const payload = { title: tt, description: d.description.trim(), project_id: d.project_id || null, list_id: d.list_id || null, status: d.status, priority: d.priority, due_date: d.due_date || null, assigned_to: d.assigned_to || null, deal_id: d.deal_id || null, contact_id: d.contact_id || null,
+    const payload = { title: tt, description: d.description.trim(), project_id: d.project_id || null, list_id: d.list_id || null, status: d.status, priority: d.priority, due_date: d.due_date || null, due_time: d.due_time || null, assigned_to: d.assigned_to || null, deal_id: d.deal_id || null, contact_id: d.contact_id || null,
       custom_data: Object.fromEntries([...f.querySelectorAll('[data-cf]')].map(el => [el.dataset.cf, el.value])) };
     const res = await api.post('/api/tasks', payload); if (res?.error) return ui.toast(res.error);
     m.close();
@@ -712,7 +766,7 @@ async function openTaskDrawer(id, opts = {}) {
       <dt><label for="${fid}-s">Status</label></dt><dd><select class="select select-sm" id="${fid}-s" data-f="status">${dvTaskStatuses().map(s => dvOpt(s.key, s.label, x.status)).join('')}</select></dd>
       <dt><label for="${fid}-p">Priority</label></dt><dd><select class="select select-sm" id="${fid}-p" data-f="priority">${Object.keys(DV_PRIO).map(p => dvOpt(p, DV_PRIO[p][0], x.priority)).join('')}</select></dd>
       <dt><label for="${fid}-o">Assignee</label></dt><dd><select class="select select-sm" id="${fid}-o" data-f="assigned_to"><option value="">Unassigned</option>${members.map(mm => dvOpt(mm.id, mm.name, x.assigned_to)).join('')}</select></dd>
-      <dt><label for="${fid}-d">Due date</label></dt><dd><input class="input input-sm" type="date" id="${fid}-d" data-f="due_date" value="${esc(dvIso(x.due_date))}"><span class="muted" id="${fid}-dl" style="white-space:nowrap;font-size:var(--fs-sm)"></span></dd>
+      <dt><label for="${fid}-d">Due date</label></dt><dd><input class="input input-sm" type="date" id="${fid}-d" data-f="due_date" value="${esc(dvIso(x.due_date))}"><input class="input input-sm" type="time" id="${fid}-dt" data-f="due_time" value="${esc(String(x.due_time || '').slice(0, 5))}" aria-label="Time" style="max-width:104px"><span class="muted" id="${fid}-dl" style="white-space:nowrap;font-size:var(--fs-sm)"></span></dd>
       <dt><label for="${fid}-pr">Project</label></dt><dd><select class="select select-sm" id="${fid}-pr" data-f="project_id">${dvOpt('', 'Not set', x.project_id) + taskProjects.map(p => dvOpt(p.id, p.name, x.project_id)).join('')}</select><select class="select select-sm" id="${fid}-l" data-f="list_id" aria-label="List">${dvListOpts(x.project_id, x.list_id)}</select></dd>
       <dt><label for="${fid}-de">Deal</label></dt><dd><select class="select select-sm" id="${fid}-de" data-f="deal_id">${dvOpt('', 'No deal', x.deal_id) + dealList.map(d => dvOpt(d.id, d.title, x.deal_id)).join('')}</select><button class="btn btn-ghost btn-sm btn-icon" id="${fid}-dea" data-open="deal" aria-label="Open deal" title="Open deal" ${x.deal_id ? '' : 'hidden'}>${icon('external')}</button></dd>
       <dt><label for="${fid}-c">Contact</label></dt><dd><select class="select select-sm" id="${fid}-c" data-f="contact_id">${dvOpt('', 'No contact', x.contact_id) + contactList.map(c => dvOpt(c.id, c.name, x.contact_id)).join('')}</select><button class="btn btn-ghost btn-sm btn-icon" id="${fid}-ca" data-open="contact" aria-label="Open contact" title="Open contact" ${x.contact_id ? '' : 'hidden'}>${icon('external')}</button></dd>
@@ -725,15 +779,15 @@ async function openTaskDrawer(id, opts = {}) {
     onClose: () => { if (dvDrawer === dr) dvDrawer = null; } });
   dvDrawer = dr; dr.el.querySelector('.drawer').classList.add('tk-drawer');
   const q = sel => dr.el.querySelector(sel);
-  const syncRow = () => { const row = tasks.find(y => y.id === id); if (row) Object.assign(row, { title: x.title, status: x.status, priority: x.priority, assigned_to: x.assigned_to, assigned_to_name: members.find(mm => mm.id === x.assigned_to)?.name || null, due_date: x.due_date, description: x.description }); dvRefreshTasks(); opts.onChange && opts.onChange(x); };
-  const payload = () => ({ title: x.title, description: x.description, status: x.status, priority: x.priority, assigned_to: x.assigned_to || null, due_date: x.due_date ? dvIso(x.due_date) : null, project_id: x.project_id || null, list_id: x.list_id || null, deal_id: x.deal_id || null, contact_id: x.contact_id || null, custom_data: x.custom_data || {} });
+  const syncRow = () => { const row = tasks.find(y => y.id === id); if (row) Object.assign(row, { title: x.title, status: x.status, priority: x.priority, assigned_to: x.assigned_to, assigned_to_name: members.find(mm => mm.id === x.assigned_to)?.name || null, due_date: x.due_date, due_time: x.due_time, description: x.description }); dvRefreshTasks(); opts.onChange && opts.onChange(x); };
+  const payload = () => ({ title: x.title, description: x.description, status: x.status, priority: x.priority, assigned_to: x.assigned_to || null, due_date: x.due_date ? dvIso(x.due_date) : null, due_time: x.due_time || null, project_id: x.project_id || null, list_id: x.list_id || null, deal_id: x.deal_id || null, contact_id: x.contact_id || null, custom_data: x.custom_data || {} });
   async function save(patch, msg) { const prev = {}; Object.keys(patch).forEach(k => prev[k] = x[k]); Object.assign(x, patch); const res = await api.put(`/api/tasks/${id}`, payload()); if (res?.error) { Object.assign(x, prev); return ui.toast(res.error); } syncRow(); if (msg) ui.toast(msg, { ms: 1800 }); }
   const titleEl = q(`#${fid}-t`), titleErr = q(`#${fid}-te`);
   const fit = () => { titleEl.style.height = 'auto'; titleEl.style.height = titleEl.scrollHeight + 2 + 'px'; };
   fit(); titleEl.addEventListener('input', () => { fit(); titleEl.removeAttribute('aria-invalid'); titleErr.hidden = true; });
   titleEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); } if (e.key === 'Escape') { e.stopPropagation(); titleEl.value = x.title; fit(); titleEl.blur(); } });
   titleEl.addEventListener('blur', () => { const v = titleEl.value.trim(); if (!v) { titleEl.value = x.title; titleEl.setAttribute('aria-invalid', 'true'); titleErr.textContent = 'The title cannot be empty. The previous title was restored.'; titleErr.hidden = false; fit(); return; } if (v !== x.title) save({ title: v }, 'Title saved'); });
-  const dueNote = () => { q(`#${fid}-dl`).textContent = x.due_date ? dvDue(x.due_date) : ''; };
+  const dueNote = () => { q(`#${fid}-dl`).textContent = x.due_date ? dvDue(x.due_date, x.due_time) : ''; };
   const links = () => { q(`#${fid}-dea`).hidden = !x.deal_id; q(`#${fid}-ca`).hidden = !x.contact_id; };
   const syncDone = () => { const b = q('[data-dtoggle]'), f = fin(); b.classList.toggle('on', f); b.setAttribute('aria-pressed', f); b.setAttribute('aria-label', f ? 'Reopen task' : 'Complete task'); q(`#${fid}-s`).value = x.status; };
   dueNote(); links();
@@ -746,7 +800,7 @@ async function openTaskDrawer(id, opts = {}) {
     else patch[k] = v || null;
     if (k === 'project_id') { patch.list_id = (taskProjects.find(p => p.id === patch.project_id)?.lists || [])[0]?.id || null; q(`#${fid}-l`).innerHTML = dvListOpts(patch.project_id, patch.list_id); }
     if (k === 'deal_id' && patch.deal_id && !x.contact_id) { const d = dealList.find(y => y.id === patch.deal_id); if (d?.contact_id) { patch.contact_id = d.contact_id; q(`#${fid}-c`).value = d.contact_id; } }
-    save(patch, { status: 'Status updated', priority: 'Priority updated', assigned_to: 'Assignee updated', due_date: 'Due date updated', description: 'Description saved', project_id: 'Project updated', list_id: 'List updated', deal_id: 'Deal link updated', contact_id: 'Contact updated' }[k] || 'Saved').then(() => { if (k === 'status') syncDone(); if (k === 'due_date') dueNote(); if (k === 'deal_id' || k === 'contact_id') links(); });
+    save(patch, { status: 'Status updated', priority: 'Priority updated', assigned_to: 'Assignee updated', due_date: 'Due date updated', due_time: 'Time updated', description: 'Description saved', project_id: 'Project updated', list_id: 'List updated', deal_id: 'Deal link updated', contact_id: 'Contact updated' }[k] || 'Saved').then(() => { if (k === 'status') syncDone(); if (k === 'due_date' || k === 'due_time') dueNote(); if (k === 'deal_id' || k === 'contact_id') links(); });
   });
   on(dr.el, 'click', '[data-open]', (e, el) => { const kind = el.dataset.open; dr.close(); if (kind === 'deal' && x.deal_id) openDealDetail(x.deal_id); if (kind === 'contact' && x.contact_id) openContactDetail(x.contact_id); });
   on(dr.el, 'click', '[data-del]', async () => { const ok = await ui.confirm({ title: 'Delete this task?', message: 'Its subtasks are deleted with it. This cannot be undone.', confirmLabel: 'Delete task', danger: true }); if (!ok) return; const res = await api.del(`/api/tasks/${id}`); if (res?.error) return ui.toast(res.error); tasks = tasks.filter(y => y.id !== id && y.parent_id !== id); dvRefreshTasks(); opts.onChange && opts.onChange(null); dr.close(); ui.toast('Task deleted'); });

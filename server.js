@@ -94,7 +94,6 @@ app.use('/api/auth',          require('./routes/auth'));
 app.use('/api/admin',         require('./routes/admin'));
 app.use('/api/platform',      require('./routes/platform'));
 app.use('/api/contacts',      require('./routes/contacts'));
-app.use('/api/stages',        require('./routes/stages'));
 app.use('/api/fields',        require('./routes/fields'));
 app.use('/api/activities',         require('./routes/activities'));
 app.use('/api/activity-comments',  require('./routes/activity-comments'));

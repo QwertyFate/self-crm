@@ -35,6 +35,9 @@ const SCHEMA = `
     created_at   TIMESTAMPTZ DEFAULT NOW()
   );
 
+  -- Contact stages were removed from the product (Part 19): nothing reads or writes this
+  -- table or contacts.stage_id any more. Both are left in place so existing rows are not
+  -- destroyed; drop them with a migration if you decide the old values are not worth keeping.
   CREATE TABLE IF NOT EXISTS stages (
     id           SERIAL PRIMARY KEY,
     workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -148,35 +151,8 @@ const SCHEMA = `
   );
 `;
 
-const DEFAULT_STAGES = [
-  ['Lead',        '#6b7280', 0],
-  ['Qualified',   '#3b82f6', 1],
-  ['Proposal',    '#f59e0b', 2],
-  ['Negotiation', '#8b5cf6', 3],
-  ['Won',         '#22c55e', 4],
-  ['Lost',        '#ef4444', 5],
-];
 
-async function getAdminDefaultStages(client) {
-  try {
-    const { rows: [saved] } = await client.query('SELECT value FROM platform_settings WHERE key=$1', ['default_stages']);
-    if (saved && saved.value?.contactStages) {
-      return saved.value.contactStages;
-    }
-  } catch (e) {
-  }
-  return DEFAULT_STAGES.map(([name, color, pos]) => ({ name, color, position: pos }));
-}
 
-async function seedDefaultStages(workspaceId, client) {
-  const stages = await getAdminDefaultStages(client);
-  for (const stage of stages) {
-    await client.query(
-      'INSERT INTO stages (workspace_id, name, color, position) VALUES ($1,$2,$3,$4)',
-      [workspaceId, stage.name, stage.color, stage.position || 0]
-    );
-  }
-}
 
 async function initDb() {
   await pool.query(SCHEMA);
@@ -193,6 +169,10 @@ async function initDb() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Europe/Berlin'`);
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS event_date DATE`);
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT false`);
+  // A scheduled activity may also carry a time of day, which is what lets the Calendar's week
+  // view place it on an hour grid. Nullable on purpose: an activity with a date and no time is
+  // an all-day entry, and every activity that existed before this column is exactly that.
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS event_time TIME`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_activities_event_date ON activities (workspace_id, event_date)`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS analytics_layout JSONB NOT NULL DEFAULT '{}'`);
   // Workspace roles: invite codes carry the role the joiner will receive (member or admin).
@@ -328,6 +308,10 @@ async function initDb() {
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS list_id    INTEGER REFERENCES task_lists(id)    ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deal_id    INTEGER REFERENCES deals(id)    ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL`);
+  // A task may also be due at a time, not just on a day; that is what puts it on the
+  // calendar's hour grid rather than its all-day strip. Nullable: a task without a time
+  // is still a whole-day task, which is what every task before this column was.
+  await pool.query(`ALTER TABLE tasks      ADD COLUMN IF NOT EXISTS due_time   TIME`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_attachments (
@@ -531,4 +515,4 @@ async function seedDefaultPipeline(workspaceId, client) {
   }
 }
 
-module.exports = { pool, initDb, seedDefaultStages, seedDefaultPipeline };
+module.exports = { pool, initDb, seedDefaultPipeline };

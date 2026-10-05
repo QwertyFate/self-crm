@@ -386,7 +386,7 @@ function renderIntgStageOptions(selectedStageId) {
   const stages     = (intgData?.stages || []).filter(s => !pipeline || s.pipeline_name === pipeline.name);
 
   if (!dealOn) {
-    stageEl.innerHTML = `<option value="">${esc(t('opt_no_stage'))}</option>` +
+    stageEl.innerHTML = `<option value="">${esc(t('opt_no_deal_stage'))}</option>` +
       stages.map(s => `<option value="${s.id}"${selectedStageId == s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
     return;
   }

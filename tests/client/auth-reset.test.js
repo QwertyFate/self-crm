@@ -13,7 +13,7 @@ const clock = read('public/js/clock.js');
 // Every module-level value that holds workspace or user data, with the value a fresh load gives it.
 const INITIAL = {
   currentUser: null, currentWorkspace: null,
-  contacts: [], stages: [], fields: [], activities: [], members: [],
+  contacts: [], fields: [], activities: [], members: [],
   pipelines: [], deals: [], dealFields: [], dealColumns: [], currentPipelineId: null, dragDealId: null,
   kanbanFields: ['company', 'email'], dealKanbanFields: ['contact', 'value'], contactColumns: [], colWidths: {},
   objects: [], objectFields: [], objectColumns: [], objCurrentPage: 1,
@@ -21,14 +21,14 @@ const INITIAL = {
   analyticsData: null, trendRawData: null, calEvents: [],
   intgData: null, engineData: null, activeGuideId: null, activeCustomKeys: [],
   currentSettingsTab: 'workspace', currentIntgTab: 'webhook',
-  currentContactType: 'contact', filteredContacts: [], kanbanAllContacts: [], selectionModeOn: false,
-  currentPage: 1, sortKey: null, sortDir: 'asc', activeFilters: {}, filterPanelOpen: false,
+  currentContactType: 'contact', filteredContacts: [], selectionModeOn: false,
+  currentPage: 1, sortKey: null, sortDir: 'asc', activeFilters: {},
   notifPanelOpen: false, onlineUsers: [], chatOldestId: null, chatNewestId: null, chatOpen: false, chatPageOpen: false, chatLoadingMore: false,
 };
 // Workspace-1-looking values to seed before the reset.
 const SEEDED = {
   currentUser: { id: 1, role: 'owner' }, currentWorkspace: { id: 1, name: 'WS One' },
-  contacts: [{ id: 1 }], stages: [{ id: 1 }], fields: [{ id: 1 }], activities: [{ id: 1 }], members: [{ id: 1 }],
+  contacts: [{ id: 1 }], fields: [{ id: 1 }], activities: [{ id: 1 }], members: [{ id: 1 }],
   pipelines: [{ id: 11 }], deals: [{ id: 5 }], dealFields: [{ id: 2 }], dealColumns: [{ key: 'value', visible: true }], currentPipelineId: 11, dragDealId: 5,
   kanbanFields: ['phone'], dealKanbanFields: ['value'], contactColumns: [{ key: 'email' }], colWidths: { name: 200 },
   objects: [{ id: 3 }], objectFields: [{ id: 4 }], objectColumns: [{ key: 'x' }], objCurrentPage: 3,
@@ -36,8 +36,8 @@ const SEEDED = {
   analyticsData: { total: 1 }, trendRawData: { x: 1 }, calEvents: [{ id: 1 }],
   intgData: { webhook: {} }, engineData: { engine: {} }, activeGuideId: 'zapier', activeCustomKeys: ['k'],
   currentSettingsTab: 'team', currentIntgTab: 'engine',
-  currentContactType: 'supplier', filteredContacts: [{ id: 1 }], kanbanAllContacts: [{ id: 1 }], selectionModeOn: true,
-  currentPage: 4, sortKey: 'name', sortDir: 'desc', activeFilters: { stage: '1' }, filterPanelOpen: true,
+  currentContactType: 'supplier', filteredContacts: [{ id: 1 }], selectionModeOn: true,
+  currentPage: 4, sortKey: 'name', sortDir: 'desc', activeFilters: { stage: 1 },
   notifPanelOpen: true, onlineUsers: [{ id: 1 }], chatOldestId: 3, chatNewestId: 9, chatOpen: true, chatPageOpen: true, chatLoadingMore: true,
 };
 

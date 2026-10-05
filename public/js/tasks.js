@@ -281,10 +281,31 @@ function buildSubtaskMap(list) {
   return map;
 }
 
+// A task's due moment. A timed task is due at that time; a whole-day task at the end of its
+// day, which is why one due today is not late until midnight. Built from the local date parts
+// on purpose: new Date('2026-10-05') is UTC midnight, which called a task due today overdue
+// from 08:00 local in this timezone.
+function taskDueAt(t) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(t?.due_date || '').slice(0, 10));
+  if (!m) return null;
+  const hm = /^(\d{2}):(\d{2})$/.exec(String(t.due_time || '').slice(0, 5));
+  return hm ? new Date(+m[1], +m[2] - 1, +m[3], +hm[1], +hm[2])
+            : new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59, 999);
+}
+function taskIsOverdue(t, isDone, now = new Date()) {
+  const at = taskDueAt(t);
+  return !!at && !isDone && at < now;
+}
+function taskDueLabel(t) {
+  if (!t?.due_date) return '';
+  const time = String(t.due_time || '').slice(0, 5);
+  return fmtDate(t.due_date) + (time ? ' · ' + time : '');
+}
+
 function taskListRow(t, isSubtask = false, subMap = {}) {
   const isDone     = t.status === (getActiveTaskStatuses().at(-1)?.key || 'done');
-  const dueStr     = t.due_date ? fmtDate(t.due_date) : '';
-  const isOverdue  = t.due_date && !isDone && new Date(t.due_date) < new Date();
+  const dueStr     = taskDueLabel(t);
+  const isOverdue  = taskIsOverdue(t, isDone);
   const subtasks   = subMap[t.id] || [];
   const hasSubtasks = t.subtask_count > 0 || subtasks.length > 0;
 
@@ -346,8 +367,8 @@ function renderTasksKanban(list) {
 
 function taskKanbanCard(t, subMap = {}, colStatus) {
   const isDone      = t.status === (getActiveTaskStatuses().at(-1)?.key || 'done');
-  const dueStr      = t.due_date ? fmtDate(t.due_date) : '';
-  const isOverdue   = t.due_date && !isDone && new Date(t.due_date) < new Date();
+  const dueStr      = taskDueLabel(t);
+  const isOverdue   = taskIsOverdue(t, isDone);
   const subtasks    = subMap[t.id] || [];
   const hasSubtasks = subtasks.length > 0 || t.subtask_count > 0;
   const isCollapsed = collapsedTasks.has(t.id);

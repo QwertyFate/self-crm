@@ -6,7 +6,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 async function openContactModal(id) {
-  await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
+  await Promise.all([ensureFields(), ensureMembers()]);
   document.getElementById('contact-form').reset();
   document.getElementById('contact-id').value   = id || '';
   document.getElementById('cf-type').value       = currentContactType;
@@ -14,10 +14,6 @@ async function openContactModal(id) {
     ? (currentWorkspace?.supplier_name || 'Supplier').replace(/s$/i, '')
     : 'Contact';
   document.getElementById('contact-modal-title').textContent = id ? `Edit ${typeName}` : `Add ${typeName}`;
-
-  const stageEl = document.getElementById('cf-stage');
-  stageEl.innerHTML = '<option value="">— None —</option>' +
-    stages.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
 
   const assigneeEl = document.getElementById('cf-assignee');
   assigneeEl.innerHTML = '<option value="">— Unassigned —</option>' +
@@ -32,7 +28,7 @@ async function openContactModal(id) {
     document.getElementById('cf-company').value = c.company || '';
     document.getElementById('cf-email').value   = c.email   || '';
     document.getElementById('cf-phone').value   = c.phone   || '';
-    stageEl.value = c.stage_id || ''; assigneeEl.value = c.assigned_to || '';
+    assigneeEl.value = c.assigned_to || '';
     fields.forEach(f => { const el = document.getElementById(`cfield-${f.field_key}`); if (el) el.value = c.custom_data?.[f.field_key] ?? ''; });
   } else {
     assigneeEl.value = currentUser?.id || '';
@@ -62,7 +58,6 @@ async function saveContact(e) {
     company:      document.getElementById('cf-company').value,
     email:        document.getElementById('cf-email').value,
     phone:        document.getElementById('cf-phone').value,
-    stage_id:     document.getElementById('cf-stage').value    || null,
     assigned_to:  document.getElementById('cf-assignee').value || null,
     contact_type: document.getElementById('cf-type').value || currentContactType,
     custom_data,
@@ -75,7 +70,6 @@ async function saveContact(e) {
     await loadDeals();
   } else {
     await loadContacts();
-    renderContactsKanban();
   }
 }
 
@@ -104,12 +98,16 @@ function renderDealFieldInput(f, value = '') {
   return `<input type="${typeMap[f.type]||'text'}" id="${id}" value="${esc(value)}" />`;
 }
 
-async function openActivityModal() {
+// date/time preset the form for "add on this day", which is how the Calendar adds an entry.
+async function openActivityModal({ date = '', time = '' } = {}) {
   await ensureContacts();
   document.getElementById('activity-form').reset();
   document.getElementById('act-contact').innerHTML = '<option value="">— None —</option>' +
     contacts.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  document.getElementById('act-date').value = date;
+  document.getElementById('act-time').value = time;
   document.getElementById('activity-modal').classList.remove('hidden');
+  document.getElementById('act-content')?.focus();
 }
 
 async function saveActivity(e) {
@@ -118,7 +116,10 @@ async function saveActivity(e) {
     contact_id: document.getElementById('act-contact').value || null,
     type:       document.getElementById('act-type').value,
     content:    document.getElementById('act-content').value,
+    event_date: document.getElementById('act-date').value || null,
+    event_time: document.getElementById('act-time').value || null,
   });
   closeModal('activity-modal');
   if (document.getElementById('page-activities').classList.contains('active')) loadActivities();
+  if (document.getElementById('page-calendar').classList.contains('active')) renderCalendar();
 }

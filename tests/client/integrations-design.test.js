@@ -124,7 +124,7 @@ describe('copy', () => {
     for (const m of section.matchAll(/<button[^>]*>\s*<svg[\s\S]*?<\/button>/g)) assert.match(m[0], /<\/svg><span data-i18n=/, m[0].slice(0, 60));
   });
   test('runtime strings the builders use exist in both dictionaries', () => {
-    for (const k of ['intg_no_activity', 'intg_setup_guide', 'intg_guide_url', 'intg_autosaved', 'intg_confirm_regen_url', 'opt_assignee_self', 'opt_no_stage', 'intg_no_stages_in_pipeline', 'msg_saved',
+    for (const k of ['intg_no_activity', 'intg_setup_guide', 'intg_guide_url', 'intg_autosaved', 'intg_confirm_regen_url', 'opt_assignee_self', 'opt_no_deal_stage', 'intg_no_stages_in_pipeline', 'msg_saved',
                      'intg_builtin_fields', 'intg_custom_fields', 'intg_add_field_ph', 'intg_edit_key', 'intg_fields_missing', 'intg_fields_missing_hint', 'intg_view_raw', 'intg_log_success', 'intg_log_error', 'intg_custom_tag', 'btn_save_changes', 'copied',
                      'lbl_name', 'lbl_email', 'lbl_phone', 'lbl_company',
                      ...INTG_TABS.map(t => `intg_tab_${t}`), ...INTG_TABS.map(t => `intg_pane_${t}`), ...INTG_TABS.map(t => `intg_pane_${t}_hint`), 'engine_deliveries_hint']) {
@@ -203,7 +203,7 @@ describe('integrations.js markup builders', () => {
     assert.match(sliceFn(intg, 'loadEngineDeliveries', 'integrations.js'), /class="empty-inline"/);
     assert.match(sliceFn(intg, 'loadIntegrations', 'integrations.js'), /t\('opt_assignee_self'\)/);
     const stages = sliceFn(intg, 'renderIntgStageOptions', 'integrations.js');
-    assert.match(stages, /t\('opt_no_stage'\)/);
+    assert.match(stages, /t\('opt_no_deal_stage'\)/);
     assert.match(stages, /t\('intg_no_stages_in_pipeline'\)/);
     assert.match(sliceFn(intg, 'regenerateWebhookKey', 'integrations.js'), /confirm\(t\('intg_confirm_regen_url'\)\)/);
     assert.match(sliceFn(intg, 'copyWebhookUrl', 'integrations.js'), /t\('copied'\)/);
