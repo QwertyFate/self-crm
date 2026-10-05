@@ -1,3 +1,19 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   PLATFORM FEATURE FLAGS — one JSON blob in platform_settings, key "features".
+
+   Platform-wide, not per workspace: these are switches the people running the
+   platform control from the admin console, not workspace settings.
+
+   DEFAULT_FEATURES is the source of truth for which flags exist and what they
+   are when unset — a missing row means every flag is at its default, which for
+   tourEnabled is OFF. readFeatures() always merges over the defaults, so a
+   flag added here works immediately against an old row.
+
+   Read by: routes/platform.js (any logged-in user, so the client can tell
+   whether the product tour exists) and routes/admin.js (the console that
+   writes them).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const { pool } = require('../db');
 
 // Platform-wide feature flags live in platform_settings under the key "features".

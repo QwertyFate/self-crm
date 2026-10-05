@@ -1,3 +1,32 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/calendar — READ ONLY. The calendar owns no table of its own.
+
+   Each response is a UNION ALL of the two things this app schedules:
+     activities with an event_date   (+ optional event_time)
+     tasks      with a due_date      (+ optional due_time)
+   Every row carries `kind` ('activity' | 'task') because an activity and a
+   task can share an id — the client keys entries by kind AND id.
+
+   WRITES GO BACK TO THE OWNING ROUTE, not here:
+     an activity → PATCH /api/activities/:id
+     a task      → PATCH /api/tasks/:id/status
+
+   BOTH HALVES OF THE UNION MUST FILTER ON workspace_id. A missing filter in
+   one half is invisible in the UI, which is why tests/routes/calendar-tasks.js
+   asserts it in the SQL.
+
+   Dates come back pre-formatted (TO_CHAR 'YYYY-MM-DD' and 'HH24:MI') so the
+   client never parses a timestamp — building a Date from a bare date string
+   is UTC midnight and has caused off-by-a-day bugs here.
+
+   The LATERAL join on each activity finds that contact's most recently updated
+   deal, so an entry can link straight to the deal it is about.
+
+   ENDPOINTS
+     GET /?start=YYYY-MM-DD&end=YYYY-MM-DD   400 without both
+     GET /today                              the same union at CURRENT_DATE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');

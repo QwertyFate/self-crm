@@ -1,3 +1,47 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTEGRATIONS — two independent halves on one page, switched by switchIntgTab().
+
+   1. INBOUND WEBHOOK ("webhook" tab) — getting leads INTO the CRM.
+      Every workspace has one webhook URL ending in a secret key. An external
+      form posts JSON to it; a field_map says which incoming key becomes which
+      CRM field, and dot paths ("data.contact.email") are supported. Optionally
+      each lead also creates a deal in a chosen pipeline and stage.
+        loadIntegrations → GET /api/integrations/settings (creates the row and
+        the key on first view) → renderIntgFieldMap + renderIntgStageOptions
+        saveIntegration  → PATCH /api/integrations/settings
+        loadIntgLogs     → GET /api/integrations/logs (last 50 deliveries, with
+                           what was captured and what was skipped)
+      renderIntgPlatforms / showIntgGuide / buildGuideJson produce the
+      copy-paste setup snippet per external platform.
+
+   2. OUTBOUND ENGINE ("engine" tab) — pushing events OUT of the CRM.
+      When a deal moves into one of the configured trigger stages, the server
+      POSTs a signed vertrag.unterschrieben event to the Engine URL
+      (utils/engine.js). This tab edits those settings and shows the delivery log.
+        loadEngineSettings    → GET  /api/engine/settings
+        saveEngineSettings    → PATCH /api/engine/settings
+        regenerateEngineSecret→ POST /api/engine/settings/regenerate-secret
+        sendEngineTestEvent   → POST /api/engine/test-event
+        loadEngineDeliveries  → GET  /api/engine/deliveries
+      READ-ONLY FOR MEMBERS: the server returns can_manage:false and omits the
+      secret for non owner/admin; setEngineReadOnly() disables the inputs to
+      match. The disabling is cosmetic — the server is the real gate.
+
+   FUNCTION MAP
+     shell     switchIntgTab, loadIntegrations
+     inbound   renderIntgPlatforms, showIntgGuide, buildGuideJson,
+               refreshGuideJson, renderIntgFieldMap, renderFieldRow,
+               intgToggleKeyEdit, intgKeyBlur, intgAddField, intgRemoveField,
+               getIntgFieldMap, renderIntgStageOptions, loadIntgStages,
+               toggleIntgDeal, saveIntegration, copyWebhookUrl,
+               regenerateWebhookKey, loadIntgLogs
+     engine    loadEngineSettings, saveEngineSettings, setEngineReadOnly,
+               renderEngineStages, getEngineTriggerIds, maskSecret,
+               copyEngineSecret, regenerateEngineSecret, sendEngineTestEvent,
+               loadEngineDeliveries, engineDeliveryHtml, showEngineMsg
+     clipboard copyIntgText, copyIntgJson, fallbackCopy
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 let intgData = null;
 let currentIntgTab = 'webhook';   // remembered for the session, like the Settings rail
 

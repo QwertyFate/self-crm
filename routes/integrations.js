@@ -1,3 +1,42 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/integrations — INBOUND leads. (Outbound lives in routes/engine.js.)
+
+   THE PUBLIC ENDPOINT  POST /receive/:key is the only route in this app that
+   anyone on the internet may call. It is NOT behind requireAuth — the secret
+   key in the URL identifies the workspace — which is why server.js rate limits
+   it twice, per IP and per key. Note the selective guard at the top of this
+   file: requireAuth is applied to /settings and /logs only.
+
+   WHAT A DELIVERY DOES
+     1. look up workspace_webhook by key, must be active        → 404 otherwise
+     2. map the payload through field_map. Values may be nested: a mapping of
+        "data.contact.email" is resolved by pick() walking dot segments.
+        first_name + last_name are joined when there is no single name field.
+     3. reject with 422 when neither a name nor an email could be mapped, and
+        log WHY — the log row records which keys the map wanted and which keys
+        the payload actually had, which is the first thing to look at when
+        someone says "my form is not coming through".
+     4. anything mapped that is not a built-in field becomes custom_data;
+        what could not be found is recorded under captured._skipped.
+     5. upsert the contact BY EMAIL; with no email it always inserts.
+     6. optionally create a deal — with no configured stage it falls back to
+        the pipeline's FIRST stage, the same rule as the CSV import.
+     7. always write a webhook_logs row, success or failure.
+
+   GET /settings CREATES the workspace_webhook row and its key on first view,
+   and returns the pipelines, stages, custom fields and members the mapping UI
+   needs in one response.
+
+   ⚠ /settings and /settings/regenerate-key are MEMBER level — any member can
+     repoint or rotate the inbound webhook. The equivalent Engine routes
+     require owner/admin. See §8 of readmedev.md.
+
+   ENDPOINTS
+     GET   /settings · PATCH /settings · POST /settings/regenerate-key
+     GET   /logs                       last 50 deliveries
+     POST  /receive/:key               PUBLIC
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const crypto      = require('crypto');

@@ -1,3 +1,55 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CORE — the foundation every other client file is built on. Loaded FIRST.
+
+   There are no modules in the browser here: every public/js file shares one
+   global scope and is loaded by a <script> tag in index.html. This file
+   declares the shared state and the helpers, so nothing else can run without
+   it. If you are new, read this file before any other client file.
+
+   WHAT LIVES HERE
+     1. Global state   — currentUser, currentWorkspace, and the per-page caches
+                         (contacts, deals, pipelines, objects, …). Every other
+                         file reads and writes these directly.
+                         ⚠ Add a global here → also reset it in resetClientState()
+                         (auth.js), or the next user to log in in the same tab
+                         sees the previous user's data.
+     2. i18n           — TRANSLATIONS.en / .de, t(key), tf(key, vars),
+                         applyTranslations(), setLanguage(). A key must exist in
+                         BOTH languages; tests/client assert that.
+     3. Networking     — api.get/post/put/patch/del. Thin wrappers over fetch
+                         that always parse JSON and never throw: a failed call
+                         resolves to { error }. ALWAYS check `res.error`.
+                         apiFetchSilent() is the same without the loading bar
+                         (used by pollers so the bar does not flicker).
+     4. Formatting     — esc() (HTML-escape — use it on EVERY interpolated
+                         value), fmtDate, buildPageNumbers, initialsOf,
+                         hashColor, avatar, icon.
+     5. ui.*           — the design system in code: ui.popover, ui.menu,
+                         ui.select, ui.modal, ui.drawer, ui.confirm, ui.toast.
+                         Prefer these over hand-rolled markup and over the
+                         browser's own dialogs.
+     6. Shell          — setCrumbs, toggleRail, setSidebarWorkspace, the top-bar
+                         New / help / user menus, the Ctrl-K command palette,
+                         the theme toggle and the loading bar.
+
+   FUNCTION MAP
+     i18n        t, tf, roleLabel, applyTranslations, setLanguage
+     format      esc, fmtDate, buildPageNumbers, icon, initialsOf, hashColor,
+                 avatar, uid, waLink
+     net         apiFetch, apiFetchSilent, api (get/post/put/patch/del), loader
+     dom         $, $$, on (delegated listener), closeModal, toggleNoDate,
+                 resetNoDate, toggleInlineNoDate, defaultNoDate
+     theme       applyTheme, toggleDarkMode
+     ui          ui.popover, ui.menu, ui.select, uiOverlay, ui.modal, ui.drawer,
+                 ui.confirm, ui.toast, ui.formData, ui.closePopover
+     shell       setCrumbs, toggleRail, applyRailState, setSidebarWorkspace,
+                 openNewMenu, openHelpMenu, openUserMenu, openPalette,
+                 showShortcuts
+
+   GOTCHA  esc() escapes & < > " — it does NOT escape single quotes. Never put
+           an unescaped value inside a single-quoted HTML attribute.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 let currentUser      = null;
 let currentWorkspace = null;
 let kanbanFields     = ['company', 'email'];

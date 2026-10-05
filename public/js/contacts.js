@@ -1,3 +1,57 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONTACTS (and SUPPLIERS) — the table page with columns, filters, inline
+   editing, sorting, pagination and bulk selection.
+
+   ONE PAGE, TWO TABS. Contacts and suppliers are the same database table,
+   separated by contact_type. The global currentContactType ('contact' |
+   'supplier') decides which the page is showing; the sidebar has two links
+   pointing at the same <section id="page-contacts">. Labels come from the
+   workspace (supplier_name), so never hardcode the word "Supplier" — use
+   contactsNoun().
+
+   ENTRY POINT  loadContacts(), called by switchPage('contacts' | 'suppliers').
+     loadContacts → GET /api/contacts?contact_type=… → renderContactsTable
+                 → renderContactsToolbar → renderPagination
+
+   COLUMNS are a workspace setting (workspaces.contact_columns) merged with the
+   workspace's custom fields: effectiveContactColumns() is the single source of
+   truth for which columns exist, in what order, and which are visible. Column
+   WIDTHS are a per-user preference (users.column_widths) saved by saveColWidths().
+
+   FILTERS live in the global activeFilters map, one entry per column. A filter
+   is either a picker (dropdown/date-range) or a text match — filterKind()
+   decides which. visibleContacts() applies search + every active filter and is
+   the function to read if you want to know what the table is showing.
+
+   INLINE EDITING  double-click a cell → startInlineEdit() swaps in an input →
+   commitInlineEdit() PUTs the whole contact back. The row is re-rendered from
+   the server response, so a failed save visibly reverts.
+
+   FUNCTION MAP
+     load/render     loadContacts, renderContactsTable, renderContactsToolbar,
+                     updateContactsPageHeader, updateContactsSubLine,
+                     contactsNoun, openContactsMoreMenu
+     columns         effectiveContactColumns, openContactsColumnsMenu,
+                     loadColWidths, saveColWidths, startColResize, onColResize,
+                     stopColResize
+     sort            toggleSort, getSortValue, sortContacts
+     filter          visibleContacts, filterContacts, filterableColumns,
+                     activeFilterKeys, contactsFilterActive, columnValue,
+                     filterKind, filterOptionsFor, filterLabelFor,
+                     filterValueText, contactsChip, openContactsChip,
+                     openContactTextFilter, openAddFilterMenu, addContactFilter,
+                     setContactFilter, removeContactFilter, onContactSearch,
+                     clearContactFilters, daysSince, inDateRange
+     inline edit     startInlineEdit, commitInlineEdit
+     pagination      goToPage, renderPagination
+     selection       toggleSelectMode, toggleContactSelection, toggleSelectAll,
+                     updateBulkDeleteButton, clearContactSelection,
+                     openBulkDeleteModal, confirmBulkDelete
+
+   The create/edit form lives in modals.js; the read-only detail panel is built
+   at runtime by detail-views.js (openContactDetail).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 let selectedContactIds = new Set();
 let selectionModeOn = false;
 let filteredContacts = [];

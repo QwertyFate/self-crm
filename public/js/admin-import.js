@@ -1,3 +1,45 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CSV IMPORT / EXPORT  +  the in-app platform admin screen.
+
+   Two unrelated things share this file because both are "bulk/admin" chores.
+
+   1. THE IMPORT WIZARD (Contacts → ⋯ → Import from CSV)
+      A four-step modal, driven by showImportStep():
+        1 pick a file   handleImportFile / handleImportDrop → processImportFile
+        2 map columns   parseCSV + autoMapHeader guess the mapping,
+                        renderImportMapping lets the user correct it. A column
+                        can map to a built-in field, to an existing custom
+                        field, or create a NEW custom field.
+        3 options       optionally create a deal per row (pipeline + stage +
+                        default assignee)  — toggleImportDealOptions
+        4 run           runImport() POSTs everything as ONE request to
+                        /api/contacts/import, which does it in one transaction.
+      The CSV is parsed in the browser (parseCSV handles quotes and escaped
+      quotes; detectDelimiter picks , or ;). Rows are matched on email: an
+      existing contact is updated, a new one inserted.
+      ⚠ The whole file is sent as a JSON array, which is why server.js raises
+        the body limit to 10 MB for that ONE route. A bigger file gets a 413.
+
+   2. EXPORT  exportContactsCSV() builds the CSV in the browser from whatever
+      the Contacts table currently shows (filters included) and downloads it.
+
+   3. THE ADMIN SCREEN (index.html?admin) — a cut-down console for platform
+      invite codes, separate from the fuller public/admin.html at /adminconsole.
+      It authenticates with ADMIN_SECRET against /api/admin/login and has
+      nothing to do with workspace roles.
+
+   FUNCTION MAP
+     admin    handleAdminLogin, adminLogout, loadAdminInvites,
+              adminGenerateCode, adminDeleteCode, adminCopyCode
+     export   exportContactsCSV
+     csv      readFileText, detectDelimiter, parseCSV, toFieldKey, autoMapHeader
+     wizard   openImportModal, showImportStep, handleImportFile,
+              handleImportDrop, processImportFile, renderImportMapping,
+              onImportMapChange, updateImportNameOptions,
+              toggleImportDealOptions, loadImportPipelines,
+              loadImportAssignees, updateImportStages, importBack, runImport
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 async function handleAdminLogin(e) {
   e.preventDefault();
   const errEl = document.getElementById('admin-login-error'); errEl.classList.add('hidden');

@@ -1,3 +1,48 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/auth — sessions, signup, password reset, and workspace switching.
+
+   THE ONLY ROUTER WITHOUT requireAuth. Each handler checks req.session itself,
+   because most of these run before there is a session to check.
+
+   THE IDENTITY MODEL, WHICH EXPLAINS MOST OF THIS FILE
+     A person with three workspaces has THREE rows in `users`, one per
+     workspace, sharing an email and the same password hash. `user_workspaces`
+     ties them together and is what authorises. So "logging into a workspace"
+     means pointing session.userId at the right row — that is what
+     select-workspace and switch-workspace do, by re-resolving the row from
+     (email, workspace_id).
+
+   TWO WAYS TO GET AN ACCOUNT, both need a code:
+     mode 'create' + platform_invite_code → a new workspace, you are its owner,
+       seeded with the platform's default contact columns and pipelines
+       (platform_settings, set in the admin console).
+     mode 'join' + invite_code → an existing workspace; the CODE carries the
+       role you get (member or admin).
+   Both run in one transaction, and both consume the code.
+
+   ENDPOINTS
+     GET  /me                 current user + workspace + the list you belong to
+     POST /login              one membership → in; several → workspace picker
+     POST /select-workspace   finish a picker login
+     POST /switch-workspace   change workspace from inside the app
+     GET  /my-workspaces      the switcher's list
+     POST /signup             create or join (above)
+     POST /logout
+     POST /forgot-password    always 200 (no account enumeration)
+     POST /reset-password     single-use token, 1 hour
+     PATCH /preferences       column widths, deal columns, timezone
+     POST /create-workspace   another workspace for an existing user
+     POST /join-workspace     join another workspace with an invite code
+   The first four POSTs are rate limited in server.js.
+
+   ⚠ TWO KNOWN SHARP EDGES (see §8 of readmedev.md)
+     - login and forgot-password both do `WHERE email = $1` with no ORDER BY
+       and no LIMIT, then use the first row. With several rows per email, which
+       one you get is unspecified.
+     - forgot-password returns the reset URL in the response body when SMTP is
+       not configured.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express  = require('express');
 const router   = express.Router();
 const bcrypt   = require('bcryptjs');
@@ -199,7 +244,6 @@ router.post('/signup', async (req, res, next) => {
           { key: 'company', label: 'Company', visible: true, isCustom: false },
           { key: 'email', label: 'Email', visible: true, isCustom: false },
           { key: 'phone', label: 'Phone', visible: true, isCustom: false },
-          { key: 'stage_id', label: 'Stage', visible: true, isCustom: false },
           { key: 'assigned_to', label: 'Assignee', visible: true, isCustom: false },
           { key: 'created_at', label: 'Created At', visible: false, isCustom: false },
         ];

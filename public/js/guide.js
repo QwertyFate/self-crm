@@ -1,3 +1,33 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRODUCT TOUR — the step-by-step overlay for first-time users.
+
+   OFF BY DEFAULT, PLATFORM-WIDE. loadTourFlag() reads GET /api/platform/features
+   and the tour only exists when a platform admin has turned tourEnabled on in
+   the admin console. core.js's help menu shows "Start the product tour" only
+   while that flag is true.
+
+   GUIDE_STEPS is the content: an array of { title, body, target, pos }. target
+   is a CSS selector for the element to spotlight (null = a centred card), and
+   some steps call switchPage() first so the element they point at exists.
+   To add a step, add an entry — no other change needed.
+
+   HOW IT PAINTS: a full-screen overlay plus a "spotlight" div positioned over
+   the target (placeGuideSpotlight), and a tooltip card beside it
+   (positionGuideStep). A ResizeObserver keeps both aligned while the page
+   reflows.
+
+   "ALREADY SEEN" is remembered in localStorage under crm_guide_seen_v1.
+   ⚠ endGuide() also tries to persist it server-side with
+     PATCH /api/analytics/layout { guide_seen: true }, but that route only
+     accepts stat_card_order / hidden_stat_cards / section_order / trend_config
+     and silently drops anything else — so the flag never reaches the database
+     and the tour reappears in a new browser profile.
+
+   FUNCTION MAP  loadTourFlag, maybeStartGuide, startGuide, endGuide,
+                 guideNext, guidePrev, showGuideStep, positionGuideStep,
+                 placeSpotlight
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const GUIDE_KEY = 'crm_guide_seen_v1';
 
 const GUIDE_STEPS = [

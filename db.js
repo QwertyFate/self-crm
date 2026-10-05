@@ -1,3 +1,48 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   DATABASE — the connection pool, the schema, and the migration system.
+
+   THERE IS NO MIGRATION TOOL. initDb() runs on every boot and is the whole
+   story. It is idempotent: CREATE TABLE IF NOT EXISTS for the base schema,
+   then a long list of ALTER TABLE ... ADD COLUMN IF NOT EXISTS for everything
+   added since. Nothing is ever backfilled.
+
+   HOW TO CHANGE THE SCHEMA
+     new column      append one ALTER TABLE ... ADD COLUMN IF NOT EXISTS at the
+                     END of initDb(), nullable or with a default.
+     new table       add it to SCHEMA (or as its own CREATE TABLE IF NOT EXISTS
+                     inside initDb() when it must run after another one), with
+                     workspace_id INTEGER NOT NULL REFERENCES workspaces(id)
+                     ON DELETE CASCADE.
+     changed CHECK   DROP CONSTRAINT IF EXISTS then ADD CONSTRAINT, inside a
+                     try/catch that rethrows anything but error code 42710.
+     NEVER edit a statement that already shipped — live databases have run it.
+     Add a new one instead.
+   A new column exists only AFTER A RESTART. That is the usual reason a new
+   field "doesn't save" right after a change.
+
+   TENANCY  almost every table has workspace_id with ON DELETE CASCADE, and
+   every query in routes/ filters on it. The exceptions are deliberate:
+   platform_invites and platform_settings are platform-wide, and password_resets
+   hangs off a user.
+
+   TWO THINGS THAT LOOK LIKE BUGS AND ARE NOT
+     - the `stages` table and contacts.stage_id are DEAD. Contact stages were
+       removed from the product; both are kept so old rows survive. Nothing
+       reads them.
+     - users.workspace_id is the user's single home workspace. Membership and
+       authorisation live in user_workspaces; a person in three workspaces has
+       three users rows sharing an email. The backfill INSERT near the bottom
+       copies users.role into user_workspaces on every boot.
+
+   ALSO HERE
+     seedDefaultPipeline()  the pipeline + stages every new workspace gets,
+                            overridable per platform via the admin console
+                            (platform_settings.default_stages).
+     first-run invite       with no workspaces and no platform invites, boot
+                            prints a one-time platform invite code so the very
+                            first account can be created.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const { Pool } = require('pg');
 const crypto   = require('crypto');
 

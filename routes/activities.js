@@ -1,3 +1,31 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/activities — the timeline entries logged against a contact.
+
+   AN ACTIVITY is a note, call, email or whatsapp entry with free-text content,
+   optionally attached to a contact and optionally SCHEDULED: event_date (a
+   DATE) plus an optional event_time (a TIME). A scheduled activity is what
+   makes it appear on the Calendar; one with a date and no time is an all-day
+   entry. `completed` is the Calendar's tick box.
+
+   PARTIAL UPDATES  PATCH /:id COALESCEs each field, so you send only what
+   changed. To CLEAR a date or time, send an explicit null — that is what the
+   `CASE WHEN $7 THEN NULL` branches are for. Omitting the key keeps the
+   current value; sending null erases it.
+
+   @MENTIONS  after a create or update, notifyMentions() scans the content for
+   @name, matches loosely against the workspace's user names (exact, prefix, or
+   any word of the name), and inserts a 'mention' notification pointing at the
+   contact's most recently updated deal when there is one, otherwise the
+   contact. Its errors are swallowed: a mention must never fail the write.
+   NOTE routes/activity-comments.js has a SECOND, STRICTER mention scanner
+   (exact name match only). Changing mention behaviour means changing both.
+
+   CONTENT IS STORED AS THE CLIENT SENDS IT, including HTML, and nothing here
+   sanitises it. See §8 of readmedev.md.
+
+   ENDPOINTS  GET / (newest 200) · POST / · GET /:id · PATCH /:id · DELETE /:id
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');

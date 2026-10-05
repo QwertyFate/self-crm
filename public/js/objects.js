@@ -1,3 +1,59 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   LISTINGS ("objects") + the BOARD page + the ACTIVITIES page.
+
+   Three pages in one file, because all three are small and were ported
+   together. If you are looking for one of them, jump to its section:
+     1. Listings    — a generic record type a workspace names itself
+     2. Board       — an embedded Miro iframe, nothing more
+     3. Activities  — the workspace-wide feed of notes/calls/emails/WhatsApp
+
+   1. LISTINGS  (sidebar label = workspaces.object_name, default "Listings")
+      A deliberately generic record: a name plus custom fields. It exists so a
+      workspace can track whatever its business is about (properties, vehicles,
+      SKUs) without a schema change. A listing can be linked to deals
+      (deal_objects) and to contacts (object_contacts), which is what makes the
+      detail view useful.
+        loadObjects → GET /api/objects → renderObjectsTable (search, paging,
+        inline edit) ;  openObjectDetail(id) → GET /api/objects/:id → a drawer
+        with its linked deals and contacts.
+      Columns work exactly like the Contacts page: effectiveObjectColumns()
+      merges workspaces.object_columns with the workspace's object fields.
+      The nav item hides itself when the workspace has no listings configured —
+      updateObjectsNav(); the same pattern as updateSuppliersNav().
+
+   2. BOARD  — loadBoard() drops workspaces.miro_url into an iframe.
+      getMiroBoardUrl() converts a normal Miro link into an embed link.
+      updateBoardNavVisibility() hides the nav item when no URL is set.
+
+   3. ACTIVITIES  — the feed of everything logged against any contact.
+      loadActivities → GET /api/activities (newest 200) → renderActivitiesFeed.
+      Filters live in activitiesUI (search, type, person) and are applied by
+      visibleActivities(). Creating one is modals.js (openActivityModal); the
+      timelines inside the deal and contact views are detail-views.js.
+
+   FUNCTION MAP
+     listings     loadObjects, renderObjectsCurrent, renderObjectsTable,
+                  objectMatchesQuery, onObjectSearch, clearObjectSearch,
+                  updateObjectCountTag, objGoToPage, openObjectKebab,
+                  openObjectsMoreMenu, exportObjectsCsv,
+                  startObjectInlineEdit, openObjectModal, saveObject,
+                  deleteObject, openObjectDetail, navigateToDeal
+     obj config   effectiveObjectColumns, renderObjectColumnSettings,
+                  objColDragStart, objColDrop, objColToggle, saveObjectColumns,
+                  saveObjectTypeName, updateObjectsNav, renderObjectFieldsList,
+                  openObjectFieldModal, autoObjectFieldKey,
+                  toggleObjectFieldOptions, refreshObjectFieldViews,
+                  saveObjectField, deleteObjectField
+     suppliers    updateSuppliersNav, saveSupplierName
+     board        updateBoardNavVisibility, loadBoard, getMiroBoardUrl,
+                  reloadMiroIframe, saveMiroUrl
+     activities   loadActivities, visibleActivities, renderActivities,
+                  renderActivitiesToolbar, renderActivitiesFeed,
+                  activitiesChip, openActivitiesChip, onActivitiesSearch,
+                  clearActivitiesFilters, openActivityKebab, deleteActivity,
+                  exportActivitiesCsv, openActivitiesMoreMenu
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 function updateSuppliersNav() {
   const name  = currentWorkspace?.supplier_name || 'Suppliers';
   const label = document.getElementById('nav-suppliers-label');

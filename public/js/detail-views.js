@@ -11,6 +11,45 @@
      openTaskModal(id, ctx)     → openTaskDrawer(id)   | openTaskForm(ctx)
      openTaskModalForContact(c), addTaskFromDeal(), openLinkedTaskObject()
    ═══════════════════════════════════════════════════════════════════════════ */
+/* THE BIGGEST CLIENT FILE, and the last one loaded, because it uses helpers
+   from every other file. It builds the record views at runtime instead of
+   reading them from index.html: a deal form, a deal detail drawer, a contact
+   detail panel, a task form and a task drawer.
+
+   THE PUBLIC ENTRY POINTS (what other files call — keep these stable):
+     openDealModal(id) / openDealForm({pipelineId, stageId, contactId})
+     openDealDetail(id)            the deal drawer with timeline + linked records
+     openDealModalForContact(id)
+     openContactDetail(id)         the contact panel
+     openDetail(id)                alias used by the Contacts table
+     openTaskModal(id, ctx) / openTaskForm(...)
+     openTaskDrawer(id)
+     addTaskFromDeal(dealId), openLinkedTaskObject(kind, id)
+
+   HOW A VIEW IS BUILT  each opener keeps a local state object `S` (the record,
+   its activities, which inline editor is open) and a render() that rebuilds the
+   drawer's innerHTML from S. Interactions are delegated through a map of
+   data-attribute handlers rather than inline onclick, so re-rendering never
+   loses listeners. dvInlineEdit() is the shared "click a field, edit in place,
+   PUT the record" helper.
+
+   FUNCTION MAP
+     helpers      dvDigits, dvActText, dvActHtml, dvDue, dvAutoGrow, dvEmpty,
+                  dvInlineEdit, dvTypeOf, dvPlural, dvSupplierWord,
+                  dvObjectWord, dvTaskStatuses, dvDoneKey, dvFirstKey,
+                  dvAgoHours, dvWhen, dvIso, dvOpt, dvListOpts
+     data         dvAllTasks, dvContacts, dvTaskLists, dvRefreshDeals,
+                  dvRefreshTasks, dvRefreshContacts
+     deals        openDealForm, openDealDetail, openDealModal,
+                  openDealModalForContact
+     contacts     openContactDetail, openDetail
+     tasks        openTaskForm, openTaskDrawer, openTaskModal,
+                  openTaskModalForContact, addTaskFromDeal,
+                  openLinkedTaskObject
+
+   CAUTION: dvActHtml() renders an activity's stored content as RAW HTML when it looks
+     like HTML. Nothing sanitises it on the way in or out — see §8 of
+     readmedev.md before extending activity rendering. */
 
 /* ---------- shared helpers ---------- */
 const DV_ACT_TYPES = [

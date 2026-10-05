@@ -1,3 +1,31 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/admin — the PLATFORM console. Not a workspace feature.
+
+   A COMPLETELY SEPATE AUTH SCHEME from the rest of the app: no session user,
+   no workspace, no role. POST /login compares a plaintext ADMIN_SECRET from
+   the environment and sets req.session.isAdmin; requireAdmin() below gates
+   everything else on that flag. With ADMIN_SECRET unset every login returns
+   503, which is the intended "feature off" state.
+
+   Because it is cross-tenant by design, nothing here filters by workspace —
+   that is correct for this file and wrong everywhere else.
+
+   WHAT IT CONTROLS
+     /invites    platform invite codes: the only way a new workspace can be
+                 created. Mint, list, revoke (while unused).
+     /defaults   platform_settings.default_contact_columns and
+                 .default_pipelines — what EVERY new workspace is seeded with.
+                 Changing them affects future workspaces only.
+     /features   platform_settings.features, e.g. { tourEnabled }.
+     /stats      global counts.
+
+   TWO CLIENTS: public/admin.html at /adminconsole (defaults, features, stats)
+   and the cut-down ?admin screen inside index.html (invites only).
+
+   ⚠ /login has no rate limiter and compares with !== rather than a constant
+     time comparison. One guessable secret is the whole boundary here.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express  = require('express');
 const router   = express.Router();
 const crypto   = require('crypto');

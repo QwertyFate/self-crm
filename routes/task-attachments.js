@@ -1,3 +1,29 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/tasks/:taskId/attachments — files on a task.
+
+   MOUNTED ON THE SAME PREFIX AS routes/tasks.js. server.js mounts tasks.js
+   first; because that router only declares one- and two-segment paths, these
+   three-segment paths fall through to here. Keep it that way: a /:id/:x route
+   added to tasks.js would shadow this file.
+
+   THE UPLOAD PATH  multer keeps the file in MEMORY (no temp files) with a
+   10 MB cap, then storage.js pushes it to Supabase Storage under
+   <workspaceId>/<taskId>/<timestamp>-<name> and returns a PUBLIC url, which is
+   stored in task_attachments along with the storage_path. Deleting removes the
+   object from Supabase first, then the row.
+
+   REQUIRES SUPABASE. Without SUPABASE_URL / SUPABASE_SERVICE_KEY the upload
+   throws a clear "not configured" error; everything else in the app is fine.
+
+   NOT CHECKED  file type. And the URL is public: anyone with the link can read
+   the file without a CRM session.
+
+   ENDPOINTS
+     GET    /:taskId/attachments
+     POST   /:taskId/attachments       multipart, field name "file"
+     DELETE /:taskId/attachments/:id
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const multer      = require('multer');

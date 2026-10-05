@@ -1,3 +1,37 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   TEAM CHAT — one room per workspace, over socket.io, plus a REST fallback.
+
+   TWO SURFACES, ONE ROOM: a slide-out panel available from anywhere, and a
+   full Chat page. chatOpen / chatPageOpen say which is visible; both render
+   the same messages through different renderers (renderMessages vs
+   renderMessagesToPage).
+
+   HOW THE LIVE PART WORKS
+     initChatSocket()  — called from showApp() once per session. The socket
+       handshake reuses the session cookie, so there is no separate chat login;
+       the server disconnects anyone who is not a member of the workspace.
+       socket.on('new_message')  → append + bump the unread badge
+       socket.on('online_users') → the presence list (renderOnlineUsers)
+       socket.emit('chat_message', text) → send
+     Presence is kept in memory ON THE SERVER, so it resets on restart and does
+     not work across multiple instances.
+
+   HISTORY AND UNREAD go over REST, not the socket:
+     GET  /api/chat/messages?before=<id>  paginate backwards (50 at a time);
+          chatOldestId / chatNewestId are the cursors
+     GET  /api/chat/unread                drives the sidebar badge
+     PATCH /api/chat/read                 marks the room read
+
+   FUNCTION MAP
+     socket    initChatSocket
+     render    renderMessages, renderMessagesToPage, renderChatRoom,
+               renderOnlineUsers, renderPageOnlineUsers, chatAvatar,
+               chatTimeLabel, dayLabel, isSameDay
+     paging    loadOlderMessages, scrollChatBottom, scrollChatPageBottom
+     page      loadChatPage, sendChatMessageFromPage
+     badge     updateChatBadge, refreshChatBadge
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 let chatOpen         = false;
 let chatPageOpen     = false;
 let chatOldestId     = null;

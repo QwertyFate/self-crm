@@ -1,3 +1,42 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/deals — the pipeline. Deals, their stage, and their linked listings.
+
+   A DEAL belongs to exactly one pipeline and (usually) one of that pipeline's
+   stages. stage_id is nullable and the FK is ON DELETE SET NULL, so deleting a
+   stage leaves its deals in place with no stage rather than destroying them.
+   contact_id and supplier_id both point at `contacts` — a supplier is just a
+   contact with contact_type='supplier'.
+
+   THE LIST AND DETAIL QUERIES FLATTEN everything the UI needs into each row
+   (contact name/email/phone/company, supplier name, stage name + colour,
+   assignee name) so the board can render without a second request.
+
+   MOVING A DEAL IS NOT JUST AN UPDATE. POST /, PUT /:id and
+   PATCH /:id/stage all:
+     1. read the row FIRST to learn the previous stage,
+     2. write,
+     3. notify the workspace,
+     4. and, only when the stage actually CHANGED to one of the workspace's
+        configured trigger stages, fire an outbound Engine event through
+        fireEngine() → utils/engine.js → dispatchContractSigned().
+   That dispatch is fire-and-forget: it never throws into the request, and the
+   route does not wait for the HTTP delivery. Everything it does is visible
+   afterwards in engine_deliveries (GET /api/engine/deliveries).
+
+   urgency is an integer 0-4, clamped by clampUrgency() — never trust the body.
+
+   ENDPOINTS
+     GET    /?pipeline_id=&contact_id=
+     GET    /:id                      + its linked listings
+     POST   / · PUT /:id · DELETE /:id
+     PATCH  /:id/stage                what drag and drop calls
+     PATCH  /:id/urgency
+     GET/POST /:id/objects · DELETE /:id/objects/:objectId   listing links
+
+   ⚠ The three /:id/objects handlers query deal_objects by the id in the URL
+     without an AND workspace_id — see §8 of readmedev.md.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');

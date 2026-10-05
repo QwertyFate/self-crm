@@ -1,3 +1,27 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/chat — the REST half of team chat. The live half is in server.js.
+
+   DIVISION OF LABOUR
+     socket.io (server.js)  sending in real time, presence, delivering new
+                            messages to everyone in room ws-<workspaceId>
+     this file              history, pagination, the unread count, and a
+                            non-socket fallback for sending
+
+   PAGINATION IS CURSOR BASED, not offset: GET /messages?before=<id> returns
+   the 50 messages older than that id. The query fetches them newest-first and
+   REVERSES in JS so the client always gets chronological order.
+
+   UNREAD is computed from chat_reads.last_read_at, one row per (user,
+   workspace), upserted by PATCH /read and also whenever you send. Messages you
+   sent yourself are excluded from the count.
+
+   ENDPOINTS
+     GET   /messages?before=<id>
+     GET   /unread
+     POST  /messages            { content }
+     PATCH /read
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');

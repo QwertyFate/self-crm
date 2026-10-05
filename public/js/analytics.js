@@ -1,3 +1,50 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   ANALYTICS — the dashboard: KPI cards, funnel, win/loss, trends, tables.
+
+   TWO REQUESTS FEED THE WHOLE PAGE
+     GET /api/analytics/summary?months=3|6|12[&pipeline_id=]  → everything
+         except the time series. One response: counts, win rate, values,
+         period deltas, top open deals, by-owner, funnel, win-rate trend,
+         by-pipeline, the stage list, the deal fields, the workspace config
+         and this user's saved layout.
+     GET /api/analytics/trend?period=week|month|year          → the sparkline
+         series, fetched separately because the period switch changes only it.
+
+   WHAT THE NUMBERS MEAN depends on the workspace's analytics_config:
+     won_stage_ids / lost_stage_ids  which stages count as won and lost
+     value_field                     which field the money metrics add up —
+                                     'value' or a numeric custom deal field
+   Nothing is computed until an owner sets these in openAnalyticsConfig();
+   with no value_field the money cards render as "—" rather than zero. The
+   server validates value_field against the workspace's own deal fields.
+
+   LAYOUT IS PER USER (users.analytics_layout): card order, hidden cards,
+   section order and the trend card config. Drag-and-drop writes the globals
+   statCardOrder / sectionOrder / trendCardOrder and then PATCHes the layout.
+
+   CHARTS ARE HAND-DRAWN SVG — no chart library. renderSparkline,
+   renderBarChart, anRateChart and renderDetailView build SVG strings; the
+   tooltip is a positioned div (showSparkTooltip).
+
+   FUNCTION MAP
+     load         loadAnalytics, loadTrend, setAnalyticsPeriod,
+                  switchTrendPeriod, periodFromStorage, periodLabel
+     layout       buildStatOrder, buildSectionOrder, renderAllSections,
+                  initSectionDragDrop, initTrendDragDrop, saveLayoutConfig,
+                  saveTrendConfig, setCardView
+     sections     renderAnalyticsCards, getStatCardContent, renderWinRateTrend,
+                  renderFunnel, renderDealsByOwner, renderTopOpenDeals,
+                  renderWinLoss, wlSegments, renderByPipeline, renderTrendCards
+     charts       anRateChart, renderSparkline, renderBarChart,
+                  renderDetailView, showSparkTooltip, hideSparkTooltip
+     tables       anDataTable, anTableBtn, toggleAnalyticsTable,
+                  tablesFromStorage
+     config       openAnalyticsConfig, closeAnalyticsConfig,
+                  saveAnalyticsConfig, openFunnelPipelineMenu
+     format       fmt, fmtCurrency, delta, formatTrendLabel,
+                  syncAnalyticsPeriodSwitch
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 let analyticsData  = null;
 let analyticsPeriodMonths = periodFromStorage();   // the 3M/6M/12M switch in the page header
 let analyticsTables = new Set(tablesFromStorage());   // the reference's per-card chart/table toggle (its S.tables)

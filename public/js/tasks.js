@@ -1,3 +1,53 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   TASKS — projects → lists → tasks → subtasks, as a list or a kanban board.
+
+   THE HIERARCHY, which the whole file assumes:
+     task_project  (a project, e.g. "Onboarding")   ← has its own status columns
+       └─ task_list   (a list inside it, e.g. "Q4") ← the unit the page shows
+            └─ task         (parent_id = null)
+                 └─ subtask (parent_id = the task)
+   The page always shows ONE list. currentProjectId / currentListId / currentProject
+   say which; selectList() switches, and the choice is remembered in
+   localStorage('lastTaskListId').
+
+   ENTRY POINT  loadTasks(), called by switchPage('tasks').
+     loadTasks → GET /api/task-projects → renderProjectNav → selectList(...)
+               → GET /api/tasks?list_id= → renderTasksCurrent()
+
+   STATUSES ARE PER PROJECT, not global: getActiveTaskStatuses() returns the
+   current project's statuses or DEFAULT_TASK_STATUSES. The LAST status in the
+   list means "done" — that is why toggleTaskDone() and the card renderers use
+   `.at(-1).key` instead of the string 'done'. Do not hardcode 'done'.
+
+   DUE DATES — three shared helpers, used here and by detail-views.js:
+     taskDueAt(t)      the task's due moment, built from LOCAL date parts.
+                       A timed task is due at its time; a whole-day task at
+                       23:59:59.999 of its day.
+     taskIsOverdue()   late only once that moment has passed, never when done.
+     taskDueLabel()    the formatted label, with "· HH:MM" when there is a time.
+   ⚠ Never write `new Date(t.due_date) < new Date()`. new Date('2026-10-05') is
+     UTC midnight, which marked tasks due today as overdue from 08:00 local.
+
+   FUNCTION MAP
+     load/nav     loadTasks, renderProjectNav, toggleProjectExpand, selectList,
+                  selectListById, showTasksEmptyState
+     projects     openProjectModal, saveProject, deleteProject
+     lists        openListModal, saveList, deleteList
+     view/filter  setTaskView, filterTasks, getFilteredTasks,
+                  populateTaskAssigneeFilter, renderTasksCurrent
+     list view    renderTasksList, taskListRow, buildSubtaskMap, toggleSubtasksRow
+     kanban       renderTasksKanban, taskKanbanCard, toggleKanbanSubtasks
+     drag & drop  taskDragStart, taskDragEnd, taskDragOver, taskDragLeave,
+                  taskDrop  (drop = PATCH /api/tasks/:id/status)
+     dates        taskDueAt, taskIsOverdue, taskDueLabel
+     actions      toggleTaskDone, deleteTask, getActiveTaskStatuses
+
+   The task form and the task drawer are in detail-views.js (openTaskForm,
+   openTaskDrawer).
+   ⚠ deleteProject and deleteList still use the browser's own blocking prompt
+     instead of ui.confirm(); the rest of the app uses ui.confirm().
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 let tasks            = [];
 let taskProjects     = [];
 let currentProjectId = null;

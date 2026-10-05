@@ -1,3 +1,36 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/tasks — tasks and subtasks.
+
+   A TASK can hang off several things, all optional: a project and list
+   (task_projects / task_lists), a deal, a contact, and a parent task. A
+   subtask is simply a task with parent_id set; it is never notified about and
+   it is deleted with its parent (ON DELETE CASCADE).
+
+   WORKSPACE OWNERSHIP OF LINKS IS CHECKED EXPLICITLY. deal_id and contact_id
+   come from the client, so POST and PUT verify each one belongs to this
+   workspace before writing — otherwise a task could point at another tenant's
+   record. Copy that pattern for any new foreign key here.
+
+   TIMES  due_date is a DATE and due_time a nullable TIME. They are read back
+   as TO_CHAR(..., 'HH24:MI') so the client gets "09:30", not "09:30:00". A
+   task with no time is a whole-day task; see taskDueAt() in public/js/tasks.js
+   for why that distinction matters for "overdue".
+
+   THE LIST QUERY also counts subtasks (subtask_count / subtask_done) and
+   joins the deal title and contact name, so the list renders in one request.
+
+   ENDPOINTS
+     GET    /?list_id=       the list view's query
+     GET    /:id             one task + its subtasks
+     POST   / · PUT /:id · DELETE /:id
+     PATCH  /:id/status      what kanban drag and drop calls
+
+   ATTACHMENTS ARE A SEPARATE FILE mounted on the SAME prefix:
+   routes/task-attachments.js serves /api/tasks/:taskId/attachments. This
+   router is mounted first and only declares one- and two-segment paths, which
+   is what lets those fall through. Do not add a /:id/:something route here.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');

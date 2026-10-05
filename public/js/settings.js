@@ -1,3 +1,61 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SETTINGS — every per-workspace and per-user configuration screen.
+
+   ONE PAGE, SEVERAL TABS, driven by currentSettingsTab and switchSettingsTab().
+   Other files deep-link into a tab, e.g. the Deals page's "Manage pipelines"
+   calls switchSettingsTab('deals').
+
+   ENTRY POINT  loadSettings(), called by switchPage('settings'). It fetches
+   what the visible tabs need and calls each render function below. Owners see
+   more tabs than admins, and admins more than members — the gating is here in
+   the client AND re-checked on the server (never trust this file for access
+   control; see the owner-only routes in routes/workspace.js).
+
+   WHAT EACH GROUP EDITS, AND WHERE IT IS STORED
+     workspace name        workspaces.name            PATCH /api/workspace/name
+     pipelines + stages    pipelines, pipeline_stages /api/pipelines/*
+     custom fields         custom_fields / deal_fields / task_fields /
+                           object_fields — all four via the SAME server router
+                           (middleware/field-crud.js), so the four blocks here
+                           are near-identical by design
+     table columns         workspaces.contact_columns PATCH /api/workspace/contact-columns
+     kanban card fields    workspaces.kanban_fields   PATCH /api/workspace/kanban-fields
+     task statuses         workspaces.task_statuses   PATCH /api/workspace/task-statuses
+     WhatsApp template     workspaces.whatsapp_template
+     invite codes          invite_codes               /api/invites
+     members + roles       users / user_workspaces    /api/workspace/members
+     timezone              users.timezone             (rendered by clock.js)
+     notification prefs    users.notification_prefs   (rendered by notifications.js)
+
+   ADDING A NEW CUSTOM-FIELD TYPE? Change middleware/field-crud.js (VALID_TYPES)
+   once — all four field editors here pick it up.
+
+   FUNCTION MAP
+     shell        switchSettingsTab, loadSettings, saveWorkspaceName,
+                  deleteWorkspace
+     pipelines    renderPipelinesSettings, openNewPipelineModal, editPipeline,
+                  saveNewPipeline, deletePipeline, addPipelineStage,
+                  editPipelineStage, deletePipelineStage,
+                  pipelineStageDragStart, pipelineStageDragOver,
+                  pipelineStageDrop
+     deal fields  renderDealFieldsList, openDealFieldModal, autoDealFieldKey,
+                  toggleDealFieldOptions, saveDealField, deleteDealField
+     contact flds renderFieldsList, openFieldModal, autoKey,
+                  toggleDropdownOptions, saveField, deleteField
+     task config  loadTaskSettings, getTaskStatuses, renderTaskStatusesList,
+                  taskStatusDragStart, taskStatusDragOver, taskStatusDrop,
+                  openTaskStatusModal, saveTaskStatus, deleteTaskStatus,
+                  saveTaskStatuses, renderTaskFieldsList, openTaskFieldModal,
+                  autoTaskFieldKey, toggleTaskFieldOptions, saveTaskField,
+                  deleteTaskField
+     columns      renderContactColumnSettings, colDragStart, colDragOver,
+                  colDragLeave, colDrop, colToggleVisible, saveContactColumns,
+                  renderKanbanFields, saveKanbanFields
+     whatsapp     insertWaVar, saveWaTemplate
+     team         loadInvites, generateInviteCode, deleteInviteCode, copyCode,
+                  loadMembers, changeMemberRole, removeMember
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 let currentSettingsTab = 'workspace';   // owners start on Workspace; loadSettings() moves members to My preferences
 let taskFields = [];
 let taskStatusDragIdx = null;

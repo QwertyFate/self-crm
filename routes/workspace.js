@@ -1,3 +1,43 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/workspace — members, roles, and every per-workspace setting.
+
+   TWO KINDS OF ENDPOINT HERE
+     1. MEMBER MANAGEMENT, owner-only: list, remove, change role, rename the
+        workspace, delete the workspace.
+     2. CONFIG PATCHES, one per column on `workspaces`: the table columns, the
+        kanban fields, the task statuses, the labels for suppliers and
+        listings, the Miro URL, the WhatsApp template.
+
+   ROLE GATING IS PER HANDLER (`if (req.userRole !== 'owner')`), not on the
+   router, because members legitimately edit some settings. Read the guard at
+   the top of each handler rather than assuming.
+
+   A ROLE LIVES IN TWO PLACES: users.role (displayed) and user_workspaces.role
+   (what middleware/auth.js actually enforces). PATCH /members/:id/role writes
+   BOTH in one transaction — keep any future writer in step or the UI and the
+   authorisation will disagree.
+
+   DELETE / removes the workspace's data table by table in one transaction
+   rather than relying on ON DELETE CASCADE, and refuses when it is your only
+   workspace, so nobody can lock themselves out.
+
+   ⚠ POST / creates another workspace for an existing user but stores the
+     literal string 'placeholder' as the new users row's password_hash, where
+     POST /api/auth/create-workspace copies the real one. The UI calls THIS
+     one. See §8 of readmedev.md before changing it.
+
+   ENDPOINTS
+     POST   /                       new workspace (platform invite required)
+     GET    /members
+     DELETE /members/:id            owner · not yourself · not the owner
+     PATCH  /members/:id/role       owner · member <-> admin
+     PATCH  /name                   owner
+     DELETE /                       owner · not your last workspace
+     PATCH  /contact-columns · /object-columns · /task-statuses ·
+            /kanban-fields · /miro-url · /whatsapp-template      any member
+     PATCH  /supplier-name · /object-name                        owner
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
@@ -26,7 +66,6 @@ router.post('/', async (req, res, next) => {
         { key: 'company', label: 'Company', visible: true, isCustom: false },
         { key: 'email', label: 'Email', visible: true, isCustom: false },
         { key: 'phone', label: 'Phone', visible: true, isCustom: false },
-        { key: 'stage_id', label: 'Stage', visible: true, isCustom: false },
         { key: 'assigned_to', label: 'Assignee', visible: true, isCustom: false },
         { key: 'created_at', label: 'Created At', visible: false, isCustom: false },
       ];

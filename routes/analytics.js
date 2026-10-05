@@ -1,3 +1,45 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/analytics — the dashboard's numbers.
+
+   TWO READS  GET /summary builds the whole page in one response (counts, win
+   rate, values, period deltas, top open deals, by-owner, funnel, win-rate
+   trend, by-pipeline, stages, deal fields, config, layout). GET /trend returns
+   only the time series, because the period switch changes nothing else.
+
+   NOTHING IS MEANINGFUL UNTIL A WORKSPACE IS CONFIGURED
+   (workspaces.analytics_config, written by PATCH /config):
+     won_stage_ids / lost_stage_ids   which stages mean won and lost; every
+                                      other stage counts as open
+     value_field                      which field the money metrics sum —
+                                      'value' or a numeric custom deal field
+   With no value_field the money numbers are returned as null, not 0, so the
+   UI can say "not configured" instead of lying with a zero.
+
+   THE ONE PLACE THIS CODEBASE SPLICES A NAME INTO SQL
+   A JSONB key cannot be a bind parameter, so value_field is interpolated as
+   custom_data->>'<field>'. safeValueField() first matches it against THIS
+   workspace's own deal_fields and returns null for anything else — that check
+   is the only thing between this file and SQL injection. Never bypass it, and
+   do not add a second interpolation. The period keys in /trend are likewise
+   looked up in a fixed PERIODS map, never taken from the query string.
+
+   HONEST LIMITS, by design: only "new deals" and "average deal size" are
+   compared across time, because created_at is the only date a deal carries.
+   Won/lost/open are current-stage snapshots, so they cannot be trended until
+   a deal records when it closed.
+
+   LAYOUT IS PER USER (users.analytics_layout) and merged with the JSONB ||
+   operator, so PATCH /layout only overwrites the keys you send — and silently
+   DROPS keys it does not know (which is why guide.js's guide_seen never
+   persists).
+
+   ENDPOINTS
+     GET   /summary?months=3|6|12&pipeline_id=
+     GET   /trend?period=week|month|year
+     PATCH /layout      per user
+     PATCH /config      per workspace
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');

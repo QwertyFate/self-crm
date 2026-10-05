@@ -1,3 +1,45 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SERVER — the whole HTTP and realtime surface in one file. Start here.
+
+   Read it top to bottom once; the order of the middleware IS the behaviour.
+
+   1. helmet + CSP        CSP is applied only when NODE_ENV=production. It
+                          allows inline scripts, because the UI uses inline
+                          event handlers throughout.
+   2. rate limiters       login 5/15min, signup 5/h, password reset 3/h, and
+                          the public inbound webhook twice (per IP and per key).
+                          Everything else is unlimited.
+   3. body parsing        The CSV import route gets a 10 MB JSON limit; every
+                          other route keeps the library default (100 kb).
+                          The bigger one must be registered FIRST or the parser
+                          never sees it — tests/unit/import-body-limit.test.js
+                          locks that order in.
+   4. sessions            express-session stored in Postgres (connect-pg-simple
+                          creates its own table). Cookie: httpOnly, sameSite
+                          lax, 7 days.
+   5. static files        public/. HTML/CSS/JS are sent no-store so a deploy is
+                          visible on reload; other assets cache for an hour.
+   6. routes              every /api/* mount, one line each. The ONLY place
+                          that knows the full URL map.
+   7. /adminconsole       serves public/admin.html.
+   8. catch-all GET *     serves public/index.html, which is why the client can
+                          have "pages" without any URL routing.
+   9. error handler       entity.too.large → 413 with a readable message,
+                          anything else → 500 and the real error to the log.
+  10. socket.io           team chat and presence. It reuses the Express session
+                          (io.engine.use), re-checks workspace membership on
+                          connect, and joins the socket to the room
+                          `ws-<workspaceId>`. Presence is an in-memory Map, so
+                          it resets on restart and does NOT work across more
+                          than one instance.
+
+   ADDING A ROUTE FILE: create routes/<name>.js, mount it here, and give it
+   `router.use(requireAuth)` unless it is deliberately public.
+
+   The process exits if initDb() fails — a server that cannot reach its
+   database should not serve traffic.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express    = require('express');
 const http       = require('http');
 const { Server } = require('socket.io');

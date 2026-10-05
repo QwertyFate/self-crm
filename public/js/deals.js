@@ -4,6 +4,41 @@
    urgency, custom_data, created_at, updated_at) and /api/pipelines with ordered
    stages. The deal modal (openDealModal / saveDeal in modals.js) is untouched.
    ═══════════════════════════════════════════════════════════════════════════ */
+/* ENTRY POINT  loadDeals(), called by switchPage('deals'). It fetches the
+   pipelines, the deal fields and the deals, then setDealView() picks board or
+   list (remembered in localStorage.dealViewMode) and renderDeals() paints the
+   sub-line, the summary, the toolbar and the chosen view.
+
+   STATE  dealsUI holds the filters, the sort, the selection and the summary
+   toggle. visibleDeals() applies all of it and is the function to read if you
+   want to know what is on screen. currentPipelineId is null when the pipeline
+   picker is on "All pipelines" — only possible in list mode, which is why
+   summaryStages() falls back to every pipeline's stages there.
+
+   FUNCTION MAP
+     data/format   urgencyMeta, urgencyLabel, urgencyBadge, fmtEUR,
+                   fmtEURShort, fmtDateShort, agoDays, sumValue
+     pipelines     currentPipeline, stagesOf, summaryStages,
+                   populatePipelineSelect, onPipelineChange
+     state         visibleDeals, dealsKpis, loadDeals, setDealView, renderDeals
+     columns       effectiveDealColumns, renderDealColumnSettings,
+                   dealColDragStart, dealColDrop, dealColToggle,
+                   saveDealColumns, openDealsColumnsMenu
+     summary       renderDealsSummary, toggleDealsSummary, jumpToStage
+     toolbar       renderDealsToolbar, dealFilterFields, dealsFilterActive,
+                   dealsChip, openDealsChip, onDealsSearch, clearDealsFilters
+     board         renderDealsBoard, dealCard, addDealInStage, openDealKebab,
+                   applyStage, moveDealToStage, setDealUrgency
+     list          renderDealsList, sortDeals, sortDealsBy, toggleDealSelected,
+                   toggleAllDeals, bulkDeals
+     drag & drop   dealDragStart, dealDragEnd, dealDragOver, dealDragLeave,
+                   dealDrop   (drop = PATCH /api/deals/:id/stage)
+     misc          deleteDeals, openDealsMoreMenu, exportDealsCsv
+
+   NOTE  moving a deal into a trigger stage makes the SERVER fire an outbound
+   Engine event (routes/deals.js → utils/engine.js). Nothing here does that,
+   but it is why a stage change is never "just a UI update".
+   The deal form and detail drawer live in detail-views.js. */
 
 // `color` feeds the modal's urgency dot (next step); `tone` is the badge tone (reference data.js).
 const DEAL_URGENCY = [
@@ -57,8 +92,15 @@ let dealsUI = { q: '', owner: null, urgency: null, stage: null, cf: {}, sort: { 
 let dealsSearchTimer = null;
 
 function currentPipeline() { return pipelines.find(p => p.id === currentPipelineId) || null; }
-function currentStages() { return currentPipeline()?.stages || []; }
 function stagesOf(d) { return pipelines.find(p => p.id === d.pipeline_id)?.stages || []; }
+// The stages the summary strip charts and the stage chip offers. With one pipeline selected those
+// are its stages; on "All pipelines" (list mode only) every pipeline's, name-prefixed so two
+// pipelines' "Won" stay apart. An entry is always a single stage, so filtering by `id` still works.
+function summaryStages() {
+  const p = currentPipeline();
+  if (p) return (p.stages || []).map(s => ({ ...s, label: s.name }));
+  return pipelines.flatMap(pl => (pl.stages || []).map(s => ({ ...s, label: `${pl.name} · ${s.name}` })));
+}
 
 // The deals the filters let through (search over title, contact and company; owner; urgency at least; stage).
 function visibleDeals() {
@@ -99,7 +141,7 @@ async function loadDeals() {
   const url = currentPipelineId ? `/api/deals?pipeline_id=${currentPipelineId}` : '/api/deals';
   deals = await api.get(url);
   dealsUI.sel.clear();
-  if (dealsUI.stage != null && !currentStages().some(s => s.id === dealsUI.stage)) dealsUI.stage = null;
+  if (dealsUI.stage !== null && dealsUI.stage !== '' && !summaryStages().some(s => s.id === dealsUI.stage)) dealsUI.stage = null;
   setDealView(dealViewMode);
 }
 
@@ -237,7 +279,7 @@ function renderDealsSummary() {
   if (!el) return;
   el.classList.toggle('hidden', !dealsUI.summary);
   if (!dealsUI.summary) { el.innerHTML = ''; return; }
-  const all = deals, k = dealsKpis(all), total = k.value || 1, stages = currentStages();
+  const all = deals, k = dealsKpis(all), total = k.value || 1, stages = summaryStages();
   const kpi = (label, value, foot) => `<div class="kpi"><div class="kpi-label">${esc(label)}</div><div class="kpi-value">${value}</div><div class="kpi-foot">${esc(foot)}</div></div>`;
   el.innerHTML = `<div class="kpis">
       ${kpi(t('kpi_pipeline_value'), fmtEURShort(k.value), currentPipeline() ? currentPipeline().name : t('opt_all_pipelines'))}
@@ -245,8 +287,8 @@ function renderDealsSummary() {
       ${kpi(t('kpi_avg_deal'), fmtEURShort(k.avg), t('kpi_avg_foot'))}
       ${kpi(t('kpi_urgent'), String(k.urgent), t('kpi_urgent_foot'))}
     </div>` + (stages.length ? `<div class="strip">
-      <div class="stack" role="img" aria-label="${esc(t('strip_label'))}">${stages.map(s => { const v = sumValue(all.filter(d => d.stage_id === s.id)); return `<button type="button" style="flex:${Math.max(v, total * .015)};background:${esc(s.color)}" data-jump="${s.id}" onclick="jumpToStage(${s.id})" title="${esc(s.name)}: ${fmtEURShort(v)}" aria-label="${esc(s.name)}"></button>`; }).join('')}</div>
-      <div class="stack-legend">${stages.map(s => { const a = all.filter(d => d.stage_id === s.id); return `<button type="button" data-jump="${s.id}" onclick="jumpToStage(${s.id})"><div class="nm"><i style="background:${esc(s.color)}"></i>${esc(s.name)}</div><div class="v">${fmtEURShort(sumValue(a))}</div><div class="c">${esc(tf('n_deals', { n: a.length }))}</div></button>`; }).join('')}</div>
+      <div class="stack" role="img" aria-label="${esc(t('strip_label'))}">${stages.map(s => { const v = sumValue(all.filter(d => d.stage_id === s.id)); return `<button type="button" style="flex:${Math.max(v, total * .015)};background:${esc(s.color)}" data-jump="${s.id}" onclick="jumpToStage(${s.id})" title="${esc(s.label)}: ${fmtEURShort(v)}" aria-label="${esc(s.label)}"></button>`; }).join('')}</div>
+      <div class="stack-legend">${stages.map(s => { const a = all.filter(d => d.stage_id === s.id); return `<button type="button" data-jump="${s.id}" onclick="jumpToStage(${s.id})"><div class="nm"><i style="background:${esc(s.color)}"></i>${esc(s.label)}</div><div class="v">${fmtEURShort(sumValue(a))}</div><div class="c">${esc(tf('n_deals', { n: a.length }))}</div></button>`; }).join('')}</div>
     </div>` : '');
 }
 function toggleDealsSummary() {
@@ -254,9 +296,14 @@ function toggleDealsSummary() {
   localStorage.setItem('dealsSummary', dealsUI.summary ? '1' : '0');
   renderDealsSummary(); renderDealsToolbar();
 }
-// A click on the stage strip or legend scrolls that column into view (switching to the board first).
+// A click on the stage strip or legend scrolls that column into view. The list has no column to
+// scroll to, so there the stage toggles the stage filter instead of yanking the user to the board.
 function jumpToStage(stageId) {
-  if (dealViewMode !== 'kanban') setDealView('kanban');
+  if (dealViewMode === 'list') {
+    dealsUI.stage = dealsUI.stage === stageId ? null : stageId;
+    renderDeals();
+    return;
+  }
   document.querySelector(`#deals-board .col-board[data-stage="${stageId}"]`)?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
 }
 
@@ -267,7 +314,7 @@ function renderDealsToolbar() {
   const active = document.activeElement && document.activeElement.id === 'deals-q';
   const any = dealsFilterActive();
   el.innerHTML = `<div class="input-group" style="width:260px">${icon('search')}<input class="input" id="deals-q" type="search" placeholder="${esc(t('search_deals'))}" value="${esc(dealsUI.q)}" aria-label="${esc(t('search_deals'))}" oninput="onDealsSearch(this.value)"></div>
-    ${dealsChip('owner')}${dealsChip('urgency')}${currentPipelineId ? dealsChip('stage') : ''}${dealFilterFields().map(f => dealsChip('cf:' + f.field_key, f.name)).join('')}
+    ${dealsChip('owner')}${dealsChip('urgency')}${dealsChip('stage')}${dealFilterFields().map(f => dealsChip('cf:' + f.field_key, f.name)).join('')}
     ${any ? `<button class="btn btn-ghost btn-sm" type="button" onclick="clearDealsFilters()">${esc(t('clear_filters'))}</button>` : ''}<span class="grow"></span>
     ${dealViewMode === 'list' ? `<button class="btn btn-secondary btn-sm" type="button" onclick="openDealsColumnsMenu(this)" aria-haspopup="menu">${icon('columns')}${esc(t('btn_columns'))}</button>` : ''}
     <button class="btn btn-secondary btn-sm" type="button" onclick="toggleDealsSummary()" aria-pressed="${dealsUI.summary}">${icon('bar-chart')}${esc(t(dealsUI.summary ? 'hide_summary' : 'show_summary'))}</button>`;
@@ -287,7 +334,7 @@ function dealsChip(key, label) {
     : v === '' ? t('detail_unassigned')
     : key === 'owner' ? (members.find(m => m.id === v)?.name || '')
     : key === 'urgency' ? `${urgencyLabel(urgencyMeta(v))} ${t('or_higher')}`
-    : (currentStages().find(s => s.id === v)?.name || '');
+    : (summaryStages().find(s => s.id === v)?.label || '');
   return `<button class="chip ${on ? 'on' : ''}" type="button" data-chip="${esc(key)}" onclick="openDealsChip(this,'${esc(key)}')" aria-haspopup="menu">${esc(label || t('chip_' + key))}${on ? ': ' + esc(txt) : ''}${icon('chevron-down', 'ic-sm')}</button>`;
 }
 function openDealsChip(anchor, key) {
@@ -305,7 +352,7 @@ function openDealsChip(anchor, key) {
     opts = [1, 2, 3, 4].map(i => ({ value: i, label: `${urgencyLabel(urgencyMeta(i))} ${t('or_higher')}` }));
     cur = dealsUI.urgency ?? null; set = v => { dealsUI.urgency = v; };
   } else {
-    opts = [unassigned, ...currentStages().map(st => ({ value: st.id, label: st.name }))];
+    opts = [unassigned, ...summaryStages().map(st => ({ value: st.id, label: st.label }))];
     cur = dealsUI.stage ?? null; set = v => { dealsUI.stage = v; };
   }
   ui.select(anchor, [{ value: null, label: t('filter_all') }, ...opts], cur, v => { set(v); renderDeals(); });

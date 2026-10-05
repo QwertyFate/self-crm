@@ -1,3 +1,60 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   AUTH + APP SHELL — getting in, choosing a workspace, and page navigation.
+   This file owns the app's lifecycle. Loaded second, right after core.js.
+
+   THE ENTRY POINT is init(), called once when index.html finishes loading:
+
+     init()
+       ├─ ?admin in the URL  → the in-app admin screen (admin-import.js)
+       ├─ ?reset=<token>     → the password-reset form
+       ├─ GET /api/auth/me   → logged in?  yes → showApp()   no → showAuth()
+       └─ showApp() fills currentUser / currentWorkspace, paints the shell, and
+          calls switchPage('deals'). Every session starts on Deals, never on
+          whatever page the previous user left open.
+
+   switchPage(page) IS THE ROUTER. There is no URL routing in this app: it
+   hides every .page section, shows one, and calls that page's loader
+   (loadDeals, loadContacts, loadTasks, …). To add a page: add the section to
+   index.html, the sidebar link, and one line here.
+
+   WORKSPACES — THE PART THAT SURPRISES PEOPLE
+     A person with three workspaces has THREE rows in the users table, one per
+     workspace, sharing an email and password hash. Switching workspace changes
+     session.userId on the server to the other row's id. So a user id is only
+     meaningful together with a workspace.
+       login  → one membership  : straight in
+              → several         : showWorkspacePicker() → selectWorkspace()
+       inside : switchWorkspace() → POST /api/auth/switch-workspace → reload
+
+   resetClientState() PUTS THE TAB BACK TO BOOT STATE — stops pollers and the
+   socket, clears every workspace-scoped global and the per-workspace
+   localStorage keys. It runs on logout and on workspace switch.
+   ⚠ ADD A NEW GLOBAL ANYWHERE IN public/js → ADD IT HERE TOO. Forgetting is
+   how one user's data leaks into the next user's session in the same tab.
+
+   ensureFields / ensureContacts / ensureMembers / ensurePipelines are lazy
+   caches: they fetch only when the array is still empty. invalidate() empties
+   them so the next ensureX() refetches.
+
+   FUNCTION MAP
+     lifecycle   init, showApp, showAuth, showAuthView, switchPage,
+                 resetClientState, invalidate, logout
+     login       handleLogin, handleSignup, toggleSignupMode,
+                 showForgotPassword, handleForgotPassword, copyResetLink,
+                 showResetForm, handleResetPassword, showMainAuth
+     workspaces  showWorkspacePicker, selectWorkspace, switchWorkspace,
+                 loadWorkspacesPage, wsGradient, openAddWorkspaceChoice,
+                 pickAddWorkspace, openCreateWorkspaceModal,
+                 closeCreateWorkspaceModal, handleCreateWorkspace,
+                 openJoinWorkspaceModal, showJoinWorkspace, closeJoinWorkspace,
+                 handleJoinWorkspace
+     caches      ensureFields, ensureContacts, ensureMembers, ensurePipelines
+
+   ⚠ handleCreateWorkspace posts to /api/workspace, which stores the literal
+     string 'placeholder' as the new users row's password_hash. See §8 of
+     readmedev.md before touching it.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 async function init() {
   const params     = new URLSearchParams(window.location.search);
   const resetToken = params.get('reset');

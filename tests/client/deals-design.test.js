@@ -266,3 +266,80 @@ describe('stylesheet', () => {
     assert.ok(!css.includes('.urgency-dot'));
   });
 });
+
+describe('deals.js: the summary strip is the same in board and list (Part 34)', () => {
+  // The strip used to come from currentStages(), which is empty whenever the pipeline select sits
+  // on "All pipelines" — the state the list view starts in. summaryStages() falls back to every
+  // pipeline's stages there, so the bar graph is on the card from the first render in either view.
+  const summaryEnv = (state) => loadFns('public/js/deals.js',
+    ['renderDealsSummary', 'summaryStages', 'currentPipeline', 'dealsKpis', 'sumValue', 'fmtEUR', 'fmtEURShort'], {
+    state: { deals: [], pipelines: [], currentPipelineId: null, dealViewMode: 'kanban',
+             dealsUI: { q: '', owner: null, urgency: null, stage: null, cf: {}, sort: { key: 'created_at', dir: -1 }, sel: [], summary: true },
+             ...state },
+    extra: `
+      const t = k => ({ opt_all_pipelines: 'All pipelines', strip_label: 'Value by stage' })[k] || k;
+      const tf = (k, p) => k + ':' + JSON.stringify(p);
+      const esc = s => String(s ?? '');
+      const currentLang = 'en';
+      const el = { innerHTML: '', classList: { hidden: false, toggle(c, on) { this.hidden = on; } } };
+      const document = { getElementById: id => id === 'deals-summary' ? el : null };
+    `,
+    expose: ['el'],
+  });
+  const PIPELINES = [
+    { id: 5, name: 'Sales',   stages: [{ id: 10, name: 'Lead', color: '#111' }, { id: 11, name: 'Won', color: '#222' }] },
+    { id: 6, name: 'Rentals', stages: [{ id: 20, name: 'Won', color: '#333' }] },
+  ];
+  const DEALS = [
+    { id: 1, value: '100000', urgency: 0, stage_id: 10, pipeline_id: 5 },
+    { id: 2, value: '50000',  urgency: 4, stage_id: 11, pipeline_id: 5 },
+    { id: 3, value: '25000',  urgency: 0, stage_id: 20, pipeline_id: 6 },
+  ];
+
+  test('with a pipeline selected the strip charts its stages, as before', () => {
+    const F = summaryEnv({ deals: DEALS.slice(0, 2), pipelines: PIPELINES, currentPipelineId: 5 });
+    F.renderDealsSummary();
+    assert.match(F.el.innerHTML, /class="stack"/);
+    assert.equal(count(F.el.innerHTML, 'onclick="jumpToStage('), 4, 'two stages: a strip segment and a legend entry each');
+    assert.match(F.el.innerHTML, /aria-label="Lead"/);
+    assert.doesNotMatch(F.el.innerHTML, /Sales ·/, 'one pipeline needs no prefix');
+  });
+
+  test('on "All pipelines" (the list view default) the strip still renders, over every pipeline\'s stages', () => {
+    const F = summaryEnv({ deals: DEALS, pipelines: PIPELINES, currentPipelineId: null, dealViewMode: 'list' });
+    F.renderDealsSummary();
+    assert.match(F.el.innerHTML, /class="stack"/, 'the bar graph must not be board-only');
+    assert.match(F.el.innerHTML, /class="stack-legend"/);
+    assert.equal(count(F.el.innerHTML, 'onclick="jumpToStage('), 6, 'three stages across the two pipelines');
+    assert.match(F.el.innerHTML, /aria-label="Sales · Won"/);
+    assert.match(F.el.innerHTML, /aria-label="Rentals · Won"/, 'same-named stages of different pipelines stay apart');
+    assert.match(F.el.innerHTML, /data-jump="20"/, 'entries keep their own stage id, so the filter still works');
+  });
+
+  test('no stages anywhere: the KPIs render and the strip is simply left out', () => {
+    const F = summaryEnv({ deals: [], pipelines: [], currentPipelineId: null });
+    F.renderDealsSummary();
+    assert.match(F.el.innerHTML, /class="kpis"/);
+    assert.doesNotMatch(F.el.innerHTML, /class="stack"/);
+  });
+
+  test('the stage chip is no longer board-only, and lists every pipeline\'s stages', () => {
+    assert.match(sliceFn(deals, 'renderDealsToolbar', 'deals.js'), /\$\{dealsChip\('owner'\)\}\$\{dealsChip\('urgency'\)\}\$\{dealsChip\('stage'\)\}/,
+      'with the strip visible on "All pipelines" the chip that clears a stage must be reachable there too');
+    assert.match(sliceFn(deals, 'openDealsChip', 'deals.js'), /summaryStages\(\)\.map\(st => \(\{ value: st\.id, label: st\.label \}\)\)/);
+    assert.match(sliceFn(deals, 'dealsChip', 'deals.js'), /summaryStages\(\)\.find\(s => s\.id === v\)\?\.label/);
+  });
+
+  test('clicking a stage scrolls the board column, but filters the list instead of switching view', () => {
+    const j = sliceFn(deals, 'jumpToStage', 'deals.js');
+    assert.match(j, /dealViewMode === 'list'/);
+    assert.match(j, /dealsUI\.stage = dealsUI\.stage === stageId \? null : stageId/, 'a second click clears the filter');
+    assert.doesNotMatch(j, /setDealView\(/, 'the list no longer yanks the user over to the board');
+    assert.match(j, /scrollIntoView/);
+  });
+
+  test('a stage filter survives a reload as long as the stage still exists in some pipeline', () => {
+    const l = sliceFn(deals, 'loadDeals', 'deals.js');
+    assert.match(l, /dealsUI\.stage !== null && dealsUI\.stage !== '' && !summaryStages\(\)\.some\(s => s\.id === dealsUI\.stage\)/);
+  });
+});

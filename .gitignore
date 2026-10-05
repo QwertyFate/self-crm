@@ -1,6 +1,6 @@
 node_modules
 .env
-.DS_store
+.DS_Store
 .claude
 ADMIN_ROLE_CHANGES.md
 CHAT_MENTIONS_CHANGES.md
@@ -12,3 +12,16 @@ AUTH_STATE_CHANGES.md
 reference
 DESIGN_PRO_CHANGES.md
 
+# stale SQLite database from before the Postgres migration — contains old user
+# rows and password hashes; exported to crm-sqlite-backup-2026-10-05.json outside
+# the repo, then removed from the working tree (2026-10-05)
+crm.db
+crm.db-shm
+crm.db-wal
+
+# any env file, not just .env
+*.env
+!.env.example
+
+# obsolete-code cleanup log (2026-10-05)
+OBSOLETE_CLEANUP_CHANGES.md

@@ -1,3 +1,33 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   NOTIFICATIONS (server side) — creating the rows the bell panel polls.
+
+   notify(workspaceId, actorId, {type, category, title, body, entityType, entityId})
+     Fans a notification out to every member of the workspace EXCEPT the actor,
+     skipping anyone whose users.notification_prefs has that category off, in
+     one multi-row INSERT. Called by the contacts, deals and tasks routes.
+     entityType + entityId are what let the client jump to the record.
+
+   notifySystem(title, body, workspaceId?)
+     A system announcement to everyone (one workspace, or all of them).
+
+   BOTH SWALLOW THEIR ERRORS ON PURPOSE: a failed notification must never fail
+   the request that triggered it. The flip side is that a broken query here is
+   invisible except in the log — which is exactly what happened to
+   notifySystem (see below).
+
+   ⚠ KNOWN BUG — notifySystem builds its VALUES list with a stride of 6
+     placeholder slots per row but supplies only 4 parameters per row, so from
+     the second user on the numbering runs past the end of the parameter array
+     and Postgres rejects the statement. POST /api/notifications/announce
+     therefore reports success and notifies nobody in any workspace with more
+     than one member. Fix the stride to 4 and add a route test — load-route.js
+     can inject this real module against a fake pool.
+
+   These rows are read by routes/notifications.js and polled by
+   public/js/notifications.js. Nothing here is realtime; chat is the only
+   socket-pushed feature.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const { pool } = require('./db');
 
 async function notify(workspaceId, actorId, { type, category, title, body, entityType, entityId }) {

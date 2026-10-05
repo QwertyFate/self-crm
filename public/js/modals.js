@@ -4,6 +4,24 @@
    built at runtime by public/js/detail-views.js — see that file for the
    reference pop windows and side panels (Part 16, DESIGN_PRO_CHANGES.md).
    ═══════════════════════════════════════════════════════════════════════════ */
+/* ENTRY POINTS  openContactModal(id) and openActivityModal({date, time}),
+   both called from inline handlers in index.html and from other files.
+
+   These two forms stayed as plain markup in index.html (filled in here) while
+   the richer record views moved to detail-views.js. Expect that split:
+     here           the contact create/edit form, the Log Activity form
+     detail-views   the deal form + drawer, contact panel, task form + drawer
+
+   renderFieldInput() / renderDealFieldInput() turn a custom-field definition
+   into an <input>/<select> — renderDealFieldInput is also reused by the
+   Listings modal in objects.js.
+
+   saveActivity() refreshes whichever page is currently active (Activities or
+   Calendar) so a new entry shows up without a reload.
+
+   FUNCTION MAP  openContactModal, saveContact, deleteContact,
+                 renderFieldInput, renderDealFieldInput, closeSidePanel,
+                 openActivityModal, saveActivity */
 
 async function openContactModal(id) {
   await Promise.all([ensureFields(), ensureMembers()]);

@@ -1,3 +1,19 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   SIDEBAR CLOCK + the timezone preference behind it.
+
+   A ticking clock in the sidebar, rendered in the user's own timezone
+   (users.timezone, default Europe/Berlin). startClock() is called by showApp()
+   and stopClock() by resetClientState(), so the interval never outlives a
+   session.
+
+   The timezone picker lives on the Settings page but is rendered here
+   (renderTimezoneSetting), because this file owns COMMON_TIMEZONES and the
+   formatting. Saving PATCHes /api/auth/preferences, which validates the zone
+   with Intl.DateTimeFormat before storing it.
+
+   FUNCTION MAP  currentTimezone, startClock, stopClock, updateClock,
+                 renderTimezoneSetting, saveTimezoneSetting
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 let clockTimer = null;
 const COMMON_TIMEZONES = [

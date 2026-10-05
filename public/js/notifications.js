@@ -1,3 +1,28 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   NOTIFICATIONS — the bell panel in the top bar.
+
+   NOT REALTIME: this polls. startNotifPolling() runs loadNotifications() on an
+   interval and is started by showApp() / stopped by resetClientState(). It
+   uses apiFetchSilent() so the global loading bar does not flash every tick.
+
+   WHERE NOTIFICATIONS COME FROM: the server creates them, never this file.
+   Routes call notify() in notifications.js (server) after a contact, deal or
+   task changes, and the activity routes create 'mention' rows when someone is
+   @-named in a note or comment. Each row carries entity_type + entity_id, and
+   onNotifClick() uses those to jump to the deal or contact.
+
+   PREFERENCES are per user (users.notification_prefs), one boolean per
+   category (contacts, deals, tasks, objects, activities). The server honours
+   them when fanning out, so an unchecked box means the row is never created —
+   turning one back on does not backfill what you missed.
+
+   FUNCTION MAP
+     poll      startNotifPolling, stopNotifPolling, loadNotifications
+     render    renderNotifList, notifIcon, notifTimeAgo
+     actions   toggleNotifPanel, onNotifClick, markAllNotifRead, clearReadNotifs
+     prefs     loadNotifPrefs, saveNotifPrefs
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 let notifPanelOpen = false;
 let notifPollTimer = null;
 

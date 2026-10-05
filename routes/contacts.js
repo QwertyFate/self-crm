@@ -1,3 +1,41 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/contacts — contacts AND suppliers, plus the CSV import.
+
+   ONE TABLE, TWO RECORD TYPES. contact_type is 'contact' or 'supplier';
+   the UI shows them as two pages but everything here is shared. Filter with
+   ?contact_type= and remember that PUT COALESCEs the column, so omitting it
+   does not silently turn a supplier into a contact.
+
+   CUSTOM FIELDS live in contacts.custom_data (JSONB), keyed by the field_key
+   of a row in custom_fields. No schema change per field — see
+   middleware/field-crud.js.
+
+   THE LIST QUERY also computes last_activity_at as a correlated MAX over
+   activities, which is what the "Last contact" filter on the Contacts page
+   sorts by.
+
+   POST /import IS THE INTERESTING ONE. The browser parses the CSV and posts
+   the whole thing as one JSON array, so:
+     - server.js gives THIS ROUTE ALONE a 10 MB body limit; over that the
+       error handler turns body-parser's entity.too.large into a 413.
+     - everything happens in ONE transaction: create any new custom fields,
+       then per row upsert the contact BY EMAIL (update when it exists, insert
+       when it does not), then optionally create a deal.
+     - a row with no name is skipped; a row with no email can never match an
+       existing contact, so it always inserts.
+     - when deals are requested with no stage, it falls back to the pipeline's
+       FIRST stage — the same rule as the inbound webhook. Change one, change
+       both.
+
+   ENDPOINTS
+     GET    /?contact_type=&contact_id=    list (+ assignee, + last activity)
+     POST   /import                        bulk upsert, see above
+     GET    /:id                           one contact + its activities
+     POST   /                              409 on a duplicate email
+     PUT    /:id · DELETE /:id
+     POST   /bulk/delete                   { contactIds: [...] }
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');

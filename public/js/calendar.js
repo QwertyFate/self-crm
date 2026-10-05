@@ -13,6 +13,37 @@
    activity can share an id, so every entry is keyed by `uid` = kind-id, and a
    task opens the task drawer rather than the activity detail.
    ═══════════════════════════════════════════════════════════════════════════ */
+/* ENTRY POINT  renderCalendar(), called by switchPage('calendar').
+   It fetches GET /api/calendar?start=&end= for the visible range, normalises
+   the rows (calNormalize) and paints one of three views.
+
+   STATE  calView ('month' | 'week' | 'upcoming', remembered in localStorage),
+   calViewDate (the anchor date), calEvents (the fetched rows), calFilters
+   (type + person chips). visibleCalEvents() applies the filters.
+
+   EVERY ENTRY IS BORROWED. The calendar owns no table: a row is either an
+   activity with an event_date or a task with a due_date, and `kind` says
+   which. Editing therefore goes back to the owning route —
+   PATCH /api/activities/:id for an activity, PATCH /api/tasks/:id/status for a
+   task — which is what toggleCalendarDone() dispatches on. An activity and a
+   task can share an id, so entries are keyed by kind+id (calFindEvent).
+
+   FUNCTION MAP
+     dates      calPad, calIso, calAddDays, calWeekStart, calMins, calHHMM,
+                calToday, calFmtDay, calDateFromIso, calendarRange,
+                calendarLabel
+     nav        setCalendarView, calViewFromStorage, calendarGoToday,
+                calendarStep, calendarPrevMonth, calendarNextMonth,
+                switchPageCalendar
+     render     renderCalendar, renderCalendarBody, calendarMonthView,
+                calendarWeekView, calendarUpcoming, calLanes, calEvButton,
+                renderCalendarToolbar
+     filters    visibleCalEvents, calOnDay, calChip, openCalendarChip,
+                clearCalendarFilters
+     entries    calNormalize, calTypeOf, calTitleOf, calFindEvent, stripHtml,
+                openCalendarEntry, openCalendarEvent, openCalendarEventDetail,
+                openDayModal, openCalMoreMenu, toggleCalendarDone,
+                toggleActivityComplete, calendarAddOn, calendarAddAtTime */
 
 const CAL_TYPES = [
   { id: 'note',     label: 'Note',     color: 'var(--info)'       },
