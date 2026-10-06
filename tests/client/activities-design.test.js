@@ -60,7 +60,10 @@ describe('objects.js: renderers follow the reference idiom', () => {
 });
 
 describe('objects.js: filtering logic in a sandbox', () => {
-  const extra = `const esc = s => String(s ?? '');`;
+  // visibleActivities searches the VISIBLE text of a note (dvActText — tags stripped, entities
+  // decoded) rather than the stored <br>/entities, so the real helper is sliced in; the seed
+  // notes are plain strings and pass through it unchanged.
+  const extra = `const esc = s => String(s ?? ''); ${sliceFn(read('public/js/detail-views.js'), 'dvActText', 'detail-views.js')}`;
   const F = loadFns('public/js/objects.js', ['visibleActivities'], {
     state: { activities: [], activitiesUI: { q: '', type: null, by: null } },
     extra,

@@ -21,10 +21,12 @@
    rather than relying on ON DELETE CASCADE, and refuses when it is your only
    workspace, so nobody can lock themselves out.
 
-   ⚠ POST / creates another workspace for an existing user but stores the
-     literal string 'placeholder' as the new users row's password_hash, where
-     POST /api/auth/create-workspace copies the real one. The UI calls THIS
-     one. See §8 of readmedev.md before changing it.
+   POST / creates another workspace for an existing user and copies that user's
+   real password_hash into the new users row, the same as the (uncalled) twin
+   POST /api/auth/create-workspace. It used to store the literal string
+   'placeholder' there, which could refuse the user their own password — see
+   §8 of readmedev.md. One email means one password across every row; do not
+   reintroduce a per-row credential here.
 
    ENDPOINTS
      POST   /                       new workspace (platform invite required)
@@ -120,10 +122,17 @@ router.post('/', async (req, res, next) => {
         }
       }
 
-      const { rows: [currentUser] } = await client.query('SELECT name, email FROM users WHERE id=$1', [req.userId]);
+      // Copy the creator's REAL password_hash, the way POST /api/auth/create-workspace
+      // does. This used to insert the literal string 'placeholder', which no password
+      // can ever match, and because login reads `WHERE email=$1` with no ORDER BY it
+      // could be the row checked — refusing the user their own correct password.
+      // Locked in by tests/routes/workspace-password-hash.test.js.
+      const { rows: [currentUser] } = await client.query(
+        'SELECT name, email, password_hash FROM users WHERE id=$1', [req.userId]
+      );
       const { rows: [newUser] } = await client.query(
         'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-        [ws.id, currentUser.name, currentUser.email, 'placeholder', 'owner']
+        [ws.id, currentUser.name, currentUser.email, currentUser.password_hash, 'owner']
       );
 
       await client.query(

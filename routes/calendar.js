@@ -4,6 +4,8 @@
    Each response is a UNION ALL of the two things this app schedules:
      activities with an event_date   (+ optional event_time)
      tasks      with a due_date      (+ optional due_time)
+   Every row also carries event_tz — the zone its time was typed in (NULL for
+   rows older than the column). The client converts to the viewer's clock.
    Every row carries `kind` ('activity' | 'task') because an activity and a
    task can share an id — the client keys entries by kind AND id.
 
@@ -48,14 +50,16 @@ router.get('/', async (req, res, next) => {
       SELECT 'activity' AS kind, a.id, a.type, a.content AS title, a.completed, a.created_by,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              TO_CHAR(a.event_time, 'HH24:MI')    AS event_time,
+             a.event_tz AS event_tz,
              a.content AS content,
              NULL AS status, NULL AS priority,
              u.name AS created_by_name,
              c.name AS contact_name, c.id AS contact_id,
-             d.id AS deal_id, d.title AS deal_title
+             COALESCE(db.id, d.id) AS deal_id, COALESCE(db.title, d.title) AS deal_title
       FROM activities a
       LEFT JOIN users    u ON u.id = a.created_by
       LEFT JOIN contacts c ON c.id = a.contact_id
+      LEFT JOIN deals db ON db.id = a.deal_id
       LEFT JOIN LATERAL (
         SELECT id, title FROM deals
         WHERE deals.contact_id = a.contact_id AND deals.workspace_id = a.workspace_id
@@ -71,6 +75,7 @@ router.get('/', async (req, res, next) => {
              COALESCE(t.assigned_to, t.created_by) AS created_by,
              TO_CHAR(t.due_date, 'YYYY-MM-DD')  AS event_date,
              TO_CHAR(t.due_time, 'HH24:MI')     AS event_time,
+             t.due_tz AS event_tz,
              t.description AS content,
              t.status, t.priority,
              ut.name AS created_by_name,
@@ -97,14 +102,16 @@ router.get('/today', async (req, res, next) => {
       SELECT 'activity' AS kind, a.id, a.type, a.content AS title, a.completed, a.created_by,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              TO_CHAR(a.event_time, 'HH24:MI')    AS event_time,
+             a.event_tz AS event_tz,
              a.content AS content,
              NULL AS status, NULL AS priority,
              u.name AS created_by_name,
              c.name AS contact_name, c.id AS contact_id,
-             d.id AS deal_id, d.title AS deal_title
+             COALESCE(db.id, d.id) AS deal_id, COALESCE(db.title, d.title) AS deal_title
       FROM activities a
       LEFT JOIN users    u ON u.id = a.created_by
       LEFT JOIN contacts c ON c.id = a.contact_id
+      LEFT JOIN deals db ON db.id = a.deal_id
       LEFT JOIN LATERAL (
         SELECT id, title FROM deals
         WHERE deals.contact_id = a.contact_id AND deals.workspace_id = a.workspace_id
@@ -118,6 +125,7 @@ router.get('/today', async (req, res, next) => {
              COALESCE(t.assigned_to, t.created_by) AS created_by,
              TO_CHAR(t.due_date, 'YYYY-MM-DD')  AS event_date,
              TO_CHAR(t.due_time, 'HH24:MI')     AS event_time,
+             t.due_tz AS event_tz,
              t.description AS content,
              t.status, t.priority,
              ut.name AS created_by_name,

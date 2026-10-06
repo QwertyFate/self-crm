@@ -15,6 +15,8 @@
    VALID_TYPES is the whitelist: text, email, phone, number, dropdown, date,
    url. Adding a type here makes it available on contacts, deals, tasks and
    listings at once; the client side is renderFieldInput() in public/js/modals.js.
+   It is exported because routes/admin-provision.js validates the fields an
+   admin seeds a new workspace with against the same list.
 
    `table` is interpolated into the SQL. That is safe ONLY because the four
    callers pass hardcoded literals — never let a request-supplied value reach
@@ -101,4 +103,4 @@ function createFieldRouter(tableName) {
   return router;
 }
 
-module.exports = { createFieldRouter };
+module.exports = { createFieldRouter, VALID_TYPES };

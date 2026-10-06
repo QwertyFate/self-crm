@@ -39,7 +39,7 @@
      kanban       renderTasksKanban, taskKanbanCard, toggleKanbanSubtasks
      drag & drop  taskDragStart, taskDragEnd, taskDragOver, taskDragLeave,
                   taskDrop  (drop = PATCH /api/tasks/:id/status)
-     dates        taskDueAt, taskIsOverdue, taskDueLabel
+     dates        taskDueShown, taskDueAt, taskIsOverdue, taskDueLabel
      actions      toggleTaskDone, deleteTask, getActiveTaskStatuses
 
    The task form and the task drawer are in detail-views.js (openTaskForm,
@@ -331,25 +331,38 @@ function buildSubtaskMap(list) {
   return map;
 }
 
-// A task's due moment. A timed task is due at that time; a whole-day task at the end of its
-// day, which is why one due today is not late until midnight. Built from the local date parts
-// on purpose: new Date('2026-10-05') is UTC midnight, which called a task due today overdue
-// from 08:00 local in this timezone.
+// A task's due date and time on the VIEWER's clock. The stored values are the
+// wall-clock the entering member typed plus their zone (due_tz; a row without
+// one is read as the default zone) — so another member in another zone sees it
+// at the moment that was meant, not the same digits. All-day: date only.
+function taskDueShown(t) {
+  return toViewerClock(String(t?.due_date || '').slice(0, 10), String(t?.due_time || '').slice(0, 5) || null, t?.due_tz);
+}
+// A task's due moment, in the viewer's zone. A timed task is due at that time; a whole-day
+// task at the end of its day, which is why one due today is not late until midnight. Built
+// from date parts on purpose: new Date('2026-10-05') is UTC midnight, which called a task
+// due today overdue from 08:00 local in this timezone.
 function taskDueAt(t) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(t?.due_date || '').slice(0, 10));
+  const s = taskDueShown(t);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.date);
   if (!m) return null;
-  const hm = /^(\d{2}):(\d{2})$/.exec(String(t.due_time || '').slice(0, 5));
+  const hm = /^(\d{2}):(\d{2})$/.exec(s.time || '');
   return hm ? new Date(+m[1], +m[2] - 1, +m[3], +hm[1], +hm[2])
             : new Date(+m[1], +m[2] - 1, +m[3], 23, 59, 59, 999);
 }
-function taskIsOverdue(t, isDone, now = new Date()) {
+// `now` defaults to the user's picked clock (clock.js), the same one the calendar
+// files a task under "Today" with — so the two can never disagree about lateness.
+function taskIsOverdue(t, isDone, now = nowInTimezone(currentTimezone())) {
   const at = taskDueAt(t);
   return !!at && !isDone && at < now;
 }
 function taskDueLabel(t) {
   if (!t?.due_date) return '';
-  const time = String(t.due_time || '').slice(0, 5);
-  return fmtDate(t.due_date) + (time ? ' · ' + time : '');
+  const s = taskDueShown(t);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.date);
+  // fmtDate gets a parts-built Date, never the 'YYYY-MM-DD' string: new Date('2026-10-07')
+  // is UTC midnight and reads as the 6th anywhere west of UTC.
+  return fmtDate(m ? new Date(+m[1], +m[2] - 1, +m[3]) : s.date) + (s.time ? ' · ' + s.time : '');
 }
 
 function taskListRow(t, isSubtask = false, subMap = {}) {

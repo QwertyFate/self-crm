@@ -111,7 +111,9 @@ describe('the reference Calendar screen (Part 30)', () => {
   test('the week view places timed events on an hour grid, with lanes and a now line', () => {
     const w = sliceFn(cal, 'calendarWeekView', 'calendar.js');
     assert.match(w, /cw-head/); assert.match(w, /cw-grid/); assert.match(w, /cw-col/);
-    assert.match(w, /cal-wev/);
+    // the block moved into its own renderer (calWeekEvButton, the week twin of calEvButton)
+    assert.match(w, /calWeekEvButton\(x, h0\)/, 'each timed block is rendered by calWeekEvButton');
+    assert.match(sliceFn(cal, 'calWeekEvButton', 'calendar.js'), /cal-wev/);
     assert.match(w, /cw-now/);
     assert.match(w, /calLanes\(/, 'overlapping events share the column');
     assert.match(w, /allDay/i, 'an activity with no time still has somewhere to go');
@@ -230,7 +232,9 @@ describe('a task can be given a time (Part 32)', () => {
   test('the task create form has a time beside the due date, and sends it', () => {
     const f = sliceFn(dv, 'openTaskForm', 'detail-views.js');
     assert.match(f, /type="time"[^>]*name="due_time"/);
-    assert.match(f, /due_time: d\.due_time \|\| null/);
+    // sent only when the "Set a due date" box is on (an empty date input looks filled in Safari —
+    // tests/client/task-form-due.test.js); the time still goes out as null when blank
+    assert.match(f, /due_time: d\.due_on \? \(d\.due_time \|\| null\) : null/);
   });
   test('the task drawer can set and clear it', () => {
     const d = sliceFn(dv, 'openTaskDrawer', 'detail-views.js');
@@ -239,6 +243,7 @@ describe('a task can be given a time (Part 32)', () => {
   });
   test('and the quick-add on a deal offers it too', () => {
     assert.match(dv, /name="due_time"[^>]*id="dd-task-time"|id="dd-task-time"[^>]*name="due_time"/);
-    assert.match(dv, /due_time: x\.due_time \|\| null/);
+    // the quick-add's own submit, gated on its tick box (a whole-file match would also hit the drawer)
+    assert.match(sliceFn(dv, 'submitTask', 'detail-views.js'), /due_time: x\.due_on \? \(x\.due_time \|\| null\) : null/);
   });
 });

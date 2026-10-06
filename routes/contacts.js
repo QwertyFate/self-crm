@@ -177,9 +177,11 @@ router.get('/:id', async (req, res, next) => {
       SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
              a.completed,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
+             a.deal_id, db.title AS deal_title,
              u.name AS logged_by_name, u.email AS logged_by_email
       FROM activities a
       LEFT JOIN users u ON u.id = a.created_by
+      LEFT JOIN deals db ON db.id = a.deal_id
       WHERE a.contact_id = $1 AND a.workspace_id = $2
       ORDER BY a.created_at DESC
     `, [req.params.id, req.workspaceId]);

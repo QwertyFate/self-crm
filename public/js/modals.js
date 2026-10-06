@@ -117,23 +117,38 @@ function renderDealFieldInput(f, value = '') {
 }
 
 // date/time preset the form for "add on this day", which is how the Calendar adds an entry.
+let activityModalDeals = [];   // the deals offered by the modal's Deal picker, for onActivityDealChange
+
 async function openActivityModal({ date = '', time = '' } = {}) {
   await ensureContacts();
   document.getElementById('activity-form').reset();
   document.getElementById('act-contact').innerHTML = '<option value="">— None —</option>' +
     contacts.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  // The deal the note is about. Choosing one binds the note to it (and fills an empty contact
+  // from it); leaving it empty logs a contact-level note.
+  const dealList = await api.get('/api/deals');
+  activityModalDeals = Array.isArray(dealList) ? dealList : [];
+  document.getElementById('act-deal').innerHTML = '<option value="">— No deal —</option>' +
+    activityModalDeals.map(d => `<option value="${d.id}">${esc(d.title)}${d.contact_name ? ' — ' + esc(d.contact_name) : ''}</option>`).join('');
   document.getElementById('act-date').value = date;
   document.getElementById('act-time').value = time;
   document.getElementById('activity-modal').classList.remove('hidden');
   document.getElementById('act-content')?.focus();
 }
 
+function onActivityDealChange() {
+  const sel = document.getElementById('act-deal'), c = document.getElementById('act-contact');
+  const d = sel.value ? activityModalDeals.find(x => x.id === +sel.value) : null;
+  if (d?.contact_id && !c.value) c.value = d.contact_id;
+}
+
 async function saveActivity(e) {
   e.preventDefault();
   await api.post('/api/activities', {
     contact_id: document.getElementById('act-contact').value || null,
+    deal_id:    document.getElementById('act-deal').value || null,
     type:       document.getElementById('act-type').value,
-    content:    document.getElementById('act-content').value,
+    content:    esc(document.getElementById('act-content').value).replace(/\n/g, '<br>'),   // the same stored shape as the timeline editors
     event_date: document.getElementById('act-date').value || null,
     event_time: document.getElementById('act-time').value || null,
   });

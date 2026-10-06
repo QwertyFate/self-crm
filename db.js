@@ -500,6 +500,26 @@ async function initDb() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS engine_deliveries_ws_created_idx ON engine_deliveries (workspace_id, created_at DESC)`);
 
+  // Marks a workspace created by POST /api/admin/provision, so the admin console
+  // can tell a provisioned tenant from a self-served signup. NULL for every row
+  // that existed before this column — nothing is backfilled, and "unknown" is the
+  // honest answer for those.
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS provisioned_at TIMESTAMPTZ`);
+
+  // The timezone a task's due_time / an activity's event_time was ENTERED in, stamped by the
+  // server from users.timezone (middleware/auth.js → req.userTimezone). due_date/due_time are
+  // naive wall-clock values; with the zone beside them the row is an unambiguous instant and
+  // the client shows it on each viewer's own clock. NULL = written before this column, read
+  // as the default zone (Europe/Berlin) — nothing is backfilled.
+  await pool.query(`ALTER TABLE tasks      ADD COLUMN IF NOT EXISTS due_tz   TEXT`);
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS event_tz TEXT`);
+
+  // The deal a note was composed ON. NULL = a contact-level note (everything written before this
+  // column, and notes logged from the contact page), which still shows on every deal of its
+  // contact; a bound note shows only on its deal. ON DELETE SET NULL: deleting the deal unbinds
+  // the note, it never deletes it.
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS deal_id  INTEGER REFERENCES deals(id) ON DELETE SET NULL`);
+
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');
   if (wsCount === 0 && piCount === 0) {

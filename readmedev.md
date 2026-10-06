@@ -202,8 +202,10 @@ notifications.js     notify()  — fan-out to every other member, respecting not
 storage.js           Supabase Storage upload/delete, bucket "task-attachments"
 
 middleware/
-  auth.js            session → req.userId / req.workspaceId / req.userRole. 25 lines. Read it.
-  field-crud.js      createFieldRouter(table) — ONE router behind all four custom-field tables
+  auth.js            session → req.userId / req.workspaceId / req.userRole / req.userTimezone. Read it.
+  admin-auth.js      requireAdmin — the session.isAdmin gate, shared by the two /api/admin routers
+  field-crud.js      createFieldRouter(table) — ONE router behind all four custom-field tables,
+                     and VALID_TYPES, the custom-field type whitelist
   reorder.js         reorderItems() — transactional position rewrite, used by stage reordering
 
 utils/
@@ -211,12 +213,15 @@ utils/
   features.js        Platform feature flags, stored in platform_settings under key "features"
   mailer.js          SMTP transport; no SMTP_HOST → logs the reset link instead of sending
 
-routes/              24 files, each mounted at /api/<name> in server.js. See §4.
+routes/              25 files, each mounted at /api/<name> in server.js. See §4.
+                     (admin.js and admin-provision.js both mount at /api/admin.)
 
 public/
   index.html         The ENTIRE app shell: every page, every modal, the SVG icon sprite,
                      and the <script> tags whose ORDER is the dependency order.
-  admin.html         The standalone platform admin console (served at /adminconsole)
+  admin.html         The standalone platform admin console (served at /adminconsole).
+                     Two tabs: Platform Defaults and Provisioning. Has its own inline
+                     <script> and its own esc() — it does not load core.js.
   style.css          One stylesheet for everything
   fonts/, images/    inter-latin-wght.woff2, logo.png
   js/                17 files, one global scope, loaded in this order:
@@ -233,7 +238,11 @@ public/
       tasks.js         Tasks page: projects, lists, list/kanban views, due-date helpers
       notifications.js Bell panel, polling, preferences
       calendar.js      Calendar page: month/week/upcoming over /api/calendar
-      clock.js         Top-bar clock + the timezone preference
+      clock.js         Top-bar clock + the timezone preference, and nowInTimezone():
+                       "now" on the user's picked clock — what the calendar's today
+                       and task overdue run on; and toViewerClock() / wallClockInZone() /
+                       instantOf(): a stored time (typed in one member's zone) shown on
+                       another member's clock
       analytics.js     Analytics page: KPI cards, funnel, trends, drag-to-reorder layout
       integrations.js  Integrations page: inbound webhook + Engine settings/deliveries
       chat.js          socket.io client, chat panel and chat page, unread badge
@@ -356,10 +365,109 @@ A **separate** authentication scheme: `POST /login` compares a plaintext `ADMIN_
 | GET / PATCH | `/defaults` | admin | `platform_settings.default_contact_columns` and `default_pipelines` — what every **new** workspace is seeded with |
 | GET / PATCH | `/features` | admin | `platform_settings.features`; currently just `{tourEnabled}` |
 | GET | `/stats` | admin | Global counts: workspaces, users, contacts, deals |
+| POST | `/provision` | admin | **One-shot tenant creation.** [routes/admin-provision.js](routes/admin-provision.js) — see below |
+| GET | `/provision/list` | admin | Every workspace with its owner, counts and webhook URL — what the console's Provisioning tab renders. Carries no passwords or hashes |
 
 Two UIs talk to this: `public/admin.html` (`/me`, `/login`, `/logout`, `/defaults`, `/features`,
-`/stats`) and the in-app `?admin` screen in `public/js/admin-import.js` (`/me`, `/login`,
-`/logout`, `/invites`).
+`/stats`, `/provision`, `/provision/list`) and the in-app `?admin` screen in
+`public/js/admin-import.js` (`/me`, `/login`, `/logout`, `/invites`).
+
+`admin.html` has **two tabs**: "Platform Defaults" (stats, contact columns, pipelines, the tour
+flag) and "Provisioning" (the create form, the one-time credentials panel, and the
+workspace/owner table). `showAdminTab()` toggles them; the provisioning tab loads its list on
+first open. Covered by
+[tests/client/admin-provisioning.test.js](tests/client/admin-provisioning.test.js) — markup,
+`buildProvisionPayload`, and the HTML-escaping of workspace/owner names in the table.
+
+Two routers are mounted at `/api/admin`: [routes/admin.js](routes/admin.js) (everything above) and
+[routes/admin-provision.js](routes/admin-provision.js) (`/provision`). They share the gate,
+[middleware/admin-auth.js](middleware/admin-auth.js).
+
+#### `POST /api/admin/provision` — a ready-to-use tenant in one call
+
+No invite code is involved: the admin secret is the authorisation, so this route creates a
+workspace from nothing. **The minimum request is two fields.**
+
+**It is create-only.** There is no `workspace_id` parameter, and the route issues no `UPDATE` and
+no `DELETE` — it cannot reach an existing workspace, and a stray `workspace_id` in the body is
+ignored. `contact_fields` / `deal_fields` are **seeds for the new workspace**, not an admin editing
+API: once a workspace is live its fields belong to its own members via `/api/fields` and
+`/api/deal-fields` (both `requireAuth`, workspace-scoped). There is deliberately no cross-tenant
+field endpoint for the platform admin.
+
+```jsonc
+{
+  "workspace_name": "Acme Corp",            // required
+  "owner_email":    "maria@acmecorp.com",   // required
+  "owner_name":     "Maria Schmidt",        // optional — defaults to the email local part
+  "contact_fields": [                       // optional → custom_fields
+    { "name": "Lead Source", "type": "dropdown", "options": ["Google Ads", "Referral"] },
+    { "name": "LinkedIn",    "type": "url" }
+  ],
+  "deal_fields": [                          // optional → deal_fields
+    { "name": "Contract Start", "type": "date" },
+    { "name": "Seats", "field_key": "seat_count", "type": "number" }
+  ],
+  "create_deal":    true,                   // optional, default TRUE  (webhook also opens a deal)
+  "webhook_active": true                    // optional, default true
+}
+```
+
+One transaction does all of it: seed the workspace from `platform_settings` (the same defaults
+signup uses), insert the custom fields, create the owner (`users` + `user_workspaces`, role
+`owner`), and create the `workspace_webhook` row with its key, a `field_map` that already covers
+the custom contact fields, the owner as `default_assignee_id`, and the first pipeline + first
+stage when `create_deal` is on.
+
+`field_key` is slugged from `name` when not given (`"Lead Source"` → `lead_source`); `type`
+defaults to `text` and is checked against `VALID_TYPES` in
+[middleware/field-crud.js](middleware/field-crud.js), so these rows are identical to what
+`POST /api/fields` would have written. A `dropdown` must carry `options`. A contact `field_key`
+that collides with a built-in column (`email`, `company`, …) is a **400** — the webhook's
+`field_map` cannot hold two meanings for one key.
+
+**The owner's password.** One credential and nothing else: `owner.password`, 16 characters in
+four readable groups (`myUe-knsn-pUKE-tRvm`) drawn from a 56-character alphabet with the
+look-alikes removed — ~93 bits. It appears **once**, in this response; nothing is emailed and only
+the bcrypt hash is stored, so copy it before closing the response. The owner signs in at
+`login_url` with `owner_email` + that password.
+
+An email that **already has an account** reuses that account's name and `password_hash` and is
+issued **no** password (`owner.existing_account: true`). Since they now have two workspaces,
+`POST /api/auth/login` answers `needs_workspace_picker: true` and the client finishes through
+`POST /api/auth/select-workspace`.
+
+Generating a *fresh* password for a second workspace would split the hashes across that email's
+rows, which is why `existing_account` issues nothing at all.
+
+**There is no set-password token**, by choice rather than by necessity. An earlier version minted a
+`password_resets` row and returned a `?reset=` link. It was unsafe at the time — `reset-password`
+re-hashed a single `users` row while `login` reads `WHERE email = $1` with no `ORDER BY`, so a
+two-workspace owner ended up with one row on each hash. **That is fixed**: the reset now covers
+every row of the email (see §8), so a link here would be correct again if you want one. It stays
+out because one credential beats two.
+
+⚠ The app still has **no change-password screen**, so `forgot-password` → `reset-password` remains
+the only way the owner can replace a password the admin has seen. That path is correct now, but it
+is a reset (it emails a link, or logs it when SMTP is unset), not a change.
+
+**The response** is the tenant plus an `integration` block generated from the rows just written —
+`webhook_url` with the real key, `field_map`, `sample_payload` keyed by the incoming keys,
+`sample_curl` (shell-quoted and runnable), `success_response`, `error_responses`, `rate_limits`
+and `notes`. Hand that block to the customer as-is.
+
+A provisioned workspace is stamped with `workspaces.provisioned_at` (a nullable column added at
+the end of `initDb()`), which is how `/provision/list` and the console tell a provisioned tenant
+from a self-served signup. Nothing is backfilled, so workspaces that predate the column read as
+"unknown" rather than being guessed at.
+
+⚠ The inbound webhook maps **contact** fields only. `deal_fields` are created for the board and
+the deal modal, but `POST /api/integrations/receive/:key` inserts a deal with a title, pipeline
+and stage and no `custom_data` — `integration.notes` says so in the response.
+
+Tested by [tests/routes/admin-provision.test.js](tests/routes/admin-provision.test.js) (18 cases:
+the gate, the full happy path, custom fields, an existing owner, `create_deal:false`, the
+mid-transaction rollback, and twelve rejected bodies).
 
 ### `/api/platform`
 
@@ -395,6 +503,33 @@ All four are the *same* router, produced by `createFieldRouter(table)` in
 
 ### `/api/activities` and `/api/activity-comments`
 
+**Timezone.** `POST` stamps `event_tz` from `req.userTimezone`; `PATCH` re-stamps it only when a
+date or time was actually sent (a bare `completed` tick must not relabel a time it did not touch —
+that is the `event_tz = CASE WHEN $10 THEN $11 ELSE event_tz END`). The Calendar converts it for
+each viewer. Only the Calendar and the activity form consume `event_date`/`event_time` — the
+Activities page and the contact detail never render them — so the `GET` statements here were
+deliberately left alone. NULL `event_tz` is read as `Europe/Berlin`.
+
+**A note can be bound to one deal** (`activities.deal_id`, nullable, `ON DELETE SET NULL`). A note
+composed on the deal detail — or with the modal's Deal picker — is bound to that deal; one logged
+from the contact page is a *contact-level* note (`NULL`). `POST` verifies the deal is in this
+workspace and, given a deal but no contact, takes the deal's contact.
+
+**Two optional, independent filters on `GET /`.** `?deal_id=N` is *"this deal's notes"*: the notes
+bound to N **plus** the contact-level notes (`NULL` deal) of N's contact — a note about the person
+belongs with every deal of theirs; the only notes it hides are those bound to the contact's *other*
+deals. `?contact_id=N` is everything on that contact, whichever deal (or none) each note was logged
+on. The **deal detail shows the contact's whole history by default** — "all together", each row
+labelled with the deal it was logged on — and its "This deal only" chip switches to the deal filter;
+the Activities page's Deal chip is the same filter. A deal with no contact can only have bound
+notes, so the deal detail always uses `?deal_id=` for it. A non-numeric filter is a `400`.
+
+For display every row carries `bound_deal_id`, plus `deal_id`/`deal_title` that **prefer the bound
+deal and fall back to the derived one** — the contact's most recently updated deal, the identical
+`LEFT JOIN LATERAL` the calendar uses, so the Activities page and the calendar detail agree.
+`GET /api/contacts/:id` returns `deal_id`/`deal_title` on each activity so the contact timeline can
+badge bound notes. `tests/routes/activity-deal.test.js`, `tests/routes/activities-links.test.js`.
+
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/activities` | Newest 200 for the workspace, with contact and author names |
@@ -412,13 +547,19 @@ All four are the *same* router, produced by `createFieldRouter(table)` in
 
 ### `/api/calendar`
 
+**Every row carries `event_tz`** (`a.event_tz` / `t.due_tz`, at the same position in both halves
+of the `UNION` — Postgres requires it). The client converts to the viewer's zone in
+`calNormalize()` before anything renders, and because the server filters on the *stored* date
+while a conversion can move a row by up to two days, the Calendar fetches its windows padded by
+two days each side and lets `calOnDay()` (reading the converted date) decide what is on screen.
+
 Read-only. Each row carries `kind` (`'activity'` \| `'task'`) because an activity and a task can
 share an id.
 
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/?start=YYYY-MM-DD&end=YYYY-MM-DD` | 400 without both. `UNION ALL` of activities with an `event_date` and tasks with a `due_date`; times come back as `HH:MI`, `NULL` meaning all-day |
-| GET | `/today` | The same union pinned to `CURRENT_DATE` |
+| GET | `/today` | The same union pinned to `CURRENT_DATE`. ⚠ **Uncalled** — nothing in `public/js` or on the server requests it — and `CURRENT_DATE` is the *database server's* clock, not the user's picked timezone. The Calendar page gets "today" from the client (`calToday()`, see §8) and fetches `GET /?start=&end=` over its own 8-day window instead. If this ever gains a caller, compute the date in `users.timezone` or take a `?date=` from the client |
 
 ### `/api/invites` — workspace invite codes
 
@@ -432,7 +573,7 @@ share an id.
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| POST | `/` | member | Create another workspace with a platform invite. ⚠️ Writes the literal `password_hash = 'placeholder'` for the new `users` row. **This is the route the UI's "+ Add workspace → Create" calls**; the correct twin `POST /api/auth/create-workspace`, which copies the real hash, has no caller. See [§8](#8-first-ticket-starter-guide) |
+| POST | `/` | member | Create another workspace with a platform invite. Copies the creator's real `password_hash` into the new `users` row — one email, one password, a row per workspace. **This is the route the UI's "+ Add workspace → Create" calls**; the equivalent twin `POST /api/auth/create-workspace` has no caller. It used to write the literal `'placeholder'` here; see [§8](#8-first-ticket-starter-guide) |
 | GET | `/members` | member | `users` rows of this workspace |
 | DELETE | `/members/:id` | **owner** | Not yourself, not the owner; nulls their contact assignments first |
 | PATCH | `/members/:id/role` | **owner** | `{role:'member'\|'admin'}`; updates `users.role` **and** `user_workspaces.role` in one transaction |
@@ -488,12 +629,20 @@ share an id.
 
 ### `/api/tasks` (+ attachments)
 
+**Timezone.** `due_date`/`due_time` are stored exactly as typed, and `POST` / `PUT` stamp
+`due_tz` — the zone the saving member was in — from `req.userTimezone` (`middleware/auth.js`
+reads `users.timezone`), never from the body. The client shows every row on the viewer's own
+clock (`taskDueShown()` → `toViewerClock()` in `public/js/clock.js`), so a Berlin member's 19:30 is
+a Manila member's 01:30 next day and overdue is judged on the same instant by everyone. A NULL
+`due_tz` predates the column and is read as `Europe/Berlin`. All-day tasks are dates and are not
+converted. `tests/routes/timezone-stamp.test.js`, `tests/client/timezone-conversion.test.js`.
+
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/?list_id=` | Adds `subtask_count` / `subtask_done`, deal + contact titles, and `due_time` as `HH:MI` |
 | GET | `/:id` | Plus `subtasks[]` |
 | POST | `/` | `deal_id` / `contact_id` are verified against this workspace before insert. Subtasks (`parent_id`) do **not** notify |
-| PUT | `/:id` | Full update (note the deliberate `$14` at the end — `due_time` was appended later) |
+| PUT | `/:id` | Full update (note the deliberate `$14` and `$15` at the end — `due_time` and then `due_tz` were appended later). Re-stamps `due_tz` with the editor's zone, which is the zone the edited time now means |
 | PATCH | `/:id/status` | What kanban drag & drop calls |
 | DELETE | `/:id` | Subtasks cascade |
 | GET | `/:taskId/attachments` | |
@@ -896,20 +1045,57 @@ Then pick one page and follow it end to end. Deals is the richest:
 **Worth a design conversation first:**
 - The member-level role gap on `/api/integrations/settings` (any member can rotate the inbound
   webhook key). Mirror `requireManage` from `routes/engine.js` — but agree the policy first.
-- **The `password_hash = 'placeholder'` row.** `POST /api/workspace` — the route the UI's
-  "+ Add workspace → Create" actually calls — inserts the literal string `'placeholder'` as the
-  new `users` row's hash, while its unused twin `POST /api/auth/create-workspace` copies the
-  real hash. Nobody can log in *with* that row (`bcrypt.compareSync(x, 'placeholder')` is always
-  `false`), so it is not a weak password but an unusable one. The risk is **account lockout**:
-  `POST /api/auth/login` does `SELECT * FROM users WHERE email = $1` with no `ORDER BY` and no
-  `LIMIT`, then checks the password against whichever row came back first — so someone with a
-  placeholder row among their `users` rows can be refused their own correct password depending
-  on heap order. Proved with the route harness: same data, same password, placeholder row first
-  → `401`; real row first → `200`. Small fix: copy `password_hash` in `routes/workspace.js` the
-  way `routes/auth.js` already does, plus an `UPDATE`-from-the-good-row repair for existing
-  data. Real fix: stop duplicating credentials across `users` rows — that touches signup.
 - `PATCH /api/pipelines/deal-kanban-fields` has no caller; `workspaces.deal_kanban_fields` is
   read by the Deals board but never written. Either wire a Settings control to it or remove it.
+
+### Fixed — kept here because the reasoning is load-bearing
+
+- **`reset-password` re-hashes the whole email, not one row** (2026-10-05).
+  [routes/auth.js](routes/auth.js) used to run `UPDATE users SET password_hash=$1 WHERE id=$2`,
+  changing the password of exactly ONE of a user's rows. With login's unordered
+  `WHERE email = $1`, their new password then worked or failed depending on heap order — and since
+  there is no change-password screen, `forgot-password` → `reset-password` is the only way any
+  password changes, so every multi-workspace user hit it the first time they used it. It now runs:
+
+  ```sql
+  UPDATE users SET password_hash=$1 WHERE email=(SELECT email FROM users WHERE id=$2)
+  ```
+
+  which matches the "one email, one password, a row per workspace" invariant that
+  `POST /api/auth/create-workspace` already relies on by cloning the hash, and repairs
+  `'placeholder'` rows as a side effect. [tests/routes/reset-password-all-rows.test.js](tests/routes/reset-password-all-rows.test.js)
+  locks it in: five cases, two of which fail against the old one-row statement. **Do not narrow
+  this back to `WHERE id`** — that is the bug, not a tightening.
+
+- **The `password_hash = 'placeholder'` row** (2026-10-05). `POST /api/workspace` — the route the
+  UI's "+ Add workspace → Create" actually calls — used to insert the literal string
+  `'placeholder'` as the new `users` row's hash, while its uncalled twin
+  `POST /api/auth/create-workspace` copied the real one. Nobody could log in *with* that row
+  (`bcrypt.compareSync(x, 'placeholder')` is always `false`), so it was not a weak password but an
+  unusable one, and the risk was **account lockout**: `POST /api/auth/login` reads
+  `SELECT * FROM users WHERE email = $1` with no `ORDER BY` and no `LIMIT`, then checks the
+  password against whichever row came back first, so one placeholder row among a user's rows could
+  refuse them their own correct password depending on heap order. It now copies
+  `currentUser.password_hash`, and [tests/routes/workspace-password-hash.test.js](tests/routes/workspace-password-hash.test.js)
+  asserts both that the stored hash is the real one and that `bcrypt.compareSync` against it
+  succeeds — two cases that fail against the old `'placeholder'` literal.
+
+  ⚠ **Rows written before this fix are still in the database.** They are repaired the first time
+  that user runs a password reset (the email-wide `UPDATE` above), but not before. To repair them
+  all at once:
+
+  ```sql
+  UPDATE users u SET password_hash = g.password_hash
+  FROM (SELECT DISTINCT ON (email) email, password_hash
+          FROM users WHERE password_hash <> 'placeholder'
+         ORDER BY email, id ASC) g
+  WHERE u.password_hash = 'placeholder' AND u.email = g.email;
+  -- then: SELECT COUNT(*) FROM users WHERE password_hash = 'placeholder';
+  -- any remainder is an email with no good row — those users must reset.
+  ```
+
+  This has NOT been run and is not wired into `initDb()`; it rewrites credential data, so it is a
+  deliberate operator action.
 
 ### Known-dead things — do not "fix" them
 
@@ -928,6 +1114,12 @@ Then pick one page and follow it end to end. Deals is the richest:
 | Trap | What to do instead |
 |---|---|
 | `new Date('2026-10-05')` | UTC midnight → off-by-a-day in any timezone east of London. Build from local parts; see `taskDueAt()` in `public/js/tasks.js` |
+| Reading a `DATE` column via `SELECT t.*` | The server-side twin of the row above, and it **has** bitten: node-pg returns a `DATE` as a JS `Date` at *local* midnight, and `res.json` emits it in UTC — one day early on any server east of UTC. Read every `DATE` as `TO_CHAR(col, 'YYYY-MM-DD')`. The calendar route did; `routes/tasks.js` didn't, so a task opened *from* the calendar showed one day less than the calendar. Only two `DATE` columns exist (`tasks.due_date`, `activities.event_date`) and both are now wrapped everywhere. Guard: `tests/routes/task-date-serialisation.test.js` |
+| `new Date()` for "today" or "now" in `public/js` | That is the **browser's** clock. The user picked a timezone in Settings (`users.timezone`), and at 23:00 Berlin a browser at UTC+8 is already on tomorrow — so "Today" in the calendar's Upcoming card, the highlighted cell, the now-line and task overdue all drifted. Use `nowInTimezone(currentTimezone())` from `clock.js`; `calToday()` and `taskIsOverdue()`'s default already do. Stored dates and times are naive wall-clock values — convert nothing on save. Guard: `tests/client/calendar-timezone.test.js` |
+| Showing a stored `due_time`/`event_time` as-is | That digit string was typed in **someone's** zone — `due_tz`/`event_tz` says whose. Shown raw, a Berlin member's 19:30 is a Manila member's 19:30 (six hours early), lands on the wrong day at the boundary and reads as overdue before it is due. Always go through `toViewerClock()` (or `taskDueShown()` / `dvDue()`), and bind `req.userTimezone || 'Europe/Berlin'` on every write. All-day values are dates: never convert them. Guard: `tests/client/timezone-conversion.test.js`, `tests/routes/timezone-stamp.test.js` |
+| An empty `<input type="date">` that "looks filled" | Safari and the macOS picker paint an *empty* date input as today's date in grey. A user sees today, submits, and the value is `''` — the task saved with **no due date**, and only re-picking today made it stick. Never trust what a date input appears to show: gate the value on an explicit control (the create forms' "Set a due date" tick box, `due_on`, off by default) and **prefill real values** when it is switched on (`dvDefaultDue()`: today on the viewer's clock, +3 h, next quarter hour). Guard: `tests/client/task-form-due.test.js` |
+| The `hidden` **attribute** on an element with a `display` rule | The browser's own `[hidden] { display: none }` is a UA rule; **any** author `display` — `.field-row { display: grid }` — beats it, so `el.hidden = true` did nothing and a "hidden" date row stayed visible and usable. Hide with the `.hidden` **class** (`display: none !important`, the house convention), and note `style.css` now ends with a global `[hidden] { display: none !important }` so the attribute cannot lose this way again. Static source tests cannot see the cascade — this one reached the user. Guard: `tests/client/task-form-due.test.js` |
+| Rendering a stored activity note with `esc(a.content)` — or by *trusting* it | Notes are stored as **escaped text with `<br>`** (all four writers now; the modal used to store raw text, and the server stores whatever it is sent). `esc()` again shows `<br>` and `&amp;` literally (the Activities page bug). Trusting a string "because it contains a tag" is an XSS — a raw `<img onerror>` satisfies that test. Render every note with `dvActHtml()`: plain text first (`dvActText`), **then** `esc`, then newline → `<br>`. Search and CSV export read `dvActText` too. Guard: `tests/client/activities-notes.test.js` |
 | Adding a column and not restarting | `initDb()` only runs at boot. Restart, then retest |
 | Adding a `public/js` global | Add it to `resetClientState()` in `public/js/auth.js` or it leaks across logins in the same tab |
 | Renaming a `public/js` function | `sliceFn()` fails loudly in the client tests. That is the feature; update the test |

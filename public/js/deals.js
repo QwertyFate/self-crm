@@ -392,17 +392,22 @@ function renderDealsBoard() {
   }).join('');
 }
 
+// Every SET urgency (1–4) is marked on the card — stripe + badge — so the board
+// shows what to take care of first; only 0 "No urgency" is unmarked. This used
+// to gate on u >= 3, which hid Low and Medium and made them look like "none".
+// The badge is urgencyBadge(u), the same call the list view makes (it returns
+// '' for 0 itself). Pinned by tests/client/deals-urgency-visibility.test.js.
 function dealCard(d) {
   const u = parseInt(d.urgency, 10) || 0, m = urgencyMeta(u);
   const who = d.contact_name ? esc(d.contact_name) + (d.contact_company ? ', ' + esc(d.contact_company) : '') : esc(t('no_contact'));
   return `<div class="dcard" draggable="true" tabindex="0" role="button" data-id="${d.id}" aria-label="${esc(d.title)}, ${fmtEUR(d.value)}"
       ondragstart="dealDragStart(event,${d.id})" ondragend="dealDragEnd(event)" onclick="openDealModal(${d.id})"
       onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openDealModal(${d.id});}">
-    ${u >= 3 ? `<span class="urg urg-${u}" title="${esc(urgencyLabel(m))}"></span>` : ''}
+    ${u > 0 ? `<span class="urg urg-${u}" title="${esc(urgencyLabel(m))}"></span>` : ''}
     <button class="iconbtn kebab" type="button" onclick="event.stopPropagation();openDealKebab(this,${d.id})" aria-label="${esc(t('open_deal'))}: ${esc(d.title)}">${icon('ellipsis')}</button>
     <div class="dcard-title" style="padding-right:22px">${esc(d.title)}</div>
     <div class="dcard-meta truncate">${who}</div>
-    <div class="dcard-foot"><span class="dcard-value">${d.value != null ? fmtEUR(d.value) : '<span class="muted">—</span>'}</span>${u >= 3 ? urgencyBadge(u) : ''}<span style="margin-left:auto">${avatar(d.assigned_to_name, 'sm')}</span></div>
+    <div class="dcard-foot"><span class="dcard-value">${d.value != null ? fmtEUR(d.value) : '<span class="muted">—</span>'}</span>${urgencyBadge(u)}<span style="margin-left:auto">${avatar(d.assigned_to_name, 'sm')}</span></div>
     <div class="dcard-sub"><span class="row" style="gap:5px" title="${esc(t('created_lbl'))}">${icon('calendar')}${fmtDateShort(d.created_at)}</span><span class="row" style="gap:5px" title="${esc(t('updated_lbl'))}">${icon('clock')}${agoDays(d.updated_at || d.created_at)}</span></div>
   </div>`;
 }

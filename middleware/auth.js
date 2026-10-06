@@ -9,10 +9,13 @@
         the membership is re-read from the database every single time, never
         trusted from the cookie, so removing someone logs them out instantly;
      3. destroys the session and 401s when that membership is gone;
-     4. sets the three values the rest of the app runs on:
+     4. sets the four values the rest of the app runs on:
           req.userId       who is asking
           req.workspaceId  THE TENANT BOUNDARY — every query must filter on it
           req.userRole     'owner' | 'admin' | 'member', for role checks
+          req.userTimezone users.timezone, what a due/event time this user
+                           types is stamped with (routes/tasks.js, activities.js).
+                           Never undefined: the default zone when none is set.
 
    THE RULE  a route never takes a workspace id from the client. Not from the
    body, not from the query string, not from a path parameter. If you find
@@ -31,8 +34,9 @@ module.exports = async function requireAuth(req, res, next) {
     if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const { rows: [membership] } = await pool.query(
-      `SELECT uw.role, uw.workspace_id
+      `SELECT uw.role, uw.workspace_id, u.timezone
        FROM user_workspaces uw
+       JOIN users u ON u.id = uw.user_id
        WHERE uw.user_id = $1 AND uw.workspace_id = $2`,
       [req.session.userId, req.session.workspaceId]
     );
@@ -45,6 +49,7 @@ module.exports = async function requireAuth(req, res, next) {
     req.userId      = req.session.userId;
     req.workspaceId = membership.workspace_id;
     req.userRole    = membership.role;
+    req.userTimezone = membership.timezone || 'Europe/Berlin';
     next();
   } catch (e) {
     next(e);

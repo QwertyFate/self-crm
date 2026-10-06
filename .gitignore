@@ -25,3 +25,21 @@ crm.db-wal
 
 # obsolete-code cleanup log (2026-10-05)
 OBSOLETE_CLEANUP_CHANGES.md
+
+# admin tenant-provisioning log (2026-10-05)
+ADMIN_PROVISION_CHANGES.md
+
+# admin-facing provisioning guide, handed to admins directly (2026-10-05)
+ADMIN_PROVISIONING_GUIDE.md
+
+# task due-date serialisation fix log (2026-10-06)
+TASK_DATE_CHANGES.md
+
+# deal board urgency-visibility fix log (2026-10-06)
+DEALS_BOARD_CHANGES.md
+
+# calendar / timezone fix log (2026-10-06)
+CALENDAR_TIMEZONE_CHANGES.md
+
+# activity notes rendering fix log (2026-10-06)
+ACTIVITY_NOTES_CHANGES.md

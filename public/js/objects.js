@@ -522,11 +522,18 @@ async function saveMiroUrl() {
 }
 
 // Toolbar/feed state for the Activities page: search, type, and who logged it.
-let activitiesUI = { q: '', type: null, by: null };
+let activitiesUI = { q: '', type: null, by: null, deal: null };
+let activityDeals = [];   // deals that have notes, captured from an unfiltered load — the Deal chip's options
 
 async function loadActivities() {
   await ensureMembers();
-  activities = await api.get('/api/activities');
+  // The Deal filter is applied by the SERVER (?deal_id=): "bound to the deal, or a contact-level
+  // note on its contact" is one SQL rule, not a second copy here. Type, person and search stay local.
+  activities = await api.get(activitiesUI.deal ? `/api/activities?deal_id=${activitiesUI.deal}` : '/api/activities');
+  if (!Array.isArray(activities)) activities = [];
+  // Options are the deals that actually have notes BOUND to them (bound_deal_id) — not deal_id, which
+  // for an unbound note is the derived fallback and would be an option that matches nothing.
+  if (!activitiesUI.deal) activityDeals = [...new Map(activities.filter(a => a.bound_deal_id).map(a => [a.bound_deal_id, { id: a.bound_deal_id, title: a.deal_title || 'Deal' }])).values()];
   renderActivities();
 }
 
@@ -535,7 +542,7 @@ function visibleActivities() {
   return activities.filter(a => {
     if (activitiesUI.type && a.type !== activitiesUI.type) return false;
     if (activitiesUI.by != null && a.created_by !== activitiesUI.by) return false;
-    if (q && !`${a.content || ''} ${a.contact_name || ''}`.toLowerCase().includes(q)) return false;
+    if (q && !`${dvActText(a.content)} ${a.contact_name || ''} ${a.deal_title || ''}`.toLowerCase().includes(q)) return false;   // search the visible text (not stored <br>/entities), the contact and the deal
     return true;
   });
 }
@@ -555,21 +562,22 @@ function renderActivitiesToolbar() {
   if (!el) return;
   const active = document.activeElement && document.activeElement.id === 'activities-q';
   const types = [...new Set(activities.map(a => a.type))];
-  const any = activitiesUI.q || activitiesUI.type || activitiesUI.by != null;
+  const any = activitiesUI.q || activitiesUI.type || activitiesUI.by != null || activitiesUI.deal != null;
   el.innerHTML = `<div class="input-group" style="width:260px">${icon('search')}<input class="input" id="activities-q" type="search" placeholder="${esc(t('search_activities'))}" value="${esc(activitiesUI.q)}" aria-label="${esc(t('search_activities'))}" oninput="onActivitiesSearch(this.value)"></div>
-    ${activitiesChip('type', types)}${activitiesChip('by', members)}
+    ${activitiesChip('type', types)}${activitiesChip('by', members)}${activitiesChip('deal', activityDeals)}
     ${any ? `<button class="btn btn-ghost btn-sm" type="button" onclick="clearActivitiesFilters()">${esc(t('clear_filters'))}</button>` : ''}`;
   if (active) { const q = document.getElementById('activities-q'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
 }
 function activitiesChip(key, opts) {
   const v = activitiesUI[key], on = v != null && v !== '';
-  const txt = on ? (key === 'type' ? t('act_' + v) : (members.find(m => m.id === v)?.name || '')) : '';
+  const txt = on ? (key === 'type' ? t('act_' + v) : key === 'deal' ? (activityDeals.find(d => d.id === v)?.title || '') : (members.find(m => m.id === v)?.name || '')) : '';
   return `<button class="chip ${on ? 'on' : ''}" type="button" onclick="openActivitiesChip(this,'${key}')" aria-haspopup="menu">${esc(t('chip_' + (key === 'by' ? 'person' : key)))}${on ? ': ' + esc(txt) : ''}${icon('chevron-down', 'ic-sm')}</button>`;
 }
 function openActivitiesChip(anchor, key) {
   const opts = key === 'type' ? [...new Set(activities.map(a => a.type))].map(v => ({ value: v, label: t('act_' + v) }))
+    : key === 'deal' ? activityDeals.map(d => ({ value: d.id, label: d.title }))
     : members.map(m => ({ value: m.id, label: m.name }));
-  ui.select(anchor, [{ value: null, label: t('filter_all') }, ...opts], activitiesUI[key], v => { activitiesUI[key] = v; renderActivities(); });
+  ui.select(anchor, [{ value: null, label: t('filter_all') }, ...opts], activitiesUI[key], v => { activitiesUI[key] = v; if (key === 'deal') loadActivities(); else renderActivities(); });
 }
 let activitiesSearchTimer = null;
 function onActivitiesSearch(value) {
@@ -577,7 +585,7 @@ function onActivitiesSearch(value) {
   clearTimeout(activitiesSearchTimer);
   activitiesSearchTimer = setTimeout(() => { renderActivitiesToolbar(); renderActivitiesFeed(); }, 120);
 }
-function clearActivitiesFilters() { activitiesUI = { q: '', type: null, by: null }; renderActivities(); }
+function clearActivitiesFilters() { const refetch = activitiesUI.deal != null; activitiesUI = { q: '', type: null, by: null, deal: null }; if (refetch) loadActivities(); else renderActivities(); }
 
 function renderActivitiesFeed() {
   const el = document.getElementById('activities-list');
@@ -589,9 +597,9 @@ function renderActivitiesFeed() {
     <div class="activity-item">
       <div class="act-icon ${a.type}">${icon(a.type)}</div>
       <div class="act-body">
-        <div class="act-meta"><strong>${t('act_' + a.type)}</strong>${a.contact_name ? ` · ${esc(a.contact_name)}` : ''} · ${fmtDate(a.created_at)}</div>
+        <div class="act-meta"><strong>${t('act_' + a.type)}</strong>${a.contact_id ? ` · <a href="#" class="act-link" onclick="event.preventDefault();openContactDetail(${a.contact_id})">${esc(a.contact_name || 'Contact')}</a>` : a.contact_name ? ` · ${esc(a.contact_name)}` : ''}${a.deal_id ? ` · <a href="#" class="act-link" onclick="event.preventDefault();openDealDetail(${a.deal_id})">${esc(a.deal_title || 'Deal')}</a>` : ''} · ${fmtDate(a.created_at)}</div>
         ${a.logged_by_name ? `<div class="act-logged-by">${t('logged_by')} ${esc(a.logged_by_name)} · <span class="act-logged-email">${esc(a.logged_by_email||'')}</span></div>` : ''}
-        <div class="act-content">${esc(a.content)}</div>
+        <div class="act-content">${dvActHtml(a.content)}</div>
       </div>
       <button class="iconbtn" onclick="openActivityKebab(this,${a.id})" aria-label="Actions" aria-haspopup="menu">${icon('ellipsis')}</button>
     </div>`).join('');
@@ -606,7 +614,7 @@ function exportActivitiesCsv() {
   const rows = visibleActivities();
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const head = ['Type', 'Contact', 'Logged by', 'Date', 'Content'];
-  const lines = rows.map(a => [t('act_' + a.type), a.contact_name || '', a.logged_by_name || '', a.created_at ? new Date(a.created_at).toISOString().slice(0, 10) : '', a.content || ''].map(q).join(','));
+  const lines = rows.map(a => [t('act_' + a.type), a.contact_name || '', a.logged_by_name || '', a.created_at ? new Date(a.created_at).toISOString().slice(0, 10) : '', dvActText(a.content)].map(q).join(','));
   const csv = [head.map(q).join(','), ...lines].join('\n');
   const link = document.createElement('a');
   link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }));

@@ -3,24 +3,31 @@
 
    A COMPLETELY SEPATE AUTH SCHEME from the rest of the app: no session user,
    no workspace, no role. POST /login compares a plaintext ADMIN_SECRET from
-   the environment and sets req.session.isAdmin; requireAdmin() below gates
-   everything else on that flag. With ADMIN_SECRET unset every login returns
+   the environment and sets req.session.isAdmin; requireAdmin (imported from
+   middleware/admin-auth.js) gates everything else on that flag. With ADMIN_SECRET unset every login returns
    503, which is the intended "feature off" state.
 
    Because it is cross-tenant by design, nothing here filters by workspace —
    that is correct for this file and wrong everywhere else.
 
    WHAT IT CONTROLS
-     /invites    platform invite codes: the only way a new workspace can be
-                 created. Mint, list, revoke (while unused).
+     /invites    platform invite codes: how someone creates their OWN workspace
+                 through signup. Mint, list, revoke (while unused). Since
+                 /provision exists this is no longer the only way a workspace
+                 can come into being — that route makes one directly.
      /defaults   platform_settings.default_contact_columns and
                  .default_pipelines — what EVERY new workspace is seeded with.
                  Changing them affects future workspaces only.
      /features   platform_settings.features, e.g. { tourEnabled }.
      /stats      global counts.
+   One-shot tenant provisioning (/provision) is the OTHER router mounted at
+   /api/admin — routes/admin-provision.js. requireAdmin is shared from
+   middleware/admin-auth.js so both files gate on the same flag.
 
-   TWO CLIENTS: public/admin.html at /adminconsole (defaults, features, stats)
-   and the cut-down ?admin screen inside index.html (invites only).
+   TWO CLIENTS: public/admin.html at /adminconsole — two tabs, "Platform
+   Defaults" (defaults, features, stats) and "Provisioning" (the /provision form
+   plus the workspace/owner table from /provision/list) — and the cut-down
+   ?admin screen inside index.html (invites only).
 
    ⚠ /login has no rate limiter and compares with !== rather than a constant
      time comparison. One guessable secret is the whole boundary here.
@@ -31,11 +38,7 @@ const router   = express.Router();
 const crypto   = require('crypto');
 const { pool } = require('../db');
 const { readFeatures, writeFeatures } = require('../utils/features');
-
-function requireAdmin(req, res, next) {
-  if (!req.session?.isAdmin) return res.status(401).json({ error: 'Admin access required' });
-  next();
-}
+const requireAdmin = require('../middleware/admin-auth');
 
 router.get('/me', (req, res) => {
   res.json({ isAdmin: !!req.session?.isAdmin });

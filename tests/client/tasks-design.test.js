@@ -78,8 +78,15 @@ describe('tasks.js: sidebar, list and board renderers use sprite icons, not emoj
 describe("a task's due time on the task list (Part 33)", () => {
   const t = read('public/js/tasks.js');
   const dv = read('public/js/detail-views.js');
-  const sandbox = () => loadFns('public/js/tasks.js', ['taskDueAt', 'taskIsOverdue', 'taskDueLabel'], {
-    extra: 'function fmtDate(d) { return "FMT:" + String(d).slice(0, 10); }' });
+  // The real zone helpers from clock.js, with the viewer pinned to the default zone: the
+  // fixture tasks carry no due_tz, so they convert as the identity and the assertions below
+  // are unchanged. fmtDate now receives a parts-built Date for a due date (the UTC-midnight
+  // fix), so the stub formats one.
+  const clockSrc = read('public/js/clock.js');
+  const sandbox = () => loadFns('public/js/tasks.js', ['taskDueShown', 'taskDueAt', 'taskIsOverdue', 'taskDueLabel'], {
+    extra: "const DEFAULT_TIMEZONE = 'Europe/Berlin'; function currentTimezone() { return 'Europe/Berlin'; }\n"
+      + ['pad2', 'nowInTimezone', 'tzOffsetMinutes', 'instantOf', 'wallClockInZone', 'toViewerClock'].map(n => sliceFn(clockSrc, n, 'clock.js')).join('\n')
+      + '\nfunction fmtDate(d) { const x = d instanceof Date ? d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") : String(d).slice(0, 10); return "FMT:" + x; }' });
 
   test('taskDueAt: a timed task is due at that local time, a whole-day one at the end of its day', () => {
     const { taskDueAt } = sandbox();

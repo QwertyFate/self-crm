@@ -28,6 +28,21 @@
    task — which is what toggleCalendarDone() dispatches on. An activity and a
    task can share an id, so entries are keyed by kind+id (calFindEvent).
 
+   "TODAY" IS THE USER'S CLOCK, NOT THE BROWSER'S. calToday() is
+   nowInTimezone(currentTimezone()) (clock.js) — the picked timezone from
+   Settings. Everything derived from now flows through it: the today cell,
+   the Upcoming card's Today/Tomorrow grouping and its 8-day fetch window, the
+   week view's now-line, the detail's Today/Past badge, and the default date
+   for "Add event". The view anchor calViewDate is resolved from it on first
+   render rather than from new Date() at script load. Stored values are naive
+   DATE/TIME, so nothing is converted on save.
+
+   EVERY ROW IS SHOWN ON THE VIEWER'S CLOCK. A row carries event_tz, the zone
+   its time was typed in; calNormalize() converts it to currentTimezone() via
+   toViewerClock() (clock.js) before anything renders, and the two fetches are
+   padded by two days because the server filters on the stored date. All-day
+   rows are dates and are not converted.
+
    FUNCTION MAP
      dates      calPad, calIso, calAddDays, calWeekStart, calMins, calHHMM,
                 calToday, calFmtDay, calDateFromIso, calendarRange,
@@ -37,6 +52,7 @@
                 switchPageCalendar
      render     renderCalendar, renderCalendarBody, calendarMonthView,
                 calendarWeekView, calendarUpcoming, calLanes, calEvButton,
+                calWeekEvButton,
                 renderCalendarToolbar
      filters    visibleCalEvents, calOnDay, calChip, openCalendarChip,
                 clearCalendarFilters
@@ -56,7 +72,7 @@ const CAL_DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const CAL_H0 = 8, CAL_H1 = 19, CAL_HH = 48;   // the grid shows 08:00–20:00 unless events fall outside
 const CAL_SLOT_MIN = 30;                      // no duration column, so a timed entry is a 30-minute block
 
-let calViewDate    = new Date();
+let calViewDate    = null;   // the user's "today", resolved on first render — see renderCalendar()
 let calView        = calViewFromStorage();
 let calEvents      = [];     // the range on screen
 let calUpcoming    = [];     // today and the next 7 days
@@ -75,7 +91,8 @@ function calAddDays(d, n) { return new Date(d.getFullYear(), d.getMonth(), d.get
 function calWeekStart(d) { return calAddDays(d, -((d.getDay() + 6) % 7)); }
 function calMins(t) { const [h, m] = String(t || '').split(':').map(Number); return (h || 0) * 60 + (m || 0); }
 function calHHMM(m) { return `${calPad(Math.floor(m / 60) % 24)}:${calPad(m % 60)}`; }
-function calToday() { return new Date(); }
+// Now, on the clock of the timezone the user picked — NOT the browser's. See the header.
+function calToday() { return nowInTimezone(currentTimezone()); }
 function calFmtDay(dateStr, opts) { return calDateFromIso(dateStr).toLocaleDateString('en-GB', opts); }
 function calDateFromIso(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
@@ -146,7 +163,7 @@ async function setCalendarView(view) {
 function calEvButton(e) {
   const title = calTitleOf(e);
   const who = e.kind === 'task' ? '' : (e.contact_name ? `${e.contact_name}: ` : '');
-  const when = e.event_time ? e.event_time : e.kind === 'task' ? 'due today' : 'all day';
+  const when = e.event_time ? e.event_time : 'all day';
   return `<button class="cal-ev ${e.type}${e.completed ? ' done' : ''}" data-ev="${e.uid}" onclick="event.stopPropagation();openCalendarEntry('${e.uid}')"
     title="${esc(calTypeOf(e.type).label)}: ${esc(who + title)}${e.event_time ? ', ' + esc(e.event_time) : ''}"
     aria-label="${esc(calTypeOf(e.type).label)}: ${esc(who + title)}, ${esc(when)}, ${esc(calFmtDay(e.event_date, { weekday: 'long', day: 'numeric', month: 'long' }))}">${
@@ -201,6 +218,22 @@ function calLanes(list) {
   return out;
 }
 
+// One timed block on the week grid — the week twin of calEvButton. The time is
+// in the visible text, like the month chip: every entry is a nominal 30-minute
+// block (there is no duration column), which is 22px at CAL_HH=48, so a time
+// that rendered only when hgt >= 40 never rendered at all and lived solely in
+// the tooltip. The second line keeps the contact for a tall block.
+function calWeekEvButton(x, h0) {
+  const top = (x.s - h0 * 60) / 60 * CAL_HH;
+  const hgt = Math.max(22, (x.en - x.s) / 60 * CAL_HH - 2);
+  const w = 100 / x.lanes, e = x.ev, title = calTitleOf(e);
+  return `<button class="cal-ev cal-wev ${e.type}${e.completed ? ' done' : ''}${hgt < 40 ? ' tight' : ''}" data-ev="${e.uid}"
+    onclick="event.stopPropagation();openCalendarEntry('${e.uid}')"
+    style="top:${top}px;height:${hgt}px;left:calc(${x.lane * w}% + 2px);width:calc(${w}% - 4px)"
+    title="${esc(title)}, ${esc(e.event_time)}" aria-label="${esc(calTypeOf(e.type).label)}: ${esc(title)}, ${esc(e.event_time)}"><span class="t"><b>${esc(e.event_time)}</b>${esc(title)}</span>${
+    hgt >= 40 && e.contact_name ? `<span class="m">${esc(e.contact_name)}</span>` : ''}</button>`;
+}
+
 function calendarWeekView() {
   const start = calWeekStart(calViewDate), todayIso = calIso(calToday());
   const cols = Array.from({ length: 7 }, (_, i) => {
@@ -229,16 +262,7 @@ function calendarWeekView() {
     <div class="cw-gutter">${Array.from({ length: hours }, (_, i) => `<div class="cw-hr"><span>${calPad(h0 + i)}:00</span></div>`).join('')}</div>
     ${cols.map(c => `<div class="cw-col${c.iso === todayIso ? ' today' : ''}" data-col="${c.iso}" data-h0="${h0}"
       onclick="calendarAddAtTime(event, this)" role="group" aria-label="${esc(calFmtDay(c.iso, { weekday: 'long', day: 'numeric', month: 'long' }))}">
-      ${calLanes(c.timed).map(x => {
-        const top = (x.s - h0 * 60) / 60 * CAL_HH;
-        const hgt = Math.max(22, (x.en - x.s) / 60 * CAL_HH - 2);
-        const w = 100 / x.lanes, e = x.ev, title = calTitleOf(e);
-        return `<button class="cal-ev cal-wev ${e.type}${e.completed ? ' done' : ''}${hgt < 40 ? ' tight' : ''}" data-ev="${e.uid}"
-          onclick="event.stopPropagation();openCalendarEntry('${e.uid}')"
-          style="top:${top}px;height:${hgt}px;left:calc(${x.lane * w}% + 2px);width:calc(${w}% - 4px)"
-          title="${esc(title)}, ${esc(e.event_time)}" aria-label="${esc(calTypeOf(e.type).label)}: ${esc(title)}, ${esc(e.event_time)}"><span class="t">${esc(title)}</span>${
-          hgt >= 40 ? `<span class="m">${esc(e.event_time)}${e.contact_name ? ', ' + esc(e.contact_name) : ''}</span>` : ''}</button>`;
-      }).join('')}
+      ${calLanes(c.timed).map(x => calWeekEvButton(x, h0)).join('')}
       ${c.iso === todayIso && nowMin >= h0 * 60 && nowMin < (h1 + 1) * 60
         ? `<div class="cw-now" style="top:${(nowMin - h0 * 60) / 60 * CAL_HH}px"></div>` : ''}</div>`).join('')}</div></div>`;
 
@@ -259,7 +283,7 @@ function calendarUpcoming() {
       <button class="cal-up-item" data-ev="${e.uid}" onclick="openCalendarEntry('${e.uid}')">
         <span class="cal-bar ${e.type}"></span>
         <div class="grow" style="min-width:0"><div class="t truncate${e.completed ? ' done' : ''}">${esc(calTitleOf(e))}</div>
-        <div class="m truncate">${e.event_time ? esc(e.event_time) : e.kind === 'task' ? 'Task, due' : 'All day'}${e.contact_name ? ', ' + esc(e.contact_name) : ''}</div></div>
+        <div class="m truncate">${e.event_time ? esc(e.event_time) : 'All day'}${e.kind === 'task' ? ' · Task' : ''}${e.contact_name ? ', ' + esc(e.contact_name) : ''}</div></div>
         ${e.created_by_name ? avatar(e.created_by_name, 'sm') : ''}</button>`).join('');
   }
   const filtered = calFilters.type || calFilters.person;
@@ -357,11 +381,15 @@ async function renderCalendar() {
   const grid = document.getElementById('calendar-grid');
   if (!grid) return;
   await ensureMembers();
+  if (!calViewDate) calViewDate = calToday();
   const [from, to] = calendarRange();
   const upFrom = calToday(), upTo = calAddDays(upFrom, 7);
   const [range, soon] = await Promise.all([
-    api.get(`/api/calendar?start=${calIso(from)}&end=${calIso(to)}`),
-    api.get(`/api/calendar?start=${calIso(upFrom)}&end=${calIso(upTo)}`),
+    // The server filters by the STORED date; a conversion to the viewer's zone can
+    // move a row by up to two days either way, so fetch wider and let calOnDay()
+    // (which reads the converted date) decide what belongs on screen.
+    api.get(`/api/calendar?start=${calIso(calAddDays(from, -2))}&end=${calIso(calAddDays(to, 2))}`),
+    api.get(`/api/calendar?start=${calIso(calAddDays(upFrom, -2))}&end=${calIso(calAddDays(upTo, 2))}`),
   ]);
   calEvents   = calNormalize(range);
   calUpcoming = calNormalize(soon);
@@ -379,15 +407,26 @@ function stripHtml(html) {
 
 /* ---------- one event ---------- */
 // An activity and a task can share an id, so entries are keyed by kind and id together.
+// Every row is converted to the VIEWER's clock here, once, so the rest of the
+// file never sees another member's wall-clock: event_date/event_time are what
+// this viewer should see; stored_date/stored_time/event_tz keep what was typed
+// and where. An all-day row (no time) is a date and is left alone.
 function calNormalize(data) {
-  return (Array.isArray(data) ? data : []).map(e => ({
-    ...e,
-    kind: e.kind || 'activity',
-    uid: `${e.kind || 'activity'}-${e.id}`,
-    event_date: String(e.event_date || '').slice(0, 10),
-    event_time: e.event_time || null,
-    completed: !!e.completed,
-  }));
+  return (Array.isArray(data) ? data : []).map(e => {
+    const storedDate = String(e.event_date || '').slice(0, 10), storedTime = e.event_time || null;
+    const shown = toViewerClock(storedDate, storedTime, e.event_tz);
+    return {
+      ...e,
+      kind: e.kind || 'activity',
+      uid: `${e.kind || 'activity'}-${e.id}`,
+      event_date: shown.date,
+      event_time: shown.time,
+      stored_date: storedDate,
+      stored_time: storedTime,
+      event_tz: e.event_tz || null,
+      completed: !!e.completed,
+    };
+  });
 }
 function calFindEvent(uid) {
   return calEvents.find(e => e.uid === uid) || calUpcoming.find(e => e.uid === uid) || null;
@@ -443,7 +482,8 @@ function openCalendarEventDetail(uid) {
       </div>
       <dl class="kv" style="grid-template-columns:100px minmax(0,1fr);align-items:start">
         <dt>When</dt><dd>${esc(calFmtDay(e.event_date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}
-          <div class="muted" style="font-weight:400">${e.event_time ? esc(e.event_time) : 'All day'}</div></dd>
+          <div class="muted" style="font-weight:400">${e.event_time ? esc(e.event_time) : 'All day'}${
+            e.event_time && e.event_tz && e.event_tz !== currentTimezone() ? ` <span class="muted">(entered as ${esc(e.stored_time)} ${esc(e.event_tz)})</span>` : ''}</div></dd>
         <dt>Contact</dt><dd>${e.contact_id
           ? `<a href="#" onclick="event.preventDefault();openContactDetail(${e.contact_id})">${esc(e.contact_name || 'Contact')}</a>`
           : '<span class="muted">Not set</span>'}</dd>

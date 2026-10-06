@@ -38,9 +38,18 @@
    ⚠ TWO KNOWN SHARP EDGES (see §8 of readmedev.md)
      - login and forgot-password both do `WHERE email = $1` with no ORDER BY
        and no LIMIT, then use the first row. With several rows per email, which
-       one you get is unspecified.
+       one you get is unspecified. For the PASSWORD CHECK that is now harmless:
+       every row of an email is kept on the same hash by reset-password (below)
+       and by POST /api/workspace, which copies the real one. Rows written with
+       the old 'placeholder' literal are the exception until repaired — see §8.
      - forgot-password returns the reset URL in the response body when SMTP is
        not configured.
+
+   RESET-PASSWORD IS EMAIL-WIDE ON PURPOSE. It re-hashes every `users` row that
+   shares the email, not just reset.user_id, because the identity model is one
+   row per workspace sharing ONE hash. Narrowing it back to `WHERE id` reopens
+   the heap-order login bug above and is caught by
+   tests/routes/reset-password-all-rows.test.js.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const express  = require('express');
@@ -418,7 +427,17 @@ router.post('/reset-password', async (req, res, next) => {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query('UPDATE users SET password_hash=$1 WHERE id=$2', [bcrypt.hashSync(password, 10), reset.user_id]);
+      // EVERY `users` row for this email, not just the one the token points at.
+      // The identity model is one row per workspace sharing ONE hash, and login
+      // reads `WHERE email=$1` unordered — so a per-row update would leave the
+      // other rows on the old hash and make login depend on heap order. Setting
+      // the whole email also repairs a row left with the literal 'placeholder'
+      // hash by POST /api/workspace. Locked in by
+      // tests/routes/reset-password-all-rows.test.js.
+      await client.query(
+        'UPDATE users SET password_hash=$1 WHERE email=(SELECT email FROM users WHERE id=$2)',
+        [bcrypt.hashSync(password, 10), reset.user_id]
+      );
       await client.query('UPDATE password_resets SET used=1 WHERE id=$1', [reset.id]);
       await client.query('COMMIT');
       res.json({ success: true });

@@ -68,7 +68,13 @@ const dvDoneKey = () => dvTaskStatuses().at(-1)?.key || 'done';
 const dvFirstKey = () => dvTaskStatuses()[0]?.key || 'todo';
 const DV_PRIO = { urgent: ['Urgent', 'danger'], high: ['High', 'warning'], medium: ['Medium', 'info'], low: ['Low', ''] };
 // Timeline text: legacy entries are rich HTML, new ones are escaped text with line breaks.
-const dvActHtml = s => /<[a-z][\s\S]*>/i.test(s || '') ? s : esc(s || '').replace(/\n/g, '<br>');
+// A stored note → safe HTML for display. Notes arrive in two shapes — escaped text with <br>
+// (the timeline editors and, now, the modal) and raw text (older modal rows) — and the server
+// stores whatever it was sent. So: reduce to plain text FIRST (dvActText: <br>/</p> → newline,
+// tags stripped, entities decoded), THEN escape, THEN newline → <br>. Every legitimate note
+// looks exactly as before, and no stored markup can ever reach the DOM — the old version trusted
+// any string that contained a tag, which a raw "<img onerror=…>" would have satisfied.
+function dvActHtml(s) { return esc(dvActText(s)).replace(/\n/g, '<br>'); }
 function dvActText(s) {
   const t = String(s || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li)>/gi, '\n').replace(/<[^>]*>/g, '')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
@@ -76,7 +82,24 @@ function dvActText(s) {
 }
 const dvAgoHours = ts => { if (!ts) return ''; const h = Math.round((Date.now() - new Date(ts).getTime()) / 36e5); return h < 1 ? 'Just now' : h < 24 ? `${h} h ago` : agoDays(ts); };
 const dvWhen = ts => ts ? new Date(ts).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '';
-function dvDue(d, due_time) { if (!d) return 'No due date'; const day = x => { const t = new Date(x); t.setHours(0, 0, 0, 0); return t.getTime(); }; const off = Math.round((day(d) - day(Date.now())) / 864e5); const at = String(due_time || '').slice(0, 5), when = at ? ` at ${at}` : '';
+// What a freshly ticked "Set a due date" starts with: today on the VIEWER's clock, three
+// hours from now, rounded UP to the next quarter hour (14:07 → 17:15). Crossing midnight rolls
+// the date — Date arithmetic does that. `now` is a parameter so tests can pin it.
+function dvDefaultDue(now = nowInTimezone(currentTimezone())) {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours() + 3, Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
+  const p = n => String(n).padStart(2, '0');
+  return { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, time: `${p(d.getHours())}:${p(d.getMinutes())}` };
+}
+// A due date phrased against the VIEWER's today, after converting the stored wall-clock
+// (typed in `tz`, or the default zone for a row with none) to the viewer's zone. Days are
+// built from parts: new Date('YYYY-MM-DD') is UTC midnight and lands a day early west of
+// UTC. `now` is a parameter so tests can pin the viewer's clock.
+function dvDue(d, due_time, tz, now = nowInTimezone(currentTimezone())) {
+  if (!d) return 'No due date';
+  const shown = toViewerClock(String(d).slice(0, 10), String(due_time || '').slice(0, 5) || null, tz);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(shown.date); if (!m) return 'No due date';
+  const day = new Date(+m[1], +m[2] - 1, +m[3]).getTime(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const off = Math.round((day - today) / 864e5), when = shown.time ? ` at ${shown.time}` : '';
   return off < 0 ? `${-off} ${-off === 1 ? 'day' : 'days'} overdue` : off === 0 ? `Due today${when}` : off === 1 ? `Due tomorrow${when}` : `In ${off} days${when}`; }
 const dvIso = d => d ? String(d).slice(0, 10) : '';
 // An edited note shows all of itself: the field takes the content's height rather than
@@ -190,13 +213,20 @@ async function openDealDetail(id) {
   const [d, allContacts, allSuppliers, allTasks, objs] = await Promise.all([api.get(`/api/deals/${id}`), dvContacts('contact'), dvContacts('supplier'), dvAllTasks(), api.get('/api/objects')]);
   if (!d || d.error) { ui.toast('That deal no longer exists.'); return; }
   objects = Array.isArray(objs) ? objs : objects;
-  const S = { d, contacts: allContacts, suppliers: allSuppliers, tasks: allTasks.filter(x => x.deal_id === d.id && !x.parent_id), acts: [], tab: 'overview', type: 'note', text: '', textErr: '', filter: null, editAct: null, editText: '', addTask: false, task: { title: '', due_date: '', due_time: '', priority: 'medium', assigned_to: currentUser?.id || '' }, taskErr: '', gone: false };
+  const S = { d, contacts: allContacts, suppliers: allSuppliers, tasks: allTasks.filter(x => x.deal_id === d.id && !x.parent_id), acts: [], tab: 'overview', actsOnly: false, type: 'note', text: '', textErr: '', filter: null, editAct: null, editText: '', addTask: false, task: { title: '', due_on: false, due_date: '', due_time: '', priority: 'medium', assigned_to: currentUser?.id || '' }, taskErr: '', gone: false };
   const contactOf = () => S.contacts.find(c => c.id === S.d.contact_id) || null;
   const supplierOf = () => S.suppliers.find(c => c.id === S.d.supplier_id) || null;
   const pipe = () => pipelines.find(p => p.id === S.d.pipeline_id) || { name: '', stages: [] };
   const stage = () => pipe().stages.find(s => s.id === S.d.stage_id) || null;
   const owner = () => members.find(m => m.id === S.d.assigned_to) || null;
-  const loadActs = async () => { if (!S.d.contact_id) { S.acts = []; return; } const c = await api.get(`/api/contacts/${S.d.contact_id}`); S.acts = (c?.activities || []); };
+  // The activity tab shows the CONTACT's whole history by default — every note, whichever deal it
+  // was logged on, each labelled with that deal. "This deal only" keeps this deal's notes PLUS the
+  // contact's notes not tied to any deal; only the other deals' notes drop out (the server's
+  // ?deal_id= rule). A deal with no contact can only have bound notes, so it always asks for those.
+  const loadActs = async () => {
+    const url = S.actsOnly || !S.d.contact_id ? `/api/activities?deal_id=${S.d.id}` : `/api/activities?contact_id=${S.d.contact_id}`;
+    const rows = await api.get(url); S.acts = Array.isArray(rows) ? rows : [];
+  };
   await loadActs();
 
   const payload = patch => ({ title: S.d.title, contact_id: S.d.contact_id, supplier_id: S.d.supplier_id, pipeline_id: S.d.pipeline_id, stage_id: S.d.stage_id, value: S.d.value, assigned_to: S.d.assigned_to, urgency: S.d.urgency, custom_data: S.d.custom_data || {}, ...patch });
@@ -263,7 +293,7 @@ async function openDealDetail(id) {
   function miniTasks() {
     const list = S.tasks.filter(x => x.status !== dvDoneKey()).sort((a, b) => (a.due_date || '9') < (b.due_date || '9') ? -1 : 1).slice(0, 3);
     return `<section class="dd-mini" aria-label="Next tasks"><div class="dd-mini-head"><span>Next tasks</span><button class="btn btn-ghost btn-sm" data-act="goto" data-tab="tasks">View all</button></div>
-      ${list.length ? list.map(x => `<div class="dd-mini-row"><div class="grow"><a class="dd-task-title" href="#" data-act="open-task" data-id="${x.id}">${esc(x.title)}</a><div class="dd-task-meta"><span class="${taskIsOverdue(x, false) ? 'dd-late' : ''}">${esc(dvDue(x.due_date, x.due_time))}</span>${x.assigned_to_name ? avatar(x.assigned_to_name, 'sm') : ''}</div></div></div>`).join('')
+      ${list.length ? list.map(x => `<div class="dd-mini-row"><div class="grow"><a class="dd-task-title" href="#" data-act="open-task" data-id="${x.id}">${esc(x.title)}</a><div class="dd-task-meta"><span class="${taskIsOverdue(x, false) ? 'dd-late' : ''}">${esc(dvDue(x.due_date, x.due_time, x.due_tz))}</span>${x.assigned_to_name ? avatar(x.assigned_to_name, 'sm') : ''}</div></div></div>`).join('')
         : `<div class="dd-mini-empty">No open tasks. <button class="btn btn-ghost btn-sm" data-act="goto-task">Add task</button></div>`}</section>`;
   }
   function miniActs() {
@@ -290,7 +320,7 @@ async function openDealDetail(id) {
   function tlItem(a) {
     const ty = dvTypeOf(a.type), editing = S.editAct === a.id;
     return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main">
-      <div class="tl-head"><b>${ty.label}</b>${a.logged_by_name ? `<span class="muted">by ${esc(a.logged_by_name)}</span>` : ''}<span class="dd-tl-time muted" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
+      <div class="tl-head"><b>${ty.label}</b>${a.bound_deal_id && a.bound_deal_id !== S.d.id ? `<span class="badge badge-outline" title="Logged on another deal of this contact" style="margin-right:6px">${esc(a.deal_title || 'Other deal')}</span>` : ''}${a.logged_by_name ? `<span class="muted">by ${esc(a.logged_by_name)}</span>` : ''}<span class="dd-tl-time muted" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
         <span class="dd-tl-actions"><button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="Edit entry">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="Delete entry">${icon('trash')}</button></span></div>
       ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="dd-act-edit" rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
           <div class="row" style="justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-act="act-cancel">Cancel</button><button class="btn btn-primary btn-sm" data-act="act-save" data-id="${a.id}">Save</button></div></div>`
@@ -305,7 +335,7 @@ async function openDealDetail(id) {
           <textarea class="textarea" id="dd-compose-text" rows="3" placeholder="${esc(ty.ph)}" ${c ? '' : 'disabled'} ${S.textErr ? 'aria-invalid="true"' : ''}>${esc(S.text)}</textarea>
           <div class="error-text" id="dd-compose-err" role="alert">${esc(S.textErr)}</div></div>
         <div class="row-between"><span class="help">Logged as ${esc(currentUser?.name || '')}${c ? `, on ${esc(c.name)}` : ''}. Press Ctrl+Enter to save.</span><button class="btn btn-primary btn-sm" type="submit" ${c ? '' : 'disabled'}>${ty.verb}</button></div></form>
-      <div class="dd-bar"><button class="chip ${S.filter ? 'on' : ''}" data-act="tlfilter" aria-haspopup="menu">Type${S.filter ? ': ' + dvTypeOf(S.filter).label : ''}${icon('chevron-down', 'ic-sm')}</button>
+      <div class="dd-bar"><button class="chip ${S.filter ? 'on' : ''}" data-act="tlfilter" aria-haspopup="menu">Type${S.filter ? ': ' + dvTypeOf(S.filter).label : ''}${icon('chevron-down', 'ic-sm')}</button><button class="chip ${S.actsOnly ? 'on' : ''}" data-act="tlonly" type="button" aria-pressed="${S.actsOnly}" title="${S.actsOnly ? 'Showing notes on this deal and untied contact notes. Click to show every note on the contact.' : 'Notes logged on this deal, plus notes on the contact not tied to any deal'}">${S.actsOnly ? 'Show all notes' : 'This deal only'}</button>
         <span class="muted" style="font-size:var(--fs-sm)">${S.filter ? `${list.length} of ${all.length}` : dvPlural(all.length, 'entry', 'entries')}</span></div>
       ${list.length ? `<div class="timeline">${list.map(tlItem).join('')}</div>`
         : dvEmpty('activity', all.length ? 'No entries of this type' : 'No activity yet', all.length ? 'Choose another type or clear the filter.' : c ? 'Log a call, email or note to start the history of this deal.' : 'Link a contact to this deal first.', all.length ? '<button class="btn btn-secondary btn-sm" data-act="tlclear">Clear filter</button>' : '')}`;
@@ -314,15 +344,16 @@ async function openDealDetail(id) {
     const done = x.status === dvDoneKey(), pr = DV_PRIO[x.priority] || DV_PRIO.medium, st = dvTaskStatuses().find(s => s.key === x.status), late = taskIsOverdue(x, done);
     return `<li class="dd-task ${done ? 'done' : ''}" data-tid="${x.id}"><label class="check"><input type="checkbox" data-toggle="${x.id}" ${done ? 'checked' : ''} aria-label="${done ? 'Reopen' : 'Complete'} task: ${esc(x.title)}"></label>
       <div class="grow"><a class="dd-task-title" href="#" data-act="open-task" data-id="${x.id}">${esc(x.title)}</a>
-        <div class="dd-task-meta"><span class="badge ${pr[1] ? 'badge-' + pr[1] : ''}">${pr[0]}</span>${st ? `<span>${esc(st.label)}</span>` : ''}<span class="dd-sep"></span><span class="${late ? 'dd-late' : ''}">${esc(done ? 'Done' : dvDue(x.due_date, x.due_time))}</span></div></div>${x.assigned_to_name ? avatar(x.assigned_to_name, 'sm') : ''}</li>`;
+        <div class="dd-task-meta"><span class="badge ${pr[1] ? 'badge-' + pr[1] : ''}">${pr[0]}</span>${st ? `<span>${esc(st.label)}</span>` : ''}<span class="dd-sep"></span><span class="${late ? 'dd-late' : ''}">${esc(done ? 'Done' : dvDue(x.due_date, x.due_time, x.due_tz))}</span></div></div>${x.assigned_to_name ? avatar(x.assigned_to_name, 'sm') : ''}</li>`;
   }
   function taskFormHtml() {
     const x = S.task;
     return `<form class="dd-taskform" id="dd-taskform" novalidate aria-label="New task">
       <div class="field"><label class="label" for="dd-task-title">Task <span class="req">*</span></label><input class="input" id="dd-task-title" name="title" value="${esc(x.title)}" placeholder="What needs to be done?" autocomplete="off" ${S.taskErr ? 'aria-invalid="true"' : ''}><div class="error-text" role="alert">${esc(S.taskErr)}</div></div>
-      <div class="field-row-3"><div class="field"><label class="label" for="dd-task-due">Due date</label><input class="input" type="date" id="dd-task-due" name="due_date" value="${esc(x.due_date)}"><input class="input" type="time" id="dd-task-time" name="due_time" value="${esc(x.due_time || '')}" aria-label="Time" style="margin-top:6px"></div>
+      <div class="field-row-3"><div class="field"><span class="label">Due</span><label class="check" style="margin-top:8px"><input type="checkbox" name="due_on" id="dd-task-dueon" ${x.due_on ? 'checked' : ''}><span>Set a due date</span></label></div>
         <div class="field"><label class="label" for="dd-task-prio">Priority</label><select class="select" id="dd-task-prio" name="priority">${Object.keys(DV_PRIO).map(p => `<option value="${p}" ${x.priority === p ? 'selected' : ''}>${DV_PRIO[p][0]}</option>`).join('')}</select></div>
         <div class="field"><label class="label" for="dd-task-owner">Assignee</label><select class="select" id="dd-task-owner" name="assigned_to"><option value="">Unassigned</option>${members.map(m => `<option value="${m.id}" ${String(x.assigned_to) === String(m.id) ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select></div></div>
+      <div class="field-row-3 ${x.due_on ? '' : 'hidden'}" id="dd-task-duew"><div class="field"><label class="label" for="dd-task-due">Due date</label><input class="input" type="date" id="dd-task-due" name="due_date" value="${esc(x.due_date)}"><input class="input" type="time" id="dd-task-time" name="due_time" value="${esc(x.due_time || '')}" aria-label="Time" style="margin-top:6px"></div></div>
       <div class="row" style="justify-content:flex-end"><button type="button" class="btn btn-secondary btn-sm" data-act="task-cancel">Cancel</button><button type="submit" class="btn btn-primary btn-sm">Add task</button></div></form>`;
   }
   function tasksHtml() {
@@ -432,7 +463,7 @@ async function openDealDetail(id) {
     const text = S.text.trim(), ty = dvTypeOf(S.type), c = contactOf();
     if (!c) return;
     if (!text) { S.textErr = 'Add a short description before saving.'; render('main'); const ta = R('#dd-compose-text'); ta && ta.focus(); return; }
-    const res = await api.post('/api/activities', { contact_id: c.id, type: S.type, content: esc(text).replace(/\n/g, '<br>') });
+    const res = await api.post('/api/activities', { contact_id: c.id, deal_id: S.d.id, type: S.type, content: esc(text).replace(/\n/g, '<br>') });   // composed on this deal → bound to it
     if (res?.error) return ui.toast(res.error);
     S.text = ''; S.textErr = ''; await loadActs(); render('head main');
     ui.toast(`${ty.label} logged`); const ta = R('#dd-compose-text'); ta && ta.focus();
@@ -469,9 +500,9 @@ async function openDealDetail(id) {
   async function submitTask() {
     const x = S.task, title = x.title.trim();
     if (!title) { S.taskErr = 'Enter a task title.'; render('main'); R('#dd-task-title')?.focus(); return; }
-    const res = await api.post('/api/tasks', { title, status: dvFirstKey(), priority: x.priority, due_date: x.due_date || null, due_time: x.due_time || null, assigned_to: x.assigned_to || null, deal_id: S.d.id, contact_id: S.d.contact_id || null });
+    const res = await api.post('/api/tasks', { title, status: dvFirstKey(), priority: x.priority, due_date: x.due_on ? (x.due_date || null) : null, due_time: x.due_on ? (x.due_time || null) : null, assigned_to: x.assigned_to || null, deal_id: S.d.id, contact_id: S.d.contact_id || null });
     if (res?.error) return ui.toast(res.error);
-    S.addTask = false; S.taskErr = ''; S.task = { title: '', due_date: '', due_time: '', priority: 'medium', assigned_to: currentUser?.id || '' };
+    S.addTask = false; S.taskErr = ''; S.task = { title: '', due_on: false, due_date: '', due_time: '', priority: 'medium', assigned_to: currentUser?.id || '' };
     S.tasks = (await dvAllTasks()).filter(t2 => t2.deal_id === S.d.id && !t2.parent_id); dvRefreshTasks(); render('main'); ui.toast('Task added');
   }
 
@@ -518,9 +549,13 @@ async function openDealDetail(id) {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.editAct = null; render('main'); }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const b = R('[data-act="act-save"]'); b && A['act-save'](b); }
   });
-  on(root, 'input', '#dd-taskform [name]', (e, el) => { S.task[el.name] = el.value; if (el.name === 'title' && S.taskErr) { S.taskErr = ''; el.removeAttribute('aria-invalid'); } });
-  on(root, 'change', '#dd-taskform [name]', (e, el) => { S.task[el.name] = el.value; });
+  on(root, 'input', '#dd-taskform [name]', (e, el) => { S.task[el.name] = el.type === 'checkbox' ? el.checked : el.value; if (el.name === 'title' && S.taskErr) { S.taskErr = ''; el.removeAttribute('aria-invalid'); } });
+  on(root, 'change', '#dd-taskform [name]', (e, el) => { S.task[el.name] = el.type === 'checkbox' ? el.checked : el.value;
+    // the due tick box: on → prefill today + 3h and show the fields; off → clear and hide
+    if (el.name === 'due_on') { if (el.checked) { const dd = dvDefaultDue(); S.task.due_date = dd.date; S.task.due_time = dd.time; } else { S.task.due_date = ''; S.task.due_time = ''; } render('main'); R('#dd-task-due')?.focus(); } });
   on(root, 'submit', '#dd-compose', e => { e.preventDefault(); submitCompose(); });
+  // "This deal only": the filter is applied by the server (?deal_id= vs ?contact_id=), so toggling reloads.
+  on(root, 'click', '[data-act="tlonly"]', async () => { S.actsOnly = !S.actsOnly; await loadActs(); render('head main'); });
   on(root, 'submit', '#dd-taskform', e => { e.preventDefault(); submitTask(); });
   on(root, 'keydown', '#dd-compose-text', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submitCompose(); } });
   on(root, 'keydown', '[role="tab"]', (e, el) => { const ids = ['overview', 'activity', 'tasks'], i = ids.indexOf(el.dataset.tab); let n = -1; if (e.key === 'ArrowRight') n = (i + 1) % ids.length; else if (e.key === 'ArrowLeft') n = (i + ids.length - 1) % ids.length; if (n >= 0) { e.preventDefault(); setTab(ids[n]); } });
@@ -561,7 +596,7 @@ async function openContactDetail(id, opts = {}) {
   };
   const actItem = a => {
     const ty = dvTypeOf(a.type), editing = S.editAct === a.id;
-    return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main"><div class="tl-head"><b>${ty.label}</b><span class="muted" style="font-size:var(--fs-sm)">${a.logged_by_name ? 'by ' + esc(a.logged_by_name) : ''}</span><span class="muted" style="margin-left:auto;font-size:var(--fs-sm)" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
+    return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main"><div class="tl-head"><b>${ty.label}</b>${a.deal_title ? `<span class="badge badge-outline" title="Logged on this deal" style="margin-left:6px">${esc(a.deal_title)}</span>` : ''}<span class="muted" style="font-size:var(--fs-sm)">${a.logged_by_name ? 'by ' + esc(a.logged_by_name) : ''}</span><span class="muted" style="margin-left:auto;font-size:var(--fs-sm)" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
       <span class="dd-tl-actions"><button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
       ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="ct-aedit" rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
           <div class="row-between"><span class="help">${esc(t('enter_saves_esc_cancels'))}</span><span class="row"><button class="btn btn-secondary btn-sm" type="button" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" type="button" data-act="act-save">${esc(t('btn_save'))}</button></span></div></div>`
@@ -570,7 +605,7 @@ async function openContactDetail(id, opts = {}) {
   const taskRow = x => { const done = x.status === dvDoneKey(), pr = DV_PRIO[x.priority] || DV_PRIO.medium, late = taskIsOverdue(x, done);
     return `<li class="list-item"><label class="check round"><input type="checkbox" data-task-toggle="${x.id}" aria-label="Mark ${esc(x.title)} as ${done ? 'not done' : 'done'}" ${done ? 'checked' : ''}></label>
       <div class="grow"><a class="ct-task-title ${done ? 'done' : ''}" href="#" data-act="open-task" data-id="${x.id}">${esc(x.title)}</a>${x.deal_title ? `<div class="muted truncate" style="font-size:var(--fs-sm)">${esc(x.deal_title)}</div>` : ''}</div>
-      ${done ? '<span class="badge badge-success">Done</span>' : late ? `<span class="badge badge-danger">${esc(dvDue(x.due_date, x.due_time))}</span>` : `<span class="muted" style="font-size:var(--fs-sm);white-space:nowrap">${esc(dvDue(x.due_date, x.due_time))}</span>`}
+      ${done ? '<span class="badge badge-success">Done</span>' : late ? `<span class="badge badge-danger">${esc(dvDue(x.due_date, x.due_time, x.due_tz))}</span>` : `<span class="muted" style="font-size:var(--fs-sm);white-space:nowrap">${esc(dvDue(x.due_date, x.due_time, x.due_tz))}</span>`}
       <span class="badge ${pr[1] ? 'badge-' + pr[1] : ''}">${pr[0]}</span>${x.assigned_to_name ? avatar(x.assigned_to_name, 'sm') : ''}</li>`; };
   function overviewPanel() {
     const a = acts().slice(0, 3), open = S.tasks.filter(x => x.status !== dvDoneKey()).slice(0, 3);
@@ -764,9 +799,10 @@ async function openTaskForm(opts = {}) {
         <div class="field"><label class="label" for="${fid}-l">List</label><select class="select" id="${fid}-l" name="list_id">${dvListOpts(init.project_id, init.list_id)}</select></div></div>
       <div class="field-row"><div class="field"><label class="label" for="${fid}-s">Status</label><select class="select" id="${fid}-s" name="status">${dvTaskStatuses().map(s => dvOpt(s.key, s.label, init.status)).join('')}</select></div>
         <div class="field"><label class="label" for="${fid}-p">Priority</label><select class="select" id="${fid}-p" name="priority">${Object.keys(DV_PRIO).map(p => dvOpt(p, DV_PRIO[p][0], init.priority)).join('')}</select></div></div>
-      <div class="field-row"><div class="field"><label class="label" for="${fid}-d">Due date</label><input class="input" type="date" id="${fid}-d" name="due_date" value=""></div>
-        <div class="field"><label class="label" for="${fid}-dt">Time</label><input class="input" type="time" id="${fid}-dt" name="due_time" value=""><span class="hint">Optional. A time puts it on the calendar's hour grid.</span></div>
-        <div class="field"><label class="label" for="${fid}-o">Assignee</label><select class="select" id="${fid}-o" name="assigned_to"><option value="">Unassigned</option>${members.map(x => dvOpt(x.id, x.name, init.assigned_to)).join('')}</select></div></div>
+      <div class="field-row"><div class="field"><label class="label" for="${fid}-o">Assignee</label><select class="select" id="${fid}-o" name="assigned_to"><option value="">Unassigned</option>${members.map(x => dvOpt(x.id, x.name, init.assigned_to)).join('')}</select></div>
+        <div class="field"><span class="label">Due</span><label class="check" style="margin-top:8px"><input type="checkbox" name="due_on" id="${fid}-don"><span>Set a due date and time</span></label><span class="hint">Off means no due date. On starts at today, three hours from now.</span></div></div>
+      <div class="field-row hidden" id="${fid}-dw"><div class="field"><label class="label" for="${fid}-d">Due date</label><input class="input" type="date" id="${fid}-d" name="due_date" value=""></div>
+        <div class="field"><label class="label" for="${fid}-dt">Time</label><input class="input" type="time" id="${fid}-dt" name="due_time" value=""><span class="hint">A time puts it on the calendar's hour grid.</span></div></div>
       <div class="field-row"><div class="field"><label class="label" for="${fid}-de">Deal</label><select class="select" id="${fid}-de" name="deal_id">${dvOpt('', 'No deal', init.deal_id) + dealList.map(d => dvOpt(d.id, d.title, init.deal_id)).join('')}</select></div>
         <div class="field"><label class="label" for="${fid}-c">Contact</label><select class="select" id="${fid}-c" name="contact_id">${dvOpt('', 'No contact', init.contact_id) + contactList.map(c => dvOpt(c.id, c.name, init.contact_id)).join('')}</select></div></div>
       ${taskFields.length ? `<div class="field-row">${taskFields.map(cf).join('')}</div>` : ''}</form>`,
@@ -775,10 +811,19 @@ async function openTaskForm(opts = {}) {
   title.addEventListener('input', () => { title.removeAttribute('aria-invalid'); err.hidden = true; });
   f.querySelector('[name=project_id]').addEventListener('change', e => { f.querySelector('[name=list_id]').innerHTML = dvListOpts(e.target.value, ''); });
   f.querySelector('[name=deal_id]').addEventListener('change', e => { const d = e.target.value ? dealList.find(x => x.id === +e.target.value) : null, c = f.querySelector('[name=contact_id]'); if (d?.contact_id && !c.value) c.value = d.contact_id; });
+  // An EMPTY <input type="date"> is painted as today's date in Safari, so a form that looked
+  // filled used to save "no due date". The tick box makes it explicit: off = no due date, on =
+  // the fields are shown AND filled, so an untouched form still submits a real date and time.
+  const dueOn = f.querySelector('[name=due_on]'), dueWrap = f.querySelector('#' + fid + '-dw'), dueD = f.querySelector('[name=due_date]'), dueT = f.querySelector('[name=due_time]');
+  dueOn.addEventListener('change', () => {
+    dueWrap.classList.toggle('hidden', !dueOn.checked);   // .hidden is !important; the [hidden] attribute lost to .field-row's display:grid
+    if (dueOn.checked) { const dd = dvDefaultDue(); dueD.value = dd.date; dueT.value = dd.time; dueD.focus(); }
+    else { dueD.value = ''; dueT.value = ''; }
+  });
   f.addEventListener('submit', async e => {
     e.preventDefault(); const d = ui.formData(f), tt = d.title.trim();
     if (!tt) { title.setAttribute('aria-invalid', 'true'); err.textContent = 'Enter a title for the task.'; err.hidden = false; title.focus(); return; }
-    const payload = { title: tt, description: d.description.trim(), project_id: d.project_id || null, list_id: d.list_id || null, status: d.status, priority: d.priority, due_date: d.due_date || null, due_time: d.due_time || null, assigned_to: d.assigned_to || null, deal_id: d.deal_id || null, contact_id: d.contact_id || null,
+    const payload = { title: tt, description: d.description.trim(), project_id: d.project_id || null, list_id: d.list_id || null, status: d.status, priority: d.priority, due_date: d.due_on ? (d.due_date || null) : null, due_time: d.due_on ? (d.due_time || null) : null, assigned_to: d.assigned_to || null, deal_id: d.deal_id || null, contact_id: d.contact_id || null,
       custom_data: Object.fromEntries([...f.querySelectorAll('[data-cf]')].map(el => [el.dataset.cf, el.value])) };
     const res = await api.post('/api/tasks', payload); if (res?.error) return ui.toast(res.error);
     m.close();
@@ -795,6 +840,12 @@ async function openTaskDrawer(id, opts = {}) {
   await ensureMembers(); const { dealList, contactList } = await dvTaskLists();
   let x = await api.get(`/api/tasks/${id}`);
   if (!x || x.error) { ui.toast('That task no longer exists.'); return; }
+  // Show, edit and save on the VIEWER's clock: convert the stored wall-clock once, remember
+  // what was typed and where for the note, and stamp the viewer's zone — what the inputs
+  // now hold is in that zone, and the server records it again on save.
+  const typed = { time: String(x.due_time || '').slice(0, 5) || null, tz: x.due_tz || null };
+  const shownDue = taskDueShown(x); x.due_date = shownDue.date || null; x.due_time = shownDue.time;
+  x.due_tz = currentTimezone();
   const fid = 'tkd-' + uid(), fin = () => x.status === dvDoneKey();
   const cf = f => { const id2 = `${fid}-cf-${f.field_key}`, v = x.custom_data?.[f.field_key] ?? '', typeMap = { text: 'text', email: 'email', phone: 'tel', number: 'number', date: 'date', url: 'url' };
     return `<dt><label for="${id2}">${esc(f.name)}</label></dt><dd>${f.type === 'dropdown' ? `<select class="select select-sm" id="${id2}" data-f="cf:${esc(f.field_key)}"><option value="">Not set</option>${(f.options || []).map(o => dvOpt(o, o, v)).join('')}</select>` : `<input class="input input-sm" id="${id2}" data-f="cf:${esc(f.field_key)}" type="${typeMap[f.type] || 'text'}" value="${esc(v)}">`}</dd>`; };
@@ -805,7 +856,7 @@ async function openTaskDrawer(id, opts = {}) {
       <dt><label for="${fid}-s">Status</label></dt><dd><select class="select select-sm" id="${fid}-s" data-f="status">${dvTaskStatuses().map(s => dvOpt(s.key, s.label, x.status)).join('')}</select></dd>
       <dt><label for="${fid}-p">Priority</label></dt><dd><select class="select select-sm" id="${fid}-p" data-f="priority">${Object.keys(DV_PRIO).map(p => dvOpt(p, DV_PRIO[p][0], x.priority)).join('')}</select></dd>
       <dt><label for="${fid}-o">Assignee</label></dt><dd><select class="select select-sm" id="${fid}-o" data-f="assigned_to"><option value="">Unassigned</option>${members.map(mm => dvOpt(mm.id, mm.name, x.assigned_to)).join('')}</select></dd>
-      <dt><label for="${fid}-d">Due date</label></dt><dd><input class="input input-sm" type="date" id="${fid}-d" data-f="due_date" value="${esc(dvIso(x.due_date))}"><input class="input input-sm" type="time" id="${fid}-dt" data-f="due_time" value="${esc(String(x.due_time || '').slice(0, 5))}" aria-label="Time" style="max-width:104px"><span class="muted" id="${fid}-dl" style="white-space:nowrap;font-size:var(--fs-sm)"></span></dd>
+      <dt><label for="${fid}-don">Due date</label></dt><dd><label class="check"><input type="checkbox" id="${fid}-don" data-due-on ${x.due_date ? 'checked' : ''}><span class="muted" style="font-size:var(--fs-sm)">Has a due date</span></label><span id="${fid}-dw" class="${x.due_date ? '' : 'hidden'}" style="display:contents"><input class="input input-sm" type="date" id="${fid}-d" data-f="due_date" value="${esc(dvIso(x.due_date))}"><input class="input input-sm" type="time" id="${fid}-dt" data-f="due_time" value="${esc(String(x.due_time || '').slice(0, 5))}" aria-label="Time" style="max-width:104px"><span class="muted" id="${fid}-dl" style="white-space:nowrap;font-size:var(--fs-sm)"></span></span></dd>
       <dt><label for="${fid}-pr">Project</label></dt><dd><select class="select select-sm" id="${fid}-pr" data-f="project_id">${dvOpt('', 'Not set', x.project_id) + taskProjects.map(p => dvOpt(p.id, p.name, x.project_id)).join('')}</select><select class="select select-sm" id="${fid}-l" data-f="list_id" aria-label="List">${dvListOpts(x.project_id, x.list_id)}</select></dd>
       <dt><label for="${fid}-de">Deal</label></dt><dd><select class="select select-sm" id="${fid}-de" data-f="deal_id">${dvOpt('', 'No deal', x.deal_id) + dealList.map(d => dvOpt(d.id, d.title, x.deal_id)).join('')}</select><button class="btn btn-ghost btn-sm btn-icon" id="${fid}-dea" data-open="deal" aria-label="Open deal" title="Open deal" ${x.deal_id ? '' : 'hidden'}>${icon('external')}</button></dd>
       <dt><label for="${fid}-c">Contact</label></dt><dd><select class="select select-sm" id="${fid}-c" data-f="contact_id">${dvOpt('', 'No contact', x.contact_id) + contactList.map(c => dvOpt(c.id, c.name, x.contact_id)).join('')}</select><button class="btn btn-ghost btn-sm btn-icon" id="${fid}-ca" data-open="contact" aria-label="Open contact" title="Open contact" ${x.contact_id ? '' : 'hidden'}>${icon('external')}</button></dd>
@@ -818,7 +869,7 @@ async function openTaskDrawer(id, opts = {}) {
     onClose: () => { if (dvDrawer === dr) dvDrawer = null; } });
   dvDrawer = dr; dr.el.querySelector('.drawer').classList.add('tk-drawer');
   const q = sel => dr.el.querySelector(sel);
-  const syncRow = () => { const row = tasks.find(y => y.id === id); if (row) Object.assign(row, { title: x.title, status: x.status, priority: x.priority, assigned_to: x.assigned_to, assigned_to_name: members.find(mm => mm.id === x.assigned_to)?.name || null, due_date: x.due_date, due_time: x.due_time, description: x.description }); dvRefreshTasks(); opts.onChange && opts.onChange(x); };
+  const syncRow = () => { const row = tasks.find(y => y.id === id); if (row) Object.assign(row, { title: x.title, status: x.status, priority: x.priority, assigned_to: x.assigned_to, assigned_to_name: members.find(mm => mm.id === x.assigned_to)?.name || null, due_date: x.due_date, due_time: x.due_time, due_tz: x.due_tz, description: x.description }); dvRefreshTasks(); opts.onChange && opts.onChange(x); };
   const payload = () => ({ title: x.title, description: x.description, status: x.status, priority: x.priority, assigned_to: x.assigned_to || null, due_date: x.due_date ? dvIso(x.due_date) : null, due_time: x.due_time || null, project_id: x.project_id || null, list_id: x.list_id || null, deal_id: x.deal_id || null, contact_id: x.contact_id || null, custom_data: x.custom_data || {} });
   async function save(patch, msg) { const prev = {}; Object.keys(patch).forEach(k => prev[k] = x[k]); Object.assign(x, patch); const res = await api.put(`/api/tasks/${id}`, payload()); if (res?.error) { Object.assign(x, prev); return ui.toast(res.error); } syncRow(); if (msg) ui.toast(msg, { ms: 1800 }); }
   const titleEl = q(`#${fid}-t`), titleErr = q(`#${fid}-te`);
@@ -826,20 +877,32 @@ async function openTaskDrawer(id, opts = {}) {
   fit(); titleEl.addEventListener('input', () => { fit(); titleEl.removeAttribute('aria-invalid'); titleErr.hidden = true; });
   titleEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); } if (e.key === 'Escape') { e.stopPropagation(); titleEl.value = x.title; fit(); titleEl.blur(); } });
   titleEl.addEventListener('blur', () => { const v = titleEl.value.trim(); if (!v) { titleEl.value = x.title; titleEl.setAttribute('aria-invalid', 'true'); titleErr.textContent = 'The title cannot be empty. The previous title was restored.'; titleErr.hidden = false; fit(); return; } if (v !== x.title) save({ title: v }, 'Title saved'); });
-  const dueNote = () => { q(`#${fid}-dl`).textContent = x.due_date ? dvDue(x.due_date, x.due_time) : ''; };
+  const dueNote = () => { q(`#${fid}-dl`).textContent = (x.due_date ? dvDue(x.due_date, x.due_time, x.due_tz) : '')
+    + (x.due_time && typed.tz && typed.tz !== x.due_tz ? ` (entered as ${typed.time} ${typed.tz})` : ''); };
   const links = () => { q(`#${fid}-dea`).hidden = !x.deal_id; q(`#${fid}-ca`).hidden = !x.contact_id; };
   const syncDone = () => { const b = q('[data-dtoggle]'), f = fin(); b.classList.toggle('on', f); b.setAttribute('aria-pressed', f); b.setAttribute('aria-label', f ? 'Reopen task' : 'Complete task'); q(`#${fid}-s`).value = x.status; };
+  // Box, wrapper, inputs and note all follow x — the saved task — so a failed save snaps them back.
+  const syncDue = () => { const on = !!x.due_date; q(`#${fid}-don`).checked = on; q(`#${fid}-dw`).classList.toggle('hidden', !on); q(`#${fid}-d`).value = on ? dvIso(x.due_date) : ''; q(`#${fid}-dt`).value = x.due_time ? String(x.due_time).slice(0, 5) : ''; dueNote(); };
   dueNote(); links();
   on(dr.el, 'click', '[data-dtoggle]', async () => { const next = fin() ? dvFirstKey() : dvDoneKey(), prev = x.status; x.status = next; syncDone(); const res = await api.patch(`/api/tasks/${id}/status`, { status: next }); if (res?.error) { x.status = prev; syncDone(); return ui.toast(res.error); } syncRow(); ui.toast(next === dvDoneKey() ? 'Task completed' : 'Task reopened', { ms: 1800 }); });
+  // The same tick box as the create forms. The drawer saves on change, so ticking SAVES at once
+  // (today + 3 h) — the inputs must never show a value that is not stored — and unticking saves
+  // null for both date and time, which is how a due date put on the wrong task is removed.
+  on(dr.el, 'change', '[data-due-on]', async (e, el) => {
+    if (el.checked) { const dd = dvDefaultDue(); await save({ due_date: dd.date, due_time: dd.time }, `Due date set: ${dvDue(dd.date, dd.time, x.due_tz)}`); }
+    else { await save({ due_date: null, due_time: null }, 'Due date removed'); }
+    syncDue();
+  });
   on(dr.el, 'change', '[data-f]', (e, el) => {
     const k = el.dataset.f, v = el.value, patch = {};
     if (k.startsWith('cf:')) patch.custom_data = { ...(x.custom_data || {}), [k.slice(3)]: v };
     else if (k === 'assigned_to' || k === 'deal_id' || k === 'contact_id' || k === 'project_id' || k === 'list_id') patch[k] = v ? +v : null;
     else if (k === 'description') patch.description = v.trim();
     else patch[k] = v || null;
+    if (k === 'due_date' && !v) patch.due_time = null;   // a time without a date is useless
     if (k === 'project_id') { patch.list_id = (taskProjects.find(p => p.id === patch.project_id)?.lists || [])[0]?.id || null; q(`#${fid}-l`).innerHTML = dvListOpts(patch.project_id, patch.list_id); }
     if (k === 'deal_id' && patch.deal_id && !x.contact_id) { const d = dealList.find(y => y.id === patch.deal_id); if (d?.contact_id) { patch.contact_id = d.contact_id; q(`#${fid}-c`).value = d.contact_id; } }
-    save(patch, { status: 'Status updated', priority: 'Priority updated', assigned_to: 'Assignee updated', due_date: 'Due date updated', due_time: 'Time updated', description: 'Description saved', project_id: 'Project updated', list_id: 'List updated', deal_id: 'Deal link updated', contact_id: 'Contact updated' }[k] || 'Saved').then(() => { if (k === 'status') syncDone(); if (k === 'due_date' || k === 'due_time') dueNote(); if (k === 'deal_id' || k === 'contact_id') links(); });
+    save(patch, { status: 'Status updated', priority: 'Priority updated', assigned_to: 'Assignee updated', due_date: 'Due date updated', due_time: 'Time updated', description: 'Description saved', project_id: 'Project updated', list_id: 'List updated', deal_id: 'Deal link updated', contact_id: 'Contact updated' }[k] || 'Saved').then(() => { if (k === 'status') syncDone(); if (k === 'due_date' || k === 'due_time') syncDue(); if (k === 'deal_id' || k === 'contact_id') links(); });
   });
   on(dr.el, 'click', '[data-open]', (e, el) => { const kind = el.dataset.open; dr.close(); if (kind === 'deal' && x.deal_id) openDealDetail(x.deal_id); if (kind === 'contact' && x.contact_id) openContactDetail(x.contact_id); });
   on(dr.el, 'click', '[data-del]', async () => { const ok = await ui.confirm({ title: 'Delete this task?', message: 'Its subtasks are deleted with it. This cannot be undone.', confirmLabel: 'Delete task', danger: true }); if (!ok) return; const res = await api.del(`/api/tasks/${id}`); if (res?.error) return ui.toast(res.error); tasks = tasks.filter(y => y.id !== id && y.parent_id !== id); dvRefreshTasks(); opts.onChange && opts.onChange(null); dr.close(); ui.toast('Task deleted'); });

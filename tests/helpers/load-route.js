@@ -43,7 +43,9 @@ function loadRoute(routeFile, { pool, user = { id: 1, workspaceId: 7, role: 'own
   inject('db.js', { pool });
   inject('notifications.js', notifications || { notify });
   inject('middleware/auth.js', (req, _res, next) => {
-    req.userId = user.id; req.workspaceId = user.workspaceId; req.userRole = user.role; next();
+    // userTimezone mirrors the real middleware: users.timezone, undefined when the test
+    // does not set one (routes then fall back to the default zone, as for legacy rows).
+    req.userId = user.id; req.workspaceId = user.workspaceId; req.userRole = user.role; req.userTimezone = user.timezone; next();
   });
   const abs = path.join(ROOT, 'routes', routeFile);
   delete require.cache[abs];            // drop any earlier copy so this one binds to *this* fake pool

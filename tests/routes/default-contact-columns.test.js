@@ -24,7 +24,13 @@ function makePool(captured) {
         return { rows: [{ id: 9 }] };
       }
       if (/INSERT INTO pipelines/.test(sql))      return { rows: [{ id: 1 }] };
-      if (/SELECT name, email FROM users/.test(sql)) return { rows: [{ name: 'Ada', email: 'ada@example.com' }] };
+      // The creator's own row, which POST /api/workspace clones into the new
+      // workspace. Matched loosely and carrying password_hash, because that
+      // route copies the real hash (tests/routes/workspace-password-hash.test.js)
+      // and this fixture should not care about the exact column list.
+      if (/FROM users WHERE id=/.test(sql)) {
+        return { rows: [{ name: 'Ada', email: 'ada@example.com', password_hash: '$2b$10$fake' }] };
+      }
       if (/INSERT INTO users/.test(sql))          return { rows: [{ id: 5 }] };
       return { rows: [] };
     },

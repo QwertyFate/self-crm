@@ -105,7 +105,7 @@ describe('detail-views.js: the reference deal detail in a pop window', () => {
     assert.match(d, /api\.patch\(`\/api\/deals\/\$\{S\.d\.id\}\/stage`, \{ stage_id: s\.id \}\)/);
     assert.match(d, /api\.patch\(`\/api\/deals\/\$\{S\.d\.id\}\/urgency`, \{ urgency: v \}\)/);
     assert.match(d, /api\.put\(`\/api\/deals\/\$\{S\.d\.id\}`, payload\(patch\)\)/);
-    assert.match(d, /api\.post\('\/api\/activities', \{ contact_id: c\.id, type: S\.type/);
+    assert.match(d, /api\.post\('\/api\/activities', \{ contact_id: c\.id, deal_id: S\.d\.id, type: S\.type/);
     assert.match(d, /api\.patch\(`\/api\/activities\/\$\{\+el\.dataset\.id\}`/); assert.match(d, /api\.del\(`\/api\/activities\/\$\{aid\}`\)/);
     assert.match(d, /api\.post\('\/api\/tasks', \{ title, status: dvFirstKey\(\)/); assert.match(d, /api\.patch\(`\/api\/tasks\/\$\{x\.id\}\/status`/);
     assert.match(d, /api\.post\(`\/api\/deals\/\$\{S\.d\.id\}\/objects`, \{ object_id: v \}\)/); assert.match(d, /api\.del\(`\/api\/deals\/\$\{S\.d\.id\}\/objects\/\$\{\+el\.dataset\.id\}`\)/);
@@ -265,7 +265,10 @@ describe('detail-views.js: the reference task drawer and task form', () => {
 });
 
 describe('detail-views.js: pure helpers in a sandbox', () => {
-  const F = loadFns('public/js/detail-views.js', ['dvDue', 'dvActText', 'dvDigits']);
+  // dvDue now converts through the zone helpers and takes "now" from the picked clock;
+  // identity stubs keep this fixture on the browser's clock, which is what d(n) builds from.
+  const F = loadFns('public/js/detail-views.js', ['dvDue', 'dvActText', 'dvDigits'], {
+    extra: "function toViewerClock(d, t) { return { date: String(d || '').slice(0, 10), time: t || null }; } function nowInTimezone() { return new Date(); } function currentTimezone() { return 'UTC'; }" });
   test('dvDue phrases a due date relative to today', () => {
     // Builds the date from local Y/M/D, like a real <input type="date"> due-date picker would — not
     // toISOString(), whose UTC calendar date can fall a day either side of "today" near local midnight.
