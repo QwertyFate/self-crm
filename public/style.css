@@ -777,8 +777,8 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 /* ═══════════════════════════════════════════════════════════════════════════
    10 · DEALS BOARD / LIST LAYOUT
    The contact kanban that used to live here went with contact stages (Part 19):
-   .pipeline-board/.pipeline-col/.col-header/.col-cards/.contact-card/.card-*/
-   .stage-badge had no markup or renderer left. The Deals board draws from
+   .pipeline-board, .pipeline-col, .col-header, .col-cards, .contact-card, .card-*
+   and .stage-badge had no markup or renderer left. The Deals board draws from
    .col-board/.dcard in 00b.
    ═══════════════════════════════════════════════════════════════════════════ */
 /* Deals page: board (.col-board/.dcard from 00b) and list fill the page column */

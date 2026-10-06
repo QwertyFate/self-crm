@@ -4,8 +4,8 @@
   "description": "Simple CRM with pipeline",
   "main": "server.js",
   "scripts": {
-    "start": "node --env-file=.env server.js",
-    "dev": "nodemon --exec 'node --env-file=.env' server.js",
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "nodemon --exec 'node --env-file-if-exists=.env' server.js",
     "test": "node --test \"tests/**/*.test.js\"",
     "test:client": "node --test \"tests/client/*.test.js\"",
     "test:routes": "node --test \"tests/routes/*.test.js\"",

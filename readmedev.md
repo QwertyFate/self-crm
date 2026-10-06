@@ -213,6 +213,13 @@ utils/
   features.js        Platform feature flags, stored in platform_settings under key "features"
   mailer.js          SMTP transport; no SMTP_HOST → logs the reset link instead of sending
 
+deploy/
+  com.upgrads.crm.plist  launchd LaunchDaemon for the production Mac mini: KeepAlive (restart
+                         on crash), RunAtLoad (start at boot, no login needed), NODE_ENV=production
+                         (the CSP is only applied then), stdout/stderr to logs/. Production is
+                         NOT `npm run dev` in a terminal — see deploy/README.md and §8.
+  README.md              the operator steps: install, restart after a deploy, logs, stop
+
 routes/              25 files, each mounted at /api/<name> in server.js. See §4.
                      (admin.js and admin-provision.js both mount at /api/admin.)
 
@@ -1120,6 +1127,8 @@ Then pick one page and follow it end to end. Deals is the richest:
 | An empty `<input type="date">` that "looks filled" | Safari and the macOS picker paint an *empty* date input as today's date in grey. A user sees today, submits, and the value is `''` — the task saved with **no due date**, and only re-picking today made it stick. Never trust what a date input appears to show: gate the value on an explicit control (the create forms' "Set a due date" tick box, `due_on`, off by default) and **prefill real values** when it is switched on (`dvDefaultDue()`: today on the viewer's clock, +3 h, next quarter hour). Guard: `tests/client/task-form-due.test.js` |
 | The `hidden` **attribute** on an element with a `display` rule | The browser's own `[hidden] { display: none }` is a UA rule; **any** author `display` — `.field-row { display: grid }` — beats it, so `el.hidden = true` did nothing and a "hidden" date row stayed visible and usable. Hide with the `.hidden` **class** (`display: none !important`, the house convention), and note `style.css` now ends with a global `[hidden] { display: none !important }` so the attribute cannot lose this way again. Static source tests cannot see the cascade — this one reached the user. Guard: `tests/client/task-form-due.test.js` |
 | Rendering a stored activity note with `esc(a.content)` — or by *trusting* it | Notes are stored as **escaped text with `<br>`** (all four writers now; the modal used to store raw text, and the server stores whatever it is sent). `esc()` again shows `<br>` and `&amp;` literally (the Activities page bug). Trusting a string "because it contains a tag" is an XSS — a raw `<img onerror>` satisfies that test. Render every note with `dvActHtml()`: plain text first (`dvActText`), **then** `esc`, then newline → `<br>`. Search and CSV export read `dvActText` too. Guard: `tests/client/activities-notes.test.js` |
+| `*/` inside a CSS comment | CSS comments cannot contain `*/` and do not nest. A banner listing old class names as `.contact-card/.card-*/` **closed the comment at `.card-*/`**, mid-sentence; the rest of the banner became tokens the parser read as a selector, and the first real rule after it (`#deals-board.board { … }`) was swallowed and silently dropped — VS Code showed the file red, the browser just lost a rule. Never put `*/` in a comment (watch `*` followed by `/`, e.g. a glob then a slash). Guard: `tests/client/stylesheet-syntax.test.js` scans the whole stylesheet for exactly this |
+| Running production with `npm run dev` in a remote terminal | nodemon is a devDependency (absent from `npm ci --omit=dev`), restarts on *any* file change (a mid-deploy hazard), and dies with the SSH session. A shell `until … done` loop around it was measured to **never fire on an app crash** (nodemon waits for a file change rather than exiting) and to **ignore Ctrl+C** (nodemon exits 130, which `until` reads as "retry"). Production is `launchd` on the mini — `deploy/com.upgrads.crm.plist`, KeepAlive + RunAtLoad — running the `npm start` command. Also: with `NODE_ENV` unset, `server.js`'s CSP is **off**; the plist sets `NODE_ENV=production`. Guard: `tests/unit/deploy-config.test.js` |
 | Adding a column and not restarting | `initDb()` only runs at boot. Restart, then retest |
 | Adding a `public/js` global | Add it to `resetClientState()` in `public/js/auth.js` or it leaks across logins in the same tab |
 | Renaming a `public/js` function | `sliceFn()` fails loudly in the client tests. That is the feature; update the test |

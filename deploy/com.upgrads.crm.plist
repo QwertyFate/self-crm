@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- launchd LaunchDaemon for the production Mac mini. Install steps: deploy/README.md.
+       Fill the CHANGE-ME placeholders before installing (node path, repo path, user). -->
+  <key>Label</key>
+  <string>com.upgrads.crm</string>
+
+  <!-- Exactly what `npm start` runs. launchd has a minimal PATH, so node must be an absolute
+       path: the output of `which node` on the mini (Apple Silicon Homebrew: /opt/homebrew/bin/node,
+       Intel Homebrew: /usr/local/bin/node, nvm: ~/.nvm/versions/node/<version>/bin/node). -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/node</string>
+    <string>--env-file-if-exists=.env</string>
+    <string>server.js</string>
+  </array>
+
+  <!-- The clone on the mini. .env and logs/ are found relative to it. CHANGE-ME -->
+  <key>WorkingDirectory</key>
+  <string>/Users/CHANGE-ME/crm</string>
+
+  <!-- Run as your user, not as root (a LaunchDaemon's default). CHANGE-ME: `whoami` -->
+  <key>UserName</key>
+  <string>CHANGE-ME</string>
+
+  <!-- NODE_ENV=production switches on the Content-Security-Policy in server.js; with it unset
+       (as production had been running) the CSP is not applied. Everything else comes from .env. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key>
+    <string>production</string>
+  </dict>
+
+  <!-- Start at boot with no login, restart whenever the process exits (crash or kill), and
+       wait 2 s between restarts: initDb() exits 1 while Postgres is unreachable, and without a
+       pause that would spin. -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>2</integer>
+
+  <!-- stdout / stderr, appended. The directory must exist (mkdir -p logs); it is gitignored. CHANGE-ME -->
+  <key>StandardOutPath</key>
+  <string>/Users/CHANGE-ME/crm/logs/crm.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/CHANGE-ME/crm/logs/crm.err.log</string>
+</dict>
+</plist>
