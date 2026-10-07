@@ -159,152 +159,162 @@
        AUTH SCREEN
   ══════════════════════════════════════ -->
   <div id="auth-screen" class="hidden">
-    <div class="auth-wrap">
-      <div class="auth-card">
-        <div class="auth-logo">
-          <img src="/images/logo.png" alt="CRM Logo" />
+    <div class="au">
+      <!-- The navy wall: the sidebar's own colours, the wordmark, the product's one-line promise and
+           three things it actually does. German first; every string has an English key. -->
+      <aside class="au-brand" aria-label="Über Upgrads CRM">
+        <canvas class="au-wall" aria-hidden="true"></canvas>
+        <span class="au-scrim" aria-hidden="true"></span>
+        <img class="au-logo au-rise" src="/images/logo.png" alt="Upgrads">
+        <div class="au-brand-body">
+          <p class="au-headline au-rise au-rise-1" data-i18n="au_headline">Vom ersten Lead bis zum unterschriebenen Vertrag – auf einem Board.</p>
+          <p class="au-lede au-rise au-rise-2" data-i18n="au_lede">Upgrads CRM bündelt Pipeline, Kontakte, Aufgaben und Team-Chat in einem Arbeitsbereich. So sieht jeder im Team, was als Nächstes zählt.</p>
+          <ul class="au-points au-rise au-rise-3">
+            <li><span class="au-pt-ic"><svg class="ic" aria-hidden="true"><use href="#i-kanban"/></svg></span><div><b data-i18n="au_pt_pipe_t">Die Pipeline im Blick</b><span class="t" data-i18n="au_pt_pipe_d">Deals per Drag-and-drop durch die Phasen ziehen – mit Wert, Dringlichkeit und Forecast je Phase.</span></div></li>
+            <li><span class="au-pt-ic"><svg class="ic" aria-hidden="true"><use href="#i-users"/></svg></span><div><b data-i18n="au_pt_contacts_t">Kontakte mit Kontext</b><span class="t" data-i18n="au_pt_contacts_d">Notizen, Anrufe, E-Mails und WhatsApp: die ganze Historie eines Kontakts an einem Ort, nach Deal filterbar.</span></div></li>
+            <li><span class="au-pt-ic"><svg class="ic" aria-hidden="true"><use href="#i-message-circle"/></svg></span><div><b data-i18n="au_pt_team_t">Ein Team, jede Zeitzone</b><span class="t" data-i18n="au_pt_team_d">Aufgaben, Kalender und Chat im selben Arbeitsbereich. Jeder Termin erscheint in der Ortszeit des Betrachters.</span></div></li>
+          </ul>
         </div>
+      </aside>
 
-        <div class="auth-tabs">
-          <button class="auth-tab active" data-tab="login">Log in</button>
-          <button class="auth-tab" data-tab="signup">Sign up</button>
+      <section class="au-main">
+        <div class="au-lang" role="group" aria-label="Sprache / Language">
+          <button type="button" data-lang="de" aria-pressed="true" onclick="setLanguage('de')">DE</button>
+          <button type="button" data-lang="en" aria-pressed="false" onclick="setLanguage('en')">EN</button>
         </div>
-
-        <!-- ── View: Login / Signup ── -->
-        <div id="auth-view-main">
-          <!-- Login -->
-          <form id="login-form" class="auth-form" onsubmit="handleLogin(event)">
-            <div class="auth-field">
-              <label>Email</label>
-              <input type="email" id="login-email" required autocomplete="email" />
-            </div>
-            <div class="auth-field">
-              <label>Password</label>
-              <input type="password" id="login-password" required autocomplete="current-password" />
-            </div>
-            <div id="login-error" class="auth-error hidden"></div>
-            <button type="submit" class="btn btn-primary auth-submit">Log in</button>
-            <div class="auth-link-row">
-              <a href="#" onclick="showForgotPassword(event)">Forgot your password?</a>
-            </div>
-          </form>
-
-          <!-- Signup -->
-          <form id="signup-form" class="auth-form hidden" onsubmit="handleSignup(event)">
-            <div class="auth-mode-toggle">
-              <label class="auth-mode-opt">
-                <input type="radio" name="signup-mode" value="create" checked onchange="toggleSignupMode()" />
-                Create new workspace
-              </label>
-              <label class="auth-mode-opt">
-                <input type="radio" name="signup-mode" value="join" onchange="toggleSignupMode()" />
-                Join existing workspace
-              </label>
-            </div>
-            <div class="auth-field" id="su-workspace-field">
-              <label>Workspace name</label>
-              <input type="text" id="su-workspace" placeholder="e.g. Acme Sales" />
-            </div>
-            <div class="auth-field" id="su-platform-code-field">
-              <label>Platform invite code <span class="auth-hint">(required to create a workspace)</span></label>
-              <input type="text" id="su-platform-code" placeholder="Paste platform code here" autocomplete="off" />
-            </div>
-            <div class="auth-field hidden" id="su-code-field">
-              <label>Workspace invite code</label>
-              <input type="text" id="su-code" placeholder="Paste workspace code here" autocomplete="off" />
-            </div>
-            <div class="auth-field">
-              <label>Your name</label>
-              <input type="text" id="su-name" required autocomplete="name" />
-            </div>
-            <div class="auth-field">
-              <label>Email</label>
-              <input type="email" id="su-email" required autocomplete="email" />
-            </div>
-            <div class="auth-field">
-              <label>Password <span class="auth-hint">(min 6 chars)</span></label>
-              <input type="password" id="su-password" required autocomplete="new-password" />
-            </div>
-            <div id="signup-error" class="auth-error hidden"></div>
-            <button type="submit" class="btn btn-primary auth-submit">Create account</button>
-          </form>
-        </div>
-
-        <!-- ── View: Forgot Password ── -->
-        <div id="auth-view-forgot" class="hidden">
-          <p class="auth-view-title">Reset your password</p>
-          <p class="auth-view-sub">Enter your email and we'll send you a reset link.</p>
-          <form class="auth-form" onsubmit="handleForgotPassword(event)">
-            <div class="auth-field">
-              <label>Email</label>
-              <input type="email" id="forgot-email" required autocomplete="email" />
-            </div>
-            <div id="forgot-error" class="auth-error hidden"></div>
-            <div id="forgot-success" class="auth-success hidden"></div>
-            <div id="forgot-link-box" class="auth-reset-link hidden">
-              <label>Copy this reset link:</label>
-              <div class="reset-link-row">
-                <input type="text" id="forgot-link-val" readonly />
-                <button type="button" class="btn btn-sm" onclick="copyResetLink()">Copy</button>
+        <div class="au-col au-in">
+          <!-- ── View: Login / Signup ── -->
+          <div id="auth-view-main">
+            <form id="login-form" class="au-form" onsubmit="handleLogin(event)">
+              <div class="au-head"><h1 class="au-title" data-i18n="au_title_login">Willkommen zurück</h1><p class="au-sub" data-i18n="au_sub_login">Anmelden und direkt weiterarbeiten.</p></div>
+              <div id="login-notice" class="au-notice hidden" role="status"></div>
+              <div class="au-field field">
+                <label class="label" for="login-email" data-i18n="au_lbl_email">E-Mail-Adresse</label>
+                <div class="au-inp"><svg class="ic au-inp-ic" aria-hidden="true"><use href="#i-mail"/></svg><input class="input" type="email" id="login-email" required autocomplete="email"></div>
               </div>
+              <div class="au-field field">
+                <div class="au-lab"><label class="label" for="login-password" data-i18n="lbl_password">Passwort</label><a href="#" onclick="showForgotPassword(event)" data-i18n="auth_forgot">Passwort vergessen?</a></div>
+                <div class="au-pw au-inp"><svg class="ic au-inp-ic" aria-hidden="true"><use href="#i-lock"/></svg><input class="input" type="password" id="login-password" required autocomplete="current-password"><button type="button" class="au-pw-btn" data-pw="login-password" aria-pressed="false" onclick="togglePassword(this)"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><span class="sr-only" data-i18n="auth_show">Passwort anzeigen</span></button></div>
+              </div>
+              <div id="login-error" class="au-alert hidden" role="alert"></div>
+              <div id="login-hint" class="au-advice hidden" role="status"><span data-i18n="auth_fails_hint">Fünf Fehlversuche. Vielleicht hilft ein neues Passwort.</span><a href="#" onclick="showForgotPassword(event)" data-i18n="auth_fails_link">Passwort zurücksetzen</a></div>
+              <button type="submit" class="btn btn-primary btn-lg au-submit" data-i18n="btn_login">Anmelden</button>
+            </form>
+
+            <form id="signup-form" class="au-form hidden" onsubmit="handleSignup(event)">
+              <div class="au-head"><h1 class="au-title" data-i18n="au_title_signup">Konto erstellen</h1><p class="au-sub" data-i18n="au_sub_signup">Einen neuen Arbeitsbereich anlegen oder dem Team mit einem Einladungscode beitreten.</p></div>
+              <div class="au-modes" role="radiogroup">
+                <label class="check round au-mode"><input type="radio" name="signup-mode" value="create" checked onchange="toggleSignupMode()"><span data-i18n="auth_mode_create">Neuen Arbeitsbereich anlegen</span></label>
+                <label class="check round au-mode"><input type="radio" name="signup-mode" value="join" onchange="toggleSignupMode()"><span data-i18n="auth_mode_join">Bestehendem Arbeitsbereich beitreten</span></label>
+              </div>
+              <div class="au-field field" id="su-workspace-field">
+                <label class="label" for="su-workspace" data-i18n="lbl_workspace_name">Name des Arbeitsbereichs</label>
+                <input class="input" type="text" id="su-workspace" data-i18n-ph="ph_workspace_name" placeholder="z. B. Vertrieb Nord">
+              </div>
+              <div class="au-field field" id="su-platform-code-field">
+                <label class="label" for="su-platform-code" data-i18n="auth_platform_code">Plattform-Einladungscode</label>
+                <input class="input" type="text" id="su-platform-code" data-i18n-ph="ph_platform_code" placeholder="Code einfügen" autocomplete="off">
+                <div class="help" data-i18n="auth_platform_code_help">Wird vom Plattform-Administrator vergeben und ist für einen neuen Arbeitsbereich erforderlich.</div>
+              </div>
+              <div class="au-field field hidden" id="su-code-field">
+                <label class="label" for="su-code" data-i18n="auth_ws_code">Einladungscode des Arbeitsbereichs</label>
+                <input class="input" type="text" id="su-code" data-i18n-ph="ph_ws_code" placeholder="Code einfügen" autocomplete="off">
+              </div>
+              <div class="au-field field">
+                <label class="label" for="su-name" data-i18n="lbl_your_name">Vollständiger Name</label>
+                <input class="input" type="text" id="su-name" required autocomplete="name">
+              </div>
+              <div class="au-field field">
+                <label class="label" for="su-email" data-i18n="au_lbl_email">E-Mail-Adresse</label>
+                <div class="au-inp"><svg class="ic au-inp-ic" aria-hidden="true"><use href="#i-mail"/></svg><input class="input" type="email" id="su-email" required autocomplete="email"></div>
+              </div>
+              <div class="au-field field">
+                <label class="label" for="su-password" data-i18n="lbl_password">Passwort</label>
+                <div class="au-pw au-inp"><svg class="ic au-inp-ic" aria-hidden="true"><use href="#i-lock"/></svg><input class="input" type="password" id="su-password" required autocomplete="new-password"><button type="button" class="au-pw-btn" data-pw="su-password" aria-pressed="false" onclick="togglePassword(this)"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><span class="sr-only" data-i18n="auth_show">Passwort anzeigen</span></button></div>
+                <div class="help" data-i18n="auth_pw_min">Mindestens 6 Zeichen.</div>
+              </div>
+              <div id="signup-error" class="au-alert hidden" role="alert"></div>
+              <button type="submit" class="btn btn-primary btn-lg au-submit" data-i18n="btn_create_account">Konto erstellen</button>
+            </form>
+          </div>
+
+          <!-- ── View: Forgot Password ── -->
+          <div id="auth-view-forgot" class="hidden">
+            <form class="au-form" onsubmit="handleForgotPassword(event)">
+              <div class="au-head"><h1 class="au-title" data-i18n="au_title_forgot">Passwort zurücksetzen</h1><p class="au-sub" data-i18n="au_sub_forgot">Der Link zum Zurücksetzen geht an die hinterlegte E-Mail-Adresse.</p></div>
+              <div class="au-field field">
+                <label class="label" for="forgot-email" data-i18n="au_lbl_email">E-Mail-Adresse</label>
+                <div class="au-inp"><svg class="ic au-inp-ic" aria-hidden="true"><use href="#i-mail"/></svg><input class="input" type="email" id="forgot-email" required autocomplete="email"></div>
+              </div>
+              <div id="forgot-error" class="au-alert hidden" role="alert"></div>
+              <div id="forgot-success" class="au-notice hidden" role="status"></div>
+              <div id="forgot-link-box" class="au-field field hidden">
+                <label class="label" for="forgot-link-val" data-i18n="auth_copy_link">Link zum Zurücksetzen:</label>
+                <div class="au-linkrow"><input class="input" type="text" id="forgot-link-val" readonly><button type="button" class="btn btn-secondary" id="forgot-copy-btn" onclick="copyResetLink(this)"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span data-i18n="btn_copy">Kopieren</span></button></div>
+              </div>
+              <button type="submit" class="btn btn-primary btn-lg au-submit" id="forgot-btn" data-i18n="btn_send_reset">Link senden</button>
+            </form>
+            <div class="au-aux">
+              <a href="#" onclick="showMainAuth(event)"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span data-i18n="auth_back_login">Zurück zur Anmeldung</span></a>
             </div>
-            <button type="submit" class="btn btn-primary auth-submit" id="forgot-btn">Send reset link</button>
-          </form>
-          <div class="auth-link-row">
-            <a href="#" onclick="showMainAuth(event)"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back to log in</span></a>
+          </div>
+
+          <!-- ── View: Reset Password ── -->
+          <div id="auth-view-reset" class="hidden">
+            <form class="au-form" onsubmit="handleResetPassword(event)">
+              <div class="au-head"><h1 class="au-title" data-i18n="au_title_reset">Neues Passwort festlegen</h1><p class="au-sub" data-i18n="au_sub_reset">Mindestens 6 Zeichen.</p></div>
+              <input type="hidden" id="reset-token">
+              <div class="au-field field">
+                <label class="label" for="reset-password" data-i18n="auth_new_password">Neues Passwort</label>
+                <div class="au-pw au-inp"><svg class="ic au-inp-ic" aria-hidden="true"><use href="#i-lock"/></svg><input class="input" type="password" id="reset-password" required autocomplete="new-password"><button type="button" class="au-pw-btn" data-pw="reset-password" aria-pressed="false" onclick="togglePassword(this)"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><span class="sr-only" data-i18n="auth_show">Passwort anzeigen</span></button></div>
+              </div>
+              <div class="au-field field">
+                <label class="label" for="reset-confirm" data-i18n="lbl_confirm_password">Passwort bestätigen</label>
+                <div class="au-pw au-inp"><svg class="ic au-inp-ic" aria-hidden="true"><use href="#i-lock"/></svg><input class="input" type="password" id="reset-confirm" required autocomplete="new-password"><button type="button" class="au-pw-btn" data-pw="reset-confirm" aria-pressed="false" onclick="togglePassword(this)"><svg class="ic" aria-hidden="true"><use href="#i-eye"/></svg><span class="sr-only" data-i18n="auth_show">Passwort anzeigen</span></button></div>
+              </div>
+              <div id="reset-error" class="au-alert hidden" role="alert"></div>
+              <button type="submit" class="btn btn-primary btn-lg au-submit" data-i18n="btn_set_password">Passwort speichern</button>
+            </form>
+            <div class="au-aux">
+              <a href="#" onclick="showMainAuth(event)"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span data-i18n="auth_back_login">Zurück zur Anmeldung</span></a>
+            </div>
+          </div>
+
+          <!-- ── View: Workspace Picker ── -->
+          <div id="auth-view-workspace-picker" class="hidden">
+            <div class="au-head"><h1 class="au-title" data-i18n="au_title_picker">Arbeitsbereich wählen</h1><p class="au-sub" data-i18n="au_sub_picker">Dieses Konto gehört zu mehreren Arbeitsbereichen. Welcher soll geöffnet werden?</p></div>
+            <div id="workspace-picker-list" class="workspace-picker-list"></div>
+            <div id="workspace-picker-error" class="au-alert hidden" role="alert"></div>
+          </div>
+
+          <!-- ── View: Join Workspace (its own ids — the in-app modal has join-ws-code / join-ws-error) ── -->
+          <div id="auth-view-join-workspace" class="hidden">
+            <form class="au-form" onsubmit="handleJoinWorkspace(event)">
+              <div class="au-head"><h1 class="au-title" data-i18n="au_title_join">Arbeitsbereich beitreten</h1><p class="au-sub" data-i18n="au_sub_join">Den Einladungscode vom Inhaber oder Admin des Arbeitsbereichs eingeben.</p></div>
+              <div class="au-field field">
+                <label class="label" for="join-ws-auth-code" data-i18n="auth_ws_code">Einladungscode des Arbeitsbereichs</label>
+                <input class="input" type="text" id="join-ws-auth-code" data-i18n-ph="ph_ws_code" placeholder="Code einfügen" autocomplete="off">
+              </div>
+              <div id="join-ws-auth-error" class="au-alert hidden" role="alert"></div>
+              <button type="submit" class="btn btn-primary btn-lg au-submit" data-i18n="btn_join_workspace">Beitreten</button>
+            </form>
+            <div class="au-aux">
+              <a href="#" onclick="closeJoinWorkspace(event)"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span data-i18n="btn_back">Zurück</span></a>
+            </div>
+          </div>
+
+          <!-- The login/signup switch. .auth-tabs / .auth-tab[data-tab] are what auth.js toggles (bound once at
+               script load); CSS shows the question + link for whichever form is NOT active. -->
+          <div class="auth-tabs au-switch">
+            <span data-for="signup" data-i18n="au_switch_q_signup">Noch kein Konto?</span><button type="button" class="auth-tab" data-tab="signup" aria-selected="false" data-i18n="tab_signup">Konto erstellen</button>
+            <span data-for="login" data-i18n="au_switch_q_login">Bereits ein Konto?</span><button type="button" class="auth-tab active" data-tab="login" aria-selected="true" data-i18n="tab_login">Anmelden</button>
+          </div>
+
+          <div class="admin-link-row">
+            <a href="/?admin" class="admin-link"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg><span>Admin</span></a>
           </div>
         </div>
-
-        <!-- ── View: Reset Password ── -->
-        <div id="auth-view-reset" class="hidden">
-          <p class="auth-view-title">Set a new password</p>
-          <form class="auth-form" onsubmit="handleResetPassword(event)">
-            <input type="hidden" id="reset-token" />
-            <div class="auth-field">
-              <label>New password <span class="auth-hint">(min 6 chars)</span></label>
-              <input type="password" id="reset-password" required autocomplete="new-password" />
-            </div>
-            <div class="auth-field">
-              <label>Confirm password</label>
-              <input type="password" id="reset-confirm" required autocomplete="new-password" />
-            </div>
-            <div id="reset-error" class="auth-error hidden"></div>
-            <button type="submit" class="btn btn-primary auth-submit">Set password</button>
-          </form>
-          <div class="auth-link-row">
-            <a href="#" onclick="showMainAuth(event)"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back to log in</span></a>
-          </div>
-        </div>
-
-        <!-- ── View: Workspace Picker ── -->
-        <div id="auth-view-workspace-picker" class="hidden">
-          <p class="auth-view-title">Choose a workspace</p>
-          <p class="auth-view-sub">You belong to multiple workspaces. Which one would you like to open?</p>
-          <div id="workspace-picker-list" class="workspace-picker-list"></div>
-          <div id="workspace-picker-error" class="auth-error hidden"></div>
-        </div>
-
-        <!-- ── View: Join Workspace ── -->
-        <div id="auth-view-join-workspace" class="hidden">
-          <p class="auth-view-title">Join a workspace</p>
-          <form class="auth-form" onsubmit="handleJoinWorkspace(event)">
-            <div class="auth-field">
-              <label>Workspace invite code</label>
-              <input type="text" id="join-ws-code" placeholder="Paste invite code here" autocomplete="off" />
-            </div>
-            <div id="join-ws-error" class="auth-error hidden"></div>
-            <button type="submit" class="btn btn-primary auth-submit">Join workspace</button>
-          </form>
-          <div class="auth-link-row">
-            <a href="#" onclick="closeJoinWorkspace(event)"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back</span></a>
-          </div>
-        </div>
-
-        <div class="admin-link-row">
-          <a href="/?admin" class="admin-link"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg><span>Admin</span></a>
-        </div>
-
-      </div>
+      </section>
     </div>
   </div>
 
@@ -1850,6 +1860,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/chat.js"></script>
   <script src="js/guide.js"></script>
+  <script src="js/login-wall.js"></script>
   <script src="js/admin-import.js"></script>
   <script src="js/detail-views.js"></script>
 </body>

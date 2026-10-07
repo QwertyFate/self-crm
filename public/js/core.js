@@ -84,7 +84,7 @@ const PAGE_SIZE    = 25;
 let sortKey        = null;
 let sortDir        = 'asc';
 let activeFilters  = {};
-let currentLang   = localStorage.getItem('lang') || 'en';
+let currentLang   = localStorage.getItem('lang') || 'de';   // the team is German; English stays one click away in Settings
 
 const TRANSLATIONS = {
   en: {
@@ -215,6 +215,30 @@ const TRANSLATIONS = {
     intg_no_activity:'No leads received yet. Send a test from your platform and it will show up here.',
     intg_fields_missing:'Not found in the payload:', intg_fields_missing_hint:'Check that the mapping keys match the incoming data.', intg_view_raw:'View raw payload',
     intg_log_success:'Lead received', intg_log_error:'Rejected',
+    // Login page (2026-10-06) — the door, in both languages
+    au_headline:'From first lead to signed contract, on one board.',
+    au_lede:'Upgrads CRM brings your pipeline, contacts, tasks and team chat into one workspace, so everyone on the team can see what matters next.',
+    au_pt_pipe_t:'The pipeline at a glance', au_pt_pipe_d:'Drag deals through your stages, with value, urgency and forecast per stage.',
+    au_pt_contacts_t:'Contacts with context', au_pt_contacts_d:'Notes, calls, emails and WhatsApp: a contact’s whole history in one place, filterable by deal.',
+    au_pt_team_t:'One team, every time zone', au_pt_team_d:'Tasks, calendar and chat in the same workspace. Every date shows in each person’s local time.',
+    au_switch_q_signup:'New to Upgrads?', tab_signup:'Create an account', au_switch_q_login:'Already have an account?', tab_login:'Log in',
+    au_title_login:'Welcome back', au_sub_login:'Log in and pick up where you left off.',
+    au_lbl_email:'Email address', lbl_password:'Password', auth_forgot:'Forgot your password?', auth_show:'Show password', auth_hide:'Hide password',
+    btn_login:'Log in', auth_logging_in:'Logging in…',
+    au_title_signup:'Create your account', au_sub_signup:'Start a new workspace, or join your team with an invite code.',
+    auth_mode_create:'Create a new workspace', auth_mode_join:'Join an existing workspace',
+    lbl_workspace_name:'Workspace name', ph_workspace_name:'e.g. Sales North',
+    auth_platform_code:'Platform invite code', auth_platform_code_help:'Issued by the platform administrator; required for a new workspace.', ph_platform_code:'Paste the code',
+    auth_ws_code:'Workspace invite code', ph_ws_code:'Paste the code',
+    lbl_your_name:'Full name', auth_pw_min:'At least 6 characters.', btn_create_account:'Create account',
+    au_title_forgot:'Reset your password', au_sub_forgot:'The reset link goes to the email address on the account.',
+    auth_copy_link:'Reset link:', btn_send_reset:'Send reset link', auth_back_login:'Back to log in',
+    au_title_reset:'Set a new password', au_sub_reset:'At least 6 characters.', auth_new_password:'New password', lbl_confirm_password:'Confirm password', btn_set_password:'Save password',
+    au_title_picker:'Choose a workspace', au_sub_picker:'This account belongs to several workspaces. Which one should open?',
+    au_title_join:'Join a workspace', au_sub_join:'Enter the invite code from the workspace owner or admin.', btn_join_workspace:'Join', btn_back:'Back',
+    auth_pw_updated:'Password updated. Log in with your new password.', auth_pw_mismatch:'The passwords do not match.', auth_code_required:'Please enter the invite code.',
+    auth_err_invalid:'Email address or password is not correct.', auth_err_limit:'Too many failed attempts. Please try again in 15 minutes.',
+    auth_retry_in:'Try again in %s s', auth_fails_hint:'Five failed attempts. A new password may help.', auth_fails_link:'Reset password',
   },
   de: {
     nav_deals:'Deals', nav_contacts:'Kontakte', nav_activities:'Aktivitäten', nav_settings:'Einstellungen', nav_board:'Board',
@@ -344,6 +368,30 @@ const TRANSLATIONS = {
     intg_no_activity:'Noch keine Leads empfangen. Sende einen Test aus deiner Plattform, dann erscheint er hier.',
     intg_fields_missing:'Nicht im Payload gefunden:', intg_fields_missing_hint:'Prüfe, ob die Zuordnungsschlüssel zu den eingehenden Daten passen.', intg_view_raw:'Rohdaten anzeigen',
     intg_log_success:'Lead empfangen', intg_log_error:'Abgelehnt',
+    // Login-Seite (2026-10-06) — unpersönlich formuliert, damit sie neben den App-Texten besteht
+    au_headline:'Vom ersten Lead bis zum unterschriebenen Vertrag – auf einem Board.',
+    au_lede:'Upgrads CRM bündelt Pipeline, Kontakte, Aufgaben und Team-Chat in einem Arbeitsbereich. So sieht jeder im Team, was als Nächstes zählt.',
+    au_pt_pipe_t:'Die Pipeline im Blick', au_pt_pipe_d:'Deals per Drag-and-drop durch die Phasen ziehen – mit Wert, Dringlichkeit und Forecast je Phase.',
+    au_pt_contacts_t:'Kontakte mit Kontext', au_pt_contacts_d:'Notizen, Anrufe, E-Mails und WhatsApp: die ganze Historie eines Kontakts an einem Ort, nach Deal filterbar.',
+    au_pt_team_t:'Ein Team, jede Zeitzone', au_pt_team_d:'Aufgaben, Kalender und Chat im selben Arbeitsbereich. Jeder Termin erscheint in der Ortszeit des Betrachters.',
+    au_switch_q_signup:'Noch kein Konto?', tab_signup:'Konto erstellen', au_switch_q_login:'Bereits ein Konto?', tab_login:'Anmelden',
+    au_title_login:'Willkommen zurück', au_sub_login:'Anmelden und direkt weiterarbeiten.',
+    au_lbl_email:'E-Mail-Adresse', lbl_password:'Passwort', auth_forgot:'Passwort vergessen?', auth_show:'Passwort anzeigen', auth_hide:'Passwort verbergen',
+    btn_login:'Anmelden', auth_logging_in:'Anmeldung läuft…',
+    au_title_signup:'Konto erstellen', au_sub_signup:'Einen neuen Arbeitsbereich anlegen oder dem Team mit einem Einladungscode beitreten.',
+    auth_mode_create:'Neuen Arbeitsbereich anlegen', auth_mode_join:'Bestehendem Arbeitsbereich beitreten',
+    lbl_workspace_name:'Name des Arbeitsbereichs', ph_workspace_name:'z. B. Vertrieb Nord',
+    auth_platform_code:'Plattform-Einladungscode', auth_platform_code_help:'Wird vom Plattform-Administrator vergeben und ist für einen neuen Arbeitsbereich erforderlich.', ph_platform_code:'Code einfügen',
+    auth_ws_code:'Einladungscode des Arbeitsbereichs', ph_ws_code:'Code einfügen',
+    lbl_your_name:'Vollständiger Name', auth_pw_min:'Mindestens 6 Zeichen.', btn_create_account:'Konto erstellen',
+    au_title_forgot:'Passwort zurücksetzen', au_sub_forgot:'Der Link zum Zurücksetzen geht an die hinterlegte E-Mail-Adresse.',
+    auth_copy_link:'Link zum Zurücksetzen:', btn_send_reset:'Link senden', auth_back_login:'Zurück zur Anmeldung',
+    au_title_reset:'Neues Passwort festlegen', au_sub_reset:'Mindestens 6 Zeichen.', auth_new_password:'Neues Passwort', lbl_confirm_password:'Passwort bestätigen', btn_set_password:'Passwort speichern',
+    au_title_picker:'Arbeitsbereich wählen', au_sub_picker:'Dieses Konto gehört zu mehreren Arbeitsbereichen. Welcher soll geöffnet werden?',
+    au_title_join:'Arbeitsbereich beitreten', au_sub_join:'Den Einladungscode vom Inhaber oder Admin des Arbeitsbereichs eingeben.', btn_join_workspace:'Beitreten', btn_back:'Zurück',
+    auth_pw_updated:'Passwort aktualisiert. Jetzt mit dem neuen Passwort anmelden.', auth_pw_mismatch:'Die Passwörter stimmen nicht überein.', auth_code_required:'Bitte den Einladungscode eingeben.',
+    auth_err_invalid:'E-Mail-Adresse oder Passwort ist nicht korrekt.', auth_err_limit:'Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen.',
+    auth_retry_in:'Erneut versuchen in %s s', auth_fails_hint:'Fünf Fehlversuche. Vielleicht hilft ein neues Passwort.', auth_fails_link:'Passwort zurücksetzen',
   },
 };
 
@@ -365,6 +413,7 @@ function applyTranslations() {
   const lbl = document.getElementById('dark-toggle-label');
   if (lbl) lbl.textContent = t(dark ? 'light_mode' : 'dark_mode');
   document.querySelectorAll('input[name="language"]').forEach(r => { r.checked = r.value === currentLang; });
+  document.querySelectorAll('.au-lang button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === currentLang)));   // the login page's DE | EN switch
 }
 
 function setLanguage(lang) {

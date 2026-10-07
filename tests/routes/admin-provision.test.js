@@ -65,6 +65,20 @@ function one(log, re) {
   return hits[0];
 }
 
+describe('the gate accepts the secret in the request (no session)', () => {
+  test('GET …/provision/list with X-Admin-Secret and no session → 200', async () => {
+    const saved = process.env.ADMIN_SECRET; process.env.ADMIN_SECRET = 'top-secret';
+    const q = async (sql) => (/FROM workspaces/.test(sql) ? { rows: [] } : { rows: [] });
+    const s = await server({ connect: async () => ({ query: q, release() {} }), query: q }, { isAdmin: false });
+    try {
+      const r = await s.request('GET', '/api/admin/provision/list', undefined, { 'x-admin-secret': 'top-secret' });   // undefined: a GET has no body
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      const bad = await s.request('GET', '/api/admin/provision/list', undefined, { 'x-admin-secret': 'wrong' });
+      assert.equal(bad.status, 401);
+    } finally { await s.close(); if (saved === undefined) delete process.env.ADMIN_SECRET; else process.env.ADMIN_SECRET = saved; }
+  });
+});
+
 describe('GET /api/admin/provision/list', () => {
   const dbRow = {
     id: 7, name: 'Acme', created_at: '2026-10-01T10:00:00Z', provisioned_at: '2026-10-01T10:00:00Z',

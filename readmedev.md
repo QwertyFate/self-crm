@@ -203,7 +203,9 @@ storage.js           Supabase Storage upload/delete, bucket "task-attachments"
 
 middleware/
   auth.js            session → req.userId / req.workspaceId / req.userRole / req.userTimezone. Read it.
-  admin-auth.js      requireAdmin — the session.isAdmin gate, shared by the two /api/admin routers
+  admin-auth.js      requireAdmin — the platform gate, shared by the two /api/admin routers: the console's
+                     session.isAdmin, OR admin_secret in the JSON body / X-Admin-Secret header (constant-time,
+                     scrubbed before the handler) so a script needs one request, no login first
   field-crud.js      createFieldRouter(table) — ONE router behind all four custom-field tables,
                      and VALID_TYPES, the custom-field type whitelist
   reorder.js         reorderItems() — transactional position rewrite, used by stage reordering
@@ -226,8 +228,10 @@ routes/              25 files, each mounted at /api/<name> in server.js. See §4
 public/
   index.html         The ENTIRE app shell: every page, every modal, the SVG icon sprite,
                      and the <script> tags whose ORDER is the dependency order.
+                     #auth-screen is the au-* split login (2026-10-06); the .auth-* card
+                     classes now belong only to the admin gates (#admin-screen, admin.html).
   admin.html         The standalone platform admin console (served at /adminconsole).
-                     Two tabs: Platform Defaults and Provisioning. Has its own inline
+                     Three tabs: Platform Defaults, Provisioning, and API Tutorial (the provisioning guide, with copy-and-run requests on this host). Has its own inline
                      <script> and its own esc() — it does not load core.js.
   style.css          One stylesheet for everything
   fonts/, images/    inter-latin-wght.woff2, logo.png
@@ -236,6 +240,7 @@ public/
                        the ui.* primitives (popover, menu, select, modal, drawer, confirm,
                        toast), shell helpers, command palette.  EVERYTHING depends on this.
       auth.js          init(), login/signup/reset, workspace picker + switching, switchPage()
+      login-wall.js    the login page's canvas background (a vanilla port of upgrads.de's louvre wall); self-starting, idle while #auth-screen is hidden
                        (the "router"), resetClientState(), ensureX() caches
       deals.js         Deals page: board, list, summary, filters, drag & drop
       contacts.js      Contacts/Suppliers table: columns, inline edit, filters, bulk select
@@ -263,7 +268,7 @@ tests/
                          swapped out of require.cache, and serves it on a random port.
   helpers/client-fn.js   Slices one function out of a public/js file and evals it in a sandbox.
   routes/                10 files — SQL and behaviour, with a fake pool
-  client/                22 files — static + sandboxed assertions over public/js and index.html
+  client/                32 files — static + sandboxed assertions over public/js and index.html
   unit/                  3 files — pure units (engine signing/dispatch, import body limit)
 
 reference/pro/         Design reference the UI was ported from. GITIGNORED, read-only, not shipped.

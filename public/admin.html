@@ -235,6 +235,17 @@
       overflow-x: auto; white-space: pre; margin: 0;
     }
 
+    /* ── API Tutorial tab ── */
+    .tut-h { margin: 22px 0 4px 0; font-size: 14px; color: #374151; }
+    .tut-code { position: relative; margin: 8px 0 4px 0; }
+    .tut-code .prov-copy-btn { position: absolute; top: 8px; right: 8px; padding: 4px 10px; font-size: 12px; }
+    .tut-table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 8px 0 14px 0; }
+    .tut-table th, .tut-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+    .tut-table th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+    .tut-list { margin: 8px 0 0 0; padding-left: 20px; font-size: 14px; color: #374151; line-height: 1.55; }
+    .tut-list li { margin-bottom: 6px; }
+    #tab-tutorial code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
+
     /* ── Workspace table ── */
     .prov-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .prov-table th {
@@ -287,6 +298,7 @@
       <div class="admin-tabs">
         <button class="admin-tab active" id="tabbtn-defaults"    onclick="showAdminTab('defaults')">Platform Defaults</button>
         <button class="admin-tab"        id="tabbtn-provisioning" onclick="showAdminTab('provisioning')">Provisioning</button>
+        <button class="admin-tab"        id="tabbtn-tutorial"     onclick="showAdminTab('tutorial')">API Tutorial</button>
       </div>
 
       <div id="tab-defaults">
@@ -459,6 +471,161 @@
           </div>
         </div>
       </div><!-- /#tab-provisioning -->
+
+      <div id="tab-tutorial" class="hidden">
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Using the provisioning API</h2>
+          <p class="prov-hint">
+            One request creates a customer workspace, its owner account, any custom fields it should start with,
+            and a working inbound webhook — and hands back the owner's password and the webhook URL to send on.
+            The Provisioning tab is a form over exactly this API. Every snippet below already uses this console's
+            host; copy and run.
+          </p>
+
+          <h3 class="tut-h">1 · Authenticate: the admin secret goes in the payload</h3>
+          <p class="prov-hint">
+            No login step. Put <code>admin_secret</code> (the server's <code>ADMIN_SECRET</code>) in the JSON of the request
+            itself — one request does everything. For <code>GET</code> requests send it as the <code>X-Admin-Secret</code>
+            header instead. The secret is checked in constant time and dropped before the request is processed; it never
+            appears in a response. Treat it like a password: HTTPS only, never in a URL.
+          </p>
+          <p class="prov-hint">The console's own way still works too — <code>POST /api/admin/login</code> once and reuse the session cookie:</p>
+          <div class="tut-code"><pre class="prov-curl" id="tut-login">curl -c cookies.txt -X POST <span class="tut-host">https://YOUR-HOST</span>/api/admin/login \
+  -H 'Content-Type: application/json' \
+  -d '{"secret":"YOUR_ADMIN_SECRET"}'
+# then add  -b cookies.txt  to the requests below and leave admin_secret out</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('tut-login').textContent, this)">Copy</button></div>
+
+          <h3 class="tut-h">2 · Provision — the smallest request</h3>
+          <p class="prov-hint"><code>POST /api/admin/provision</code> — the secret plus the workspace name and the owner's email. Nothing else is required.</p>
+          <div class="tut-code"><pre class="prov-curl" id="tut-minimal">curl -X POST <span class="tut-host">https://YOUR-HOST</span>/api/admin/provision \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "admin_secret": "YOUR_ADMIN_SECRET",
+    "workspace_name": "Acme Corp",
+    "owner_email": "maria@acmecorp.com"
+  }'</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('tut-minimal').textContent, this)">Copy</button></div>
+
+          <h3 class="tut-h">3 · A full request</h3>
+          <p class="prov-hint">Everything the endpoint accepts. Custom fields apply to <strong>this new workspace only</strong>; afterwards its own members manage them in Settings.</p>
+          <div class="tut-code"><pre class="prov-curl" id="tut-full">{
+  "admin_secret":   "YOUR_ADMIN_SECRET",      // required (unless you sent the session cookie)
+  "workspace_name": "Acme Corp",              // required
+  "owner_email":    "maria@acmecorp.com",     // required
+  "owner_name":     "Maria Schmidt",          // optional — defaults to the part before the @
+
+  "contact_fields": [                         // optional — extra fields on every contact
+    { "name": "Lead Source", "type": "dropdown", "options": ["Google Ads", "Referral"] },
+    { "name": "LinkedIn",    "type": "url" }
+  ],
+
+  "deal_fields": [                            // optional — extra fields on every deal
+    { "name": "Contract Start", "type": "date" },
+    { "name": "Seats", "field_key": "seat_count", "type": "number" }
+  ],
+
+  "create_deal":    true,                     // optional, default true — inbound leads also open a deal
+  "webhook_active": true                      // optional, default true
+}</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('tut-full').textContent, this)">Copy</button></div>
+
+          <h3 class="tut-h">4 · What comes back (201)</h3>
+          <div class="tut-code"><pre class="prov-curl" id="tut-response">{
+  "workspace": { "id": 42, "name": "Acme Corp" },
+
+  "owner": {
+    "email": "maria@acmecorp.com",
+    "password": "Z5ri-jBxY-cQ3V-QJgV",        // send this. Shown once — not stored, not emailed.
+    "existing_account": false,
+    "credentials_note": "Shown once only, and not recoverable…"
+  },
+
+  "login_url": "<span class="tut-host">https://YOUR-HOST</span>",
+
+  "custom_fields": {
+    "contact": [ { "field_key": "lead_source", "type": "dropdown", … } ],
+    "deal":    [ { "field_key": "contract_start", "type": "date", … } ]
+  },
+
+  "integration": {
+    "webhook_url": "<span class="tut-host">https://YOUR-HOST</span>/api/integrations/receive/cd9dd4cd863a…",
+    "field_map":   { "name": "full_name", "email": "email", "lead_source": "lead_source", … },
+    "sample_payload": { "full_name": "Jane Doe", "email": "jane@example.com", … },
+    "sample_curl":    "curl -X POST …",
+    "success_response": { "success": true, "contact_id": 123, "deal_id": 456 },
+    "error_responses":  [ … ],
+    "rate_limits":      { "per_key": "120 requests per minute", … },
+    "notes":            [ … ]
+  }
+}</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('tut-response').textContent, this)">Copy</button></div>
+          <p class="prov-hint">Send the customer three things: the <strong>login URL</strong>, the <strong>password</strong>, and the <strong>webhook URL</strong> (plus <code>sample_curl</code> if they are wiring up an integration).</p>
+
+          <h3 class="tut-h">5 · The list</h3>
+          <p class="prov-hint"><code>GET /api/admin/provision/list</code> — every workspace with its owner, newest first; <code>provisioned_at</code> is set only for workspaces created through this API.</p>
+          <div class="tut-code"><pre class="prov-curl" id="tut-list">curl -H 'X-Admin-Secret: YOUR_ADMIN_SECRET' <span class="tut-host">https://YOUR-HOST</span>/api/admin/provision/list</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('tut-list').textContent, this)">Copy</button></div>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Custom fields</h2>
+          <p class="prov-hint">Each entry in <code>contact_fields</code> / <code>deal_fields</code> takes:</p>
+          <table class="tut-table">
+            <thead><tr><th>Key</th><th>Required</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td><code>name</code></td><td>yes</td><td>What the user sees, e.g. <code>"Lead Source"</code></td></tr>
+              <tr><td><code>type</code></td><td>no</td><td>Defaults to <code>text</code>. One of <code>text</code>, <code>email</code>, <code>phone</code>, <code>number</code>, <code>dropdown</code>, <code>date</code>, <code>url</code></td></tr>
+              <tr><td><code>options</code></td><td>only for <code>dropdown</code></td><td>A dropdown with no options is rejected</td></tr>
+              <tr><td><code>field_key</code></td><td>no</td><td>Auto-generated from <code>name</code> (<code>"Lead Source"</code> → <code>lead_source</code>). Set it if you need a specific key</td></tr>
+            </tbody>
+          </table>
+          <ul class="tut-list">
+            <li>Up to 50 fields per object. A contact field key may not collide with a built-in column (<code>name</code>, <code>email</code>, <code>phone</code>, <code>company</code>, <code>assigned_to</code>, …) — that is a <code>400</code>.</li>
+            <li><strong>Contact fields are wired into the webhook automatically</strong>: each one is added to <code>field_map</code>, so the customer can send <code>lead_source</code> in their payload and it lands on the contact.</li>
+            <li><strong>Deal fields are not fillable by the webhook.</strong> They work on the deal board and in the deal modal, but an auto-created deal gets a title, pipeline and stage only. This is repeated in <code>integration.notes</code> of every response.</li>
+            <li>Fields can only be seeded here, at creation. The API cannot add fields to an existing workspace — once it is live, its owner/admins manage fields in <strong>Settings → Custom fields</strong>.</li>
+          </ul>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">The owner's password</h2>
+          <ul class="tut-list">
+            <li>Generated per workspace: 16 characters in four groups, e.g. <code>Z5ri-jBxY-cQ3V-QJgV</code>; look-alike characters (<code>0</code>/<code>O</code>, <code>1</code>/<code>l</code>/<code>I</code>) are excluded so it survives being retyped.</li>
+            <li><strong>Shown once, in the response. Not stored, not emailed.</strong> Only a bcrypt hash is kept — nobody can read it back later. Copy it before closing the response.</li>
+            <li>Lost? The owner uses <strong>Forgot password</strong> on the login page and sets their own. Suggest they do that anyway, since you have seen the first one.</li>
+            <li><strong>If the email already has an account</strong>, the owner keeps their existing password and <code>existing_account</code> is <code>true</code> — no new credentials. One person can own several workspaces with one password; at login they are asked which workspace to open.</li>
+          </ul>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Handing over the integration</h2>
+          <p class="prov-hint">Give the customer <code>integration.webhook_url</code> and <code>integration.sample_curl</code>. The webhook takes a <code>POST</code> with JSON and needs no header or token — <strong>the key in the URL is the secret, so treat the URL itself as a credential.</strong></p>
+          <ol class="tut-list">
+            <li>The payload is mapped through <code>field_map</code> (nested paths work: <code>"data.contact.email"</code>).</li>
+            <li>At least a <strong>name or an email</strong> is required, otherwise <code>422</code>.</li>
+            <li>An existing contact is matched and updated <strong>by email</strong>; with no email a new one is always created.</li>
+            <li>Anything mapped that is not <code>name</code>/<code>email</code>/<code>phone</code>/<code>company</code> is stored on the contact as a custom field.</li>
+            <li>A deal is opened in the first pipeline stage, if <code>create_deal</code> was on.</li>
+            <li>The delivery is logged either way.</li>
+          </ol>
+          <p class="prov-hint">Rate limits: 120 requests per minute per key, 120 per 15 minutes per IP. The owner can change the mapping, rotate the key or switch the webhook off under <strong>Settings → Integrations</strong>, where the last 50 deliveries are listed — the first place to look when "my form isn't coming through".</p>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Errors</h2>
+          <p class="prov-hint">Every failure is <code>{ "error": "…" }</code> with a message meant to be read. Nothing is half-created: the whole thing runs in one database transaction.</p>
+          <table class="tut-table">
+            <thead><tr><th>Status</th><th>Means</th></tr></thead>
+            <tbody>
+              <tr><td><code>400</code></td><td>Something in the request is wrong — the message names the field, e.g. <code>contact_fields[1].type "money" is not valid</code></td></tr>
+              <tr><td><code>401</code></td><td><code>admin_secret</code> (or the <code>X-Admin-Secret</code> header) missing or wrong, and no admin session</td></tr>
+              <tr><td><code>503</code></td><td><code>ADMIN_SECRET</code> is not configured on the server — the admin API is off</td></tr>
+            </tbody>
+          </table>
+          <ul class="tut-list">
+            <li><strong>Workspace names are not unique.</strong> Provisioning twice with the same name gives two separate workspaces — check the list first.</li>
+            <li><strong>It can only create.</strong> A stray <code>workspace_id</code> in the body is ignored; there is no way to point it at an existing workspace.</li>
+            <li><strong><code>APP_URL</code> must be set on the server</strong>, or the generated login and webhook URLs point at the wrong host.</li>
+            <li><strong>Nothing is emailed</strong> — not the password, not the webhook URL. Handing them over is a manual step, by design.</li>
+          </ul>
+        </div>
+      </div><!-- /#tab-tutorial -->
 
       <div id="message" class="message" style="display: none;"></div>
     </div>
@@ -861,11 +1028,17 @@
        ══════════════════════════════════════════════════════════════════════ */
 
     function showAdminTab(name) {
-      for (const t of ['defaults', 'provisioning']) {
+      for (const t of ['defaults', 'provisioning', 'tutorial']) {
         document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== name);
         document.getElementById(`tabbtn-${t}`).classList.toggle('active', t === name);
       }
       if (name === 'provisioning') loadProvisionList();
+      if (name === 'tutorial') fillTutorialHost();
+    }
+
+    // The tutorial's snippets name this console's own host, so they are copy-and-run.
+    function fillTutorialHost() {
+      document.querySelectorAll('.tut-host').forEach(el => { el.textContent = location.origin; });
     }
 
     // One row of the contact/deal custom-field editors. `kind` is 'contact' or

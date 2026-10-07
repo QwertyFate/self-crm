@@ -74,7 +74,9 @@ app.use(helmet({
 }));
 
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, max: 5,
+  // Counts WRONG guesses only: a correct password never spends an attempt (it did until 2026-10-06,
+  // so a handful of normal logins locked the door for 15 minutes).
+  windowMs: 15 * 60 * 1000, max: 10, skipSuccessfulRequests: true,
   message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
   standardHeaders: true, legacyHeaders: false,
 });

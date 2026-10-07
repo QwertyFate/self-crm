@@ -39,9 +39,9 @@
    FUNCTION MAP
      lifecycle   init, showApp, showAuth, showAuthView, switchPage,
                  resetClientState, invalidate, logout
-     login       handleLogin, handleSignup, toggleSignupMode,
-                 showForgotPassword, handleForgotPassword, copyResetLink,
-                 showResetForm, handleResetPassword, showMainAuth
+     login       handleLogin, handleSignup, toggleSignupMode, togglePassword,
+                 setAuthBusy, startLoginCooldown, showForgotPassword, handleForgotPassword,
+                 copyResetLink, showResetForm, handleResetPassword, showMainAuth
      workspaces  showWorkspacePicker, selectWorkspace, switchWorkspace,
                  loadWorkspacesPage, wsGradient, openAddWorkspaceChoice,
                  pickAddWorkspace, openCreateWorkspaceModal,
@@ -87,16 +87,25 @@ function showAuth() {
   document.getElementById('auth-screen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
   ['login-form', 'signup-form'].forEach(id => document.getElementById(id).reset());
-  ['login-error', 'signup-error', 'forgot-error', 'forgot-success', 'forgot-link-box'].forEach(id =>
+  ['login-error', 'signup-error', 'forgot-error', 'forgot-success', 'forgot-link-box', 'login-notice', 'login-hint'].forEach(id =>
     document.getElementById(id).classList.add('hidden')
   );
   document.getElementById('forgot-btn').disabled = false;
   document.getElementById('reset-error').classList.add('hidden');
-  document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'login'));
+  loginFails = 0; clearInterval(loginCooldown); loginCooldown = null;   // door state, not workspace state: every entry to the door starts clean
+  const loginBtn = document.querySelector('#login-form .au-submit');
+  if (loginBtn) { loginBtn.disabled = false; if (loginBtn.dataset.label) loginBtn.textContent = loginBtn.dataset.label; }
+  document.querySelectorAll('.auth-tab').forEach(t => {
+    const on = t.dataset.tab === 'login';
+    t.classList.toggle('active', on); t.setAttribute('aria-selected', String(on));
+  });
+  // a password revealed with Show never survives a logout
+  document.querySelectorAll('#auth-screen .au-pw-btn[aria-pressed="true"]').forEach(togglePassword);
   document.getElementById('login-form').classList.remove('hidden');
   document.getElementById('signup-form').classList.add('hidden');
   const createRadio = document.querySelector('input[name="signup-mode"][value="create"]');
   if (createRadio) { createRadio.checked = true; toggleSignupMode(); }
+  applyTranslations();   // the door is the one screen showApp() never translates
   showAuthView('main');
 }
 
@@ -137,6 +146,8 @@ function showAuthView(view) {
 function showForgotPassword(e) {
   e?.preventDefault();
   document.getElementById('forgot-email').value = document.getElementById('login-email').value;
+  document.getElementById('login-notice').classList.add('hidden');
+  document.getElementById('login-hint').classList.add('hidden');
   document.getElementById('forgot-error').classList.add('hidden');
   document.getElementById('forgot-success').classList.add('hidden');
   document.getElementById('forgot-link-box').classList.add('hidden');
@@ -154,8 +165,8 @@ function showResetForm(token) {
 
 document.querySelectorAll('.auth-tab').forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
+    document.querySelectorAll('.auth-tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+    tab.classList.add('active'); tab.setAttribute('aria-selected', 'true');
     const isLogin = tab.dataset.tab === 'login';
     document.getElementById('login-form').classList.toggle('hidden', !isLogin);
     document.getElementById('signup-form').classList.toggle('hidden', isLogin);
@@ -169,15 +180,73 @@ function toggleSignupMode() {
   document.getElementById('su-code-field').classList.toggle('hidden', mode !== 'join');
 }
 
+// The Show/Hide button beside every password field; `btn.dataset.pw` names its input.
+function togglePassword(btn) {
+  const input = document.getElementById(btn.dataset.pw);
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.setAttribute('aria-pressed', String(show));
+  btn.querySelector('use').setAttribute('href', show ? '#i-eye-off' : '#i-eye');
+  btn.querySelector('span').textContent = t(show ? 'auth_hide' : 'auth_show');
+}
+
+// While a request is out the submit button says what is happening ("Logging in…")
+// and cannot be pressed twice; `on = false` gives it its label back.
+function setAuthBusy(form, on, key) {
+  const btn = form.querySelector('.au-submit');
+  if (!btn) return;
+  if (on) { btn.dataset.label = btn.textContent; btn.setAttribute('aria-busy', 'true'); btn.textContent = t(key); }
+  else { btn.removeAttribute('aria-busy'); if (btn.dataset.label) btn.textContent = btn.dataset.label; }
+}
+
+// After a wrong password the button counts down LOGIN_COOLDOWN_S seconds before it can be pressed
+// again — so a refused attempt reads as deliberate, not as a broken button — and from the
+// LOGIN_FAILS_HINT-th failure on, #login-hint points to the password reset. Client-side only; the
+// server's own limit (10 failures / 15 min) still stands behind it.
+const LOGIN_COOLDOWN_S = 8, LOGIN_FAILS_HINT = 5;
+let loginFails = 0, loginCooldown = null;
+
+function startLoginCooldown(form, seconds) {
+  const btn = form.querySelector('.au-submit');
+  if (!btn) return;
+  clearInterval(loginCooldown);
+  const label = btn.dataset.label || btn.textContent;
+  btn.dataset.label = label;
+  let left = seconds;
+  const show = () => { btn.textContent = t('auth_retry_in').replace('%s', left); };
+  btn.disabled = true; show();
+  loginCooldown = setInterval(() => {
+    left -= 1;
+    if (left > 0) { show(); return; }
+    clearInterval(loginCooldown); loginCooldown = null;
+    btn.disabled = false; btn.textContent = label;
+  }, 1000);
+}
+
+// The two server messages the door can show, as translation keys (the server speaks English).
+const AUTH_ERRORS = { 'Invalid email or password': 'auth_err_invalid', 'Too many login attempts. Please try again in 15 minutes.': 'auth_err_limit' };
+
 async function handleLogin(e) {
   e.preventDefault();
   const errEl = document.getElementById('login-error');
   errEl.classList.add('hidden');
+  document.getElementById('login-notice').classList.add('hidden');
+  setAuthBusy(e.target, true, 'auth_logging_in');
   const data = await api.post('/api/auth/login', {
     email:    document.getElementById('login-email').value,
     password: document.getElementById('login-password').value,
   });
-  if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
+  setAuthBusy(e.target, false);
+  if (data.error) {
+    errEl.textContent = AUTH_ERRORS[data.error] ? t(AUTH_ERRORS[data.error]) : data.error; errEl.classList.remove('hidden');
+    if (AUTH_ERRORS[data.error] === 'auth_err_invalid') {
+      loginFails += 1;
+      startLoginCooldown(e.target, LOGIN_COOLDOWN_S);
+      if (loginFails >= LOGIN_FAILS_HINT) document.getElementById('login-hint').classList.remove('hidden');
+    }
+    return;
+  }
+  loginFails = 0;
 
   if (data.needs_workspace_picker) {
     showWorkspacePicker(data.workspaces, data.user);
@@ -334,8 +403,8 @@ function showJoinWorkspace(e) {
   e?.preventDefault();
   wsSwitcherOpen = false;
   document.getElementById('ws-dropdown').classList.add('hidden');
-  document.getElementById('join-ws-code').value = '';
-  document.getElementById('join-ws-error').classList.add('hidden');
+  document.getElementById('join-ws-auth-code').value = '';
+  document.getElementById('join-ws-auth-error').classList.add('hidden');
   showAuthView('join-workspace');
   document.getElementById('auth-screen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
@@ -351,16 +420,20 @@ function closeJoinWorkspace(e) {
 
 async function handleJoinWorkspace(e) {
   e.preventDefault();
-  const errEl = document.getElementById('join-ws-error');
+  // Two forms submit here — the in-app modal and the auth-screen view — each with
+  // its own input and error box, so read from the form that fired, not by id.
+  const form = e.target.closest('form');
+  const errEl = form.querySelector('.au-alert, .auth-error');
   errEl.classList.add('hidden');
-  const codeInput = document.querySelector('#join-workspace-modal input[id="join-ws-code"]');
-  const code = (codeInput?.value || '').trim();
-  if (!code) { errEl.textContent = 'Invite code required'; errEl.classList.remove('hidden'); return; }
+  const code = (form.querySelector('input[type="text"]')?.value || '').trim();
+  if (!code) { errEl.textContent = t('auth_code_required'); errEl.classList.remove('hidden'); return; }
 
   const data = await api.post('/api/auth/join-workspace', { invite_code: code });
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
 
   document.getElementById('join-workspace-modal').classList.add('hidden');
+  document.getElementById('auth-screen').classList.add('hidden');   // the auth-screen view hides the app while open
+  document.getElementById('app').classList.remove('hidden');
   currentWorkspace = data.workspace;
   kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = data.workspace.contact_columns || [];
@@ -410,8 +483,12 @@ async function handleForgotPassword(e) {
   if (data.resetUrl) { document.getElementById('forgot-link-val').value = data.resetUrl; linkBox.classList.remove('hidden'); }
 }
 
-function copyResetLink() {
-  navigator.clipboard.writeText(document.getElementById('forgot-link-val').value).then(() => alert('Copied to clipboard'));
+function copyResetLink(btn) {
+  navigator.clipboard.writeText(document.getElementById('forgot-link-val').value).then(() => {
+    const label = btn.querySelector('span'), use = btn.querySelector('use');
+    label.textContent = t('copied'); use.setAttribute('href', '#i-check');
+    setTimeout(() => { label.textContent = t('btn_copy'); use.setAttribute('href', '#i-copy'); }, 1500);
+  });
 }
 
 async function handleResetPassword(e) {
@@ -421,11 +498,12 @@ async function handleResetPassword(e) {
   const password = document.getElementById('reset-password').value;
   const confirm  = document.getElementById('reset-confirm').value;
   errEl.classList.add('hidden');
-  if (password !== confirm) { errEl.textContent = 'Passwords do not match'; errEl.classList.remove('hidden'); return; }
+  if (password !== confirm) { errEl.textContent = t('auth_pw_mismatch'); errEl.classList.remove('hidden'); return; }
   const data = await api.post('/api/auth/reset-password', { token, password });
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
-  alert('Password updated — please log in.');
   showMainAuth();
+  const notice = document.getElementById('login-notice');   // inline, where the person now has to act
+  notice.textContent = t('auth_pw_updated'); notice.classList.remove('hidden');
 }
 
 async function logout(e) {
