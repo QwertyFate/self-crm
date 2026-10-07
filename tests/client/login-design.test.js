@@ -33,7 +33,7 @@ const rule = (sel) => { const m = css.match(new RegExp(`^${sel.replace(/[.*+?^${
 describe('layout: the navy wall beside the white form half', () => {
   test('#auth-screen is .au > aside.au-brand + section.au-main > .au-col — no card, no .auth-* chrome, no <main>', () => {
     assert.match(section, /<div id="auth-screen" class="hidden">\s*<div class="au">\s*(?:<!--[\s\S]*?-->\s*)?<aside class="au-brand"/);
-    assert.match(section, /<section class="au-main">\s*(?:<div class="au-lang"[\s\S]*?<\/div>\s*)?<div class="au-col au-in">/);   // not <main>: the app shell owns the page's one <main>; the DE|EN switch may sit first
+    assert.match(section, /<section class="au-main">\s*(?:<div class="au-tools">[\s\S]*?<\/button>\s*<\/div>\s*)?<div class="au-col au-in">/);   // not <main>: the app shell owns the page's one <main>; the tools corner (DE|EN, theme) may sit first
     assert.doesNotMatch(section, /<main[\s>]/, 'the app shell owns the page\'s one <main>');
     assert.doesNotMatch(section, /class="auth-(wrap|card|logo|form|field|submit|link-row)[" ]/);
     assert.doesNotMatch(section, /style="display/, 'visibility is the .hidden class only');
@@ -342,6 +342,33 @@ describe('the DE | EN switch', () => {
     const s = sliceFn(core, 'setLanguage', 'core.js');
     assert.match(s, /localStorage\.setItem\('lang', lang\)/); assert.match(s, /applyTranslations\(\)/);
     assert.doesNotMatch(s, /^\s*(loadDeals|switchPage|loadSettings)\(/m, 'no unconditional page loader');
+  });
+});
+
+describe('the theme switch (2026-10-07: the user asked for dark / light on the login page)', () => {
+  test('one icon button beside DE | EN in the tools corner: moon in light, pressed + sun in dark, wired to toggleDarkMode()', () => {
+    assert.match(section, /<div class="au-tools">\s*<div class="au-lang" role="group"[\s\S]*?<\/div>\s*<button type="button" class="au-theme" id="au-theme" aria-pressed="false" aria-label="Dunkelmodus" title="Dunkelmodus" onclick="toggleDarkMode\(\)"><svg class="ic" aria-hidden="true"><use id="au-theme-ic" href="#i-moon"\/><\/svg><\/button>\s*<\/div>/);
+    assert.equal((section.match(/id="au-theme"/g) || []).length, 1); assert.equal((section.match(/toggleDarkMode\(\)/g) || []).length, 1, 'one switch on the door');
+    for (const id of ['i-moon', 'i-sun']) assert.ok(html.includes(`<symbol id="${id}"`), `${id} in the sprite`);
+  });
+  test('applyTheme drives it (pressed state, sun/moon, the translated name) and tints the browser chrome; setLanguage re-names it', () => {
+    const a = sliceFn(core, 'applyTheme', 'core.js');
+    assert.match(a, /document\.getElementById\('au-theme'\)/); assert.match(a, /door\.setAttribute\('aria-pressed', String\(dark\)\)/);
+    assert.match(a, /t\(dark \? 'light_mode' : 'dark_mode'\)/); assert.match(a, /door\.setAttribute\('aria-label', name\); door\.title = name;/);
+    assert.match(a, /getElementById\('au-theme-ic'\)\?\.setAttribute\('href', dark \? '#i-sun' : '#i-moon'\)/);
+    assert.match(a, /meta\[name="theme-color"\][\s\S]*dark \? '#0B1424' : '#18345D'/);
+    assert.match(sliceFn(core, 'setLanguage', 'core.js'), /applyTheme\(document\.documentElement\.getAttribute\('data-theme'\) === 'dark'\)/);
+    assert.match(sliceFn(core, 'toggleDarkMode', 'core.js'), /localStorage\.setItem\('theme', next \? 'dark' : 'light'\)/, 'the choice is kept, as in the app');
+    const dict = new Function(sliceConst('public/js/core.js', 'TRANSLATIONS').replace(/^[^{]*/, 'return '))();
+    for (const lang of ['de', 'en']) { const d = dict[lang]; assert.ok(d.dark_mode && d.light_mode, `${lang} names both modes`); }
+  });
+  test('styled by tokens only, so the login half follows the theme without a single [data-theme] rule: the corner is one flex row, the button a 32px square in the same chrome as DE | EN, pressed in brand-subtle', () => {
+    assert.match(rule('.au-tools'), /position: absolute; top: 20px; right: 24px; display: flex; align-items: center; gap: 8px;/);
+    assert.doesNotMatch(rule('.au-lang'), /position: absolute/, 'the lang switch sits in the corner, not on its own');
+    assert.match(rule('.au-theme'), /width: 32px; height: 32px;[^}]*border: 1px solid var\(--line\); border-radius: var\(--r-md\); background: var\(--surface\); color: var\(--text-3\)/);
+    assert.match(rule('.au-theme[aria-pressed="true"]'), /var\(--brand-subtle\)/); assert.match(rule('.au-theme:focus-visible'), /var\(--focus-ring\)/);
+    assert.doesNotMatch(rule('.au-theme'), /#[0-9a-fA-F]{3,8}\b/, 'no hex in the switch');
+    assert.match(css, /^  \.au-tools \{ top: 16px; right: 16px; \}$/m, 'tighter in the corner on a phone'); assert.doesNotMatch(css, /^  \.au-lang \{ top: 16px/m);
   });
 });
 

@@ -1,21 +1,26 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    LANDING PAGE (/landingpage) — standalone: no app scripts, no API calls.
 
-   The page inherits the login's two-tone split: a navy panel on the left that
-   stays put (headline, the two calls to action, an index of six parts, the
-   louvre-wall texture the login carries), and on the right, on white, one
-   screen per part with one short title, one line and one working piece:
+   A product page in the manner of a consumer launch page: one statement per
+   section, set large and centred, the product shown big and working under
+   it, light and dark bands alternating, a slim translucent bar on top, a
+   the working day (tasks, calendar, chat) near the end, one closing call to action.
 
      board    drag and drop between stage columns; once, on first sight, a
               visible cursor drags the deal into Won, then the visitor takes
               over; totals and the Engine line follow every move
-     leads    "Lead senden" maps one of three real payload shapes through the
-              webhook's own dot-path logic and shows the contact it becomes
+     leads    the ad platforms and the website on the left, Upgrads on the
+              right; one button sends a lead across (a real payload shape
+              mapped through the webhook's own dot-path logic) and the contact
+              appears
      deal     the deal record's tabs; tasks tick, a note saves
-     team     wall clock in the author's zone, shown in the viewer's zone
+     contacts search filters the list as the Contacts table does; a pick
+              fills the card (deals, history); Anrufen / E-Mail / WhatsApp
+              open the number, the address, or the filled-in template
      numbers  three periods of figures: cards, win-rate line, funnel
-     engine   the vertrag.unterschrieben event signed with HMAC-SHA256 over
-              "<timestamp>.<raw body>" via WebCrypto, as utils/engine.js does
+     engine   from our system to the next: closing the deal moves it to Won
+              and a packet travels to the next system, which confirms receipt;
+              no code on the page (the real transfer is utils/engine.js)
 
    German is the default and the markup text IS the German dictionary (the
    client test checks that key for key). Every string claims only what the
@@ -24,12 +29,12 @@
 
 const LP_I18N = {
   de: {
-    lp_login: 'Anmelden', lp_request: 'Zugang anfragen', lp_request_subject: 'Zugang zu Upgrads CRM', lp_lang: 'Sprache', lp_index: 'Inhalt',
-    lp_hero_title: 'Ein Board für jeden Deal, vom Lead bis zur Unterschrift.',
-    lp_hero_sub: 'Leads, Deals, Team und Unterschrift an einem Ort.',
-    lp_ix_board: 'Board', lp_ix_leads: 'Leads', lp_ix_deal: 'Deal', lp_ix_team: 'Team', lp_ix_numbers: 'Zahlen', lp_ix_engine: 'Engine',
+    lp_login: 'Anmelden', lp_request: 'Zugang anfragen', lp_request_subject: 'Zugang zu Upgrads CRM', lp_lang: 'Sprache', lp_overview: 'Übersicht',
+    lp_hero_kicker: 'CRM',
+    lp_hero_title: 'Ein Board. Jeder Deal.',
+    lp_hero_sub: 'Vom ersten Lead bis zur Unterschrift.',
 
-    lp_s1_t: 'Das Board.', lp_s1_d: 'Karten ziehen, Summen folgen. Eigene Phasen, eigene Begriffe.',
+    lp_s1_t: 'Ziehen. Fertig.', lp_s1_d: 'Deals durch eigene Phasen. Summen folgen live.',
     lp_board_pipeline: 'Vertrieb', lp_board_aria: 'Beispiel-Board. Karten mit der Maus oder den Pfeiltasten verschieben.',
     lp_col_new: 'Neu', lp_col_offer: 'Angebot', lp_col_nego: 'Verhandlung', lp_col_won: 'Gewonnen',
     lp_deal_one: 'Deal', lp_deal_many: 'Deals',
@@ -37,13 +42,14 @@ const LP_I18N = {
     lp_stats_line: 'Offen {open} in {n} Deals. Gewonnen {won}. Anteil {rate} %.',
     lp_toast_moved: 'Verschoben nach {stage}', lp_toast_undo: 'Rückgängig',
     lp_delivery_idle: 'Upgrads Engine wartet auf einen Deal in Gewonnen.', lp_delivery_pending: 'Upgrads Engine: wird zugestellt', lp_delivery_done: 'Upgrads Engine: zugestellt, HTTP 200',
-    lp_demo_hint: 'Einmal vorgeführt. Dann selbst ziehen.', lp_demo_replay: 'Noch einmal',
+    lp_demo_replay: 'Noch einmal zeigen',
 
-    lp_s2_t: 'Leads kommen von selbst.', lp_s2_d: 'Per Webhook aus Make, Zapier, n8n oder dem eigenen Formular.',
-    lp_lead_send: 'Lead senden', lp_lead_in: 'Eingehend', lp_lead_contact: 'Kontakt angelegt', lp_lead_deal: 'Deal angelegt in {stage}', lp_lead_owner: 'Zugewiesen an Mara Kühn',
+    lp_s2_t: 'Leads kommen an. Von selbst.', lp_s2_d: 'Aus Facebook, Instagram, TikTok und der Website. Über Make, Zapier oder n8n.',
+    lp_src_fb: 'Facebook Ads', lp_src_ig: 'Instagram Ads', lp_src_tt: 'TikTok Ads', lp_src_web: 'Website-Formular', lp_via: 'über',
+    lp_lead_send: 'Lead senden', lp_lead_contact: 'Kontakt angelegt', lp_lead_deal: 'Deal angelegt in {stage}', lp_lead_owner: 'Zugewiesen an Mara Kühn',
     lp_f_name: 'Name', lp_f_email: 'E-Mail', lp_f_phone: 'Telefon', lp_f_company: 'Firma',
 
-    lp_s3_t: 'Alles am Deal.', lp_s3_d: 'Kontakt, Aufgaben, Notizen, Objekte. Ein Datensatz.',
+    lp_s3_t: 'Alles an einem Ort.', lp_s3_d: 'Kontakt, Aufgaben, Notizen, Objekte. Am Deal.',
     lp_deal_name: 'Elbstraße 12, 3 Zimmer', lp_deal_created: 'Angelegt vor 11 Tagen',
     lp_tab_overview: 'Übersicht', lp_tab_contact: 'Kontakt', lp_tab_tasks: 'Aufgaben', lp_tab_activity: 'Aktivität', lp_tab_objects: 'Objekte',
     lp_kpi_value: 'Deal-Wert', lp_kpi_stage: 'Phase', lp_kpi_urg: 'Dringlichkeit', lp_kpi_owner: 'Zuständig', lp_kpi_last: 'Letzte Aktivität', lp_kpi_last_v: 'vor 2 Std.',
@@ -64,9 +70,14 @@ const LP_I18N = {
     lp_tl3_meta: 'Tim Berger, letzte Woche', lp_tl3_text: 'Erstkontakt über das Formular. Sucht 3 Zimmer, Altbau.',
     lp_obj_title: 'Verknüpfte Objekte', lp_obj_meta: '87 m², 3 Zimmer, Baujahr 1962', lp_obj_open: 'Öffnen', lp_obj_add: 'Objekt verknüpfen',
 
-    lp_s4_t: 'Ein Team, jede Zeitzone.', lp_s4_d: 'Ein Inhaber, Admins, Mitglieder. Echtzeit-Chat. Jeder Termin in der eigenen Ortszeit.',
-    lp_tz_entered: 'Eingetragen in', lp_tz_viewed: 'Gesehen in', lp_tz_at: 'um',
-    lp_tz_note: 'eingetragen als {time} {zone}', lp_tz_next: 'am nächsten Tag', lp_tz_prev: 'am Vortag', lp_tz_same: 'am selben Tag',
+    lp_s4_t: 'Jeder Kontakt. Sofort gefunden.', lp_s4_d: 'Suchen, anrufen, schreiben. Die ganze Geschichte an einem Kontakt.',
+    lp_ct_search_ph: 'Kontakt suchen', lp_ct_list: 'Kontakte', lp_ct_none: 'Kein Treffer', lp_ct_private: 'Privat',
+    lp_ct_call: 'Anrufen', lp_ct_mail: 'E-Mail', lp_ct_wa: 'WhatsApp', lp_ct_deals: 'Deals', lp_ct_history: 'Verlauf',
+    lp_ct_bub_call: 'Ruft an', lp_ct_bub_mail: 'Schreibt an', lp_ct_bub_wa: 'WhatsApp, Vorlage vorausgefüllt',
+    lp_ct_tpl: 'Guten Tag {name}, danke für die Anfrage zu {deal}. Beste Grüße, Mara Kühn',
+    lp_h1a: 'Besichtigung bestätigt', lp_h1b: 'Finanzierung über die Hausbank', lp_h2a: 'Entwurf Kaufvertrag erhalten', lp_h2b: 'Termin am 14. Oktober vorgeschlagen',
+    lp_h3a: 'Exposé gesendet', lp_h3b: 'Budget bis 650.000 €', lp_h4a: 'Erstkontakt über die Website', lp_h4b: 'Rückruf vereinbart',
+    lp_h5a: 'Interesse an drei Zimmern', lp_h5b: 'Besichtigungstermin angefragt',
 
     lp_s5_t: 'Zahlen, die stimmen.', lp_s5_d: 'Gewinnquote und Trichter nach den eigenen Phasen.',
     lp_an_period_3: '3 Monate', lp_an_period_6: '6 Monate', lp_an_period_12: '12 Monate',
@@ -74,24 +85,27 @@ const LP_I18N = {
     lp_an_rate_m: 'Gewinnquote je Monat', lp_an_funnel: 'Trichter', lp_an_lost: 'Verloren', lp_an_funnel_hint: '{p} % weiter zu {stage}',
     lp_an_tip: '{month}: {rate} %, {won} gewonnen, {lost} verloren',
 
-    lp_s6_t: 'Unterschrieben. Weitergemeldet.', lp_s6_d: 'Erreicht ein Deal Gewonnen, erhält das nächste System das signierte Ereignis vertrag.unterschrieben.',
-    lp_en_send: 'Testereignis senden', lp_en_event: 'Ereignis', lp_en_signature: 'Signatur', lp_en_signed: 'HMAC-SHA256 über Zeitstempel und Body', lp_en_status: 'Zustellung',
-    lp_en_idle: 'Noch nicht gesendet', lp_en_pending: 'Wird zugestellt', lp_en_done: 'Zugestellt, HTTP 200', lp_en_nosubtle: 'Signieren braucht eine sichere Verbindung.',
+    lp_s6_t: 'Unterschrieben. Weitergemeldet.', lp_s6_d: 'Ein Zug nach Gewonnen, und das nächste System weiß Bescheid.',
+    lp_en_cap: 'Sicher übertragen, Empfang bestätigt. Jede Übertragung im Protokoll.',
+    lp_en_send: 'Deal abschließen', lp_en_to: 'Nächstes System', lp_en_to_sub: 'Abwicklung, Buchhaltung, Verwaltung', lp_en_received: 'Empfangen',
+    lp_en_idle: 'Wartet auf den Abschluss', lp_en_pending: 'Wird übertragen', lp_en_done: 'Empfangen und bestätigt',
 
-    lp_fact1: 'PostgreSQL, jede Abfrage je Arbeitsbereich.', lp_fact2: 'Zugang nur auf Einladung, mit Einladungscode.', lp_fact3: 'Deutsch und Englisch, Beträge in Euro.', lp_fact4: 'Export als CSV, jederzeit.',
-    lp_faq1_q: 'Wie bekommt ein Team Zugang?', lp_faq1_a: 'Auf Anfrage. Der Einladungscode kommt per E-Mail.',
-    lp_faq2_q: 'Woher kommen die Leads?', lp_faq2_a: 'Aus allem, was JSON sendet: Make, Zapier, n8n, ein Formular.',
-    lp_faq3_q: 'Ist die Engine Pflicht?', lp_faq3_a: 'Nein. Ohne Engine ist Upgrads ein vollständiges CRM.',
-    lp_cta_t: 'Bereit, wenn das Team es ist.', lp_cta_d: 'Zugang anfragen. Der erste Lead liegt heute auf dem Board.',
-    lp_foot_tag: 'Upgrads CRM. Ein Board für jeden Deal.',
+    lp_s7_t: 'Aufgaben. Kalender. Chat.', lp_s7_d: 'Ein Termin an der Aufgabe steht im Kalender. Das Team redet live.',
+    lp_wk_tasks: 'Aufgaben', lp_wk_cal: 'Kalender', lp_wk_team: 'Team', lp_wk_online: '3 online', lp_wk_add: 'Hinzufügen', lp_wk_task_ph: 'Neue Aufgabe', lp_wk_msg_ph: 'Nachricht an das Team', lp_wk_send: 'Senden', lp_wk_typing: '{name} schreibt',
+    lp_w1: 'Exposé senden', lp_w1_due: 'Mi, 14:00', lp_w2: 'Rückruf Weber', lp_w2_due: 'Do, 11:00', lp_w3: 'Energieausweis anfordern', lp_w3_due: 'Di, 11:00', lp_w_new_due: 'Do, 10:00',
+    lp_wd1: 'Mo', lp_wd2: 'Di', lp_wd3: 'Mi', lp_wd4: 'Do', lp_wd5: 'Fr', lp_wd6: 'Sa', lp_wd7: 'So', lp_ev1: 'Besichtigung',
+    lp_msg1: 'Elbstraße 12 ist in Verhandlung.', lp_msg2: 'Besichtigung am Donnerstag, 09:30.', lp_msg_reply: 'Alles klar, Donnerstag passt.',
+
+    lp_cta_t: 'Bereit, wenn das Team es ist.', lp_cta_d: 'Zugang anfragen. Der Einladungscode kommt per E-Mail.',
+    lp_foot_tag: 'Upgrads CRM. Ein Board. Jeder Deal.',
   },
   en: {
-    lp_login: 'Log in', lp_request: 'Request access', lp_request_subject: 'Access to Upgrads CRM', lp_lang: 'Language', lp_index: 'Contents',
-    lp_hero_title: 'One board for every deal, from lead to signature.',
-    lp_hero_sub: 'Leads, deals, team and signature in one place.',
-    lp_ix_board: 'Board', lp_ix_leads: 'Leads', lp_ix_deal: 'Deal', lp_ix_team: 'Team', lp_ix_numbers: 'Numbers', lp_ix_engine: 'Engine',
+    lp_login: 'Log in', lp_request: 'Request access', lp_request_subject: 'Access to Upgrads CRM', lp_lang: 'Language', lp_overview: 'Overview',
+    lp_hero_kicker: 'CRM',
+    lp_hero_title: 'One board. Every deal.',
+    lp_hero_sub: 'From the first lead to the signature.',
 
-    lp_s1_t: 'The board.', lp_s1_d: 'Drag cards, totals follow. Your own stages, your own names.',
+    lp_s1_t: 'Drag. Done.', lp_s1_d: 'Deals through your own stages. Totals follow live.',
     lp_board_pipeline: 'Sales', lp_board_aria: 'Example board. Move cards with the mouse or the arrow keys.',
     lp_col_new: 'New', lp_col_offer: 'Proposal', lp_col_nego: 'Negotiation', lp_col_won: 'Won',
     lp_deal_one: 'deal', lp_deal_many: 'deals',
@@ -99,13 +113,14 @@ const LP_I18N = {
     lp_stats_line: 'Open {open} across {n} deals. Won {won}. Share {rate} %.',
     lp_toast_moved: 'Moved to {stage}', lp_toast_undo: 'Undo',
     lp_delivery_idle: 'Upgrads Engine waits for a deal in Won.', lp_delivery_pending: 'Upgrads Engine: delivering', lp_delivery_done: 'Upgrads Engine: delivered, HTTP 200',
-    lp_demo_hint: 'Shown once. Then drag yourself.', lp_demo_replay: 'Once more',
+    lp_demo_replay: 'Show again',
 
-    lp_s2_t: 'Leads arrive on their own.', lp_s2_d: 'By webhook from Make, Zapier, n8n or your own form.',
-    lp_lead_send: 'Send a lead', lp_lead_in: 'Incoming', lp_lead_contact: 'Contact created', lp_lead_deal: 'Deal created in {stage}', lp_lead_owner: 'Assigned to Mara Kühn',
+    lp_s2_t: 'Leads arrive. On their own.', lp_s2_d: 'From Facebook, Instagram, TikTok and the website. Via Make, Zapier or n8n.',
+    lp_src_fb: 'Facebook Ads', lp_src_ig: 'Instagram Ads', lp_src_tt: 'TikTok Ads', lp_src_web: 'Website form', lp_via: 'via',
+    lp_lead_send: 'Send a lead', lp_lead_contact: 'Contact created', lp_lead_deal: 'Deal created in {stage}', lp_lead_owner: 'Assigned to Mara Kühn',
     lp_f_name: 'Name', lp_f_email: 'Email', lp_f_phone: 'Phone', lp_f_company: 'Company',
 
-    lp_s3_t: 'Everything on the deal.', lp_s3_d: 'Contact, tasks, notes, listings. One record.',
+    lp_s3_t: 'Everything in one place.', lp_s3_d: 'Contact, tasks, notes, listings. On the deal.',
     lp_deal_name: 'Elbstraße 12, 3 rooms', lp_deal_created: 'Created 11 days ago',
     lp_tab_overview: 'Overview', lp_tab_contact: 'Contact', lp_tab_tasks: 'Tasks', lp_tab_activity: 'Activity', lp_tab_objects: 'Listings',
     lp_kpi_value: 'Deal value', lp_kpi_stage: 'Stage', lp_kpi_urg: 'Urgency', lp_kpi_owner: 'Owner', lp_kpi_last: 'Last activity', lp_kpi_last_v: '2 h ago',
@@ -126,9 +141,14 @@ const LP_I18N = {
     lp_tl3_meta: 'Tim Berger, last week', lp_tl3_text: 'First contact through the form. Looking for 3 rooms, period building.',
     lp_obj_title: 'Linked listings', lp_obj_meta: '87 m², 3 rooms, built 1962', lp_obj_open: 'Open', lp_obj_add: 'Link a listing',
 
-    lp_s4_t: 'One team, every time zone.', lp_s4_d: 'One owner, admins, members. Realtime chat. Every appointment in local time.',
-    lp_tz_entered: 'Entered in', lp_tz_viewed: 'Viewed in', lp_tz_at: 'at',
-    lp_tz_note: 'entered as {time} {zone}', lp_tz_next: 'the next day', lp_tz_prev: 'the day before', lp_tz_same: 'the same day',
+    lp_s4_t: 'Every contact. Found at once.', lp_s4_d: 'Search, call, write. The whole history on one contact.',
+    lp_ct_search_ph: 'Find a contact', lp_ct_list: 'Contacts', lp_ct_none: 'No match', lp_ct_private: 'Private',
+    lp_ct_call: 'Call', lp_ct_mail: 'Email', lp_ct_wa: 'WhatsApp', lp_ct_deals: 'Deals', lp_ct_history: 'History',
+    lp_ct_bub_call: 'Calls', lp_ct_bub_mail: 'Writes to', lp_ct_bub_wa: 'WhatsApp, template filled in',
+    lp_ct_tpl: 'Hello {name}, thank you for the enquiry about {deal}. Best regards, Mara Kühn',
+    lp_h1a: 'Viewing confirmed', lp_h1b: 'Financing through their bank', lp_h2a: 'Draft purchase contract received', lp_h2b: 'Appointment proposed for 14 October',
+    lp_h3a: 'Exposé sent', lp_h3b: 'Budget up to 650.000 €', lp_h4a: 'First contact via the website', lp_h4b: 'Call back arranged',
+    lp_h5a: 'Interested in three rooms', lp_h5b: 'Viewing requested',
 
     lp_s5_t: 'Numbers that add up.', lp_s5_d: 'Win rate and funnel by your own stages.',
     lp_an_period_3: '3 months', lp_an_period_6: '6 months', lp_an_period_12: '12 months',
@@ -136,16 +156,19 @@ const LP_I18N = {
     lp_an_rate_m: 'Win rate per month', lp_an_funnel: 'Funnel', lp_an_lost: 'Lost', lp_an_funnel_hint: '{p} % on to {stage}',
     lp_an_tip: '{month}: {rate} %, {won} won, {lost} lost',
 
-    lp_s6_t: 'Signed. Passed on.', lp_s6_d: 'When a deal reaches Won, the next system receives the signed event vertrag.unterschrieben.',
-    lp_en_send: 'Send test event', lp_en_event: 'Event', lp_en_signature: 'Signature', lp_en_signed: 'HMAC-SHA256 over timestamp and body', lp_en_status: 'Delivery',
-    lp_en_idle: 'Not sent yet', lp_en_pending: 'Delivering', lp_en_done: 'Delivered, HTTP 200', lp_en_nosubtle: 'Signing needs a secure connection.',
+    lp_s6_t: 'Signed. Passed on.', lp_s6_d: 'One move to Won, and the next system knows.',
+    lp_en_cap: 'Transferred securely, receipt confirmed. Every transfer on record.',
+    lp_en_send: 'Close the deal', lp_en_to: 'Next system', lp_en_to_sub: 'Fulfilment, accounting, administration', lp_en_received: 'Received',
+    lp_en_idle: 'Waiting for the close', lp_en_pending: 'Transferring', lp_en_done: 'Received and confirmed',
 
-    lp_fact1: 'PostgreSQL, every query per workspace.', lp_fact2: 'Access by invitation only, with an invite code.', lp_fact3: 'German and English, amounts in euro.', lp_fact4: 'Export as CSV, any time.',
-    lp_faq1_q: 'How does a team get access?', lp_faq1_a: 'On request. The invite code arrives by email.',
-    lp_faq2_q: 'Where do the leads come from?', lp_faq2_a: 'From anything that sends JSON: Make, Zapier, n8n, a form.',
-    lp_faq3_q: 'Is the Engine required?', lp_faq3_a: 'No. Without the Engine, Upgrads is a complete CRM.',
-    lp_cta_t: 'Ready when the team is.', lp_cta_d: 'Request access. The first lead is on the board today.',
-    lp_foot_tag: 'Upgrads CRM. One board for every deal.',
+    lp_s7_t: 'Tasks. Calendar. Chat.', lp_s7_d: 'A dated task is on the calendar. The team talks live.',
+    lp_wk_tasks: 'Tasks', lp_wk_cal: 'Calendar', lp_wk_team: 'Team', lp_wk_online: '3 online', lp_wk_add: 'Add', lp_wk_task_ph: 'New task', lp_wk_msg_ph: 'Message the team', lp_wk_send: 'Send', lp_wk_typing: '{name} is typing',
+    lp_w1: 'Send exposé', lp_w1_due: 'Wed, 14:00', lp_w2: 'Call back Weber', lp_w2_due: 'Thu, 11:00', lp_w3: 'Request energy certificate', lp_w3_due: 'Tue, 11:00', lp_w_new_due: 'Thu, 10:00',
+    lp_wd1: 'Mon', lp_wd2: 'Tue', lp_wd3: 'Wed', lp_wd4: 'Thu', lp_wd5: 'Fri', lp_wd6: 'Sat', lp_wd7: 'Sun', lp_ev1: 'Viewing',
+    lp_msg1: 'Elbstraße 12 is in negotiation.', lp_msg2: 'Viewing on Thursday, 09:30.', lp_msg_reply: 'Got it, Thursday works.',
+
+    lp_cta_t: 'Ready when the team is.', lp_cta_d: 'Request access. The invite code arrives by email.',
+    lp_foot_tag: 'Upgrads CRM. One board. Every deal.',
   },
 };
 
@@ -169,7 +192,16 @@ const LP_ANALYTICS = {
   12: { open: 1840000, won: 4620000, rate: 38, newDeals: 97, rates: [26, 28, 27, 30, 31, 29, 31, 35, 38, 38, 44, 47], wonM: [3, 3, 3, 4, 4, 3, 4, 5, 6, 5, 7, 8], lostM: [8, 8, 8, 9, 9, 7, 9, 9, 10, 8, 9, 9], funnel: [131, 76, 46, 31], lost: 43 },
 };
 
-const LP_ZONES = ['Europe/Berlin', 'Europe/London', 'Europe/Lisbon', 'Europe/Athens', 'America/New_York', 'America/Los_Angeles', 'America/Sao_Paulo', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Tokyo', 'Australia/Sydney'];
+// Five contacts as the Contacts table holds them (name, company, phone, email) with their
+// deals and the last two entries of their history (note, call, email, WhatsApp: the four
+// activity types). Texts are dictionary keys; a time is weekday + clock.
+const LP_CONTACTS = [
+  { id: 1, name: 'Jana Weber', company: '', phone: '+49 171 2345678', email: 'jana.weber@example.de', deals: [{ title: 'Elbstraße 12, 3 Zimmer', stage: 'lp_col_nego' }], history: [{ type: 'call', key: 'lp_h1a', day: 3, time: '10:12' }, { type: 'note', key: 'lp_h1b', day: 2, time: '16:40' }] },
+  { id: 2, name: 'Katrin Feld', company: 'Notariat Feld & Kollegen', phone: '+49 40 5551234', email: 'kanzlei@example.de', deals: [{ title: 'Elbstraße 12, 3 Zimmer', stage: 'lp_col_nego' }], history: [{ type: 'email', key: 'lp_h2a', day: 3, time: '08:55' }, { type: 'call', key: 'lp_h2b', day: 1, time: '11:20' }] },
+  { id: 3, name: 'Markus Lenz', company: 'Lenz Bau GmbH', phone: '+49 160 9876543', email: 'm.lenz@example.de', deals: [{ title: 'Hafenstraße 4, 2 Zimmer', stage: 'lp_col_offer' }], history: [{ type: 'wa', key: 'lp_h3a', day: 2, time: '14:05' }, { type: 'note', key: 'lp_h3b', day: 1, time: '09:30' }] },
+  { id: 4, name: 'Sofia Brandt', company: 'Brandt & Partner', phone: '+49 30 4445566', email: 's.brandt@example.de', deals: [{ title: 'Kanalweg 8, 4 Zimmer', stage: 'lp_col_new' }], history: [{ type: 'email', key: 'lp_h4a', day: 3, time: '07:48' }, { type: 'call', key: 'lp_h4b', day: 3, time: '09:02' }] },
+  { id: 5, name: 'Ömer Kaya', company: '', phone: '+49 176 1112233', email: 'oe.kaya@example.de', deals: [{ title: 'Elbstraße 12, 3 Zimmer', stage: 'lp_col_new' }], history: [{ type: 'note', key: 'lp_h5a', day: 2, time: '12:15' }, { type: 'wa', key: 'lp_h5b', day: 2, time: '12:30' }] },
+];
 
 let lpLang = 'de';
 const lpRerender = [];   // functions that repaint script-generated text when the language changes
@@ -196,148 +228,76 @@ function lpApplyLang(lang) {
 
 function lpSetLang(lang) { lpApplyLang(lang); }
 
-// ── the index in the panel follows the screen in view ───────────────────────
-function lpInitIndex() {
-  const links = [...document.querySelectorAll('.lp-index a[href^="#"]')];
-  if (!links.length || !('IntersectionObserver' in window)) return;
-  const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
-  const io = new IntersectionObserver(entries => {
-    for (const e of entries) {
-      if (!e.isIntersecting) continue;
-      links.forEach(a => a.removeAttribute('aria-current'));
-      byId.get(e.target.id)?.setAttribute('aria-current', 'true');
-    }
-  }, { rootMargin: '-45% 0px -45% 0px' });
-  for (const id of byId.keys()) { const s = document.getElementById(id); if (s) io.observe(s); }
+// ── the bar gains its line once the page has scrolled; statements rise once as they enter ──
+function lpInitNav() {
+  const nav = document.querySelector('.lp-nav');
+  if (!nav) return;
+  const onScroll = () => nav.classList.toggle('is-scrolled', window.scrollY > 24);
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
 }
 
-// ── the wall ────────────────────────────────────────────────────────────────
-// The louvre wall of upgrads.de, as the login page carries it (public/js/login-wall.js), as the
-// texture of the panel: slats rest tilted away under one fixed light and turn toward the pointer.
-// No wordmark mask (the crisp logo sits above it). Sleeps when the panel is off screen or the tab
-// hidden; coarse pointers get the idle wander only; reduced motion gets one still frame.
-function lpWallSmooth(v) { const c = v < 0 ? 0 : v > 1 ? 1 : v; return c * c * (3 - 2 * c); }
-function lpWallGrid(W, H, target) { const cell = Math.sqrt((W * H) / target); return { cols: Math.max(6, Math.round(W / cell)), rows: Math.max(6, Math.round(H / cell)) }; }
-function lpWallHex(h, fb) { const s = String(h || '').trim().replace('#', ''); if (!/^[0-9a-f]{6}$/i.test(s)) return fb; return [parseInt(s.slice(0, 2), 16), parseInt(s.slice(2, 4), 16), parseInt(s.slice(4, 6), 16)]; }
-function lpWallMix(a, b, t) { return '#' + [0, 1, 2].map(i => Math.round(a[i] + (b[i] - a[i]) * t).toString(16).padStart(2, '0')).join(''); }
+function lpInitReveal() {
+  const els = document.querySelectorAll('.lp-reveal');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || !('IntersectionObserver' in window)) { els.forEach(el => el.classList.add('is-in')); return; }
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); }
+  }, { threshold: 0.2 });
+  els.forEach(el => io.observe(el));
+}
 
-function lpInitWall() {
-  const wrap = document.querySelector('.lp-panel');
-  const cv = document.querySelector('canvas.lp-wall');
-  if (!wrap || !cv) return;
-  const ctx = cv.getContext('2d');
-  if (!ctx) return;
-  const DEG = Math.PI / 180, LEVELS = 14;
-  const REST = 72 * DEG, MAX_TILT = 60 * DEG, RADIUS = 260, FILL = 0.4, TARGET = 2600;
+// ── pointer effects: the hero glow follows the pointer, frames tilt a little ──
+// One passive pointermove listener, throttled to a frame, writing CSS variables; nothing runs
+// on coarse pointers or under reduced motion. The board frame never tilts: its drag positions a
+// card with position: fixed, which a transformed ancestor would re-anchor.
+function lpTiltFor(x, y, w, h, max) { return { rx: ((y / h) - 0.5) * -2 * max, ry: ((x / w) - 0.5) * 2 * max }; }
+
+function lpInitFx() {
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const coarse = window.matchMedia('(pointer: coarse)').matches;
-  const css = getComputedStyle(document.documentElement);
-  const tok = (name, fb) => lpWallHex(css.getPropertyValue(name), fb);
-  const ground = tok('--sb-bg', [15, 35, 64]), panel = tok('--navy-500', [61, 109, 169]);
-  const palette = [];
-  for (let i = 0; i < LEVELS; i++) palette.push(lpWallMix(ground, panel, i / (LEVELS - 1)));
-  const buckets = palette.map(() => []);
-  let cells = [], size = { w: 0, h: 0, dpr: 1, hw: 8, hh: 8 }, built = null, inView = true;
-  const att = { x: 0, y: 0, tx: 0, ty: 0, live: false, since: 0 };
-  let startAt = 0, sweepFrom = -1, nextSweep = -1, last = 0;
+  if (reduce || coarse) return;
+  const hero = document.querySelector('.lp-hero');
+  const tilts = [...document.querySelectorAll('.lp-tilt')];
+  let pending = null, raf = 0;
+  function apply() {
+    raf = 0;
+    const e = pending; pending = null; if (!e) return;
+    if (hero) {
+      const r = hero.getBoundingClientRect();
+      if (e.clientY >= r.top && e.clientY <= r.bottom) { hero.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100).toFixed(2) + '%'); hero.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100).toFixed(2) + '%'); }
+    }
+    for (const el of tilts) {
+      const r = el.getBoundingClientRect();
+      const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      if (!inside) { if (el.classList.contains('is-tilted')) { el.classList.remove('is-tilted'); el.style.transform = ''; el.style.removeProperty('--sx'); el.style.removeProperty('--sy'); } continue; }
+      const { rx, ry } = lpTiltFor(e.clientX - r.left, e.clientY - r.top, r.width, r.height, 3);
+      el.classList.add('is-tilted');
+      el.style.transform = `perspective(1400px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg)`;
+      el.style.setProperty('--sx', ((e.clientX - r.left) / r.width * 100).toFixed(1) + '%');
+      el.style.setProperty('--sy', ((e.clientY - r.top) / r.height * 100).toFixed(1) + '%');
+    }
+  }
+  window.addEventListener('pointermove', e => { pending = e; if (!raf) raf = requestAnimationFrame(apply); }, { passive: true });
+}
 
-  function rebuild() {
-    const W = wrap.clientWidth, H = wrap.clientHeight;
-    if (W < 2 || H < 2) return;
-    if (built && Math.abs(built.w - W) < 2 && Math.abs(built.h - H) < 90) return;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-    const { cols, rows } = lpWallGrid(W, H, TARGET);
-    const cw = W / cols, ch = H / rows;
-    size = { w: W, h: H, dpr, hw: cw * FILL, hh: ch * FILL };
-    const persp = 0.0016, cxm = W / 2, cym = H / 2;
-    let seed = 40503;
-    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-    cells = [];
-    for (let gy = 0; gy < rows; gy++) for (let gx = 0; gx < cols; gx++) {
-      const x = (gx + 0.5) * cw, y = (gy + 0.5) * ch, ra = REST * (0.92 + rnd() * 0.16);
-      cells.push({ x, y, a: ra, b: 0, va: 0, vb: 0, ra, ox: (x - cxm) * persp, oy: (y - cym) * persp, nx: 0, ny: 0, nz: 0, bucket: 0, ready: false, q: new Float32Array(8) });
-    }
-    if (!built) { att.x = att.tx = W / 2; att.y = att.ty = H / 2; startAt = 0; }
-    built = { w: W, h: H };
-  }
-  const L = [-0.34, -0.44, 0.83], LN = Math.hypot(...L), lx = L[0] / LN, ly = L[1] / LN, lz = L[2] / LN;
-  function shadeOf(p) {
-    const facing = p.nz > 0 ? p.nz : 0;
-    const lam = Math.max(0, p.nx * lx + p.ny * ly + p.nz * lz);
-    const shade = 0.06 + 0.5 * facing * facing + 0.42 * lam;
-    return Math.min(LEVELS - 1, Math.max(0, Math.round(Math.min(1, shade) * (LEVELS - 1))));
-  }
-  function geometry(p) {
-    const ca = Math.cos(p.a), sa = Math.sin(p.a), cb = Math.cos(p.b), sb = Math.sin(p.b);
-    p.nx = sa; p.ny = -ca * sb; p.nz = ca * cb;
-    const q = p.q, hw = size.hw, hh = size.hh;
-    for (let k = 0; k < 4; k++) {
-      const sx = (k === 0 || k === 3) ? -hw : hw, sy = k < 2 ? -hh : hh;
-      const x2 = sx * ca, y2 = sy * cb + sx * sa * sb, z2 = sy * sb - sx * sa * cb;
-      q[k * 2] = p.x + x2 + p.ox * z2; q[k * 2 + 1] = p.y + y2 + p.oy * z2;
-    }
-  }
-  function paint(now) {
-    const W = size.w, H = size.h;
-    if (W < 2 || !cells.length) return;
-    if (!startAt) { startAt = now; last = now; sweepFrom = now + 600; nextSweep = -1; }
-    const dt = Math.min(0.034, Math.max(0.001, (now - last) / 1000)); last = now;
-    const idle = !att.live || now - att.since > 2600;
-    if (!reduce && idle) { const t = now / 1000; att.tx = W * (0.5 + 0.3 * Math.sin(t * 0.29)); att.ty = H * (0.48 + 0.24 * Math.sin(t * 0.41 + 1.3)); }
-    const follow = Math.min(1, dt * (att.live && !idle ? 11 : 2.2));
-    att.x += (att.tx - att.x) * follow; att.y += (att.ty - att.y) * follow;
-    let sweepP = 1;
-    if (!reduce && sweepFrom >= 0) { sweepP = Math.min(1, Math.max(0, (now - sweepFrom) / 1500)); if (sweepP >= 1) { sweepFrom = -1; nextSweep = now + 10000 + Math.random() * 20000; } }
-    else if (!reduce && nextSweep >= 0 && now >= nextSweep) { if (idle) { sweepFrom = now; nextSweep = -1; sweepP = 0; } else nextSweep = now + 2200; }
-    const sweepX = (-0.2 + 1.4 * sweepP) * W, bandW = W * 0.19, sweeping = sweepFrom >= 0 && sweepP > 0 && sweepP < 1;
-    for (const b of buckets) b.length = 0;
-    const cym = H / 2;
-    for (let i = 0; i < cells.length; i++) {
-      const p = cells[i], dx = p.x - att.x, dy = p.y - att.y, dist = Math.sqrt(dx * dx + dy * dy);
-      let w = 1 - lpWallSmooth(dist / RADIUS);
-      if (sweeping) { const wv = 1 - lpWallSmooth(Math.abs(p.x + (p.y - cym) * 0.26 - sweepX) / bandW); if (wv > w) w = wv; }
-      let ta = p.ra, tb = 0;
-      if (w > 0.001) { const ring = w * (1 - w) * 4, inv = dist > 0.001 ? 1 / dist : 0; ta = p.ra * (1 - w) - (dx * inv) * MAX_TILT * ring * 0.85; tb = (dy * inv) * MAX_TILT * ring * 0.85; }
-      if (reduce) { p.a = ta; p.b = tb; }
-      else {
-        const da = ta - p.a, db = tb - p.b;
-        if (p.ready && Math.abs(da) < 0.0012 && Math.abs(db) < 0.0012 && Math.abs(p.va) < 0.0016 && Math.abs(p.vb) < 0.0016) { buckets[p.bucket].push(i); continue; }
-        p.va += (da * 130 - p.va * 17) * dt; p.vb += (db * 130 - p.vb * 17) * dt;
-        p.a += p.va * dt; p.b += p.vb * dt;
-      }
-      geometry(p); p.bucket = shadeOf(p); p.ready = true; buckets[p.bucket].push(i);
-    }
-    ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
-    ctx.clearRect(0, 0, W, H);
-    for (let bi = 0; bi < buckets.length; bi++) {
-      const list = buckets[bi]; if (!list.length) continue;
-      ctx.fillStyle = palette[bi]; ctx.beginPath();
-      for (const idx of list) { const q = cells[idx].q; ctx.moveTo(q[0], q[1]); ctx.lineTo(q[2], q[3]); ctx.lineTo(q[4], q[5]); ctx.lineTo(q[6], q[7]); ctx.closePath(); }
-      ctx.fill();
-    }
-  }
-  const active = () => inView && !document.hidden;
-  function tick(now) {
-    if (!active()) { last = 0; setTimeout(() => requestAnimationFrame(tick), 400); return; }
-    if (!last) last = now;
-    paint(now);
-    if (reduce) return;
-    requestAnimationFrame(tick);
-  }
-  if (!coarse && !reduce) {
-    const onMove = e => {
-      const r = wrap.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-      if (x < -60 || y < -60 || x > r.width + 60 || y > r.height + 60) { att.live = false; return; }
-      att.tx = x; att.ty = y; att.live = true; att.since = performance.now();
-    };
-    window.addEventListener('pointermove', onMove, { passive: true });
-    window.addEventListener('pointerdown', onMove, { passive: true });
-  }
-  if ('IntersectionObserver' in window) new IntersectionObserver(es => { inView = es.some(e => e.isIntersecting); }, { threshold: 0.02 }).observe(wrap);
-  new ResizeObserver(() => { rebuild(); if (reduce) paint(performance.now()); }).observe(wrap);
-  rebuild();
-  requestAnimationFrame(tick);
+// Fly `packet` (absolute inside `frame`) from the centre of `from` to the centre of `to`.
+// Resolves when it lands; one jump under reduced motion.
+function lpFly(packet, frame, from, to, ms) {
+  const f = frame.getBoundingClientRect(), a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
+  const x0 = a.left - f.left + a.width / 2, y0 = a.top - f.top + a.height / 2, x1 = b.left - f.left + b.width / 2, y1 = b.top - f.top + b.height / 2;
+  packet.classList.remove('hidden');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce || !packet.animate) { packet.style.transform = `translate(${x1}px, ${y1}px)`; return Promise.resolve(); }
+  const anim = packet.animate([{ transform: `translate(${x0}px, ${y0}px) scale(.6)`, opacity: 0 }, { transform: `translate(${x0}px, ${y0}px) scale(1)`, opacity: 1, offset: .12 }, { transform: `translate(${x1}px, ${y1}px) scale(1)`, opacity: 1, offset: .9 }, { transform: `translate(${x1}px, ${y1}px) scale(.4)`, opacity: 0 }], { duration: ms, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' });
+  return anim.finished.catch(() => {});
+}
+
+// Count a number up from zero over `ms`, formatting each frame with `fmt`.
+function lpCountUp(el, target, fmt, ms) {
+  const t0 = performance.now();
+  const step = now => { const t = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - t, 3); el.textContent = fmt(target * e); if (t < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
 }
 
 // ── money, as the Deals page formats it ─────────────────────────────────────
@@ -412,6 +372,8 @@ function lpInitBoard() {
   toast?.querySelector('.lp-toast-undo')?.addEventListener('click', () => { undo?.(); undo = null; toast.classList.add('hidden'); });
 
   function deliver() {
+    const wonCol = cols.find(c => c.dataset.stage === 'won');
+    if (wonCol && !reduce) { wonCol.classList.remove('is-flash'); void wonCol.offsetWidth; wonCol.classList.add('is-flash'); }
     if (!engine) return;
     engine.classList.remove('is-done'); engine.classList.add('is-busy');
     engine.querySelector('span').textContent = lpT('lp_delivery_pending');
@@ -630,13 +592,14 @@ function lpMapLead(payload, map) {
 function lpInitLeads() {
   const root = document.getElementById('leads');
   if (!root) return;
-  const btn = root.querySelector('#lp-lead-send'), pre = root.querySelector('#lp-lead-json'), card = root.querySelector('#lp-lead-card'), fields = root.querySelector('#lp-lead-fields'), chips = root.querySelector('#lp-lead-chips');
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let i = 0, last = null;
-  function show(preset) {
+  const frame = root.querySelector('#lp-flow-leads'), btn = root.querySelector('#lp-lead-send'), packet = root.querySelector('#lp-lead-packet');
+  const target = root.querySelector('#lp-lead-target'), card = root.querySelector('#lp-lead-card'), fields = root.querySelector('#lp-lead-fields'), chips = root.querySelector('#lp-lead-chips');
+  const sources = [...root.querySelectorAll('.lp-source')];
+  let i = 0, last = null, busy = false;
+  // Each source hands over one of the real payload shapes; the card shows what the webhook made of it.
+  function paint(preset) {
     last = preset;
     const r = lpMapLead(preset.payload, preset.map);
-    if (pre) pre.textContent = JSON.stringify(preset.payload, null, 2);
     if (fields) {
       fields.textContent = '';
       for (const [f, v] of Object.entries(r.fields)) {
@@ -649,56 +612,82 @@ function lpInitLeads() {
       chips.textContent = '';
       for (const text of [lpT('lp_lead_owner'), lpT('lp_lead_deal', { stage: lpT('lp_col_new') })]) { const c = document.createElement('span'); c.className = 'lp-chip'; c.textContent = text; chips.appendChild(c); }
     }
-    if (card) { card.classList.remove('is-in'); void card.offsetWidth; card.classList.add('is-in'); }
-    root.classList.remove('is-sending'); void root.offsetWidth; if (!reduce) root.classList.add('is-sending');
   }
-  btn?.addEventListener('click', () => { show(LP_LEAD_PRESETS[i % LP_LEAD_PRESETS.length]); i++; });
-  lpRerender.push(() => { if (last) show(last); });
-  show(LP_LEAD_PRESETS[0]); i = 1;
+  async function send() {
+    if (busy) return;
+    busy = true;
+    const src = sources[i % sources.length], preset = LP_LEAD_PRESETS[i % LP_LEAD_PRESETS.length];
+    i++;
+    sources.forEach(el => el.classList.toggle('is-on', el === src));
+    card?.classList.remove('is-in');
+    if (frame && packet && target) await lpFly(packet, frame, src, target, 900);
+    packet?.classList.add('hidden');
+    paint(preset);
+    if (card) { void card.offsetWidth; card.classList.add('is-in'); }
+    target?.classList.remove('is-hit'); void target?.offsetWidth; target?.classList.add('is-hit');
+    busy = false;
+  }
+  btn?.addEventListener('click', send);
+  sources.forEach((el, k) => el.addEventListener('click', () => { i = k; send(); }));
+  lpRerender.push(() => { if (last) paint(last); });
+  paint(LP_LEAD_PRESETS[0]); card?.classList.add('is-in'); i = 1;
 }
 
-// ── time zones: the Calendar's conversion, wall clock in → wall clock out ───
-// Offset of `tz` from UTC at the instant `utcMs`, in milliseconds.
-function lpZoneOffsetMs(utcMs, tz) {
-  const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(utcMs));
-  const g = t => Number(parts.find(p => p.type === t).value);
-  return Date.UTC(g('year'), g('month') - 1, g('day'), g('hour'), g('minute'), g('second')) - utcMs;
-}
-
-// '2026-10-07', '09:30', 'Europe/Berlin', 'Europe/Lisbon' → { time: '08:30', dayShift: 0 }
-function lpConvertClock(date, time, fromTz, toTz) {
-  const [y, m, d] = date.split('-').map(Number);
-  const [hh, mm] = time.split(':').map(Number);
-  const wall = Date.UTC(y, m - 1, d, hh, mm);
-  let utc = wall - lpZoneOffsetMs(wall, fromTz);
-  utc = wall - lpZoneOffsetMs(utc, fromTz);                 // second pass settles a DST edge
-  const local = new Date(utc + lpZoneOffsetMs(utc, toTz));
-  const pad = n => String(n).padStart(2, '0');
-  const shift = Math.round((Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - Date.UTC(y, m - 1, d)) / 864e5);
-  return { time: pad(local.getUTCHours()) + ':' + pad(local.getUTCMinutes()), dayShift: shift };
-}
-
-function lpInitTimezone() {
-  const root = document.getElementById('lp-tz');
+// ── contacts: search, pick, see the history, reach them ─────────────────────
+// The list filters on name and company as the Contacts table does; the card shows the
+// picked contact, their deals and history; Anrufen / E-Mail / WhatsApp open a bubble with
+// the number, the address, or the WhatsApp template filled in with the name and the deal.
+function lpInitContacts() {
+  const root = document.getElementById('contacts');
   if (!root) return;
-  const from = root.querySelector('#lp-tz-from'), to = root.querySelector('#lp-tz-to'), time = root.querySelector('#lp-tz-time');
-  const out = root.querySelector('#lp-tz-out'), note = root.querySelector('#lp-tz-note'), day = root.querySelector('#lp-tz-day');
-  for (const sel of [from, to]) { if (!sel) continue; for (const z of LP_ZONES) { const o = document.createElement('option'); o.value = z; o.textContent = z.replace('_', ' '); sel.appendChild(o); } }
-  if (from) from.value = 'Europe/Berlin';
-  if (to) to.value = 'Europe/Lisbon';
-  const today = () => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; };
-  function render() {
-    if (!from || !to || !time || !out) return;
-    const t = /^\d{2}:\d{2}$/.test(time.value) ? time.value : '09:30';
-    let r;
-    try { r = lpConvertClock(today(), t, from.value, to.value); } catch { return; }
-    out.textContent = r.time;
-    if (note) note.textContent = from.value === to.value ? '' : lpT('lp_tz_note', { time: t, zone: from.value.split('/').pop().replace('_', ' ') });
-    if (day) day.textContent = r.dayShift > 0 ? lpT('lp_tz_next') : r.dayShift < 0 ? lpT('lp_tz_prev') : lpT('lp_tz_same');
+  const q = sel => root.querySelector(sel);
+  const rows = q('#lp-ct-rows'), none = q('#lp-ct-none'), input = q('#lp-ct-q'), card = q('#lp-ct-card');
+  const bubble = q('#lp-ct-bubble'), bubLabel = q('#lp-ct-bubble-label'), bubText = q('#lp-ct-bubble-text');
+  const acts = [...root.querySelectorAll('.lp-ct-act')];
+  const TYPE = { note: 'lp_type_note', call: 'lp_type_call', email: 'lp_type_email', wa: 'lp_type_wa' };
+  let current = LP_CONTACTS[0], act = null, query = '';
+  const initial = c => c.name.trim().charAt(0).toUpperCase();
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  function matches(c) { const n = query.trim().toLowerCase(); return !n || c.name.toLowerCase().includes(n) || c.company.toLowerCase().includes(n); }
+  function renderList() {
+    if (!rows) return;
+    rows.textContent = '';
+    const hits = LP_CONTACTS.filter(matches);
+    for (const c of hits) {
+      const li = el('li', 'lp-ct-row' + (c === current ? ' is-on' : '')); li.setAttribute('role', 'option'); li.setAttribute('aria-selected', String(c === current)); li.tabIndex = 0; li.dataset.id = String(c.id);
+      li.appendChild(el('i', 'lp-av', initial(c)));
+      const box = el('div'); box.appendChild(el('b', null, c.name)); box.appendChild(el('span', null, c.company || lpT('lp_ct_private')));
+      li.appendChild(box);
+      const pick = () => { current = c; act = null; renderList(); renderCard(true); };
+      li.addEventListener('click', pick);
+      li.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+      rows.appendChild(li);
+    }
+    none?.classList.toggle('hidden', hits.length > 0);
   }
-  [from, to, time].forEach(el => el?.addEventListener('input', render));
-  lpRerender.push(render);
-  render();
+  function renderCard(animate) {
+    const c = current;
+    const av = q('#lp-ct-av'), name = q('#lp-ct-name'), company = q('#lp-ct-company'), deals = q('#lp-ct-deals'), hist = q('#lp-ct-hist');
+    if (av) av.textContent = initial(c);
+    if (name) name.textContent = c.name;
+    if (company) company.textContent = c.company || lpT('lp_ct_private');
+    if (deals) { deals.textContent = ''; for (const d of c.deals) { const li = el('li'); li.appendChild(el('b', null, d.title)); li.appendChild(el('span', 'lp-stagepill', lpT(d.stage))); deals.appendChild(li); } }
+    if (hist) { hist.textContent = ''; for (const hh of c.history) { const li = el('li'); li.appendChild(el('span', 'lp-type-tag lp-type-' + hh.type, lpT(TYPE[hh.type]))); li.appendChild(el('b', null, lpT(hh.key))); li.appendChild(el('time', null, lpT('lp_wd' + hh.day) + ' ' + hh.time)); hist.appendChild(li); } }
+    acts.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.act === act)));
+    if (bubble) {
+      bubble.classList.toggle('hidden', !act);
+      if (act && bubLabel && bubText) {
+        bubLabel.textContent = lpT(act === 'call' ? 'lp_ct_bub_call' : act === 'mail' ? 'lp_ct_bub_mail' : 'lp_ct_bub_wa');
+        bubText.textContent = act === 'call' ? c.phone : act === 'mail' ? c.email : lpT('lp_ct_tpl', { name: c.name, deal: c.deals[0]?.title || '' });
+      }
+    }
+    if (card && animate) { card.classList.remove('is-in'); void card.offsetWidth; card.classList.add('is-in'); }
+  }
+  acts.forEach(b => b.addEventListener('click', () => { act = act === b.dataset.act ? null : b.dataset.act; renderCard(false); }));
+  input?.addEventListener('input', () => { query = input.value; renderList(); });
+  input?.addEventListener('keydown', e => { if (e.key === 'Enter') { const first = LP_CONTACTS.find(matches); if (first) { current = first; act = null; renderList(); renderCard(true); } } });
+  lpRerender.push(() => { renderList(); renderCard(false); });
+  renderList(); renderCard(false); card?.classList.add('is-in');
 }
 
 // ── numbers: three periods of figures ───────────────────────────────────────
@@ -713,13 +702,17 @@ function lpInitAnalytics() {
   const tip = q('#lp-an-tip');
   let pts = [];
 
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let animateNext = false;   // the first render in view counts the figures up; later renders set them
+  function figure(sel, value, fmt) { const el = q(sel); if (animateNext && !reduce) lpCountUp(el, value, fmt, 900); else el.textContent = fmt(value); }
   function render() {
     const a = LP_ANALYTICS[period];
     root.querySelectorAll('.lp-period-btn').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.period) === period)));
-    q('#lp-an-open').textContent = lpFmtEurShort(a.open);
-    q('#lp-an-won').textContent = lpFmtEurShort(a.won);
-    q('#lp-an-rate').textContent = a.rate + ' %';
-    q('#lp-an-new').textContent = String(a.newDeals);
+    figure('#lp-an-open', a.open, lpFmtEurShort);
+    figure('#lp-an-won', a.won, lpFmtEurShort);
+    figure('#lp-an-rate', a.rate, v => Math.round(v) + ' %');
+    figure('#lp-an-new', a.newDeals, v => String(Math.round(v)));
+    animateNext = false;
 
     const funnel = q('#lp-an-funnel'); funnel.textContent = '';
     const max = a.funnel[0];
@@ -779,72 +772,143 @@ function lpInitAnalytics() {
   });
   svg?.addEventListener('pointerleave', () => { tip?.classList.add('hidden'); svg.__cursor?.classList.add('hidden'); pts.forEach(p => p.dot.classList.remove('is-on')); });
 
-  root.querySelectorAll('.lp-period-btn').forEach(b => b.addEventListener('click', () => { period = Number(b.dataset.period) || 6; render(); }));
+  root.querySelectorAll('.lp-period-btn').forEach(b => b.addEventListener('click', () => { period = Number(b.dataset.period) || 6; animateNext = true; render(); }));
   lpRerender.push(render);
   render();
+  if ('IntersectionObserver' in window && !reduce) {
+    const io = new IntersectionObserver(entries => { if (entries.some(e => e.isIntersecting)) { io.disconnect(); animateNext = true; render(); } }, { threshold: 0.4 });
+    io.observe(root);
+  }
 }
 
-// ── the Engine: sign the event in the browser exactly as the server does ────
-function lpHex(buf) { return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join(''); }
-function lpRandomHex(bytes) { const a = new Uint8Array(bytes); (globalThis.crypto).getRandomValues(a); return lpHex(a.buffer); }
-
-// 'sha256=' + hex(HMAC-SHA256(secret, "<timestamp>.<rawBody>")) — the scheme of utils/engine.js.
-async function lpSign(secret, timestamp, rawBody) {
-  const subtle = (globalThis.crypto || {}).subtle;
-  if (!subtle) throw new Error('no subtle crypto');
-  const enc = new TextEncoder();
-  const key = await subtle.importKey('raw', enc.encode(String(secret)), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const sig = await subtle.sign('HMAC', key, enc.encode(`${timestamp}.${rawBody}`));
-  return 'sha256=' + lpHex(sig);
-}
-
-// The payload utils/engine.js builds for a deal that reached a trigger stage.
-function lpEnginePayload({ eventId, timestamp, title, stage }) {
-  return { event: 'vertrag.unterschrieben', event_id: eventId, timestamp, kunde_id: 318, vertrag_id: 1042, produkt: title, stage };
-}
-
+// ── from our system to the next ─────────────────────────────────────────────
+// Closing the deal moves it to Won; a packet travels to the next system, which confirms.
+// The real transfer behind this is utils/engine.js; the page shows the handshake, not the code.
 function lpInitEngine() {
   const root = document.getElementById('engine');
   if (!root) return;
-  const q = s => root.querySelector(s);
-  const secret = lpRandomHex(24);
-  const body = q('#lp-en-body'), sig = q('#lp-en-sig'), status = q('#lp-en-state'), note = q('#lp-en-note');
-  let state = 'idle';
-  const paint = () => { if (status) status.textContent = lpT(state === 'idle' ? 'lp_en_idle' : state === 'pending' ? 'lp_en_pending' : 'lp_en_done'); };
+  const q = sel => root.querySelector(sel);
+  const frame = q('#lp-flow-engine'), from = q('#lp-en-from'), to = q('#lp-en-to'), packet = q('#lp-en-packet'), stage = q('#lp-en-stage'), state = q('#lp-en-state'), receipt = q('#lp-en-receipt');
+  let phase = 'idle', busy = false;
+  const paint = () => {
+    if (state) state.textContent = lpT(phase === 'idle' ? 'lp_en_idle' : phase === 'pending' ? 'lp_en_pending' : 'lp_en_done');
+    if (stage) { stage.textContent = lpT(phase === 'idle' ? 'lp_col_nego' : 'lp_col_won'); stage.classList.toggle('is-won', phase !== 'idle'); }
+  };
   lpRerender.push(paint);
-  async function send() {
-    const now = new Date();
-    const eventId = (globalThis.crypto && crypto.randomUUID) ? crypto.randomUUID() : lpRandomHex(16);
-    const payload = lpEnginePayload({ eventId, timestamp: now.toISOString(), title: lpT('lp_deal_name'), stage: lpT('lp_col_won') });
-    const raw = JSON.stringify(payload, null, 2);
-    const ts = Math.floor(now.getTime() / 1000);
-    if (body) body.textContent = raw;
-    if (note) note.textContent = '';
-    try { if (sig) sig.textContent = `X-Upgrads-Timestamp: ${ts}\nX-Upgrads-Signature: ${await lpSign(secret, ts, raw)}`; }
-    catch { if (sig) sig.textContent = `X-Upgrads-Timestamp: ${ts}\nX-Upgrads-Signature: sha256=…`; if (note) note.textContent = lpT('lp_en_nosubtle'); }
-    root.classList.remove('is-done'); root.classList.add('is-sent', 'is-pending');
-    state = 'pending'; paint();
-    setTimeout(() => { root.classList.remove('is-pending'); root.classList.add('is-done'); state = 'done'; paint(); }, 800);
+  async function close() {
+    if (busy) return;
+    busy = true;
+    frame?.classList.remove('is-done'); receipt?.classList.remove('is-in');
+    phase = 'pending'; paint();
+    frame?.classList.add('is-pending');
+    if (frame && packet && from && to) await lpFly(packet, frame, from, to, 1100);
+    packet?.classList.add('hidden');
+    frame?.classList.remove('is-pending'); frame?.classList.add('is-done');
+    receipt?.classList.add('is-in');
+    phase = 'done'; paint();
+    busy = false;
   }
-  q('#lp-en-send')?.addEventListener('click', send);
+  q('#lp-en-send')?.addEventListener('click', close);
   paint();
+}
+
+// ── the working day: tasks, the calendar that carries them, the team chat ──
+// A task with a date is a calendar entry (the real feed does the same, keyed by
+// kind+id); ticking it off ticks the entry; a new task lands on Thursday in both
+// places. The chat is one room with presence: a sent message is answered live.
+function lpInitWork() {
+  const root = document.getElementById('work');
+  if (!root) return;
+  const q = sel => root.querySelector(sel);
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const list = q('#lp-wk-tasks'), cal = q('#lp-wk-cal'), form = q('#lp-wk-add'), input = q('#lp-wk-input');
+  const progress = q('#lp-wk-progress'), bar = q('#lp-wk-bar'), count = q('#lp-wk-count');
+  let next = 10;
+  const chipFor = id => cal?.querySelector(`.lp-cal-chip[data-task="${id}"]`);
+  // the same progress line the deal record shows: done of all, and a bar
+  function refresh() {
+    const rows = [...(list?.querySelectorAll('.lp-task') || [])];
+    const done = rows.filter(r => r.querySelector('input')?.checked).length;
+    if (progress) progress.textContent = lpT('lp_tasks_progress', { d: done, n: rows.length });
+    if (bar) bar.style.width = (rows.length ? (done / rows.length) * 100 : 0) + '%';
+    if (count) count.textContent = String(rows.length - done);
+  }
+  function wire(row) {
+    const cb = row.querySelector('input');
+    cb?.addEventListener('change', () => { row.classList.toggle('is-done', cb.checked); chipFor(row.dataset.task)?.classList.toggle('is-done', cb.checked); refresh(); });
+  }
+  list?.querySelectorAll('.lp-task').forEach(wire);
+  function named(el, title) { if (title) el.textContent = title; else { el.dataset.i18n = 'lp_wk_task_ph'; el.textContent = lpT('lp_wk_task_ph'); } return el; }
+  function addTask(title) {
+    if (!list) return;
+    const id = String(next++);
+    const li = document.createElement('li'); li.className = 'lp-task is-new'; li.dataset.task = id;
+    const label = document.createElement('label');
+    const cb = document.createElement('input'); cb.type = 'checkbox';
+    const check = list.querySelector('.lp-check')?.cloneNode(true);
+    const t = named(document.createElement('span'), title); t.className = 'lp-task-title';
+    label.appendChild(cb); if (check) label.appendChild(check); label.appendChild(t);
+    const due = document.createElement('small'); due.dataset.i18n = 'lp_w_new_due'; due.textContent = lpT('lp_w_new_due');
+    const who = document.createElement('i'); who.className = 'lp-av lp-av-xs'; who.textContent = 'M';
+    li.appendChild(label); li.appendChild(due); li.appendChild(who); list.appendChild(li); wire(li);
+    const day = cal?.querySelector('.lp-cal-day[data-day="4"] .lp-cal-items');
+    if (day) {
+      const chip = document.createElement('span'); chip.className = 'lp-cal-chip is-new'; chip.dataset.task = id;
+      const at = document.createElement('time'); at.textContent = '10:00';
+      chip.appendChild(at); chip.appendChild(named(document.createElement('span'), title)); day.appendChild(chip);
+    }
+    refresh();
+  }
+  form?.addEventListener('submit', e => { e.preventDefault(); addTask((input?.value || '').trim()); if (input) input.value = ''; });
+  // the chat
+  const msgs = q('#lp-wk-msgs'), send = q('#lp-wk-send'), msgInput = q('#lp-wk-msg'), online = q('#lp-wk-online'), typing = q('#lp-wk-typing'), typingText = q('#lp-wk-typing-text');
+  let busy = false;
+  function post(initial, cls, name, text, key) {
+    if (!msgs) return;
+    const li = document.createElement('li'); li.className = 'lp-msg is-new';
+    const av = document.createElement('i'); av.className = 'lp-av' + (cls ? ' ' + cls : ''); av.textContent = initial;
+    const box = document.createElement('div');
+    const meta = document.createElement('p'); meta.className = 'lp-msg-meta';
+    const b = document.createElement('b'); b.textContent = name;
+    const time = document.createElement('time'); time.textContent = new Date().toLocaleTimeString(lpLang === 'de' ? 'de-DE' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
+    meta.appendChild(b); meta.appendChild(time);
+    const p = document.createElement('p'); p.className = 'lp-msg-text';
+    if (key) { p.dataset.i18n = key; p.textContent = lpT(key); } else p.textContent = text;
+    box.appendChild(meta); box.appendChild(p); li.appendChild(av); li.appendChild(box); msgs.appendChild(li);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+  send?.addEventListener('submit', e => {
+    e.preventDefault();
+    const text = (msgInput?.value || '').trim();
+    if (!text || busy) return;
+    if (msgInput) msgInput.value = '';
+    post('M', '', 'Mara Kühn', text);
+    busy = true; online?.classList.add('is-live');
+    if (typingText) typingText.textContent = lpT('lp_wk_typing', { name: 'Tim Berger' });
+    typing?.classList.toggle('hidden', reduce);
+    setTimeout(() => { typing?.classList.add('hidden'); post('T', 'lp-av-t', 'Tim Berger', '', 'lp_msg_reply'); online?.classList.remove('is-live'); busy = false; }, reduce ? 0 : 1400);
+  });
+  lpRerender.push(refresh);
+  refresh();
 }
 
 // ── boot ────────────────────────────────────────────────────────────────────
 function lpInit() {
   document.body.classList.add('lp');
   document.querySelectorAll('.lp-lang-btn').forEach(b => b.addEventListener('click', () => lpSetLang(b.dataset.lang)));
-  lpInitIndex();
+  lpInitNav();
+  lpInitReveal();
   lpInitRecord();
   lpInitLeads();
-  lpInitTimezone();
+  lpInitContacts();
   lpInitAnalytics();
   lpInitEngine();
+  lpInitWork();
   let saved = null;
   try { saved = localStorage.getItem('lang'); } catch {}
   lpApplyLang(saved || 'de');
   lpInitBoard();   // after the language, so its first paint reads it
-  lpInitWall();
+  lpInitFx();
 }
 
 if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', lpInit);

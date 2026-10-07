@@ -178,9 +178,12 @@
       </aside>
 
       <section class="au-main">
-        <div class="au-lang" role="group" aria-label="Sprache / Language">
-          <button type="button" data-lang="de" aria-pressed="true" onclick="setLanguage('de')">DE</button>
-          <button type="button" data-lang="en" aria-pressed="false" onclick="setLanguage('en')">EN</button>
+        <div class="au-tools">
+          <div class="au-lang" role="group" aria-label="Sprache / Language">
+            <button type="button" data-lang="de" aria-pressed="true" onclick="setLanguage('de')">DE</button>
+            <button type="button" data-lang="en" aria-pressed="false" onclick="setLanguage('en')">EN</button>
+          </div>
+          <button type="button" class="au-theme" id="au-theme" aria-pressed="false" aria-label="Dunkelmodus" title="Dunkelmodus" onclick="toggleDarkMode()"><svg class="ic" aria-hidden="true"><use id="au-theme-ic" href="#i-moon"/></svg></button>
         </div>
         <div class="au-col au-in">
           <!-- ── View: Login / Signup ── -->

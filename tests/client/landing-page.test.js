@@ -1,21 +1,22 @@
 // CLIENT (static + pure-function) tests for the public landing page at
-// /landingpage (2026-10-07, the split page): the login's two-tone split as the
-// page, a navy panel that stays in view (headline, two calls to action, an
-// index of six parts, the louvre wall without a wordmark) and on the right one
-// white screen per part with a short title, one line and one working piece:
-// the board (a visible cursor drags the deal into Won once, then drag and
-// drop), leads (one button, three real payload shapes through the webhook's
-// own mapping), the deal record's tabs, the two clocks, three periods of
-// figures, and the vertrag.unterschrieben event signed with HMAC-SHA256 as
-// utils/engine.js signs it. The route, the CSP-safe document, German-first
-// copy equal to the dictionary key for key, a hard cap on words, and the
-// claims audit. Pure functions are sliced out of public/js/landing.js and run
-// in a sandbox; the signing is checked against Node's own HMAC.
+// /landingpage (2026-10-07, the product page): statements set large and
+// centred, one per section, the product shown big and working under them in
+// a rounded frame, white, grey and navy bands alternating, a slim translucent
+// bar, pill buttons, a specs grid, one closing call to action. The route, the
+// CSP-safe document, German-first copy equal to the dictionary key for key, a
+// hard cap on words, the claims audit, and the working pieces: the board (a
+// visible cursor drags the deal into Won once, then drag and drop), leads
+// (one button, three real payload shapes through the webhook's own mapping),
+// the deal record's tabs, the contacts (search, pick, reach), three periods of figures, and the
+// hand-over from our system to the next shown as a packet that travels and a
+// receipt, no code on the page (2026-10-07: the user asked for the lead
+// sources with their logos and for the Engine as a visible workflow, not the
+// payload and the signature). Pure functions are sliced out of
+// public/js/landing.js and run in a sandbox.
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs     = require('fs');
 const path   = require('path');
-const crypto = require('crypto');
 const { read, sliceFn, sliceConst, loadFns } = require('../helpers/client-fn');
 const { ROOT } = require('../helpers/load-route');
 
@@ -25,15 +26,14 @@ const css    = read('public/landing.css');
 const js     = read('public/js/landing.js');
 const style  = read('public/style.css');
 const engine = read('utils/engine.js');
-const login  = read('public/js/login-wall.js');
 const dict      = new Function(sliceConst('public/js/landing.js', 'LP_I18N').replace(/^[^{]*/, 'return '))();
 const presets   = new Function(sliceConst('public/js/landing.js', 'LP_LEAD_PRESETS').replace(/^[^[]*/, 'return '))();
 const analytics = new Function(sliceConst('public/js/landing.js', 'LP_ANALYTICS').replace(/^[^{]*/, 'return '))();
+const contacts  = new Function(sliceConst('public/js/landing.js', 'LP_CONTACTS').replace(/^[^[]*/, 'return '))();
 const count  = (src, needle) => src.split(needle).length - 1;
 const body   = html.slice(html.indexOf('<body'));
 const unesc  = s => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-const screen = id => { const s = html.indexOf(`<section id="${id}"`); let e = html.indexOf('\n    <section id="', s + 1); if (e < 0) e = html.indexOf('</main>'); return html.slice(s, e); };
-const panel  = html.slice(html.indexOf('<aside class="lp-panel">'), html.indexOf('</aside>'));
+const section = id => { const s = html.indexOf(`<section id="${id}"`); let e = html.indexOf('\n<section id="', s + 1); if (e < 0) e = html.indexOf('</main>'); return html.slice(s, e); };
 const IMPERSONAL = /\b(du|dich|dir|dein\w*|Sie|Ihnen|Ihr\w*)\b/;
 
 describe('route', () => {
@@ -48,62 +48,92 @@ describe('route', () => {
 });
 
 describe('document', () => {
-  test('standalone head: light theme, viewport, title, description, the app stylesheet then its own, both fonts preloaded, no scripts in the head', () => {
-    assert.match(html, /^<html lang="de" data-theme="">/m);
+  test('standalone head: dark theme, viewport, title, description, the app stylesheet then its own, both fonts preloaded, no scripts in the head', () => {
+    assert.match(html, /^<html lang="de" data-theme="dark">/m, 'the root carries the product\'s dark theme: the frames are the product in dark mode');
     assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1\.0">/);
-    assert.match(html, /<meta name="color-scheme" content="light">/);
+    assert.match(html, /<meta name="color-scheme" content="dark">/);
     assert.match(html, /<title>Upgrads CRM<\/title>/);
     assert.match(html, /<meta name="description" content="[^"]{60,}">/);
     assert.deepEqual([...html.matchAll(/<link rel="stylesheet" href="([^"]+)">/g)].map(m => m[1]), ['/style.css', '/landing.css']);
     const head = html.slice(0, html.indexOf('</head>'));
-    assert.match(head, /<link rel="preload" href="\/fonts\/BricolageGrotesque\.woff2" as="font" type="font\/woff2" crossorigin>/);
+    assert.match(head, /<link rel="preload" href="\/fonts\/Manrope\.woff2" as="font" type="font\/woff2" crossorigin>/);
     assert.match(head, /<link rel="preload" href="\/fonts\/inter-latin-wght\.woff2" as="font" type="font\/woff2" crossorigin>/);
     assert.doesNotMatch(head, /<script>/);
-    assert.doesNotMatch(js, /localStorage\.(get|set)Item\('theme'/, 'the page has one theme, the product\'s light one');
+    assert.doesNotMatch(js, /localStorage\.(get|set)Item\('theme'/);
   });
-  test('nothing the production policy would block: no external hosts, no iframes, one own script and one canvas, no inline styles, no hidden attribute', () => {
+  test('nothing the production policy would block: no external hosts, no iframes, one own script, no canvas, no inline styles, no hidden attribute', () => {
     assert.doesNotMatch(html, /https?:\/\//, 'no external hosts in the markup');
-    assert.doesNotMatch(html, /<iframe/);
+    assert.doesNotMatch(html, /<iframe|<canvas/);
     assert.deepEqual([...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]), ['/js/landing.js']);
-    assert.equal(count(body, '<canvas class="lp-wall" aria-hidden="true"></canvas>'), 1);
     assert.deepEqual([...html.matchAll(/ style="[^"]*"/g)].map(m => m[0]), [], 'no inline styles');
-    for (const m of html.matchAll(/(?:src|href)="([^"]+)"/g)) assert.ok(/^(\/|#|mailto:)/.test(m[1]), `absolute, anchor or mailto: ${m[1]}`);
+    for (const m of html.matchAll(/\s(?:src|href)="([^"]+)"/g)) assert.ok(/^(\/|#|mailto:)/.test(m[1]), `absolute, anchor or mailto: ${m[1]}`);
+    assert.doesNotMatch(html, /<img[^>]*src="(?!\/images\/logo\.png)/, 'the only bitmap is our own logo; the platform marks are inline symbols');
     assert.doesNotMatch(body, /<[a-z]+[^>]*\shidden(?=[\s>])/, 'hidden things use the .hidden class, not the attribute');
     assert.ok(count(body, 'class="lp-toast hidden"') === 1 && count(body, 'class="lp-pan hidden"') === 4 && count(body, 'class="lp-demo-cursor hidden"') === 1);
   });
-  test('the split: a panel with the wall, the headline, two calls to action and an index of six; a main with the language switch and a login link', () => {
-    assert.match(html, /<div class="lp-split">\s*<!--[^>]*-->\s*<aside class="lp-panel">\s*<canvas class="lp-wall"[\s\S]*<span class="lp-scrim"[\s\S]*<a class="lp-brand" href="\/"><img src="\/images\/logo\.png" alt="Upgrads"><\/a>/);
-    assert.match(panel, /<h1 class="lp-hero-title" data-i18n="lp_hero_title">/);
-    assert.match(panel, /<p class="lp-hero-sub" data-i18n="lp_hero_sub">/);
-    assert.match(panel, /<a class="lp-btn lp-btn-sky lp-request" href="mailto:hello@upgrads\.de\?subject=[^"]+" data-i18n="lp_request">[\s\S]*<a class="lp-btn lp-btn-ghost" href="\/" data-i18n="lp_login">/);
-    assert.deepEqual([...panel.matchAll(/<a href="#(\w+)" data-i18n="(lp_ix_\w+)">/g)].map(m => [m[1], m[2]]), [['board', 'lp_ix_board'], ['leads', 'lp_ix_leads'], ['deal', 'lp_ix_deal'], ['team', 'lp_ix_team'], ['numbers', 'lp_ix_numbers'], ['engine', 'lp_ix_engine']]);
-    assert.match(html, /<main class="lp-main">\s*<div class="lp-topbar">[\s\S]*class="lp-lang-btn" data-lang="de" aria-pressed="true"[\s\S]*class="lp-lang-btn" data-lang="en" aria-pressed="false"[\s\S]*<a class="lp-top-link" href="\/" data-i18n="lp_login">/);
-    assert.equal(count(html, 'lp-request"'), 2, 'request access in the panel and the closing');
+  test('the bar: logo, overview, log in, the language switch and a small pill; nothing else', () => {
+    const nav = html.slice(html.indexOf('<header class="lp-nav">'), html.indexOf('</header>'));
+    assert.match(nav, /<a class="lp-brand" href="#top"><img src="\/images\/logo\.png" alt="Upgrads"><\/a>/);
+    assert.deepEqual([...nav.matchAll(/<a href="([^"]+)" data-i18n="(lp_\w+)">/g)].map(m => [m[1], m[2]]), [['#top', 'lp_overview'], ['/', 'lp_login']]);
+    assert.match(nav, /class="lp-lang-btn" data-lang="de" aria-pressed="true"[\s\S]*class="lp-lang-btn" data-lang="en" aria-pressed="false"/);
+    assert.match(nav, /<a class="lp-pill lp-pill-sm lp-request" href="mailto:hello@upgrads\.de\?subject=[^"]+" data-i18n="lp_request">/);
+    assert.equal(count(nav, '<a '), 4);
+  });
+  test('the hero: the product lockup (the Upgrads wordmark, a hairline, CRM set light and tracked), the statement, one line, two pills, then the product big in a frame', () => {
+    const hero = section('top');
+    assert.match(hero, /<section id="top" class="lp-sec lp-hero">\s*<div class="lp-glow" aria-hidden="true"><\/div>\s*<div class="lp-head lp-reveal">\s*<p class="lp-kicker"><img class="lp-kicker-mark" src="\/images\/logo\.png" alt="Upgrads"><span class="lp-kicker-crm" data-i18n="lp_hero_kicker">CRM<\/span><\/p>\s*<h1 class="lp-hero-title" data-i18n="lp_hero_title">[^<]*<\/h1>\s*<p class="lp-hero-sub" data-i18n="lp_hero_sub">/);
+    assert.match(hero, /<div class="lp-actions">\s*<a class="lp-pill lp-request"[^>]*data-i18n="lp_request">[^<]*<\/a>\s*<a class="lp-pill lp-pill-line" href="\/" data-i18n="lp_login">/);
+    assert.match(hero, /<div class="lp-stage lp-reveal">\s*<div class="lp-frame lp-board-wrap">/);
+    assert.ok(hero.indexOf('lp-hero-title') < hero.indexOf('id="lp-board"'), 'the statement comes first, the product under it');
+    assert.equal(count(html, 'lp-request"'), 3, 'request access in the bar, the hero and the closing');
     assert.doesNotMatch(html, /href="\/\?admin"/);
   });
-  test('seven screens in order, each with one title and one line; every anchor resolves; no chapter kit, no weekdays as structure', () => {
-    const ids = [...html.matchAll(/<section id="(\w+)" class="lp-screen[^"]*">/g)].map(m => m[1]);
-    assert.deepEqual(ids, ['board', 'leads', 'deal', 'team', 'numbers', 'engine', 'close']);
+  test('the bands: two shades of navy alternating; every section centred with one statement and at most one line', () => {
+    const secs = [...html.matchAll(/<section id="(\w+)" class="lp-sec([^"]*)">/g)].map(m => [m[1], m[2].trim()]);
+    assert.deepEqual(secs, [['top', 'lp-hero'], ['board', 'lp-alt'], ['leads', ''], ['deal', 'lp-alt'], ['contacts', ''], ['numbers', ''], ['engine', 'lp-alt'], ['work', ''], ['cta', 'lp-cta']]);
+    for (const [id] of secs.slice(1)) {
+      const s = section(id);
+      assert.equal((s.match(/<h2 /g) || []).length, 1, `${id}: one statement`);
+      assert.ok((s.match(/<p class="lp-sub"/g) || []).length <= 1, `${id}: at most one line`);
+      assert.ok((s.match(/<div class="lp-frame[ "]/g) || []).length <= 1, `${id}: at most one frame`);
+      assert.match(s, /<div class="lp-head lp-reveal">/);
+    }
+    assert.match(css, /\.lp-sec \{ position: relative; padding: 140px 24px; text-align: center; \}/, 'generous, centred');
+    assert.match(css, /\.lp-alt \{ background: var\(--lp-alt\); \}/); assert.match(css, /--lp-ground: var\(--navy-950\)/); assert.match(css, /--lp-alt: var\(--navy-900\)/);
+    assert.doesNotMatch(css, /\.lp-grey|\.lp-dark\b/);
+    assert.equal(count(body, 'class="lp-frame lp-tilt'), 6, 'every frame but the board tilts (the board\'s drag uses position: fixed)');
+    assert.doesNotMatch(body, /lp-frame lp-tilt lp-board-wrap|lp-board-wrap lp-tilt/);
     const all = new Set([...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]));
     for (const a of [...html.matchAll(/href="#([^"]+)"/g)].map(m => m[1])) assert.ok(all.has(a), `#${a} resolves`);
-    for (const id of ids.slice(0, 6)) {
-      const s = screen(id);
-      assert.equal((s.match(/<h2 /g) || []).length, 1, `${id}: one title`);
-      assert.equal((s.match(/<p class="lp-line"/g) || []).length, 1, `${id}: one line`);
-      assert.equal((s.match(/<div class="lp-piece[ "]/g) || []).length, 1, `${id}: one piece`);
-    }
-    assert.doesNotMatch(body, /lp-eyebrow|lp-reveal|lp-ch\b|lp-ch-time|lp-stage\b|lp-scene|lp-inst\b|lp-notes|lp-passage/);
+    assert.doesNotMatch(body, /lp-eyebrow|lp-ch\b|lp-ch-time|lp-scene|lp-inst\b|lp-notes|lp-passage|lp-panel|lp-index|lp-wall|lp-faq/);
     assert.doesNotMatch(body, />(Montag|Dienstag|Mittwoch|Donnerstag|Freitag)(, \d\d:\d\d)?</);
-    assert.doesNotMatch(css, /text-transform: uppercase/, 'no all-caps labels');
-    assert.doesNotMatch(css, /backdrop-filter|!important|\[data-theme/);
-    assert.equal((css.match(/gradient\(/g) || []).length, 1, 'one gradient: the panel scrim, as on the login');
   });
-  test('the closing: two buttons, four facts, three questions, a one-line footer', () => {
-    const c = screen('close');
-    assert.match(c, /<a class="lp-btn lp-btn-primary lp-request"[^>]*data-i18n="lp_request">[\s\S]*<a class="lp-btn" href="\/" data-i18n="lp_login">/);
-    assert.equal(count(c, '<li data-i18n="lp_fact'), 4);
-    assert.equal(count(c, '<details class="lp-faq-item">'), 3);
-    assert.match(c, /<footer class="lp-footer"><p data-i18n="lp_foot_tag">/);
+  test('the working day: the record\'s own task rows (three, one done) with a composer, a seven-day week carrying the dated tasks and one viewing, and the team room with presence, two messages and a composer; then the closing and a one-line footer', () => {
+    const w = section('work');
+    assert.match(w, /<h2 data-i18n="lp_s7_t">Aufgaben\. Kalender\. Chat\.<\/h2>\s*<p class="lp-sub" data-i18n="lp_s7_d">/);
+    assert.match(w, /<div class="lp-frame lp-tilt lp-work" id="lp-work">\s*<div class="lp-wk-left">/);
+    assert.match(w, /<span class="lp-wk-count" id="lp-wk-count"><\/span><\/p>\s*<div class="lp-task-head"><span class="lp-task-progress" id="lp-wk-progress"><\/span><span class="lp-task-bar"><i id="lp-wk-bar"><\/i><\/span><\/div>/, 'the record\'s progress line and bar');
+    const tasks = [...w.matchAll(/<li class="lp-task( is-done)?" data-task="(\d)"><label><input type="checkbox"( checked)?><span class="lp-check">[\s\S]*?<span class="lp-task-title" data-i18n="(lp_w\d)">[^<]*<\/span><\/label><small( class="is-today")? data-i18n="(lp_w\d_due)">([^<]*)<\/small><i class="lp-av lp-av-xs( lp-av-t)?">(\w)<\/i><\/li>/g)];
+    assert.deepEqual(tasks.map(x => [x[2], !!x[1], !!x[3], x[4], x[6], !!x[5], x[9]]), [['1', false, false, 'lp_w1', 'lp_w1_due', true, 'M'], ['2', false, false, 'lp_w2', 'lp_w2_due', false, 'T'], ['3', true, true, 'lp_w3', 'lp_w3_due', false, 'M']], 'the record\'s row plus the owner; today\'s due is lit');
+    assert.equal(dict.de.lp_w1_due.slice(0, 2), dict.de.lp_wd3, 'the lit due is today, Wednesday');
+    assert.match(w, /<form class="lp-wk-add" id="lp-wk-add"><input type="text" id="lp-wk-input" autocomplete="off" data-i18n-ph="lp_wk_task_ph" placeholder="[^"]+"><button type="submit" class="lp-pill lp-pill-sm" data-i18n="lp_wk_add">/);
+    const days = [...w.matchAll(/<div class="lp-cal-day( is-today)?" data-day="(\d)"><b data-i18n="(lp_wd\d)">[^<]*<\/b><i>(\d+)<\/i>/g)];
+    assert.deepEqual(days.map(x => [x[2], x[3], x[4], !!x[1]]), [['1', 'lp_wd1', '5', false], ['2', 'lp_wd2', '6', false], ['3', 'lp_wd3', '7', true], ['4', 'lp_wd4', '8', false], ['5', 'lp_wd5', '9', false], ['6', 'lp_wd6', '10', false], ['7', 'lp_wd7', '11', false]], 'one week, Wednesday the 7th today');
+    const chips = [...w.matchAll(/<span class="lp-cal-chip( is-done| lp-cal-ev)?"(?: data-task="(\d)")?><time>(\d\d:\d\d)<\/time><span data-i18n="(lp_\w+)">/g)].map(x => [x[1] || '', x[2] || '', x[3], x[4]]);
+    assert.deepEqual(chips, [[' is-done', '3', '11:00', 'lp_w3'], ['', '1', '14:00', 'lp_w1'], [' lp-cal-ev', '', '09:30', 'lp_ev1'], ['', '2', '11:00', 'lp_w2']], 'every dated task is on its day with its time under the same key; the done one is done there too');
+    for (const [, id, time, key] of chips) if (id) assert.ok(dict.de[key + '_due'].endsWith(time), `${key}: the chip time is the due time`);
+    assert.match(dict.de.lp_msg2, /Donnerstag, 09:30/); assert.ok(chips.some(x => x[0] === ' lp-cal-ev' && x[2] === '09:30'), 'the viewing Tim mentions is the one on the week');
+    for (const [, id] of tasks.map(x => [0, x[2]])) assert.ok(chips.some(c => c[1] === id), `task ${id} is on the calendar`);
+    assert.match(w, /<p class="lp-online" id="lp-wk-online"><i class="lp-av">M<\/i><i class="lp-av lp-av-t">T<\/i><i class="lp-av lp-av-n">N<\/i><span class="lp-online-dot"><\/span><span data-i18n="lp_wk_online">/, 'presence, as the real chat bar shows it');
+    const msgs = [...w.matchAll(/<li class="lp-msg"><i class="lp-av( lp-av-t)?">(\w)<\/i><div><p class="lp-msg-meta"><b>([^<]+)<\/b><time>(\d\d:\d\d)<\/time><\/p><p class="lp-msg-text" data-i18n="(lp_msg\d)">/g)];
+    assert.deepEqual(msgs.map(x => [x[2], x[3], x[4], x[5]]), [['M', 'Mara Kühn', '09:12', 'lp_msg1'], ['T', 'Tim Berger', '09:14', 'lp_msg2']]);
+    assert.match(w, /<\/ul>\s*<p class="lp-typing hidden" id="lp-wk-typing" aria-live="polite"><i><\/i><i><\/i><i><\/i><span id="lp-wk-typing-text"><\/span><\/p>\s*<form class="lp-chat-add"/, 'a typing indicator between the messages and the composer');
+    assert.match(w, /<form class="lp-chat-add" id="lp-wk-send"><input type="text" id="lp-wk-msg" autocomplete="off" data-i18n-ph="lp_wk_msg_ph" placeholder="[^"]+"><button type="submit" class="lp-chat-btn" data-i18n-aria="lp_wk_send" aria-label="[^"]+"><svg class="lp-ic"><use href="#lp-i-arrow"\/><\/svg><\/button><\/form>/);
+    assert.doesNotMatch(w, /lp-grid|<pre|<code|\{|\}|channel|Kanal|#general|\bDM\b/, 'one room, no channels, no code');
+    assert.match(html, /<symbol id="lp-i-calendar" viewBox="0 0 24 24">/);
+    const cta = section('cta');
+    assert.match(cta, /<h2 data-i18n="lp_cta_t">[\s\S]*<p class="lp-sub" data-i18n="lp_cta_d">[\s\S]*<a class="lp-pill lp-request"[\s\S]*<a class="lp-pill lp-pill-line" href="\/" data-i18n="lp_login">/);
+    assert.match(html, /<footer class="lp-footer">\s*<div class="lp-footer-in">\s*<a class="lp-brand" href="#top">[\s\S]*<p data-i18n="lp_foot_tag">/);
   });
 });
 
@@ -115,7 +145,7 @@ describe('German first', () => {
   test('the markup text IS the German dictionary, key for key', () => {
     let n = 0;
     for (const m of html.matchAll(/<(\w+)[^>]*\sdata-i18n="([a-z0-9_]+)"[^>]*>([^<]*)<\/\1>/g)) { n++; assert.equal(unesc(m[3]), dict.de[m[2]], m[2]); }
-    assert.ok(n >= 110, `checked ${n} strings`);
+    assert.ok(n >= 105, `checked ${n} strings`);
     for (const m of html.matchAll(/data-i18n-ph="([a-z0-9_]+)"[^>]*placeholder="([^"]*)"/g)) assert.equal(unesc(m[2]), dict.de[m[1]], m[1]);
   });
   test('the German is impersonal (neither du nor Sie)', () => {
@@ -130,18 +160,18 @@ describe('copy', () => {
     const used = new Set([...html.matchAll(/data-i18n(?:-ph|-aria)?="([a-z0-9_]+)"/g)].map(m => m[1]));
     assert.deepEqual([...used].filter(k => !(k in dict.de)), []);
     const logic = js.slice(js.indexOf('let lpLang'));
-    const dynamic = k => /^lp_f_(name|email|phone|company)$/.test(k) && logic.includes("lpT('lp_f_' + f)");   // the lead card builds these keys
+    const dynamic = k => (/^lp_f_(name|email|phone|company)$/.test(k) && logic.includes("lpT('lp_f_' + f)"))   // the lead card builds these keys
+      || (/^lp_h\d[ab]$/.test(k) && contacts.some(c => c.history.some(h => h.key === k)));                        // the contacts' history carries these
     assert.deepEqual(Object.keys(dict.de).filter(k => !used.has(k) && !logic.includes(`'${k}'`) && !dynamic(k) && k !== 'lp_request_subject'), [], 'no dead keys');
   });
-  test('short: every value at most 100 characters, titles at most 5 words, lines at most 14 words; under 600 German words on the whole page', () => {
+  test('short, in the manner of a launch page: statements at most 6 words, lines at most 12, every value at most 90 characters; under 500 German words on the whole page', () => {
     for (const [lang, d] of Object.entries(dict)) for (const [k, v] of Object.entries(d)) {
-      assert.ok(v.length <= 100, `${lang}.${k} is ${v.length} chars`);
-      if (/^lp_s\d_t$/.test(k)) assert.ok(v.split(/\s+/).length <= 5, `${lang}.${k} title: ${v}`);
-      if (/^lp_s\d_d$/.test(k)) assert.ok(v.split(/\s+/).length <= 14, `${lang}.${k} line: ${v}`);
+      assert.ok(v.length <= 90, `${lang}.${k} is ${v.length} chars`);
+      if (/^(lp_s\d_t|lp_hero_title|lp_cta_t)$/.test(k)) assert.ok(v.split(/\s+/).length <= 6, `${lang}.${k} statement: ${v}`);
+      if (/^(lp_s\d_d|lp_hero_sub|lp_cta_d)$/.test(k)) assert.ok(v.split(/\s+/).length <= 12, `${lang}.${k} line: ${v}`);
     }
-    assert.ok(dict.de.lp_hero_title.split(/\s+/).length <= 10 && dict.en.lp_hero_title.split(/\s+/).length <= 10, 'headline is ten words or fewer');
     const words = [...body.matchAll(/>([^<]+)</g)].map(m => m[1].trim()).filter(Boolean).join(' ').split(/\s+/).length;
-    assert.ok(words < 600, `German words on the page: ${words}`);
+    assert.ok(words < 500, `German words on the page: ${words}`);
   });
   test('headings, lines, links, buttons, list items and labels carry a key; only names and numbers are untranslated', () => {
     const allow = /^(DE|EN|Make\.com|Zapier|n8n|Upgrads|Mara Kühn|Tim Berger|Jana Weber|Elbstraße 12, Whg\. 3|Notariat Feld &amp; Kollegen|jana\.weber@example\.de|\+49 171 2345678|X-Upgrads[\s\S]*|\{[\s\S]*|[\d€.,:%\s+()-]*)$/;
@@ -154,7 +184,8 @@ describe('copy', () => {
   test('the copy claims only what the code does: no features we do not have, no invented proof, no template punctuation', () => {
     for (const [lang, d] of Object.entries(dict)) {
       const all = Object.values(d).join('\n');
-      assert.doesNotMatch(all, /Facebook|Lead Ads|ImmoScout|Immowelt|HubSpot|Salesforce/i, `${lang}: no adapters we do not have`);
+      assert.doesNotMatch(all, /Lead Ads|ImmoScout|Immowelt|HubSpot|Salesforce|direkt(e|er)? (Anbindung|Schnittstelle)|native integration/i, `${lang}: no adapters we do not have`);
+      assert.match(d.lp_s2_d, /Make, Zapier (oder|or) n8n/, `${lang}: the platforms arrive through the automation tools, said in the same breath`);
       assert.doesNotMatch(all, /attach|Anhang|anhäng/i, `${lang}: no attachments in the UI`);
       assert.doesNotMatch(all, /\bchannels?\b|\bKanäle\b|\bDMs?\b|Direktnachricht|thread/i, `${lang}: chat is one room`);
       assert.doesNotMatch(all, /\bSSO\b|single sign|\bAI\b|\bKI\b|mobile[- ]app|email sync|E-Mail-Sync|Kalender-Sync|calendar sync|iCal|Outlook/i, `${lang}: not built`);
@@ -164,10 +195,11 @@ describe('copy', () => {
       assert.doesNotMatch(all, /→|·|—|\*\*/, 'no arrows, middle dots, em dashes or markdown');
       assert.doesNotMatch(all, /\b[A-Z]{5,}\b/, 'no shouting labels');
     }
-    const en = Object.values(dict.en).join('\n');
-    for (const word of ['webhook', 'Make', 'Zapier', 'n8n', 'invite code', 'pipeline', 'Upgrads Engine', 'vertrag.unterschrieben', 'HMAC-SHA256', 'owner', 'admin', 'member', 'German and English', 'PostgreSQL', 'CSV', 'WhatsApp', 'euro']) assert.ok(en.includes(word), `en mentions ${word}`);
+    const en = Object.values(dict.en).join('\n').toLowerCase();
+    for (const word of ['make', 'zapier', 'n8n', 'facebook', 'instagram', 'tiktok', 'invite code', 'upgrads engine', 'tasks', 'calendar', 'chat', 'team', 'contact', 'whatsapp']) assert.ok(en.includes(word), `en mentions ${word}`);
     const de = Object.values(dict.de).join('\n');
-    for (const word of ['Webhook', 'Einladungscode', 'Upgrads Engine', 'vertrag.unterschrieben', 'Inhaber', 'Admin', 'Mitglied', 'Deutsch und Englisch', 'Arbeitsbereich']) assert.ok(de.includes(word), `de mentions ${word}`);
+    assert.doesNotMatch(en + '\n' + de, /hmac|sha256|signiert|signed with|payload|json|curl|header|endpoint|\bapi\b|webhook-url|vertrag\.unterschrieben/i, 'nothing technical in the copy: the page shows the hand-over, not the code behind it');
+    for (const word of ['Make', 'Zapier', 'n8n', 'Einladungscode', 'Upgrads Engine', 'Facebook', 'Instagram', 'TikTok', 'Aufgaben', 'Kalender', 'Chat', 'Team', 'Kontakt', 'WhatsApp']) assert.ok(de.includes(word), `de mentions ${word}`);
   });
   test('the language toggle and the mailto subject follow the chosen language', () => {
     assert.equal(count(html, 'class="lp-lang-btn" data-lang="de"'), 1); assert.equal(count(html, 'class="lp-lang-btn" data-lang="en"'), 1);
@@ -179,31 +211,36 @@ describe('copy', () => {
   });
 });
 
-describe('the pieces', () => {
+describe('the frames', () => {
   test('the board: four stage columns, six cards with values, the deal that will be demonstrated, one already won, a stats sentence, an Engine line, a cursor and a replay', () => {
-    const s = screen('board');
+    const s = section('top');
     assert.deepEqual([...s.matchAll(/<section class="lp-col[^"]*" data-stage="([a-z]+)">/g)].map(m => m[1]), ['new', 'offer', 'nego', 'won']);
     const cards = [...s.matchAll(/<article class="lp-card[^"]*" tabindex="0" data-value="(\d+)"/g)];
     assert.equal(cards.length, 6);
     assert.equal(cards.reduce((a, m) => a + Number(m[1]), 0), 1590500);
-    assert.match(s, /<article class="lp-card u3" tabindex="0" data-value="485000" data-hero>/, 'the demonstrated deal starts in New');
+    assert.match(s, /<article class="lp-card u3" tabindex="0" data-value="485000" data-hero>/);
     assert.match(s, /data-stage="won">[\s\S]*<article class="lp-card is-won"/);
     for (const id of ['lp-board', 'lp-stats-line', 'lp-engine-line', 'lp-cursor', 'lp-toast', 'lp-demo-replay']) assert.ok(s.includes(`id="${id}"`), id);
     assert.match(s, /<p class="lp-stats-line" id="lp-stats-line" aria-live="polite">/);
     assert.match(s, /<svg class="lp-demo-cursor hidden" id="lp-cursor" aria-hidden="true"><use href="#lp-i-pointer"\/><\/svg>/);
-    assert.match(s, /<p class="lp-hint" data-i18n="lp_demo_hint">/);
   });
-  test('leads: one button, an incoming block, an arrow, a contact card with fields and chips; three presets each with a four-field map', () => {
-    const s = screen('leads');
-    assert.match(s, /<pre class="lp-code" id="lp-lead-json"><\/pre>[\s\S]*<svg class="lp-ic lp-lead-arrow"[\s\S]*<div class="lp-lead-card" id="lp-lead-card">[\s\S]*<dl class="lp-fields" id="lp-lead-fields"><\/dl>[\s\S]*<p class="lp-chips" id="lp-lead-chips"><\/p>/);
-    assert.match(s, /<button type="button" class="lp-btn lp-btn-primary" id="lp-lead-send">/);
-    assert.doesNotMatch(s, /textarea|lp-map-row|lp-log/, 'no mapping table, no log: the piece shows the result');
+  test('leads: four sources with their marks (Facebook, Instagram, TikTok as inline symbols, the website as our globe), the automation tools between, Upgrads as the target with the contact card, a packet, one pill, no code; three presets each with a four-field map', () => {
+    const s = section('leads');
+    assert.deepEqual([...s.matchAll(/<li class="lp-source( is-on)?" data-src="(\w+)"><svg class="lp-logo( lp-logo-web)?"><use href="#(lp-[li]-\w+)"\/><\/svg><span data-i18n="(lp_src_\w+)">/g)].map(m => [m[2], m[4], m[5]]),
+      [['fb', 'lp-l-fb', 'lp_src_fb'], ['ig', 'lp-l-ig', 'lp_src_ig'], ['tt', 'lp-l-tt', 'lp_src_tt'], ['web', 'lp-i-globe', 'lp_src_web']]);
+    assert.equal(count(s, 'class="lp-source is-on"'), 1, 'one source lit at a time');
+    for (const id of ['lp-l-fb', 'lp-l-ig', 'lp-l-tt']) assert.match(html, new RegExp(`<symbol id="${id}" viewBox="0 0 24 24">`), `${id} is drawn in the page's own sprite`);
+    assert.match(s, /<div class="lp-via"><span data-i18n="lp_via">über<\/span><b>Make<\/b><b>Zapier<\/b><b>n8n<\/b>/);
+    assert.match(s, /<div class="lp-target" id="lp-lead-target">\s*<p class="lp-target-name"><img src="\/images\/logo\.png" alt="Upgrads"><\/p>\s*<div class="lp-lead-card" id="lp-lead-card">[\s\S]*<dl class="lp-fields" id="lp-lead-fields"><\/dl>[\s\S]*<p class="lp-chips" id="lp-lead-chips"><\/p>/);
+    assert.match(s, /<span class="lp-packet hidden" id="lp-lead-packet" aria-hidden="true"><\/span>/);
+    assert.match(s, /<button type="button" class="lp-pill" id="lp-lead-send">/);
+    assert.doesNotMatch(s, /<pre|<code|textarea|lp-map-row|lp-log\b|\{|\}/, 'no code in the leads section');
     assert.equal(presets.length, 3);
     assert.deepEqual(presets.map(p => p.name), ['form', 'make', 'zapier']);
-    for (const p of presets) { assert.deepEqual(Object.keys(p.map), ['name', 'email', 'phone', 'company'], p.name); assert.ok(Object.keys(p.payload).length >= 1, p.name); }
+    for (const p of presets) assert.deepEqual(Object.keys(p.map), ['name', 'email', 'phone', 'company'], p.name);
   });
   test('the record: a tablist of five, panels wired by aria-controls, four tasks (one done), a composer with four types', () => {
-    const rec = screen('deal');
+    const rec = section('deal');
     const tabs = [...rec.matchAll(/<button type="button" role="tab" id="(lp-tab-[a-z]+)" aria-controls="(lp-pan-[a-z]+)" aria-selected="(true|false)"/g)];
     assert.equal(tabs.length, 5);
     assert.equal(tabs.filter(t => t[3] === 'true').length, 1);
@@ -213,41 +250,44 @@ describe('the pieces', () => {
     assert.equal(count(rec, 'class="lp-type-chip"'), 4);
     assert.match(rec, /<textarea rows="2" data-i18n-ph="lp_note_ph" placeholder="/);
   });
-  test('team: the two clocks with their controls, nothing else', () => {
-    const s = screen('team');
-    for (const id of ['lp-tz', 'lp-tz-from', 'lp-tz-to', 'lp-tz-time', 'lp-tz-out', 'lp-tz-note', 'lp-tz-day']) assert.ok(s.includes(`id="${id}"`), id);
-    assert.match(s, /<input type="time" id="lp-tz-time" value="09:30">/);
-    assert.doesNotMatch(s, /lp-chat|lp-roles/, 'roles and chat are one line of copy, not a piece');
-  });
-  test('numbers: three periods with six months on, four cards, the line with its readout, the funnel', () => {
-    const s = screen('numbers');
-    const periods = [...s.matchAll(/class="lp-period-btn" data-period="(\d+)" aria-pressed="(true|false)"/g)];
+  test('contacts: a search field, a listbox the script fills from five real-shaped contacts, a card with three action pills, a bubble, deals and history; numbers: three periods, four figures, the line, the funnel; engine: our system with the deal on the left, a link with a state, the next system with a receipt on the right, a packet, one pill, one caption, no code', () => {
+    const ct = section('contacts');
+    assert.match(ct, /<h2 data-i18n="lp_s4_t">Jeder Kontakt\. Sofort gefunden\.<\/h2>/); assert.doesNotMatch(ct, /Zeitzone|time zone|lp-tz/);
+    assert.match(ct, /<div class="lp-frame lp-tilt lp-ct" id="lp-ct">\s*<div class="lp-ct-list">\s*<label class="lp-ct-search"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-search"\/><\/svg><input type="search" id="lp-ct-q" autocomplete="off" data-i18n-ph="lp_ct_search_ph" placeholder="[^"]+"><\/label>\s*<ul id="lp-ct-rows" role="listbox" data-i18n-aria="lp_ct_list" aria-label="[^"]+"><\/ul>\s*<p class="lp-ct-none hidden" id="lp-ct-none" data-i18n="lp_ct_none">/);
+    assert.deepEqual([...ct.matchAll(/<button type="button" class="lp-ct-act" data-act="(\w+)" aria-pressed="false"><svg class="lp-ic lp-ic-sm"><use href="#(lp-i-\w+)"\/><\/svg><span data-i18n="(lp_ct_\w+)">/g)].map(m => [m[1], m[2], m[3]]),
+      [['call', 'lp-i-phone', 'lp_ct_call'], ['mail', 'lp-i-mail', 'lp_ct_mail'], ['wa', 'lp-i-message', 'lp_ct_wa']], 'the three ways to reach a contact, as the contact page has them');
+    assert.match(ct, /<div class="lp-ct-bubble hidden" id="lp-ct-bubble"><small id="lp-ct-bubble-label"><\/small><p id="lp-ct-bubble-text"><\/p><\/div>/);
+    for (const id of ['lp-ct-card', 'lp-ct-av', 'lp-ct-name', 'lp-ct-company', 'lp-ct-deals', 'lp-ct-hist']) assert.ok(ct.includes(`id="${id}"`), id);
+    assert.match(ct, /<p class="lp-label" data-i18n="lp_ct_deals">[\s\S]*<p class="lp-label" data-i18n="lp_ct_history">/);
+    assert.doesNotMatch(ct, /<pre|<code|\{|\}|href="tel:|href="mailto:/, 'no code; the pills demonstrate, they do not dial a demo number');
+    assert.match(html, /<symbol id="lp-i-search" viewBox="0 0 24 24">/);
+    assert.equal(contacts.length, 5);
+    for (const c of contacts) { assert.ok(c.name && c.phone && c.email && Array.isArray(c.deals) && c.deals.length >= 1 && c.history.length === 2, c.name); for (const hh of c.history) { assert.ok(['note', 'call', 'email', 'wa'].includes(hh.type), hh.type); assert.ok(dict.de[hh.key] && dict.en[hh.key], hh.key); assert.ok(hh.day >= 1 && hh.day <= 7 && /^\d\d:\d\d$/.test(hh.time)); } for (const d of c.deals) assert.ok(/^lp_col_/.test(d.stage), d.stage); }
+    assert.equal(new Set(contacts.map(c => c.name)).size, 5, 'five different people');
+    assert.ok(contacts.some(c => c.company === 'Notariat Feld & Kollegen'), 'the notary from the record is a contact too');
+    const n = section('numbers');
+    const periods = [...n.matchAll(/class="lp-period-btn" data-period="(\d+)" aria-pressed="(true|false)"/g)];
     assert.deepEqual(periods.map(p => Number(p[1])), Object.keys(analytics).map(Number));
     assert.deepEqual(periods.filter(p => p[2] === 'true').map(p => p[1]), ['6']);
-    for (const id of ['lp-an-open', 'lp-an-won', 'lp-an-rate', 'lp-an-new', 'lp-an-line', 'lp-an-tip', 'lp-an-funnel']) assert.ok(s.includes(`id="${id}"`), id);
-    assert.doesNotMatch(s, /lp-an-table|lp-an-owners/, 'no table twin, no owners: two charts');
-    for (const [p, a] of Object.entries(analytics)) { assert.equal(a.rates.length, Number(p)); assert.equal(a.funnel.length, 4); assert.ok(a.funnel.every((n, i, arr) => i === 0 || n <= arr[i - 1])); }
-  });
-  test('engine: the event body with the exact payload keys of utils/engine.js, a signature block, a state line, one button', () => {
-    const s = screen('engine');
-    const serverKeys = [...engine.slice(engine.indexOf('function buildContractSignedPayload'), engine.indexOf('}', engine.indexOf('return {', engine.indexOf('function buildContractSignedPayload')))).matchAll(/^\s+(\w+)\s*[:,]/gm)].map(m => m[1]);
-    const bodyPre = s.match(/<pre class="lp-code" id="lp-en-body">([\s\S]*?)<\/pre>/)[1];
-    assert.deepEqual(Object.keys(JSON.parse(bodyPre)), serverKeys);
-    assert.deepEqual(Object.keys(new Function(sliceFn(js, 'lpEnginePayload', 'landing.js') + ' return lpEnginePayload({ eventId: "e", timestamp: "t", title: "T", stage: "S" });')()), serverKeys);
-    assert.match(s, /<pre class="lp-code lp-en-sig" id="lp-en-sig">X-Upgrads-Timestamp:\nX-Upgrads-Signature: sha256=<\/pre>/);
-    for (const h of ['X-Upgrads-Timestamp', 'X-Upgrads-Signature']) assert.ok(engine.includes(h), `server ${h}`);
-    assert.match(s, /<p class="lp-en-state"><i><\/i><span id="lp-en-state"><\/span><\/p>/);
-    assert.match(s, /<button type="button" class="lp-btn lp-btn-primary" id="lp-en-send">/);
-    assert.doesNotMatch(s, /lp-trigger|lp-switch|lp-en-received|lp-en-log/, 'no settings, no receiver, no log: one event, one signature');
+    for (const id of ['lp-an-open', 'lp-an-won', 'lp-an-rate', 'lp-an-new', 'lp-an-line', 'lp-an-tip', 'lp-an-funnel']) assert.ok(n.includes(`id="${id}"`), id);
+    for (const [p, a] of Object.entries(analytics)) { assert.equal(a.rates.length, Number(p)); assert.equal(a.funnel.length, 4); }
+    const e = section('engine');
+    assert.match(e, /<div class="lp-node" id="lp-en-from">\s*<p class="lp-target-name"><img src="\/images\/logo\.png" alt="Upgrads"><\/p>\s*<div class="lp-deal-mini">\s*<b>Elbstraße 12, 3 Zimmer<\/b>\s*<span class="lp-stagepill" id="lp-en-stage" data-i18n="lp_col_nego">/);
+    assert.match(e, /<div class="lp-link">\s*<i class="lp-link-line" aria-hidden="true"><\/i>\s*<p class="lp-en-state"><i><\/i><span id="lp-en-state"><\/span><\/p>\s*<\/div>/);
+    assert.match(e, /<div class="lp-node lp-node-to" id="lp-en-to">\s*<p class="lp-node-name" data-i18n="lp_en_to">[\s\S]*<p class="lp-receipt" id="lp-en-receipt"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"\/><\/svg><span data-i18n="lp_en_received">/);
+    assert.match(e, /<span class="lp-packet hidden" id="lp-en-packet" aria-hidden="true"><\/span>/);
+    assert.match(e, /<button type="button" class="lp-pill" id="lp-en-send">/);
+    assert.doesNotMatch(e, /<pre|<code|sha256|HMAC|X-Upgrads|\{|\}|curl/, 'no code, no headers, no signature on the page');
+    assert.match(engine, /function buildContractSignedPayload/, 'the real transfer still lives in utils/engine.js');
+    assert.match(e, /<p class="lp-cap" data-i18n="lp_en_cap">/);
   });
 });
 
 describe('landing.js: pure functions', () => {
-  const F = loadFns('public/js/landing.js', ['lpT', 'lpFmtEur', 'lpFmtEurShort', 'lpBoardStats', 'lpEase', 'lpGetPath', 'lpMapLead', 'lpZoneOffsetMs', 'lpConvertClock', 'lpHex', 'lpSign', 'lpEnginePayload'], { state: { lpLang: 'de' }, extra: sliceConst('public/js/landing.js', 'LP_I18N') });
+  const F = loadFns('public/js/landing.js', ['lpT', 'lpFmtEur', 'lpFmtEurShort', 'lpBoardStats', 'lpEase', 'lpTiltFor', 'lpGetPath', 'lpMapLead'], { state: { lpLang: 'de' }, extra: sliceConst('public/js/landing.js', 'LP_I18N') });
   test('lpT: current language, then English, then the key; placeholders filled', () => {
     assert.equal(F.lpT('lp_login'), 'Anmelden');
     assert.equal(F.lpT('lp_toast_moved', { stage: 'Gewonnen' }), 'Verschoben nach Gewonnen');
-    assert.equal(F.lpT('lp_tasks_progress', { d: 1, n: 4 }), '1 von 4 erledigt');
     F.__set('lpLang', 'xx');
     assert.equal(F.lpT('lp_login'), 'Log in');
     assert.equal(F.lpT('lp_nope'), 'lp_nope');
@@ -259,7 +299,7 @@ describe('landing.js: pure functions', () => {
     assert.equal(F.lpFmtEurShort(62500), '63 k €');
     assert.equal(F.lpFmtEurShort(900), '900 €');
     assert.equal(F.lpEase(0), 0); assert.equal(F.lpEase(1), 1); assert.equal(F.lpEase(0.5), 0.5);
-    assert.ok(F.lpEase(0.25) < 0.25 && F.lpEase(0.75) > 0.75);
+    assert.deepEqual(F.lpTiltFor(50, 50, 100, 100, 3), { rx: -0, ry: 0 }); assert.deepEqual(F.lpTiltFor(100, 0, 100, 100, 3), { rx: 3, ry: 3 }); assert.deepEqual(F.lpTiltFor(0, 100, 100, 100, 3), { rx: -3, ry: -3 });
   });
   test('board stats: open and won sums, counts and the won share', () => {
     assert.deepEqual(F.lpBoardStats([{ value: 100, won: false }, { value: 300, won: false }, { value: 600, won: true }]), { open: 400, won: 600, openN: 2, wonN: 1, total: 3, rate: 33 });
@@ -269,90 +309,95 @@ describe('landing.js: pure functions', () => {
     const p = { full_name: 'Jana', contact: { email: 'j@x.de', phone: '' }, n: 0 };
     assert.equal(F.lpGetPath(p, 'contact.email'), 'j@x.de'); assert.equal(F.lpGetPath(p, 'n'), 0);
     assert.equal(F.lpGetPath(p, 'contact.street'), undefined); assert.equal(F.lpGetPath(p, 'full_name.first'), undefined); assert.equal(F.lpGetPath(p, ''), undefined);
-    const r = F.lpMapLead(p, { name: 'full_name', email: 'contact.email', phone: 'contact.phone', company: 'company' });
-    assert.deepEqual(r, { ok: true, fields: { name: 'Jana', email: 'j@x.de' }, missing: ['contact.phone', 'company'] });
+    assert.deepEqual(F.lpMapLead(p, { name: 'full_name', email: 'contact.email', phone: 'contact.phone', company: 'company' }), { ok: true, fields: { name: 'Jana', email: 'j@x.de' }, missing: ['contact.phone', 'company'] });
     assert.equal(F.lpMapLead({ foo: 1 }, { name: 'name', email: 'email' }).ok, false);
     for (const pr of presets) { const m = F.lpMapLead(pr.payload, pr.map); assert.ok(m.ok && m.fields.name && m.fields.email, pr.name); }
-  });
-  test('the clock conversion is the Calendar\'s: wall clock in the author\'s zone, shown in the viewer\'s zone, with the day shift', () => {
-    assert.deepEqual(F.lpConvertClock('2026-10-07', '09:30', 'Europe/Berlin', 'Europe/Lisbon'), { time: '08:30', dayShift: 0 });
-    assert.deepEqual(F.lpConvertClock('2026-10-07', '23:00', 'Europe/Berlin', 'Asia/Tokyo'), { time: '06:00', dayShift: 1 });
-    assert.deepEqual(F.lpConvertClock('2026-10-07', '03:00', 'Asia/Tokyo', 'America/Los_Angeles'), { time: '11:00', dayShift: -1 });
-    assert.deepEqual(F.lpConvertClock('2026-10-07', '00:15', 'Europe/Berlin', 'Europe/Berlin'), { time: '00:15', dayShift: 0 });
-    assert.deepEqual(F.lpConvertClock('2026-01-15', '09:30', 'Europe/Berlin', 'Asia/Kolkata'), { time: '14:00', dayShift: 0 });
-  });
-  test('lpSign is the server\'s scheme: sha256= + hex HMAC-SHA256 over "<timestamp>.<raw body>"', async () => {
-    const secret = 'abc123', ts = 1760000000, raw = '{"event":"vertrag.unterschrieben"}';
-    assert.equal(await F.lpSign(secret, ts, raw), 'sha256=' + crypto.createHmac('sha256', secret).update(`${ts}.${raw}`).digest('hex'));
-    assert.match(engine, /createHmac\('sha256', String\(secret\)\)\.update\(`\$\{timestamp\}\.\$\{rawBody\}`\)\.digest\('hex'\)/);
-    assert.equal(F.lpHex(new Uint8Array([0, 15, 255]).buffer), '000fff');
-    const p = F.lpEnginePayload({ eventId: 'e1', timestamp: 't', title: 'T', stage: 'S' });
-    assert.equal(p.event, 'vertrag.unterschrieben'); assert.equal(p.vertrag_id, 1042); assert.equal(p.produkt, 'T'); assert.equal(p.stage, 'S');
   });
 });
 
 describe('landing.js: behaviour hooks', () => {
-  test('the board demonstrates itself once when 60 % in view: a visible cursor drags the deal into Won, then any pointer or key takes over; drag and drop with pointer events, a placeholder, arrow keys, no HTML5 drag', () => {
+  test('the board demonstrates itself once when 60 % in view, hands over on any pointer or key, drags with pointer events and a placeholder, moves with the arrow keys, never uses HTML5 drag', () => {
     const b = sliceFn(js, 'lpInitBoard', 'landing.js');
     assert.match(b, /new IntersectionObserver\([\s\S]*io\.disconnect\(\); runDemo\(\)/); assert.match(b, /threshold: 0\.6/);
-    assert.match(b, /function runDemo\(\) \{\s*if \(!hero \|\| !cursor \|\| reduce\) return;/, 'no demonstration under reduced motion');
-    assert.match(b, /hero\.classList\.add\('is-lifted'\)/); assert.match(b, /cursor\.style\.transform = `translate/); assert.match(b, /lpEase\(t\)/);
+    assert.match(b, /function runDemo\(\) \{\s*if \(!hero \|\| !cursor \|\| reduce\) return;/);
+    assert.match(b, /hero\.classList\.add\('is-lifted'\)/); assert.match(b, /lpEase\(t\)/);
     assert.match(b, /place\(hero, won, won\.querySelector\('\.lp-col-cards'\)\.firstElementChild, \{ quiet: true \}\)/);
-    assert.equal(count(b, 'stopDemo();'), 4, 'a fresh start, the reset, a pointer and a key all stop the demonstration');
+    assert.equal(count(b, 'stopDemo();'), 4);
     assert.match(b, /lp-demo-replay/); assert.match(b, /function resetBoard\(\)/);
     for (const ev of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) assert.ok(b.includes(`'${ev}'`), ev);
     assert.match(b, /setPointerCapture/); assert.match(b, /elementFromPoint/); assert.match(b, /lp-card-ph/); assert.match(b, /ArrowLeft/); assert.match(b, /ArrowRight/);
     assert.match(b, /dataset\.stage === 'won'/); assert.match(b, /deliver\(\)/); assert.match(b, /lp_toast_moved/); assert.match(b, /lpBoardStats\(/); assert.match(b, /lpFlip\(card/);
     assert.doesNotMatch(js, /dragstart|draggable|dataTransfer/);
-    assert.doesNotMatch(b, /clock|caption|feed/, 'no narration');
     assert.match(css, /\.lp-card \{[^}]*touch-action: none/);
     assert.match(css, /\.lp-card\.is-dragging \{[^}]*position: fixed[^}]*pointer-events: none/);
-    assert.match(css, /\.lp-card\.is-lifted \{[^}]*z-index: 6/);
     assert.match(css, /\.lp-demo-cursor \{ position: absolute;[^}]*pointer-events: none/);
   });
-  test('leads: the button cycles the three presets through lpMapLead and writes text nodes; the record tabs follow the WAI pattern and the composer saves without innerHTML', () => {
+  test('statements rise once as they enter and stay; reduced motion shows everything at once; the bar gains its line after a small scroll', () => {
+    const r = sliceFn(js, 'lpInitReveal', 'landing.js');
+    assert.match(r, /prefers-reduced-motion: reduce/); assert.match(r, /IntersectionObserver/); assert.match(r, /unobserve/); assert.match(r, /threshold: 0\.2/);
+    assert.ok(count(body, 'lp-reveal') >= 14, 'heads and frames reveal');
+    assert.match(css, /\.lp-reveal \{ opacity: 0; transform: translateY\(18px\); transition: opacity \.8s/);
+    assert.match(css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)')), /\.lp-reveal \{ opacity: 1; transform: none; transition: none; \}/);
+    const nv = sliceFn(js, 'lpInitNav', 'landing.js');
+    assert.match(nv, /addEventListener\('scroll', onScroll, \{ passive: true \}\)/); assert.match(nv, /is-scrolled/);
+    assert.ok(count(js, 'new IntersectionObserver(') >= 2);
+  });
+  test('leads cycle the presets through lpMapLead with text nodes; the record tabs follow the WAI pattern; contacts, numbers and engine behave', () => {
     const l = sliceFn(js, 'lpInitLeads', 'landing.js');
-    assert.match(l, /LP_LEAD_PRESETS\[i % LP_LEAD_PRESETS\.length\]/); assert.match(l, /lpMapLead\(preset\.payload, preset\.map\)/);
-    assert.match(l, /lp_lead_owner/); assert.match(l, /lp_lead_deal/); assert.doesNotMatch(l, /innerHTML/);
-    const r = sliceFn(js, 'lpInitRecord', 'landing.js');
-    assert.match(r, /aria-selected/); assert.match(r, /aria-controls/); assert.match(r, /tabIndex = on \? 0 : -1/);
-    assert.match(r, /lp_tasks_progress/); assert.match(r, /e\.ctrlKey \|\| e\.metaKey\) && e\.key === 'Enter'/); assert.doesNotMatch(r, /innerHTML/);
-  });
-  test('clock, numbers and engine: zones listed with Berlin and Lisbon defaults; hover readout on the line; the event is signed with WebCrypto and the state advances', () => {
-    const t = sliceFn(js, 'lpInitTimezone', 'landing.js');
-    assert.match(t, /'Europe\/Berlin'/); assert.match(t, /'Europe\/Lisbon'/); assert.match(t, /lpConvertClock\(/);
+    assert.match(l, /LP_LEAD_PRESETS\[i % LP_LEAD_PRESETS\.length\]/); assert.match(l, /lpMapLead\(preset\.payload, preset\.map\)/); assert.doesNotMatch(l, /innerHTML/);
+    const rec = sliceFn(js, 'lpInitRecord', 'landing.js');
+    assert.match(rec, /aria-selected/); assert.match(rec, /tabIndex = on \? 0 : -1/); assert.match(rec, /e\.ctrlKey \|\| e\.metaKey\) && e\.key === 'Enter'/);
+    const ct = sliceFn(js, 'lpInitContacts', 'landing.js');
+    assert.match(ct, /c\.name\.toLowerCase\(\)\.includes\(n\) \|\| c\.company\.toLowerCase\(\)\.includes\(n\)/, 'search on name and company, as the table does');
+    assert.match(ct, /none\?\.classList\.toggle\('hidden', hits\.length > 0\)/); assert.match(ct, /li\.setAttribute\('role', 'option'\)/); assert.match(ct, /e\.key === 'Enter' \|\| e\.key === ' '/, 'rows are keyboard-pickable');
+    assert.match(ct, /lpT\('lp_ct_tpl', \{ name: c\.name, deal: c\.deals\[0\]\?\.title \|\| '' \}\)/, 'the WhatsApp template is filled in with the name and the deal, as the contact page does');
+    assert.match(ct, /act === 'call' \? c\.phone : act === 'mail' \? c\.email :/); assert.match(ct, /act = act === b\.dataset\.act \? null : b\.dataset\.act/, 'a pill toggles its bubble');
+    assert.match(ct, /lpT\('lp_wd' \+ hh\.day\) \+ ' ' \+ hh\.time/, 'times follow the language'); assert.match(ct, /lpRerender\.push/); assert.doesNotMatch(ct, /innerHTML|fetch\(/);
     const an = sliceFn(js, 'lpInitAnalytics', 'landing.js');
-    assert.match(an, /addEventListener\('pointermove'/); assert.match(an, /lp_an_tip/); assert.match(an, /addEventListener\('pointerleave'/);
+    assert.match(an, /addEventListener\('pointermove'/); assert.match(an, /lp_an_tip/);
+    assert.match(l, /lpFly\(packet, frame, src, target, 900\)/, 'the lead flies from its source into Upgrads'); assert.match(l, /sources\.forEach\(\(el, k\) => el\.addEventListener\('click'/, 'clicking a source sends from it');
+    assert.match(l, /el\.classList\.toggle\('is-on', el === src\)/);
     const e = sliceFn(js, 'lpInitEngine', 'landing.js');
-    assert.match(e, /await lpSign\(secret, ts, raw\)/); assert.match(e, /X-Upgrads-Signature: \$\{/); assert.match(e, /Math\.floor\(now\.getTime\(\) \/ 1000\)/);
-    assert.match(e, /lp_en_nosubtle/); assert.match(e, /'is-sent', 'is-pending'/); assert.match(e, /'is-done'/);
+    assert.match(e, /lpFly\(packet, frame, from, to, 1100\)/, 'the packet travels from our system to the next');
+    assert.match(e, /frame\?\.classList\.add\('is-pending'\)/); assert.match(e, /frame\?\.classList\.add\('is-done'\)/); assert.match(e, /receipt\?\.classList\.add\('is-in'\)/);
+    assert.match(e, /lpT\(phase === 'idle' \? 'lp_col_nego' : 'lp_col_won'\)/, 'the deal visibly moves to Won');
+    assert.doesNotMatch(e, /sign|sha256|HMAC|JSON\.stringify|X-Upgrads/i, 'no signing in the page script');
+    const fly = sliceFn(js, 'lpFly', 'landing.js');
+    assert.match(fly, /getBoundingClientRect/); assert.match(fly, /packet\.animate\(/); assert.match(fly, /prefers-reduced-motion: reduce/); assert.match(fly, /fill: 'forwards'/);
   });
-  test('the wall is the login wall\'s mechanism, in the panel, without the wordmark; the index follows the screen in view; two observers in total besides the wall\'s', () => {
-    const w = sliceFn(js, 'lpInitWall', 'landing.js');
-    assert.match(w, /querySelector\('\.lp-panel'\)/); assert.match(w, /canvas\.lp-wall/); assert.match(w, /TARGET = 2600/);
-    assert.match(w, /'--sb-bg'/); assert.match(w, /'--navy-500'/, 'the login panel\'s own two tones');
-    assert.doesNotMatch(w, /MASK|logo|Image\(/, 'no pixelled wordmark');
-    assert.match(w, /const active = \(\) => inView && !document\.hidden/); assert.match(w, /if \(!coarse && !reduce\)/); assert.match(w, /if \(reduce\) return;/);
-    for (const [mine, theirs] of [['lpWallSmooth', 'wallSmooth'], ['lpWallGrid', 'wallGrid'], ['lpWallHex', 'wallHex'], ['lpWallMix', 'wallMix']]) {
-      const a = sliceFn(js, mine, 'landing.js').replace(mine, 'f').replace(/\s+/g, ' ');
-      const b2 = sliceFn(login, theirs, 'login-wall.js').replace(theirs, 'f').replace(/\s+/g, ' ');
-      assert.equal(a, b2, `${mine} equals the login's ${theirs}`);
-    }
-    const ix = sliceFn(js, 'lpInitIndex', 'landing.js');
-    assert.match(ix, /\.lp-index a\[href\^="#"\]/); assert.match(ix, /aria-current/);
-    assert.equal(count(js, 'new IntersectionObserver('), 3, 'index, board start, wall sleep');
-    assert.doesNotMatch(js, /lpInitReveal|lp-reveal|lpInitStage|lpInitNav|WebGL|\bTHREE\b|gsap|import\(/);
+  test('the effects: one passive, frame-throttled pointermove writes the glow, the tilt (never on the board) and the spotlights; figures count up once in view and on a period change; the Won column flashes on delivery; nothing runs on coarse pointers or under reduced motion', () => {
+    const fx = sliceFn(js, 'lpInitFx', 'landing.js');
+    assert.match(fx, /if \(reduce \|\| coarse\) return;/);
+    assert.match(fx, /addEventListener\('pointermove', e => \{ pending = e; if \(!raf\) raf = requestAnimationFrame\(apply\); \}, \{ passive: true \}\)/);
+    assert.match(fx, /querySelectorAll\('\.lp-tilt'\)/); assert.doesNotMatch(fx, /lp-grid/);
+    assert.match(fx, /setProperty\('--mx'/); assert.match(fx, /setProperty\('--sx'/); assert.match(fx, /perspective\(1400px\) rotateX/);
+    assert.match(fx, /lpTiltFor\(e\.clientX - r\.left, e\.clientY - r\.top, r\.width, r\.height, 3\)/, 'three degrees at most');
+    const b = sliceFn(js, 'lpInitBoard', 'landing.js');
+    assert.match(b, /wonCol\.classList\.add\('is-flash'\)/);
+    const an = sliceFn(js, 'lpInitAnalytics', 'landing.js');
+    assert.match(an, /lpCountUp\(el, value, fmt, 900\)/); assert.match(an, /animateNext = true; render\(\)/); assert.match(an, /threshold: 0\.4/);
+    assert.equal(count(js, 'new IntersectionObserver('), 3, 'reveal, the board start, the figures');
+    const wk = sliceFn(js, 'lpInitWork', 'landing.js');
+    assert.match(wk, /chipFor\(row\.dataset\.task\)\?\.classList\.toggle\('is-done', cb\.checked\)/, 'ticking a task ticks its calendar entry');
+    assert.match(wk, /\.lp-cal-day\[data-day="4"\] \.lp-cal-items/, 'a new task lands on Thursday'); assert.match(wk, /due\.dataset\.i18n = 'lp_w_new_due'/);
+    assert.match(wk, /list\.querySelector\('\.lp-check'\)\?\.cloneNode\(true\)/, 'the new row reuses the record\'s check');
+    assert.match(wk, /post\('M', '', 'Mara Kühn', text\)/); assert.match(wk, /post\('T', 'lp-av-t', 'Tim Berger', '', 'lp_msg_reply'\)/);
+    assert.match(wk, /online\?\.classList\.add\('is-live'\)/); assert.match(wk, /e\.preventDefault\(\)/); assert.match(wk, /msgs\.scrollTop = msgs\.scrollHeight/);
+    assert.match(wk, /lpT\('lp_tasks_progress', \{ d: done, n: rows\.length \}\)/, 'the record\'s progress line'); assert.match(wk, /count\.textContent = String\(rows\.length - done\)/);
+    assert.match(wk, /lpT\('lp_wk_typing', \{ name: 'Tim Berger' \}\)/); assert.match(wk, /typing\?\.classList\.toggle\('hidden', reduce\)/, 'no typing dots under reduced motion'); assert.match(wk, /reduce \? 0 : 1400/);
+    assert.match(wk, /at\.textContent = '10:00'/, 'the new chip carries its time');
+    assert.doesNotMatch(wk, /innerHTML|fetch\(|socket/);
   });
-  test('all helpers are top-level function declarations; no API calls, no eval, no innerHTML', () => {
-    for (const f of ['lpT', 'lpApplyLang', 'lpSetLang', 'lpInitIndex', 'lpWallSmooth', 'lpWallGrid', 'lpWallHex', 'lpWallMix', 'lpInitWall', 'lpFmtEur', 'lpFmtEurShort', 'lpBoardStats', 'lpFlip', 'lpEase', 'lpInitBoard', 'lpInitRecord', 'lpGetPath', 'lpMapLead', 'lpInitLeads', 'lpZoneOffsetMs', 'lpConvertClock', 'lpInitTimezone', 'lpInitAnalytics', 'lpHex', 'lpRandomHex', 'lpEnginePayload', 'lpInitEngine', 'lpInit']) assert.match(js, new RegExp(`^function ${f}\\(`, 'm'), f);
-    assert.match(js, /^async function lpSign\(/m);
-    assert.doesNotMatch(js, /fetch\(|\/api\/|\bapi\.(get|post|patch)\(|\beval\(|innerHTML/);
+  test('all helpers are top-level function declarations; no wall, no stage, no API calls, no eval, no innerHTML', () => {
+    for (const f of ['lpT', 'lpApplyLang', 'lpSetLang', 'lpInitNav', 'lpInitReveal', 'lpTiltFor', 'lpInitFx', 'lpCountUp', 'lpFmtEur', 'lpFmtEurShort', 'lpBoardStats', 'lpFlip', 'lpEase', 'lpInitBoard', 'lpInitRecord', 'lpGetPath', 'lpMapLead', 'lpInitLeads', 'lpInitContacts', 'lpInitAnalytics', 'lpFly', 'lpInitEngine', 'lpInitWork', 'lpInit']) assert.match(js, new RegExp(`^function ${f}\\(`, 'm'), f);
+    assert.doesNotMatch(js, /lpSign|lpHex|lpTypeInto|lpEnginePayload|crypto\.subtle/, 'the signing demo is gone');
+    assert.doesNotMatch(js, /lpInitWall|lpInitIndex|lpInitStage|getContext\(|fetch\(|\/api\/|\bapi\.(get|post|patch)\(|\beval\(|innerHTML/);
     assert.match(js, /document\.addEventListener\('DOMContentLoaded', lpInit\)/);
   });
 });
 
 describe('landing.css', () => {
-  test('own file, lp- prefixed and scoped, tokens only, three breakpoints widest first, a reduced-motion block, three keyframes', () => {
+  test('own file, lp- prefixed and scoped, tokens only, three breakpoints widest first, a reduced-motion block, gradients only for the effects', () => {
     assert.doesNotMatch(css, /#[0-9a-f]{3,8}\b/i, 'no hex colours');
     const selectors = [...css.matchAll(/^([.#\[:a-z][^{\n]*?)\s*\{/gm)].map(m => m[1].trim()).filter(s => !s.startsWith('@'));
     assert.ok(selectors.length > 120, `selectors: ${selectors.length}`);
@@ -360,35 +405,60 @@ describe('landing.css', () => {
     const idx = ['1100px', '860px', '600px'].map(w => css.indexOf(`@media (max-width: ${w})`));
     assert.ok(idx.every(i => i > 0)); assert.deepEqual([...idx].sort((a, b) => a - b), idx);
     assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
-    assert.deepEqual([...css.matchAll(/@keyframes ([\w-]+)/g)].map(m => m[1]), ['lp-fade', 'lp-pulse', 'lp-nudge']);
+    assert.doesNotMatch(css, /!important|\[data-theme|text-transform: uppercase/);
+    assert.equal((css.match(/gradient\(/g) || []).length, 5, 'gradients only for the effects: the hero glow (two), the headline fill, the frame sheen, the streaming link');
     const defined = new Set([...style.matchAll(/(--[\w-]+)\s*:/g), ...css.matchAll(/(--[\w-]+)\s*:/g)].map(m => m[1]));
-    for (const m of css.matchAll(/var\((--[\w-]+)/g)) assert.ok(defined.has(m[1]), `${m[1]} resolves`);
+    const script = new Set(['--mx', '--my', '--sx', '--sy']);
+    for (const m of css.matchAll(/var\((--[\w-]+)/g)) assert.ok(defined.has(m[1]) || script.has(m[1]), `${m[1]} resolves`);
+    for (const v of script) assert.match(js, new RegExp(`setProperty\\('${v}'`), `${v} is written by the script`);
   });
-  test('the display face is Bricolage Grotesque, self-hosted with its licence; Inter stays in the pieces', () => {
-    assert.match(css, /@font-face \{ font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 200 800; font-stretch: 75% 100%; font-display: swap; src: url\(\/fonts\/BricolageGrotesque\.woff2\) format\("woff2"\); \}/);
-    assert.match(css, /--lp-display: "Bricolage Grotesque", var\(--font\)/);
+  test('the display face is Manrope, self-hosted with its licence, variable in weight; Inter stays inside the frames', () => {
+    assert.match(css, /@font-face \{ font-family: "Manrope"; font-style: normal; font-weight: 200 800; font-display: swap; src: url\(\/fonts\/Manrope\.woff2\) format\("woff2"\); \}/);
+    assert.match(css, /--lp-display: "Manrope", var\(--font\)/);
     assert.equal((css.match(/@font-face/g) || []).length, 1);
     assert.doesNotMatch(css.replace(/url\("data:[^"]*"\)/g, ''), /https?:\/\//);
-    const font = path.join(ROOT, 'public', 'fonts', 'BricolageGrotesque.woff2');
-    const bytes = fs.readFileSync(font);
-    assert.equal(bytes.subarray(0, 4).toString('latin1'), 'wOF2'); assert.ok(bytes.length > 50000 && bytes.length < 400000);
-    assert.match(fs.readFileSync(path.join(ROOT, 'public', 'fonts', 'OFL-BricolageGrotesque.txt'), 'utf8'), /SIL Open Font License, Version 1\.1/);
-    assert.match(css, /\.lp-piece \{[^}]*font-family: var\(--font\)/, 'the pieces speak Inter, the page Bricolage');
-    assert.match(css, /\.lp-hero-title \{[^}]*font-optical-sizing: auto/);
-    assert.doesNotMatch(html, /Schibsted/);
+    const bytes = fs.readFileSync(path.join(ROOT, 'public', 'fonts', 'Manrope.woff2'));
+    assert.equal(bytes.subarray(0, 4).toString('latin1'), 'wOF2'); assert.ok(bytes.length > 15000 && bytes.length < 400000, `sane size: ${bytes.length}`);
+    assert.match(fs.readFileSync(path.join(ROOT, 'public', 'fonts', 'OFL-Manrope.txt'), 'utf8'), /SIL Open Font License, Version 1\.1/);
+    assert.ok(!fs.existsSync(path.join(ROOT, 'public', 'fonts', 'BricolageGrotesque.woff2')), 'the unused face is gone');
+    assert.match(css, /\.lp-frame \{[^}]*font-family: var\(--font\)/, 'the frames speak Inter, the page Manrope');
+    assert.match(css, /\.lp-pill \{[^}]*font-family: var\(--lp-display\)/);
+    assert.doesNotMatch(html, /Schibsted|Bricolage/);
   });
-  test('the cascade the page depends on: the panel is sticky and the wall absolute under its content, the split collapses under 1100 px, the toast and cursor are positioned inside the board piece, headings stay at :where() specificity', () => {
-    assert.match(css, /\.lp-split \{ display: grid; grid-template-columns: var\(--lp-panel-w\) minmax\(0, 1fr\)/);
-    assert.match(css, /\.lp-panel \{ position: sticky; top: 0; height: 100vh;[^}]*overflow: hidden; isolation: isolate; background: var\(--sb-bg\)/);
-    assert.match(css, /\.lp-wall \{ position: absolute; inset: 0; z-index: 0;[^}]*pointer-events: none/);
-    assert.match(css, /\.lp-panel-in \{ position: relative; z-index: 1;/);
-    assert.doesNotMatch(css, /\.lp-panel > \*/, 'no child rule that could pull the canvas into the flow (the login bug)');
-    const m1100 = css.slice(css.indexOf('@media (max-width: 1100px)'), css.indexOf('@media (max-width: 860px)'));
-    assert.match(m1100, /\.lp-split \{ grid-template-columns: 1fr; \}/); assert.match(m1100, /\.lp-panel \{ position: static; height: auto;/);
-    assert.match(css, /\.lp-piece \{ position: relative;/); assert.match(css, /\.lp-toast \{ position: absolute/); assert.match(css, /\.lp-demo-cursor \{ position: absolute/);
-    assert.doesNotMatch(css, /^body\.lp h[1-6]\b/m);
-    assert.match(css, /\.lp-hero-title \{[^}]*color: var\(--navy-50\)/); assert.match(css, /:where\(body\.lp\) h2 \{[^}]*color: var\(--brand\)/);
-    assert.doesNotMatch(css, /> \* \{[^}]*position/);
+  test('the launch-page grammar: a translucent bar with blur, statements huge and tight, a rounded frame with a deep shadow, pills fully round with a glow, the ground in the system\'s deepest navy', () => {
+    assert.match(css, /\.lp-nav \{ position: sticky; top: 0; z-index: 50; height: 52px; background: rgba\(10, 23, 41, \.6\);[^}]*backdrop-filter: saturate\(180%\) blur\(20px\)/);
+    assert.match(css, /\.lp-pill \{[^}]*box-shadow: 0 12px 32px -12px var\(--lp-glow\);/); assert.match(css, /\.lp-pill:hover \{[^}]*transform: translateY\(-1px\) scale\(1\.03\)/);
+    assert.match(css, /\.lp-hero-title \{ font-size: clamp\(52px, 8vw, 112px\); line-height: \.98; letter-spacing: -\.04em; font-weight: 800/);
+    assert.match(css, /:where\(body\.lp\) h2 \{ font-size: clamp\(40px, 5\.2vw, 72px\)/);
+    assert.match(css, /\.lp-frame \{ position: relative; text-align: left;[^}]*border-radius: 22px; box-shadow: 0 40px 100px -30px rgba\(0, 0, 0, \.7\)/);
+    assert.match(css, /\.lp-pill \{[^}]*border-radius: 999px/);
+    assert.match(css, /\.lp-hero-title \{[^}]*-webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;/, 'the statement carries a white-to-sky fill');
+    assert.match(css, /\.lp-kicker \{ display: inline-flex; align-items: center; gap: 16px;/); assert.match(css, /\.lp-kicker-mark \{ height: clamp\(34px, 4vw, 46px\); width: auto;/); assert.match(css, /\.lp-kicker-crm \{ font-family: var\(--lp-display\); font-size: clamp\(22px, 2\.6vw, 30px\); font-weight: 300; letter-spacing: \.24em;[^}]*border-left: 1px solid/, 'the lockup: wordmark, hairline, CRM light and tracked');
+    assert.doesNotMatch(css, /filter: (brightness|invert|grayscale)/, 'the Upgrads logo keeps its grey and sky arrow in the bar, the footer and the flow nodes; never recoloured');
+    assert.match(css, /\.lp-target-name img \{ height: 26px; width: auto; display: block; margin-bottom: 14px; \}/);
+    assert.match(css, /\.lp-toast \{ position: absolute/); assert.match(css, /\.lp-demo-cursor \{ position: absolute/);
+    assert.doesNotMatch(css, /^body\.lp h[1-6]\b/m); assert.doesNotMatch(css, /> \* \{[^}]*position/);
+  });
+  test('the effects: the glow follows CSS variables, tilting frames keep 3D and a sheen, tiles get a spotlight, the Won column flashes; reduced motion stops all of it', () => {
+    assert.match(css, /\.lp-glow \{ position: absolute; inset: 0; z-index: 0; pointer-events: none; background: radial-gradient\(640px circle at var\(--mx, 50%\) var\(--my, 28%\)/);
+    assert.match(css, /\.lp-glow::after \{[^}]*animation: lp-drift 18s/);
+    assert.match(css, /\.lp-tilt \{ transform-style: preserve-3d; transition: transform \.18s/);
+    assert.match(css, /\.lp-tilt::after \{[^}]*radial-gradient\(520px circle at var\(--sx, 50%\) var\(--sy, 50%\)/);
+    assert.match(css, /\.lp-work \{ display: grid; grid-template-columns: minmax\(0, 1\.25fr\) minmax\(0, 1fr\); \}/, 'tasks and week left, the room right');
+    assert.match(css, /\.lp-ct \{ display: grid; grid-template-columns: minmax\(0, 2fr\) minmax\(0, 3fr\); \}/, 'the list left, the card right'); assert.match(css, /\.lp-ct-act\[aria-pressed="true"\] \{ background: var\(--n-0\);/); assert.match(css, /\.lp-ct-bubble \{[^}]*animation: lp-pop/);
+    assert.doesNotMatch(css, /lp-tz|lp-stage-tight/, 'the clocks are gone');
+    assert.match(css, /\.lp-cal \{ display: grid; grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);/); assert.match(css, /\.lp-cal-day\.is-today \{ border-color: var\(--sky-400\); background: var\(--accent-subtle\); \}/);
+    assert.match(css, /\.lp-cal-chip\.is-done \{ opacity: \.5; \}\n\.lp-cal-chip\.is-done span \{ text-decoration: line-through; \}/); assert.match(css, /\.lp-cal-day\.is-today \{ border-color: var\(--sky-400\); background: var\(--accent-subtle\); \}/); assert.match(css, /\.lp-typing i \{[^}]*animation: lp-blink/); assert.match(css, /\.lp-task\.is-done \.lp-task-title \{ color: var\(--ink-muted\); text-decoration: line-through; \}/, 'done looks the same in the list and on the day');
+    assert.match(css, /\.lp-msg \{ display: grid; grid-template-columns: 32px minmax\(0, 1fr\);/); assert.match(css, /\.lp-online\.is-live \.lp-online-dot \{ animation: lp-pulse/);
+    assert.doesNotMatch(css, /\.lp-grid li|lp-span-|lp-big/, 'no tile kit left');
+    const bp = css.slice(css.indexOf('@media (max-width: 860px)'));
+    assert.match(bp, /\.lp-work, \.lp-ct \{ grid-template-columns: 1fr; \}/); assert.match(bp, /\.lp-ct-list ul \{ flex-direction: row; overflow-x: auto;/, 'on a phone the list becomes a row to swipe'); assert.match(bp, /\.lp-cal-chip \{ height: 8px; padding: 0; \}\n\s*\.lp-cal-chip time, \.lp-cal-chip span \{ display: none; \}/, 'on a phone the week shows bars, not words');
+    assert.match(css, /\.lp-col\.is-flash \{ animation: lp-flash/);
+    assert.deepEqual([...css.matchAll(/@keyframes ([\w-]+)/g)].map(m => m[1]), ['lp-fade', 'lp-pulse', 'lp-flash', 'lp-drift', 'lp-hit', 'lp-stream', 'lp-pop', 'lp-blink']);
+    assert.match(css, /\.lp-packet \{ position: absolute; left: 0; top: 0; z-index: 8;[^}]*pointer-events: none; \}/, 'the packet is positioned by the script, never in the way');
+    assert.match(css, /\.lp-flow-engine\.is-pending \.lp-link-line \{ opacity: 1; animation: lp-stream/); assert.match(css, /\.lp-target\.is-hit \{ animation: lp-hit/);
+    const rm = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
+    assert.match(rm, /\.lp-glow::after, \.lp-col\.is-flash, \.lp-task\.is-new, \.lp-cal-chip\.is-new, \.lp-msg\.is-new, \.lp-online\.is-live \.lp-online-dot, \.lp-typing i \{ animation: none; \}/); assert.match(rm, /\.lp-tilt, \.lp-pill, \.lp-chat-btn \{ transition: none; \}/); assert.match(rm, /\.lp-ct-bubble \{ animation: none; \}/); assert.match(rm, /\.lp-target\.is-hit, \.lp-flow-engine\.is-pending \.lp-link-line \{ animation: none; \}/);
   });
   test('the stylesheet parses; the app stylesheet is untouched', () => {
     let depth = 0, inC = false;

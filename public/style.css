@@ -1991,11 +1991,17 @@ input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
 .au-main::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(46% 38% at 88% 0%, color-mix(in srgb, var(--sky-400) 26%, transparent), transparent 72%); }
 .au-main::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .7; background-image: radial-gradient(circle, var(--line-strong) 1px, transparent 1.2px); background-size: 24px 24px; -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 78%); mask-image: linear-gradient(180deg, #000 0%, transparent 78%); }
 /* DE | EN, top right of the form half; aria-pressed is kept by applyTranslations() */
-.au-lang { position: absolute; top: 20px; right: 24px; display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.au-tools { position: absolute; top: 20px; right: 24px; display: flex; align-items: center; gap: 8px; }
+.au-lang { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
 .au-lang button { height: 26px; padding: 0 9px; border: 0; border-radius: 4px; background: none; color: var(--text-3); font-size: var(--fs-xs); font-weight: 650; letter-spacing: .04em; cursor: pointer; }
 .au-lang button:hover { color: var(--text); }
 .au-lang button[aria-pressed="true"] { background: var(--brand-subtle); color: var(--brand-ink); }
 .au-lang button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.au-theme { width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--text-3); cursor: pointer; transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast); }
+.au-theme .ic { width: 16px; height: 16px; }
+.au-theme:hover { color: var(--text); border-color: var(--line-strong); }
+.au-theme[aria-pressed="true"] { color: var(--brand-ink); background: var(--brand-subtle); }
+.au-theme:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .au-col { width: 100%; max-width: 440px; padding: 36px 40px 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-lg); }
 .au-head { margin-bottom: 24px; }
 .au-form .au-head { margin-bottom: 8px; }
@@ -2066,7 +2072,7 @@ input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
   .au-main { padding: 72px 16px 40px; align-items: start; }
   .au-col { padding: 26px 20px 22px; }
   .au-wall, .au-scrim { display: none; }   /* the short mobile bar has no room for the wall */
-  .au-lang { top: 16px; right: 16px; }
+  .au-tools { top: 16px; right: 16px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

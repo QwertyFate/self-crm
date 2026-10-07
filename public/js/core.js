@@ -420,6 +420,7 @@ function setLanguage(lang) {
   currentLang = lang;
   localStorage.setItem('lang', lang);
   applyTranslations();
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'dark');   // re-names the login page's theme switch
   const nav = document.querySelector('.sb-link[aria-current="page"]')?.dataset.page;
   if (nav) setCrumbs(nav);   // the crumb is the (now re-translated) sidebar label
   const page = document.querySelector('.page.active')?.id.replace('page-', '');
@@ -537,6 +538,14 @@ function applyTheme(dark) {
   if (label) label.textContent = t(dark ? 'light_mode' : 'dark_mode');
   const pref = document.getElementById('pref-dark-toggle');   // Settings → My preferences → Appearance
   if (pref) pref.checked = dark;
+  const door = document.getElementById('au-theme');            // the login page's sun / moon switch
+  if (door) {
+    door.setAttribute('aria-pressed', String(dark));
+    const name = t(dark ? 'light_mode' : 'dark_mode');
+    door.setAttribute('aria-label', name); door.title = name;
+    document.getElementById('au-theme-ic')?.setAttribute('href', dark ? '#i-sun' : '#i-moon');
+  }
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0B1424' : '#18345D');
 }
 
 function toggleDarkMode() {
