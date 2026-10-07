@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Upgrads CRM: Leads per Webhook, Deals auf einem Board mit eigenen Phasen, Kontakte, Aufgaben, Team-Chat und eine signierte Meldung an das nächste System, wenn ein Vertrag unterschrieben ist.">
+  <title>Upgrads CRM</title>
+  <link rel="icon" href="/images/logo.png" type="image/png">
+  <link rel="preload" href="/fonts/BricolageGrotesque.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/landing.css">
+</head>
+<body class="lp">
+
+<svg class="lp-sprite" aria-hidden="true" focusable="false">
+  <symbol id="lp-i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="lp-i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+  <symbol id="lp-i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="lp-i-message" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-5A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="lp-i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></symbol>
+  <symbol id="lp-i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></symbol>
+  <symbol id="lp-i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+  <symbol id="lp-i-building" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h2"/><path d="M13 7h2"/><path d="M9 11h2"/><path d="M13 11h2"/><path d="M9 15h2"/><path d="M13 15h2"/><path d="M10 21v-3h4v3"/></symbol>
+  <symbol id="lp-i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="lp-i-pointer" viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-3 7z"/></symbol>
+</svg>
+
+<div class="lp-split">
+  <!-- ══ The panel: the login's navy half, kept in view ═════════════════════ -->
+  <aside class="lp-panel">
+    <canvas class="lp-wall" aria-hidden="true"></canvas>
+    <span class="lp-scrim" aria-hidden="true"></span>
+    <div class="lp-panel-in">
+      <a class="lp-brand" href="/"><img src="/images/logo.png" alt="Upgrads"></a>
+      <div class="lp-panel-body">
+        <h1 class="lp-hero-title" data-i18n="lp_hero_title">Ein Board für jeden Deal, vom Lead bis zur Unterschrift.</h1>
+        <p class="lp-hero-sub" data-i18n="lp_hero_sub">Leads, Deals, Team und Unterschrift an einem Ort.</p>
+        <div class="lp-actions">
+          <a class="lp-btn lp-btn-sky lp-request" href="mailto:hello@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="lp_request">Zugang anfragen</a>
+          <a class="lp-btn lp-btn-ghost" href="/" data-i18n="lp_login">Anmelden</a>
+        </div>
+      </div>
+      <nav class="lp-index" data-i18n-aria="lp_index" aria-label="Inhalt">
+        <a href="#board" data-i18n="lp_ix_board">Board</a>
+        <a href="#leads" data-i18n="lp_ix_leads">Leads</a>
+        <a href="#deal" data-i18n="lp_ix_deal">Deal</a>
+        <a href="#team" data-i18n="lp_ix_team">Team</a>
+        <a href="#numbers" data-i18n="lp_ix_numbers">Zahlen</a>
+        <a href="#engine" data-i18n="lp_ix_engine">Engine</a>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- ══ The screens: one part each, white ═════════════════════════════════ -->
+  <main class="lp-main">
+    <div class="lp-topbar">
+      <div class="lp-lang" role="group" data-i18n-aria="lp_lang" aria-label="Sprache">
+        <button type="button" class="lp-lang-btn" data-lang="de" aria-pressed="true">DE</button>
+        <button type="button" class="lp-lang-btn" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <a class="lp-top-link" href="/" data-i18n="lp_login">Anmelden</a>
+    </div>
+
+    <!-- 1 · the board -->
+    <section id="board" class="lp-screen">
+      <h2 data-i18n="lp_s1_t">Das Board.</h2>
+      <p class="lp-line" data-i18n="lp_s1_d">Karten ziehen, Summen folgen. Eigene Phasen, eigene Begriffe.</p>
+      <div class="lp-piece lp-board-wrap">
+        <div class="lp-piece-bar"><span class="lp-dot s1"></span><b data-i18n="lp_board_pipeline">Vertrieb</b><button type="button" class="lp-link-btn" id="lp-demo-replay"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-play"/></svg><span data-i18n="lp_demo_replay">Noch einmal</span></button></div>
+        <div class="lp-board" id="lp-board" data-i18n-aria="lp_board_aria" aria-label="Beispiel-Board. Karten mit der Maus oder den Pfeiltasten verschieben.">
+          <section class="lp-col" data-stage="new">
+            <header class="lp-col-head"><span class="lp-dot s1"></span><h3 data-i18n="lp_col_new">Neu</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
+            <div class="lp-col-cards">
+              <article class="lp-card u3" tabindex="0" data-value="485000" data-hero><span class="lp-card-stripe"></span><h4 class="lp-card-title">Elbstraße 12, 3 Zimmer</h4><p class="lp-card-sub">Jana Weber</p><div class="lp-card-foot"><span class="lp-card-value">485.000 €</span><span class="lp-badge lp-badge-u3" data-i18n="lp_urg_high">Hoch</span><span class="lp-avatar">MK</span></div></article>
+              <article class="lp-card u2" tabindex="0" data-value="128000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Gewerbefläche Nordwind GmbH</h4><p class="lp-card-sub">Tim Berger</p><div class="lp-card-foot"><span class="lp-card-value">128.000 €</span><span class="lp-badge lp-badge-u2" data-i18n="lp_urg_medium">Mittel</span><span class="lp-avatar">TB</span></div></article>
+            </div>
+          </section>
+          <section class="lp-col" data-stage="offer">
+            <header class="lp-col-head"><span class="lp-dot s2"></span><h3 data-i18n="lp_col_offer">Angebot</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
+            <div class="lp-col-cards">
+              <article class="lp-card u1" tabindex="0" data-value="62500"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Lagerfläche Hafenweg 4</h4><p class="lp-card-sub">Hafenwerk KG</p><div class="lp-card-foot"><span class="lp-card-value">62.500 €</span><span class="lp-badge lp-badge-u1" data-i18n="lp_urg_low">Niedrig</span><span class="lp-avatar">LA</span></div></article>
+              <article class="lp-card u4" tabindex="0" data-value="310000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Wohnung Lindenhof 7</h4><p class="lp-card-sub">Sofia Marin</p><div class="lp-card-foot"><span class="lp-card-value">310.000 €</span><span class="lp-badge lp-badge-u4" data-i18n="lp_urg_very">Sehr dringend</span><span class="lp-avatar">MK</span></div></article>
+            </div>
+          </section>
+          <section class="lp-col" data-stage="nego">
+            <header class="lp-col-head"><span class="lp-dot s3"></span><h3 data-i18n="lp_col_nego">Verhandlung</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
+            <div class="lp-col-cards">
+              <article class="lp-card" tabindex="0" data-value="210000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Büroetage Kaistraße 9</h4><p class="lp-card-sub">Lenz &amp; Partner</p><div class="lp-card-foot"><span class="lp-card-value">210.000 €</span><span class="lp-avatar">TB</span></div></article>
+            </div>
+          </section>
+          <section class="lp-col is-won" data-stage="won">
+            <header class="lp-col-head"><span class="lp-dot s4"></span><h3 data-i18n="lp_col_won">Gewonnen</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
+            <div class="lp-col-cards">
+              <article class="lp-card is-won" tabindex="0" data-value="395000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Reihenhaus Am Anger 3</h4><p class="lp-card-sub">Familie Roth</p><div class="lp-card-foot"><span class="lp-card-value">395.000 €</span><span class="lp-avatar">LA</span></div></article>
+            </div>
+          </section>
+        </div>
+        <div class="lp-piece-foot">
+          <p class="lp-stats-line" id="lp-stats-line" aria-live="polite"></p>
+          <p class="lp-engine-line" id="lp-engine-line" aria-live="polite"><i></i><span data-i18n="lp_delivery_idle">Upgrads Engine wartet auf einen Deal in Gewonnen.</span></p>
+        </div>
+        <svg class="lp-demo-cursor hidden" id="lp-cursor" aria-hidden="true"><use href="#lp-i-pointer"/></svg>
+        <div class="lp-toast hidden" id="lp-toast" role="status"><span class="lp-toast-text"></span><button type="button" class="lp-toast-undo" data-i18n="lp_toast_undo">Rückgängig</button></div>
+      </div>
+      <p class="lp-hint" data-i18n="lp_demo_hint">Einmal vorgeführt. Dann selbst ziehen.</p>
+    </section>
+
+    <!-- 2 · leads -->
+    <section id="leads" class="lp-screen">
+      <h2 data-i18n="lp_s2_t">Leads kommen von selbst.</h2>
+      <p class="lp-line" data-i18n="lp_s2_d">Per Webhook aus Make, Zapier, n8n oder dem eigenen Formular.</p>
+      <div class="lp-piece lp-lead">
+        <div class="lp-lead-in">
+          <p class="lp-label" data-i18n="lp_lead_in">Eingehend</p>
+          <pre class="lp-code" id="lp-lead-json"></pre>
+        </div>
+        <svg class="lp-ic lp-lead-arrow" aria-hidden="true"><use href="#lp-i-arrow"/></svg>
+        <div class="lp-lead-card" id="lp-lead-card">
+          <p class="lp-label" data-i18n="lp_lead_contact">Kontakt angelegt</p>
+          <dl class="lp-fields" id="lp-lead-fields"></dl>
+          <p class="lp-chips" id="lp-lead-chips"></p>
+        </div>
+      </div>
+      <div class="lp-row"><button type="button" class="lp-btn lp-btn-primary" id="lp-lead-send"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-bolt"/></svg><span data-i18n="lp_lead_send">Lead senden</span></button></div>
+    </section>
+
+    <!-- 3 · the deal -->
+    <section id="deal" class="lp-screen">
+      <h2 data-i18n="lp_s3_t">Alles am Deal.</h2>
+      <p class="lp-line" data-i18n="lp_s3_d">Kontakt, Aufgaben, Notizen, Objekte. Ein Datensatz.</p>
+      <div class="lp-piece lp-record" id="lp-record">
+        <div class="lp-record-head">
+          <div>
+            <h3 class="lp-record-title" data-i18n="lp_deal_name">Elbstraße 12, 3 Zimmer</h3>
+            <p class="lp-record-meta"><span class="lp-pill s3" data-i18n="lp_col_nego">Verhandlung</span><span class="lp-badge lp-badge-u3" data-i18n="lp_urg_high">Hoch</span><span class="lp-record-created" data-i18n="lp_deal_created">Angelegt vor 11 Tagen</span></p>
+          </div>
+          <div class="lp-record-actions">
+            <button type="button" class="lp-btn lp-btn-sm"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-phone"/></svg><span data-i18n="lp_act_call">Anrufen</span></button>
+            <button type="button" class="lp-btn lp-btn-sm"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-mail"/></svg><span data-i18n="lp_act_email">E-Mail</span></button>
+            <button type="button" class="lp-btn lp-btn-sm"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-message"/></svg><span data-i18n="lp_act_wa">WhatsApp</span></button>
+          </div>
+        </div>
+        <div class="lp-tabs" role="tablist">
+          <button type="button" role="tab" id="lp-tab-overview" aria-controls="lp-pan-overview" aria-selected="true" data-i18n="lp_tab_overview">Übersicht</button>
+          <button type="button" role="tab" id="lp-tab-contact" aria-controls="lp-pan-contact" aria-selected="false" tabindex="-1" data-i18n="lp_tab_contact">Kontakt</button>
+          <button type="button" role="tab" id="lp-tab-tasks" aria-controls="lp-pan-tasks" aria-selected="false" tabindex="-1" data-i18n="lp_tab_tasks">Aufgaben</button>
+          <button type="button" role="tab" id="lp-tab-activity" aria-controls="lp-pan-activity" aria-selected="false" tabindex="-1" data-i18n="lp_tab_activity">Aktivität</button>
+          <button type="button" role="tab" id="lp-tab-objects" aria-controls="lp-pan-objects" aria-selected="false" tabindex="-1" data-i18n="lp_tab_objects">Objekte</button>
+        </div>
+        <div class="lp-pan" role="tabpanel" id="lp-pan-overview" aria-labelledby="lp-tab-overview">
+          <dl class="lp-kpis">
+            <div><dt data-i18n="lp_kpi_value">Deal-Wert</dt><dd>485.000 €</dd></div>
+            <div><dt data-i18n="lp_kpi_stage">Phase</dt><dd data-i18n="lp_col_nego">Verhandlung</dd></div>
+            <div><dt data-i18n="lp_kpi_urg">Dringlichkeit</dt><dd data-i18n="lp_urg_high">Hoch</dd></div>
+            <div><dt data-i18n="lp_kpi_owner">Zuständig</dt><dd>Mara Kühn</dd></div>
+            <div><dt data-i18n="lp_kpi_last">Letzte Aktivität</dt><dd data-i18n="lp_kpi_last_v">vor 2 Std.</dd></div>
+          </dl>
+          <div class="lp-ov-grid">
+            <div class="lp-ov-card"><h4><span data-i18n="lp_ov_next">Nächste Aufgaben</span> <span class="lp-count lp-ov-open">3</span></h4><ul class="lp-mini-list"><li><span class="lp-mini-dot"></span><span data-i18n="lp_task1">Finanzierungsbestätigung anfordern</span><small data-i18n="lp_task1_due">Fr, 10:00</small></li><li><span class="lp-mini-dot"></span><span data-i18n="lp_task3">Notartermin abstimmen</span><small data-i18n="lp_task3_due">Di, 14:30</small></li></ul></div>
+            <div class="lp-ov-card"><h4 data-i18n="lp_ov_latest">Letzte Aktivität</h4><p class="lp-ov-latest-meta" data-i18n="lp_tl1_meta">Mara Kühn, gestern 15:20</p><p class="lp-ov-latest-text" data-i18n="lp_tl1_text">Kaufpreis besprochen, Finanzierung in Prüfung.</p></div>
+          </div>
+        </div>
+        <div class="lp-pan hidden" role="tabpanel" id="lp-pan-contact" aria-labelledby="lp-tab-contact">
+          <div class="lp-contact">
+            <span class="lp-avatar lp-avatar-lg">JW</span>
+            <div class="lp-contact-body">
+              <h4>Jana Weber</h4>
+              <dl class="lp-fields">
+                <dt data-i18n="lp_f_email">E-Mail</dt><dd>jana.weber@example.de</dd>
+                <dt data-i18n="lp_f_phone">Telefon</dt><dd>+49 171 2345678</dd>
+                <dt data-i18n="lp_f_owner">Zuständig</dt><dd>Mara Kühn</dd>
+                <dt data-i18n="lp_f_last">Letzter Kontakt</dt><dd data-i18n="lp_f_last_v">gestern, 15:20</dd>
+              </dl>
+            </div>
+          </div>
+          <div class="lp-supplier">
+            <p class="lp-label" data-i18n="lp_supplier_label">Lieferant</p>
+            <div class="lp-supplier-row"><span class="lp-avatar">NF</span><div><b>Notariat Feld &amp; Kollegen</b><small data-i18n="lp_supplier_role">Notariat</small></div></div>
+          </div>
+        </div>
+        <div class="lp-pan hidden" role="tabpanel" id="lp-pan-tasks" aria-labelledby="lp-tab-tasks">
+          <div class="lp-task-head"><span class="lp-task-progress"></span><span class="lp-task-bar"><i></i></span></div>
+          <ul class="lp-task-list">
+            <li class="lp-task"><label><input type="checkbox"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task1">Finanzierungsbestätigung anfordern</span></label><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span><small data-i18n="lp_task1_due">Fr, 10:00</small></li>
+            <li class="lp-task"><label><input type="checkbox" checked><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task2">Energieausweis senden</span></label><span class="lp-badge lp-badge-u2" data-i18n="lp_prio_medium">Mittel</span><small data-i18n="lp_task2_due">erledigt</small></li>
+            <li class="lp-task"><label><input type="checkbox"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task3">Notartermin abstimmen</span></label><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span><small data-i18n="lp_task3_due">Di, 14:30</small></li>
+            <li class="lp-task"><label><input type="checkbox"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task4">Exposé aktualisieren</span></label><span class="lp-badge lp-badge-u1" data-i18n="lp_prio_low">Niedrig</span><small data-i18n="lp_task4_due">ohne Datum</small></li>
+          </ul>
+        </div>
+        <div class="lp-pan hidden" role="tabpanel" id="lp-pan-activity" aria-labelledby="lp-tab-activity">
+          <div class="lp-composer">
+            <div class="lp-type-chips">
+              <button type="button" class="lp-type-chip" data-type="note" aria-pressed="true" data-i18n="lp_type_note">Notiz</button>
+              <button type="button" class="lp-type-chip" data-type="call" aria-pressed="false" data-i18n="lp_type_call">Anruf</button>
+              <button type="button" class="lp-type-chip" data-type="email" aria-pressed="false" data-i18n="lp_type_email">E-Mail</button>
+              <button type="button" class="lp-type-chip" data-type="wa" aria-pressed="false" data-i18n="lp_type_wa">WhatsApp</button>
+            </div>
+            <textarea rows="2" data-i18n-ph="lp_note_ph" placeholder="Notiz schreiben, Strg+Enter speichert"></textarea>
+            <button type="button" class="lp-btn lp-btn-primary lp-btn-sm lp-note-save" data-i18n="lp_note_save">Speichern</button>
+          </div>
+          <ol class="lp-timeline">
+            <li class="lp-tl-item"><span class="lp-tl-ic type-call"></span><div><p class="lp-tl-meta"><b data-i18n="lp_type_call">Anruf</b> <span data-i18n="lp_tl1_meta">Mara Kühn, gestern 15:20</span></p><p class="lp-tl-text" data-i18n="lp_tl1_text">Kaufpreis besprochen, Finanzierung in Prüfung.</p></div></li>
+            <li class="lp-tl-item"><span class="lp-tl-ic type-email"></span><div><p class="lp-tl-meta"><b data-i18n="lp_type_email">E-Mail</b> <span data-i18n="lp_tl2_meta">Mara Kühn, Montag 09:05</span></p><p class="lp-tl-text" data-i18n="lp_tl2_text">Exposé gesendet, Besichtigung Mittwoch.</p></div></li>
+            <li class="lp-tl-item"><span class="lp-tl-ic type-note"></span><div><p class="lp-tl-meta"><b data-i18n="lp_type_note">Notiz</b> <span data-i18n="lp_tl3_meta">Tim Berger, letzte Woche</span></p><p class="lp-tl-text" data-i18n="lp_tl3_text">Erstkontakt über das Formular. Sucht 3 Zimmer, Altbau.</p></div></li>
+          </ol>
+        </div>
+        <div class="lp-pan hidden" role="tabpanel" id="lp-pan-objects" aria-labelledby="lp-tab-objects">
+          <p class="lp-label" data-i18n="lp_obj_title">Verknüpfte Objekte</p>
+          <div class="lp-object"><span class="lp-object-ic"><svg class="lp-ic"><use href="#lp-i-building"/></svg></span><div><b>Elbstraße 12, Whg. 3</b><small data-i18n="lp_obj_meta">87 m², 3 Zimmer, Baujahr 1962</small></div><button type="button" class="lp-btn lp-btn-sm" data-i18n="lp_obj_open">Öffnen</button></div>
+          <button type="button" class="lp-link-btn"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-plus"/></svg><span data-i18n="lp_obj_add">Objekt verknüpfen</span></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 · team -->
+    <section id="team" class="lp-screen">
+      <h2 data-i18n="lp_s4_t">Ein Team, jede Zeitzone.</h2>
+      <p class="lp-line" data-i18n="lp_s4_d">Ein Inhaber, Admins, Mitglieder. Echtzeit-Chat. Jeder Termin in der eigenen Ortszeit.</p>
+      <div class="lp-piece lp-tz" id="lp-tz">
+        <div class="lp-tz-row">
+          <label><span data-i18n="lp_tz_entered">Eingetragen in</span><select id="lp-tz-from"></select></label>
+          <label><span data-i18n="lp_tz_at">um</span><input type="time" id="lp-tz-time" value="09:30"></label>
+        </div>
+        <div class="lp-tz-row">
+          <label><span data-i18n="lp_tz_viewed">Gesehen in</span><select id="lp-tz-to"></select></label>
+          <div class="lp-tz-result"><output id="lp-tz-out" for="lp-tz-from lp-tz-time lp-tz-to"></output><small id="lp-tz-day"></small></div>
+        </div>
+        <p class="lp-tz-note" id="lp-tz-note"></p>
+      </div>
+    </section>
+
+    <!-- 5 · numbers -->
+    <section id="numbers" class="lp-screen">
+      <h2 data-i18n="lp_s5_t">Zahlen, die stimmen.</h2>
+      <p class="lp-line" data-i18n="lp_s5_d">Gewinnquote und Trichter nach den eigenen Phasen.</p>
+      <div class="lp-piece lp-an">
+        <div class="lp-piece-bar">
+          <div class="lp-seg" role="group" aria-label="Zeitraum">
+            <button type="button" class="lp-period-btn" data-period="3" aria-pressed="false" data-i18n="lp_an_period_3">3 Monate</button>
+            <button type="button" class="lp-period-btn" data-period="6" aria-pressed="true" data-i18n="lp_an_period_6">6 Monate</button>
+            <button type="button" class="lp-period-btn" data-period="12" aria-pressed="false" data-i18n="lp_an_period_12">12 Monate</button>
+          </div>
+        </div>
+        <dl class="lp-an-cards">
+          <div><dt data-i18n="lp_an_c_open">Offene Pipeline</dt><dd id="lp-an-open"></dd></div>
+          <div><dt data-i18n="lp_an_c_won">Gewonnener Wert</dt><dd id="lp-an-won"></dd></div>
+          <div><dt data-i18n="lp_an_c_rate">Gewinnquote</dt><dd id="lp-an-rate"></dd></div>
+          <div><dt data-i18n="lp_an_c_new">Neue Deals</dt><dd id="lp-an-new"></dd></div>
+        </dl>
+        <div class="lp-an-grid">
+          <div class="lp-an-card">
+            <p class="lp-label" data-i18n="lp_an_rate_m">Gewinnquote je Monat</p>
+            <div id="lp-an-line-wrap"><svg id="lp-an-line" viewBox="0 0 560 180" preserveAspectRatio="none" role="img" aria-hidden="true"></svg><div class="lp-an-tip hidden" id="lp-an-tip"></div></div>
+          </div>
+          <div class="lp-an-card">
+            <p class="lp-label" data-i18n="lp_an_funnel">Trichter</p>
+            <ol class="lp-funnel" id="lp-an-funnel"></ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6 · the Engine -->
+    <section id="engine" class="lp-screen">
+      <h2 data-i18n="lp_s6_t">Unterschrieben. Weitergemeldet.</h2>
+      <p class="lp-line" data-i18n="lp_s6_d">Erreicht ein Deal Gewonnen, erhält das nächste System das signierte Ereignis vertrag.unterschrieben.</p>
+      <div class="lp-piece lp-en">
+        <div class="lp-en-col">
+          <p class="lp-label" data-i18n="lp_en_event">Ereignis</p>
+          <pre class="lp-code" id="lp-en-body">{
+  "event": "vertrag.unterschrieben",
+  "event_id": "",
+  "timestamp": "",
+  "kunde_id": 318,
+  "vertrag_id": 1042,
+  "produkt": "Elbstraße 12, 3 Zimmer",
+  "stage": "Gewonnen"
+}</pre>
+        </div>
+        <div class="lp-en-col">
+          <p class="lp-label"><span data-i18n="lp_en_signature">Signatur</span> <span class="lp-label-dim" data-i18n="lp_en_signed">HMAC-SHA256 über Zeitstempel und Body</span></p>
+          <pre class="lp-code lp-en-sig" id="lp-en-sig">X-Upgrads-Timestamp:
+X-Upgrads-Signature: sha256=</pre>
+          <p class="lp-label" data-i18n="lp_en_status">Zustellung</p>
+          <p class="lp-en-state"><i></i><span id="lp-en-state"></span></p>
+          <p class="lp-hint" id="lp-en-note"></p>
+        </div>
+      </div>
+      <div class="lp-row"><button type="button" class="lp-btn lp-btn-primary" id="lp-en-send"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-bolt"/></svg><span data-i18n="lp_en_send">Testereignis senden</span></button></div>
+    </section>
+
+    <!-- 7 · closing -->
+    <section id="close" class="lp-screen lp-close">
+      <h2 data-i18n="lp_cta_t">Bereit, wenn das Team es ist.</h2>
+      <p class="lp-line" data-i18n="lp_cta_d">Zugang anfragen. Der erste Lead liegt heute auf dem Board.</p>
+      <div class="lp-row">
+        <a class="lp-btn lp-btn-primary lp-request" href="mailto:hello@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="lp_request">Zugang anfragen</a>
+        <a class="lp-btn" href="/" data-i18n="lp_login">Anmelden</a>
+      </div>
+      <ul class="lp-facts">
+        <li data-i18n="lp_fact1">PostgreSQL, jede Abfrage je Arbeitsbereich.</li>
+        <li data-i18n="lp_fact2">Zugang nur auf Einladung, mit Einladungscode.</li>
+        <li data-i18n="lp_fact3">Deutsch und Englisch, Beträge in Euro.</li>
+        <li data-i18n="lp_fact4">Export als CSV, jederzeit.</li>
+      </ul>
+      <div class="lp-faq">
+        <details class="lp-faq-item"><summary data-i18n="lp_faq1_q">Wie bekommt ein Team Zugang?</summary><p data-i18n="lp_faq1_a">Auf Anfrage. Der Einladungscode kommt per E-Mail.</p></details>
+        <details class="lp-faq-item"><summary data-i18n="lp_faq2_q">Woher kommen die Leads?</summary><p data-i18n="lp_faq2_a">Aus allem, was JSON sendet: Make, Zapier, n8n, ein Formular.</p></details>
+        <details class="lp-faq-item"><summary data-i18n="lp_faq3_q">Ist die Engine Pflicht?</summary><p data-i18n="lp_faq3_a">Nein. Ohne Engine ist Upgrads ein vollständiges CRM.</p></details>
+      </div>
+      <footer class="lp-footer"><p data-i18n="lp_foot_tag">Upgrads CRM. Ein Board für jeden Deal.</p></footer>
+    </section>
+  </main>
+</div>
+
+<script src="/js/landing.js"></script>
+</body>
+</html>

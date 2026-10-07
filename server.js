@@ -21,7 +21,7 @@
                           visible on reload; other assets cache for an hour.
    6. routes              every /api/* mount, one line each. The ONLY place
                           that knows the full URL map.
-   7. /adminconsole       serves public/admin.html.
+   7. /adminconsole       serves public/admin.html; /landingpage serves public/landingpage.html.
    8. catch-all GET *     serves public/index.html, which is why the client can
                           have "pages" without any URL routing.
    9. error handler       entity.too.large → 413 with a readable message,
@@ -162,6 +162,8 @@ app.use('/api/integrations',  require('./routes/integrations'));
 app.use('/api/engine',        require('./routes/engine'));
 
 app.get('/adminconsole', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+// The public landing page: a standalone document (landingpage.html + landing.css + js/landing.js), no session.
+app.get('/landingpage', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landingpage.html')));
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 

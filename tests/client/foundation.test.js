@@ -52,9 +52,7 @@ const val = (map, fb, name) => norm(resolve(map, fb, map[name] ?? fb[name] ?? ((
 
 // app name → reference name (the value must be identical in both themes)
 const MAP = {
-  '--canvas': '--bg', '--surface': '--surface', '--surface-sunken': '--surface-2', '--surface-hover': '--hover', '--surface-active': '--selected',
-  '--line': '--border', '--line-soft': '--divider', '--line-strong': '--border-strong',
-  '--ink': '--text', '--ink-secondary': '--text-2', '--ink-muted': '--text-3', '--ink-subtle': '--text-3', '--ink-inverse': '--text-inv',
+  '--ink-inverse': '--text-inv',
   '--brand': '--primary', '--brand-hover': '--primary-hover', '--brand-active': '--primary-active', '--brand-ink': '--link',
   '--brand-subtle': '--selected', '--brand-subtle-2': '--selected-strong',
   '--success': '--success', '--success-subtle': '--success-bg', '--success-ink': '--success',
@@ -77,9 +75,47 @@ describe('tokens: the reference values under the app names, and the reference na
   test('every mapped pair resolves to the same value, dark theme', () => {
     for (const [a, r] of Object.entries(MAP)) assert.equal(val(appDark, appLight, a), val(refDark, refLight, r), `${a} ← ${r}`);
   });
+  // The light theme deliberately diverges from the reference (2026-10-07): its text greys
+  // read washed-out and its white-first surfaces glared, so the app's text is darker and its
+  // surfaces, canvas and hairlines sit a step below white. The dark theme still matches.
+  // The reference *names* still resolve — to the app's values.
+  const LIGHT_INK = ['--text', '--text-2', '--text-3'];
+  const LIGHT_SURFACE = ['--bg', '--surface', '--surface-2', '--surface-3', '--hover', '--selected', '--border', '--divider', '--border-strong'];
+  const LIGHT_DIVERGED = [...LIGHT_INK, ...LIGHT_SURFACE];
   test('every reference token name exists in the app with the same value (so screen CSS copies verbatim)', () => {
-    for (const r of Object.keys(refLight)) assert.equal(val(appLight, {}, r), val(refLight, {}, r), `light ${r}`);
+    for (const r of Object.keys(refLight)) if (!LIGHT_DIVERGED.includes(r)) assert.equal(val(appLight, {}, r), val(refLight, {}, r), `light ${r}`);
     for (const r of Object.keys(refDark)) assert.equal(val(appDark, appLight, r), val(refDark, refLight, r), `dark ${r}`);
+  });
+  test('light text is darker than the reference at every step; dark text unchanged', () => {
+    const lum = hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4); return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]; };
+    const contrast = (a, b) => (Math.max(lum(a), lum(b)) + .05) / (Math.min(lum(a), lum(b)) + .05);
+    const pairs = { '--ink': '--text', '--ink-secondary': '--text-2', '--ink-muted': '--text-3', '--ink-subtle': '--text-3' };
+    for (const [a, r] of Object.entries(pairs)) {
+      const app = val(appLight, {}, a), ref = val(refLight, {}, r);
+      assert.ok(lum(app) < lum(ref), `${a} ${app} darker than reference ${ref}`);
+      assert.ok(contrast(app, '#ffffff') >= 6.5, `${a} ${app} ≥ 6.5:1 on white`);
+      assert.ok(contrast(app, val(appLight, {}, '--canvas')) >= 6, `${a} ${app} ≥ 6:1 on the canvas`);
+      assert.equal(val(appDark, appLight, a), val(refDark, refLight, r), `dark ${a} unchanged`);
+    }
+    for (const r of LIGHT_INK) assert.equal(val(appLight, {}, r), val(appLight, {}, { '--text': '--ink', '--text-2': '--ink-secondary', '--text-3': '--ink-muted' }[r]), `${r} aliases the app value`);
+  });
+  test('light surfaces sit below white, ordered canvas < sunken < surface, lines darker than the reference; dark unchanged', () => {
+    const lum = hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4); return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]; };
+    const contrast = (a, b) => (Math.max(lum(a), lum(b)) + .05) / (Math.min(lum(a), lum(b)) + .05);
+    const L = n => val(appLight, {}, n);
+    assert.notEqual(L('--surface'), '#ffffff', 'cards are no longer pure white');
+    assert.equal(L('--surface-raised'), L('--surface'));
+    assert.ok(lum(L('--canvas')) < lum(L('--surface-sunken')) && lum(L('--surface-sunken')) < lum(L('--surface')), 'canvas < sunken < surface');
+    assert.ok(lum(L('--surface-hover')) < lum(L('--surface')) && lum(L('--surface-3')) < lum(L('--surface')), 'hover and surface-3 darker than surface');
+    assert.ok(contrast(L('--ink-muted'), L('--surface')) >= 6 && contrast(L('--ink-muted'), L('--canvas')) >= 5.5, 'muted text still legible on both grounds');
+    for (const [a, r] of Object.entries({ '--canvas': '--bg', '--surface': '--surface', '--surface-sunken': '--surface-2', '--surface-hover': '--hover', '--line': '--border', '--line-soft': '--divider', '--line-strong': '--border-strong' })) {
+      assert.ok(lum(L(a)) < lum(val(refLight, {}, r)), `${a} darker than the reference ${r}`);
+      assert.equal(val(appDark, appLight, a), val(refDark, refLight, r), `dark ${a} unchanged`);
+    }
+    assert.ok(contrast(L('--line'), L('--surface')) >= 1.3, 'the hairline still shows on a card');
+    assert.ok(contrast(L('--line-strong'), L('--surface')) >= 1.7, 'input borders still show on a card');
+    const alias = { '--bg': '--canvas', '--surface': '--surface', '--surface-2': '--surface-sunken', '--surface-3': '--surface-3', '--hover': '--surface-hover', '--selected': '--brand-subtle', '--border': '--line', '--divider': '--line-soft', '--border-strong': '--line-strong' };
+    for (const r of LIGHT_SURFACE) assert.equal(L(r), L(alias[r]), `${r} aliases the app value`);
   });
   test('the reference sprite is embedded whole', () => {
     const ref = fs.readFileSync(path.join(REF, 'icons.svg'), 'utf8');

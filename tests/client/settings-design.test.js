@@ -134,3 +134,27 @@ describe('stylesheet', () => {
     assert.equal(tablet.includes('.settings-rail'), false);
   });
 });
+
+// 2026-10-07: the tab rail (shared by Settings and Integrations) sits on the light page,
+// so it must use the page's ink tokens, never the sidebar's nav-* set (light blue, white
+// on active — invisible on a light ground). Hint copy, which dominates both pages, reads
+// at the secondary step, not the muted one.
+describe('settings/integrations rail and hints: page ink, not sidebar ink', () => {
+  test('.settings-tab resting / hover / active use ink-secondary, ink and brand-ink on page surfaces', () => {
+    assert.match(css, /^\.settings-tab \{[^}]*color: var\(--ink-secondary\);/m);
+    assert.match(css, /^\.settings-tab:hover \{ color: var\(--ink\); background: var\(--surface-hover\); \}$/m);
+    assert.match(css, /^\.settings-tab\.active \{ color: var\(--brand-ink\); background: var\(--brand-subtle\); font-weight: 620; \}$/m);
+    const rail = css.slice(css.indexOf('.settings-tabs {'), css.indexOf('.settings-tab.active::after'));
+    assert.doesNotMatch(rail, /var\(--nav-|var\(--sb-/, 'no sidebar token in the rail');
+  });
+  test('the Integrations page reuses the same rail', () => {
+    const h = read('public/index.html');
+    const section = h.slice(h.indexOf('id="page-integrations"'), h.indexOf('id="page-workspaces"'));
+    assert.ok((section.match(/class="settings-tab/g) || []).length >= 5);
+  });
+  test('hint copy on both pages is ink-secondary at the small size', () => {
+    for (const sel of ['.settings-page-sub', '.settings-tab-hint', '.settings-hint', '.intg-section-hint']) {
+      assert.match(css, new RegExp(`^\\${sel} \\{ font-size: var\\(--fs-sm\\); color: var\\(--ink-secondary\\);`, 'm'), sel);
+    }
+  });
+});

@@ -436,17 +436,32 @@ function applyStage(deal, stageId) {
   const stage = stagesOf(deal).find(s => s.id === stageId);
   deal.stage_id = stageId; deal.stage_name = stage?.name || null; deal.stage_color = stage?.color || null;
 }
+// The board blurs and ignores input while a stage PATCH is in flight (CSS on
+// #deals-board[aria-busy="true"]). Counted, so overlapping moves (a drop while
+// an Undo is still saving) keep it busy until the last one lands.
+let boardBusyCount = 0;
+function setBoardBusy(on) {
+  boardBusyCount = Math.max(0, boardBusyCount + (on ? 1 : -1));
+  const board = document.getElementById('deals-board');
+  if (!board) return;
+  if (boardBusyCount > 0) board.setAttribute('aria-busy', 'true'); else board.removeAttribute('aria-busy');
+}
+async function patchStage(id, stageId) {
+  setBoardBusy(true);
+  try { return await api.patch(`/api/deals/${id}/stage`, { stage_id: stageId }); }
+  finally { setBoardBusy(false); }
+}
 // Optimistic move with a toast and Undo; a failed PATCH puts the deal back.
 async function moveDealToStage(id, stageId) {
   const deal = deals.find(d => d.id === id);
   if (!deal || deal.stage_id === stageId) return;
   const prev = { stage_id: deal.stage_id, stage_name: deal.stage_name, stage_color: deal.stage_color };
   applyStage(deal, stageId); renderDeals();
-  const res = await api.patch(`/api/deals/${id}/stage`, { stage_id: stageId });
+  const res = await patchStage(id, stageId);
   if (res && res.error) { Object.assign(deal, prev); renderDeals(); return; }
   ui.toast(tf('moved_to', { s: deal.stage_name || '' }), { action: { label: t('undo'), onClick: async () => {
     Object.assign(deal, prev); renderDeals();
-    await api.patch(`/api/deals/${id}/stage`, { stage_id: prev.stage_id });
+    await patchStage(id, prev.stage_id);
   } } });
 }
 
@@ -558,7 +573,7 @@ function bulkDeals(action, anchor) {
       const p = pipelines.find(x => x.id === pid); if (!p) return [];
       const mine = selected.filter(d => d.pipeline_id === pid);
       return [...(pids.length > 1 ? [{ heading: p.name }] : []), ...(p.stages || []).map(s => ({ label: s.name, onSelect: async () => {
-        for (const d of mine) { if (d.stage_id !== s.id) { applyStage(d, s.id); await api.patch(`/api/deals/${d.id}/stage`, { stage_id: s.id }); } }
+        for (const d of mine) { if (d.stage_id !== s.id) { applyStage(d, s.id); await patchStage(d.id, s.id); } }
         dealsUI.sel.clear(); renderDeals(); ui.toast(tf('deals_moved_to', { n: mine.length, s: s.name }));
       } }))];
     });

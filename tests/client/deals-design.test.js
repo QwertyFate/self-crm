@@ -343,3 +343,27 @@ describe('deals.js: the summary strip is the same in board and list (Part 34)', 
     assert.match(l, /dealsUI\.stage !== null && dealsUI\.stage !== '' && !summaryStages\(\)\.some\(s => s\.id === dealsUI\.stage\)/);
   });
 });
+
+// 2026-10-07: while a stage move saves, the board blurs and ignores input so the user
+// sees it is loading and cannot start a second move on stale columns.
+describe('deals.js: the board is busy (blurred, unclickable) while a stage PATCH is in flight', () => {
+  test('every stage PATCH goes through patchStage, which brackets it with setBoardBusy', () => {
+    const ps = sliceFn(deals, 'patchStage', 'deals.js');
+    assert.match(ps, /setBoardBusy\(true\);\s*try \{ return await api\.patch\(`\/api\/deals\/\$\{id\}\/stage`, \{ stage_id: stageId \}\); \}\s*finally \{ setBoardBusy\(false\); \}/);
+    assert.equal((deals.match(/api\.patch\(`\/api\/deals\/\$\{[^}]+\}\/stage`/g) || []).length, 1, 'no stage PATCH outside patchStage');
+    const mv = sliceFn(deals, 'moveDealToStage', 'deals.js');
+    assert.match(mv, /const res = await patchStage\(id, stageId\);/, 'the move');
+    assert.match(mv, /await patchStage\(id, prev\.stage_id\);/, 'the undo');
+    assert.match(deals, /applyStage\(d, s\.id\); await patchStage\(d\.id, s\.id\);/, 'the bulk move');
+  });
+  test('setBoardBusy counts overlapping moves and toggles aria-busy on #deals-board', () => {
+    const sb = sliceFn(deals, 'setBoardBusy', 'deals.js');
+    assert.match(sb, /boardBusyCount = Math\.max\(0, boardBusyCount \+ \(on \? 1 : -1\)\);/);
+    assert.match(sb, /getElementById\('deals-board'\)/);
+    assert.match(sb, /if \(boardBusyCount > 0\) board\.setAttribute\('aria-busy', 'true'\); else board\.removeAttribute\('aria-busy'\);/);
+  });
+  test('the stylesheet blurs the busy board, blocks pointer events, and transitions both ways', () => {
+    assert.match(css, /^#deals-board \{ transition: filter var\(--dur\) var\(--ease\), opacity var\(--dur\) var\(--ease\); \}$/m);
+    assert.match(css, /^#deals-board\[aria-busy="true"\] \{ pointer-events: none; user-select: none; cursor: progress; filter: blur\(2px\); opacity: \.7; \}$/m);
+  });
+});

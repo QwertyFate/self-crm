@@ -55,26 +55,32 @@
    reference's own names are aliases of the same values, so screen CSS copied
    from the reference works verbatim.                                        */
 :root {
-  /* Surfaces */
-  --canvas:        #F4F6F9;          /* app ground                           */
-  --surface:       #FFFFFF;          /* cards, panels, modals                */
-  --surface-sunken:#F8FAFC;          /* wells, table heads, footers          */
-  --surface-raised:#FFFFFF;
-  --surface-hover: #F3F6FA;
-  --surface-active:#EAF2FA;
+  /* Surfaces — a step darker than the reference's white-first set (canvas
+     #F4F6F9, surface #FFFFFF, sunken #F8FAFC, hover #F3F6FA, 3 #F0F3F7):
+     pure white glared and washed the text out (2026-10-07). Dark theme as is. */
+  --canvas:        #E9EDF2;          /* app ground                           */
+  --surface:       #F5F7FA;          /* cards, panels, modals                */
+  --surface-sunken:#EDF1F5;          /* wells, table heads, footers          */
+  --surface-raised:#F5F7FA;
+  --surface-hover: #E6EBF1;
+  --surface-active:#DCE7F2;
   --surface-2:     var(--surface-sunken);
-  --surface-3:     #F0F3F7;
+  --surface-3:     #E4E9EF;
 
-  /* Lines */
-  --line:          #E1E6ED;          /* default hairline                     */
-  --line-soft:     #EBEFF4;          /* inside cards, table rows             */
-  --line-strong:   #CBD3DE;          /* input borders, emphasis              */
+  /* Lines — darkened with the surfaces so the hairlines still show
+     (reference: #E1E6ED / #EBEFF4 / #CBD3DE) */
+  --line:          #D3DAE3;          /* default hairline                     */
+  --line-soft:     #DEE4EB;          /* inside cards, table rows             */
+  --line-strong:   #B0BBC9;          /* input borders, emphasis              */
 
-  /* Text */
-  --ink:           #161C25;
-  --ink-secondary: #3F4A5A;
-  --ink-muted:     #66728A;
-  --ink-subtle:    #66728A;
+  /* Text — darker than the reference's (#161C25 / #3F4A5A / #66728A): on the
+     light canvas the reference greys read washed-out, so every step gains
+     contrast (muted ≥ 6.7:1 on the canvas, 7.4:1 on a card; was ≈4.6:1 / 5:1).
+     Dark theme unchanged. */
+  --ink:           #0F141C;
+  --ink-secondary: #2C3545;
+  --ink-muted:     #475263;
+  --ink-subtle:    #475263;
   --ink-inverse:   #FFFFFF;
 
   /* Brand / accent */
@@ -151,6 +157,7 @@
 
   /* Layout */
   --sidebar-w:var(--sb-width);
+  --topbar-h:56px;                   /* = .topbar height; the overlay inset */
   --page-pad:28px;
 
   /* ── Legacy aliases ─────────────────────────────────────────────────────
@@ -250,7 +257,7 @@
 /* ══ 03 · RESET & BASE ═════════════════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
 body {
   font-family: var(--font);
@@ -553,7 +560,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 .col-bar { height: 3px; margin: 0 14px 8px; background: var(--divider); position: relative; overflow: hidden; border-radius: 2px; } .col-bar i { position: absolute; inset: 0 auto 0 0; }
 .dcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px 12px 10px; box-shadow: var(--shadow-sm); cursor: pointer; text-align: left; width: 100%; display: block; position: relative; transition: box-shadow .12s, border-color .12s, transform .12s; }
 .dcard:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); } .dcard.dragging { opacity: .5; transform: rotate(1deg); } .dcard:focus-visible { outline: none; box-shadow: var(--focus-ring); border-color: var(--focus); }
-.dcard-title { font-weight: 620; line-height: 1.35; margin-bottom: 3px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dcard-title { font-weight: 620; line-height: 1.35; margin-bottom: 3px; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .dcard-meta { color: var(--text-3); font-size: var(--fs-sm); margin-bottom: 10px; } .dcard-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .dcard-value { font-weight: 650; font-variant-numeric: tabular-nums; } .dcard-sub { display: flex; align-items: center; gap: 10px; color: var(--text-3); font-size: var(--fs-xs); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--divider); }
 .dcard-sub .ic { width: 13px; height: 13px; } .dcard .urg { position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; }
@@ -654,7 +661,8 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 .view { flex: 1 1 auto; overflow: auto; min-height: 0; position: relative; display: flex; flex-direction: column; }
 
 .page { display: none; flex-direction: column; height: 100%; overflow: hidden; padding: 24px var(--page-pad); gap: var(--sp-4); }
-.page.active { display: flex; flex: 1 1 auto; min-height: 0; }
+.page.active { display: flex; flex: 1 1 auto; min-height: 0; animation: page-in var(--dur) var(--ease) both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 #page-tasks { overflow: hidden; padding: 0 !important; }
 #page-analytics { overflow-y: auto; }
 
@@ -788,6 +796,11 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
    ═══════════════════════════════════════════════════════════════════════════ */
 /* Deals page: board (.col-board/.dcard from 00b) and list fill the page column */
 #deals-board.board { flex: 1 1 auto; min-height: 0; }
+#deals-board { transition: filter var(--dur) var(--ease), opacity var(--dur) var(--ease); }
+/* While a stage move is in flight (drag, menu, bulk, undo) the board blurs and
+   stops taking input, so the user sees it is saving and cannot start a second
+   move on stale columns. deals.js sets aria-busy around every stage PATCH. */
+#deals-board[aria-busy="true"] { pointer-events: none; user-select: none; cursor: progress; filter: blur(2px); opacity: .7; }
 #deals-list-view { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 #deals-list-view .table-wrap { flex: 1 1 auto; min-height: 0; }
 #deals-list-foot { margin-top: -1px; border: 1px solid var(--border); border-top: 0; flex: none; }
@@ -1246,7 +1259,7 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 }
 .settings-page-brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .settings-page-title { font-size: var(--fs-xl); font-weight: 660; letter-spacing: -.022em; }
-.settings-page-sub { font-size: var(--fs-sm); color: var(--ink-muted); }
+.settings-page-sub { font-size: var(--fs-sm); color: var(--ink-secondary); }
 
 /* ── Layout: a section rail on the left, one scrolling column on the right ─
    The rail speaks the sidebar's language (same icons, same active bar) so
@@ -1261,9 +1274,12 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
   padding: var(--sp-2) var(--sp-25);
   border: none; border-radius: var(--r-sm); background: none; cursor: pointer;
   text-align: left; white-space: nowrap;
-  font-size: var(--fs-sm); font-weight: 550; letter-spacing: -.005em; color: var(--nav-ink);
+  font-size: var(--fs-sm); font-weight: 550; letter-spacing: -.005em; color: var(--ink-secondary);
   transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
+/* The rail sits on the page, not in the navy sidebar, so it uses the page's ink
+   tokens: the nav-* tokens it used before (the sidebar's pale blue, white when
+   active) were near invisible in light mode (2026-10-07). */
 /* The icon is a CSS mask, not a child node: applyTranslations() rewrites the
    button's textContent and would otherwise wipe it. Paths are the sidebar's. */
 .settings-tab::before {
@@ -1282,8 +1298,8 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 .settings-tab[data-tab="tasks"]::before { --ico: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.85' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 11l3 3 8-8'/%3E%3Cpath d='M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'/%3E%3C/svg%3E"); }
 .settings-tab[data-tab="team"]::before { --ico: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.85' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='7' r='4'/%3E%3Cpath d='M5.5 21a6.5 6.5 0 0 1 13 0'/%3E%3C/svg%3E"); }
 .settings-tab[data-tab="integrations"]::before { --ico: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.85' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22v-5'/%3E%3Cpath d='M9 8V2M15 8V2'/%3E%3Cpath d='M18 8v3a6 6 0 0 1-12 0V8z'/%3E%3C/svg%3E"); }
-.settings-tab:hover { color: var(--nav-ink-hover); background: var(--nav-hover); }
-.settings-tab.active { color: var(--nav-ink-active); background: var(--nav-active); font-weight: 620; }
+.settings-tab:hover { color: var(--ink); background: var(--surface-hover); }
+.settings-tab.active { color: var(--brand-ink); background: var(--brand-subtle); font-weight: 620; }
 .settings-tab.active::before { opacity: 1; }
 .settings-tab.active::after {
   content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
@@ -1302,7 +1318,7 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 .page-rail .workspace-name-input { max-width: 520px; }
 .settings-pane-head { display: flex; flex-direction: column; gap: 2px; padding-bottom: var(--sp-1); max-width: var(--rail-content-max); }
 .settings-pane-title { font-size: var(--fs-lg); font-weight: 640; letter-spacing: -.016em; line-height: var(--lh-tight); }
-.settings-tab-hint { font-size: var(--fs-sm); color: var(--ink-muted); line-height: var(--lh-normal); }
+.settings-tab-hint { font-size: var(--fs-sm); color: var(--ink-secondary); line-height: var(--lh-normal); }
 
 /* ── Cards: one column, one anatomy ─────────────────────────────────────────
    header (title + optional action) → hint → list of rows | body (controls).
@@ -1335,7 +1351,7 @@ tr:hover .row-actions, tr:focus-within .row-actions { opacity: 1; }
 }
 .settings-row:last-child { border-bottom: none; }
 .settings-row:hover { background: var(--surface-hover); }
-.settings-hint { font-size: var(--fs-sm); color: var(--ink-muted); line-height: var(--lh-normal); padding: var(--sp-1) var(--sp-4) var(--sp-4); }
+.settings-hint { font-size: var(--fs-sm); color: var(--ink-secondary); line-height: var(--lh-normal); padding: var(--sp-1) var(--sp-4) var(--sp-4); }
 /* The hairline that starts a list (rows) — and one before a save bar that follows a list. */
 .settings-hint + .settings-list, .settings-hint + [id$="-list"], .settings-hint + .col-cfg-locked,
 .settings-list + .settings-card-body { border-top: 1px solid var(--line-soft); }
@@ -1665,7 +1681,7 @@ input[type="checkbox"].switch:focus-visible,
 .intg-section > .switch-row { align-self: flex-start; }
 .intg-section-head { display: flex; flex-direction: column; gap: 2px; }
 .intg-section-head h3 { font-size: var(--fs-sm); font-weight: 620; letter-spacing: -.008em; line-height: var(--lh-snug); color: var(--ink); }
-.intg-section-hint { font-size: var(--fs-xs); color: var(--ink-muted); line-height: var(--lh-normal); }
+.intg-section-hint { font-size: var(--fs-sm); color: var(--ink-secondary); line-height: var(--lh-normal); }
 .intg-stack .settings-card-body > .settings-card-actions { padding-top: var(--sp-3); border-top: 1px solid var(--line-soft); }
 .intg-fields { display: flex; flex-direction: column; gap: var(--sp-2); }
 .intg-field { display: flex; flex-direction: column; gap: var(--sp-1); max-width: 360px; }
@@ -2544,6 +2560,11 @@ input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
   animation: overlay-in var(--dur) var(--ease) both;
 }
 #loading-overlay.hidden { display: none !important; }
+/* Once the shell is up the overlay covers only the content area: the sidebar and
+   the top bar stay put and readable while a slow page loads behind them. On the
+   auth screens (#app hidden) it still covers the whole viewport. */
+body:has(#app:not(.hidden)) #loading-overlay { left: var(--sb-width); top: var(--topbar-h); }
+body:has(#app.rail:not(.hidden)) #loading-overlay { left: var(--sb-width-rail); }
 .loading-card {
   display: flex; flex-direction: column; align-items: center; gap: var(--sp-5);
   padding: var(--sp-8) var(--sp-10);
@@ -2694,7 +2715,7 @@ input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
 .dd-mini-row:last-child { border-bottom: 0; }
 .dd-mini-row .tl-ic { width: 26px; height: 26px; } .dd-mini-row .tl-ic .ic { width: 14px; height: 14px; }
 .dd-mini-empty { padding: 18px 14px; color: var(--text-3); font-size: var(--fs-sm); text-align: center; }
-.dd-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--text-2); font-size: var(--fs-sm); }
+.dd-clamp { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--text-2); font-size: var(--fs-sm); }
 .dd-compose { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-2); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
 .dd-compose .textarea { background: var(--surface); min-height: 88px; }
 .dd-hint { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--border); font-size: var(--fs-sm); color: var(--text-2); }
@@ -2733,8 +2754,8 @@ input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
 .dd-stat { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 .dd-stat div { font-size: var(--fs-xs); color: var(--text-3); } .dd-stat b { display: block; font-size: var(--fs-md); color: var(--text); font-variant-numeric: tabular-nums; font-weight: 620; }
 .dd-form { display: flex; flex-direction: column; gap: 16px; padding-top: 6px; }
-.dd-form input[type=number]::-webkit-inner-spin-button, .dd-form input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.dd-form input[type=number] { -moz-appearance: textfield; }
+.dd-form input[type=number]::-webkit-inner-spin-button, .dd-form input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
+.dd-form input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .dd-affix .input { padding-right: 46px; }
 @media (max-width: 1180px) { .dd-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } .dd-kpi { border-bottom: 1px solid var(--divider); } }
 @media (max-width: 760px) { .dd-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dd-taskform .field-row-3 { grid-template-columns: minmax(0, 1fr); } }

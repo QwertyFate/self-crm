@@ -76,6 +76,7 @@ server.js
   │     └─ middleware/auth.js  ──►  req.userId / req.workspaceId / req.userRole
   │           └─ handler: plain SQL via pool.query, always filtered on req.workspaceId
   ├─ GET /adminconsole   → public/admin.html
+  ├─ GET /landingpage    → public/landingpage.html (public, no session; landing.css + js/landing.js)
   ├─ GET *               → public/index.html        (client-side "routing")
   └─ error handler       → 413 for entity.too.large, else 500 {error:'Internal server error'}
 ```

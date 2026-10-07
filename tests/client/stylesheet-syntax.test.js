@@ -62,3 +62,18 @@ describe('public/style.css is syntactically sound', () => {
     assert.deepEqual(scan('.x { content: "*/"; }'), [], 'a "*/" inside a string is not a comment close');
   });
 });
+
+// 2026-10-07: the editor's CSS lint flags a vendor-prefixed property whose standard form
+// is missing from the same declaration block. Keep each prefixed property paired.
+describe('vendor-prefixed properties are paired with their standard form in the same block', () => {
+  const PAIRS = { '-webkit-line-clamp': 'line-clamp', '-webkit-text-size-adjust': 'text-size-adjust', '-moz-appearance': 'appearance', '-webkit-appearance': 'appearance', '-webkit-backdrop-filter': 'backdrop-filter', '-webkit-mask-image': 'mask-image' };
+  test('every block that sets a prefixed property also sets the standard one', () => {
+    const css = read('public/style.css');
+    const blocks = [...css.matchAll(/\{([^{}]*)\}/g)].map(m => m[1]);
+    const bad = [];
+    for (const b of blocks) for (const [pre, std] of Object.entries(PAIRS)) {
+      if (new RegExp(`(^|[\\s;{])${pre}\\s*:`).test(b) && !new RegExp(`(^|[\\s;{])${std}\\s*:`).test(b)) bad.push(`${pre} without ${std}: ${b.trim().slice(0, 80)}`);
+    }
+    assert.deepEqual(bad, []);
+  });
+});

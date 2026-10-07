@@ -551,47 +551,50 @@ function toggleDarkMode() {
   applyTheme(saved ? saved === 'dark' : prefersDark);
 })();
 
+// Two tiers. The top bar runs for every request and finishes the moment the
+// request does — no minimum display time, so a millisecond request costs no
+// visible wait. The blocking overlay only appears when a request has been in
+// flight for OVERLAY_DELAY (2 s): fast navigation never shows it.
 const loader = (() => {
-  let count = 0, fillTimer = null, hideTimer = null, overlayTimer = null, startTime = null;
+  let count = 0, fillTimer = null, hideTimer = null, overlayTimer = null;
   const bar     = () => document.getElementById('loading-bar');
   const fill    = () => document.getElementById('loading-bar-fill');
   const overlay = () => document.getElementById('loading-overlay');
-  const MIN_DISPLAY_TIME = 500;
+  const OVERLAY_DELAY = 2000;
+  const clearFill = () => { (fillTimer || []).forEach(clearTimeout); fillTimer = null; };
 
   function start() {
-    if (count === 0) startTime = Date.now();
     count++;
     clearTimeout(hideTimer);
-    clearTimeout(overlayTimer);
     const b = bar(), f = fill();
     if (b && f) {
       b.classList.add('active');
       let pct = parseFloat(f.style.width) || 0;
       if (pct >= 80) pct = 30;
       f.style.width = pct + '%';
-      clearTimeout(fillTimer);
-      fillTimer = setTimeout(() => { if (fill()) fill().style.width = '70%'; }, 50);
-      fillTimer = setTimeout(() => { if (fill()) fill().style.width = '82%'; }, 400);
+      clearFill();
+      fillTimer = [
+        setTimeout(() => { if (fill()) fill().style.width = '70%'; }, 50),
+        setTimeout(() => { if (fill()) fill().style.width = '82%'; }, 400),
+      ];
     }
-    overlayTimer = setTimeout(() => { if (count > 0) overlay()?.classList.remove('hidden'); }, 300);
+    if (!overlayTimer) overlayTimer = setTimeout(() => { overlayTimer = null; if (count > 0) overlay()?.classList.remove('hidden'); }, OVERLAY_DELAY);
   }
 
   function done() {
     count = Math.max(0, count - 1);
     if (count > 0) return;
-    clearTimeout(overlayTimer);
+    clearTimeout(overlayTimer); overlayTimer = null;
+    clearFill();
     overlay()?.classList.add('hidden');
     const f = fill();
     if (f) f.style.width = '100%';
-
-    const elapsed = Date.now() - startTime;
-    const delay = Math.max(0, MIN_DISPLAY_TIME - elapsed);
 
     hideTimer = setTimeout(() => {
       const b = bar(), f2 = fill();
       if (b) b.classList.remove('active');
       setTimeout(() => { if (f2) f2.style.width = '0%'; }, 160);
-    }, 260 + delay);
+    }, 200);
   }
 
   return { start, done };
