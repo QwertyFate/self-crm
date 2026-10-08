@@ -339,51 +339,79 @@
   </div>
 </section>
 
-<!-- ══ 7 · the working day: tasks, the calendar that carries them, the team chat ═ -->
+<!-- ══ 7 · how it works: one task in four steps, each explained, the product showing it ═ -->
 <section id="work" class="lp-sec">
   <div class="lp-head lp-reveal">
-    <h2 data-i18n="lp_s7_t">Aufgaben. Kalender. Chat.</h2>
-    <p class="lp-sub" data-i18n="lp_s7_d">Ein Termin an der Aufgabe steht im Kalender. Das Team redet live.</p>
+    <h2 data-i18n="lp_s7_t">Eine Aufgabe, vier Schritte.</h2>
+    <p class="lp-sub" data-i18n="lp_s7_d">Anlegen, in der Liste, im Kalender, erledigt. So arbeitet das Team.</p>
   </div>
-  <div class="lp-stage lp-reveal">
-    <div class="lp-frame lp-tilt lp-work" id="lp-work">
-      <div class="lp-wk-left">
-        <div class="lp-wk-pane">
-          <p class="lp-wk-title"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg><span data-i18n="lp_wk_tasks">Aufgaben</span><span class="lp-wk-count" id="lp-wk-count"></span></p>
-          <div class="lp-task-head"><span class="lp-task-progress" id="lp-wk-progress"></span><span class="lp-task-bar"><i id="lp-wk-bar"></i></span></div>
-          <ul class="lp-task-list" id="lp-wk-tasks">
-            <li class="lp-task" data-task="1"><label><input type="checkbox"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_w1">Exposé senden</span></label><small class="is-today" data-i18n="lp_w1_due">Mi, 14:00</small><i class="lp-av lp-av-xs">M</i></li>
-            <li class="lp-task" data-task="2"><label><input type="checkbox"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_w2">Rückruf Weber</span></label><small data-i18n="lp_w2_due">Do, 11:00</small><i class="lp-av lp-av-xs lp-av-t">T</i></li>
-            <li class="lp-task is-done" data-task="3"><label><input type="checkbox" checked><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_w3">Energieausweis anfordern</span></label><small data-i18n="lp_w3_due">Di, 11:00</small><i class="lp-av lp-av-xs">M</i></li>
-          </ul>
-          <form class="lp-wk-add" id="lp-wk-add"><input type="text" id="lp-wk-input" autocomplete="off" data-i18n-ph="lp_wk_task_ph" placeholder="Neue Aufgabe"><button type="submit" class="lp-pill lp-pill-sm" data-i18n="lp_wk_add">Hinzufügen</button></form>
+  <div class="lp-stage lp-reveal lp-how" id="lp-how">
+    <ol class="lp-how-steps" role="tablist" aria-orientation="vertical">
+      <li class="lp-how-step is-on" role="tab" id="lp-how-t1" aria-controls="lp-how-s1" aria-selected="true" tabindex="0"><span class="lp-how-n" aria-hidden="true">1</span><h3 data-i18n="lp_how1">Aufgabe anlegen</h3><p data-i18n="lp_how1_d">Am Deal oder auf der Aufgabenseite: Titel, Datum, Uhrzeit und wer es macht.</p><i class="lp-how-bar" aria-hidden="true"></i></li>
+      <li class="lp-how-step" role="tab" id="lp-how-t2" aria-controls="lp-how-s2" aria-selected="false" tabindex="-1"><span class="lp-how-n" aria-hidden="true">2</span><h3 data-i18n="lp_how2">In der Liste</h3><p data-i18n="lp_how2_d">Alle Aufgaben des Teams, nach Projekt gruppiert. Überfälliges steht rot.</p><i class="lp-how-bar" aria-hidden="true"></i></li>
+      <li class="lp-how-step" role="tab" id="lp-how-t3" aria-controls="lp-how-s3" aria-selected="false" tabindex="-1"><span class="lp-how-n" aria-hidden="true">3</span><h3 data-i18n="lp_how3">Im Kalender</h3><p data-i18n="lp_how3_d">Mit Uhrzeit steht sie im Wochenplan des Teams. Jeder in seiner Zeitzone.</p><i class="lp-how-bar" aria-hidden="true"></i></li>
+      <li class="lp-how-step" role="tab" id="lp-how-t4" aria-controls="lp-how-s4" aria-selected="false" tabindex="-1"><span class="lp-how-n" aria-hidden="true">4</span><h3 data-i18n="lp_how4">Abhaken</h3><p data-i18n="lp_how4_d">Ein Haken in der Liste, im Kalender oder am Deal. Überall erledigt.</p><i class="lp-how-bar" aria-hidden="true"></i></li>
+    </ol>
+    <div class="lp-frame lp-tilt lp-how-frame" id="lp-how-frame">
+      <!-- 1 · the form, as the app opens it: title, date, time, owner, deal, priority -->
+      <div class="lp-shot lp-shot-form" id="lp-how-s1" role="tabpanel" aria-labelledby="lp-how-t1">
+        <div class="lp-frame-bar"><b data-i18n="lp_tab_tasks">Aufgaben</b><span class="lp-crumb" data-i18n="lp_how_new">Neue Aufgabe</span></div>
+        <div class="lp-fm">
+          <div class="lp-fm-row lp-fm-wide"><span class="lp-fm-l" data-i18n="lp_how_f_title">Titel</span><span class="lp-fm-v lp-fm-title" data-i18n="lp_w1">Exposé senden</span></div>
+          <div class="lp-fm-row"><span class="lp-fm-l" data-i18n="lp_how_due">Fällig</span><span class="lp-fm-v"><svg class="lp-ic"><use href="#lp-i-calendar"/></svg><span data-i18n="lp_how_f_date">Mi, 7. Okt</span></span></div>
+          <div class="lp-fm-row"><span class="lp-fm-l" data-i18n="lp_how_f_time">Uhrzeit</span><span class="lp-fm-v lp-how-mark">14:00</span></div>
+          <div class="lp-fm-row"><span class="lp-fm-l" data-i18n="lp_kpi_owner">Zuständig</span><span class="lp-fm-v"><i class="lp-avatar">MK</i><span>Mara Kühn</span></span></div>
+          <div class="lp-fm-row"><span class="lp-fm-l" data-i18n="lp_how_f_deal">Deal</span><span class="lp-fm-v"><span data-i18n="lp_deal_name">Elbstraße 12, 3 Zimmer</span></span></div>
+          <div class="lp-fm-row"><span class="lp-fm-l" data-i18n="lp_how_prio">Priorität</span><span class="lp-fm-v"><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span></span></div>
         </div>
-        <div class="lp-wk-pane">
-          <p class="lp-wk-title"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-calendar"/></svg><span data-i18n="lp_wk_cal">Kalender</span></p>
-          <div class="lp-cal" id="lp-wk-cal">
-            <div class="lp-cal-day" data-day="1"><b data-i18n="lp_wd1">Mo</b><i>5</i><div class="lp-cal-items"></div></div>
-            <div class="lp-cal-day" data-day="2"><b data-i18n="lp_wd2">Di</b><i>6</i><div class="lp-cal-items"><span class="lp-cal-chip is-done" data-task="3"><time>11:00</time><span data-i18n="lp_w3">Energieausweis anfordern</span></span></div></div>
-            <div class="lp-cal-day is-today" data-day="3"><b data-i18n="lp_wd3">Mi</b><i>7</i><div class="lp-cal-items"><span class="lp-cal-chip" data-task="1"><time>14:00</time><span data-i18n="lp_w1">Exposé senden</span></span></div></div>
-            <div class="lp-cal-day" data-day="4"><b data-i18n="lp_wd4">Do</b><i>8</i><div class="lp-cal-items"><span class="lp-cal-chip lp-cal-ev"><time>09:30</time><span data-i18n="lp_ev1">Besichtigung</span></span><span class="lp-cal-chip" data-task="2"><time>11:00</time><span data-i18n="lp_w2">Rückruf Weber</span></span></div></div>
-            <div class="lp-cal-day" data-day="5"><b data-i18n="lp_wd5">Fr</b><i>9</i><div class="lp-cal-items"></div></div>
-            <div class="lp-cal-day" data-day="6"><b data-i18n="lp_wd6">Sa</b><i>10</i><div class="lp-cal-items"></div></div>
-            <div class="lp-cal-day" data-day="7"><b data-i18n="lp_wd7">So</b><i>11</i><div class="lp-cal-items"></div></div>
+        <div class="lp-frame-foot"><span class="lp-hint" data-i18n="lp_how_f_hint">Mit Uhrzeit steht sie im Kalender.</span><span class="lp-fm-actions"><span class="lp-btn lp-btn-sm" data-i18n="lp_how_cancel">Abbrechen</span><button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lp-how-create" data-i18n="lp_how1">Aufgabe anlegen</button></span></div>
+      </div>
+      <!-- 2 · the list: All tasks / My tasks, grouped by project, the new row marked, one overdue in red -->
+      <div class="lp-shot lp-shot-list hidden" id="lp-how-s2" role="tabpanel" aria-labelledby="lp-how-t2">
+        <div class="lp-frame-bar"><b data-i18n="lp_tab_tasks">Aufgaben</b><div class="lp-seg" id="lp-how-scope"><button type="button" class="lp-how-scope" data-scope="all" aria-pressed="true" data-i18n="lp_how_all">Alle Aufgaben</button><button type="button" class="lp-how-scope" data-scope="mine" aria-pressed="false" data-i18n="lp_how_mine">Meine Aufgaben</button></div></div>
+        <div class="lp-list" id="lp-how-list">
+          <div class="lp-list-head"><span data-i18n="lp_how_task">Aufgabe</span><span data-i18n="lp_how_prio">Priorität</span><span data-i18n="lp_how_due">Fällig</span><span data-i18n="lp_kpi_owner">Zuständig</span></div>
+          <p class="lp-list-group"><i></i><span data-i18n="lp_board_pipeline">Vertrieb</span><span class="lp-count">4</span></p>
+          <ul class="lp-task-list">
+            <li class="lp-task lp-how-mark" data-owner="mk"><label><input type="checkbox" id="lp-how-tick"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_w1">Exposé senden</span></label><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span><small data-i18n="lp_w1_due">Mi, 14:00</small><i class="lp-avatar">MK</i></li>
+            <li class="lp-task" data-owner="tb"><label><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task1">Finanzierungsbestätigung anfordern</span></label><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span><small data-i18n="lp_task1_due">Fr, 10:00</small><i class="lp-avatar">TB</i></li>
+            <li class="lp-task" data-owner="mk"><label><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task3">Notartermin abstimmen</span></label><span class="lp-badge lp-badge-u2" data-i18n="lp_prio_medium">Mittel</span><small data-i18n="lp_task3_due">Di, 14:30</small><i class="lp-avatar">MK</i></li>
+            <li class="lp-task" data-owner="nf"><label><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_how_t4">Besichtigung bestätigen</span></label><span class="lp-badge lp-badge-u2" data-i18n="lp_prio_medium">Mittel</span><small class="is-late" data-i18n="lp_how_t4_due">Mo, 09:00</small><i class="lp-avatar">NF</i></li>
+          </ul>
+        </div>
+        <div class="lp-frame-foot"><span class="lp-hint" data-i18n="lp_how_foot">4 offen, 1 überfällig</span></div>
+      </div>
+      <!-- 3 · the week, as the calendar draws it: hours down, days across, the task on its day at its time -->
+      <div class="lp-shot lp-shot-week hidden" id="lp-how-s3" role="tabpanel" aria-labelledby="lp-how-t3">
+        <div class="lp-frame-bar"><b data-i18n="lp_how_cal">Kalender</b><span class="lp-crumb" data-i18n="lp_how_range">5. bis 11. Okt</span><div class="lp-seg"><span data-i18n="lp_how_month">Monat</span><span class="is-on" data-i18n="lp_how_week">Woche</span></div></div>
+        <div class="lp-week">
+          <div class="lp-week-head"><span></span><span data-i18n="lp_wd1">Mo</span><span data-i18n="lp_wd2">Di</span><span class="is-today" data-i18n="lp_wd3">Mi</span><span data-i18n="lp_wd4">Do</span><span data-i18n="lp_wd5">Fr</span><span data-i18n="lp_wd6">Sa</span><span data-i18n="lp_wd7">So</span></div>
+          <div class="lp-week-days"><span></span><b>5</b><b>6</b><b class="is-today">7</b><b>8</b><b>9</b><b>10</b><b>11</b></div>
+          <div class="lp-week-body">
+            <div class="lp-week-rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="lp-week-gutter"><span>09:00</span><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span><span>15:00</span><span>16:00</span></div>
+            <div class="lp-week-col"><div class="lp-week-ev is-ev at-10"><b>10:00</b><span data-i18n="lp_how_e1">Besichtigung Hafenstraße</span></div></div>
+            <div class="lp-week-col"><div class="lp-week-ev at-1430"><b>14:30</b><span data-i18n="lp_task3">Notartermin abstimmen</span></div></div>
+            <div class="lp-week-col is-today"><i class="lp-week-now" aria-hidden="true"></i><div class="lp-week-ev at-14 lp-how-mark"><b>14:00</b><span data-i18n="lp_w1">Exposé senden</span></div></div>
+            <div class="lp-week-col"><div class="lp-week-ev is-ev at-11"><b>11:00</b><span data-i18n="lp_how_e2">Übergabe Kanalweg</span></div></div>
+            <div class="lp-week-col"><div class="lp-week-ev at-10"><b>10:00</b><span data-i18n="lp_task1">Finanzierungsbestätigung anfordern</span></div></div>
+            <div class="lp-week-col"></div>
+            <div class="lp-week-col"></div>
           </div>
         </div>
       </div>
-      <div class="lp-chat" id="lp-wk-chat">
-        <div class="lp-chat-head">
-          <p class="lp-wk-title"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-message"/></svg><span data-i18n="lp_wk_team">Team</span></p>
-          <p class="lp-online" id="lp-wk-online"><i class="lp-av">M</i><i class="lp-av lp-av-t">T</i><i class="lp-av lp-av-n">N</i><span class="lp-online-dot"></span><span data-i18n="lp_wk_online">3 online</span></p>
+      <!-- 4 · done: the same task struck in the list, on the calendar and on the deal; the toast with its undo -->
+      <div class="lp-shot lp-shot-done hidden" id="lp-how-s4" role="tabpanel" aria-labelledby="lp-how-t4">
+        <div class="lp-frame-bar"><b data-i18n="lp_tab_tasks">Aufgaben</b></div>
+        <div class="lp-done">
+          <div class="lp-done-cell"><span class="lp-label" data-i18n="lp_how_p_list">Liste</span><div class="lp-task is-done lp-how-mark"><label><span class="lp-check is-on"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_w1">Exposé senden</span></label><small data-i18n="lp_w1_due">Mi, 14:00</small><i class="lp-avatar">MK</i></div></div>
+          <div class="lp-done-cell"><span class="lp-label" data-i18n="lp_how_cal">Kalender</span><div class="lp-week-ev is-done"><b>14:00</b><span data-i18n="lp_w1">Exposé senden</span></div></div>
+          <div class="lp-done-cell"><span class="lp-label" data-i18n="lp_how_f_deal">Deal</span><div class="lp-done-deal"><b data-i18n="lp_deal_name">Elbstraße 12, 3 Zimmer</b><div class="lp-task-head"><span class="lp-task-progress" id="lp-how-progress"></span><span class="lp-task-bar"><i></i></span></div></div></div>
         </div>
-        <ul class="lp-msgs" id="lp-wk-msgs">
-          <li class="lp-msg"><i class="lp-av">M</i><div><p class="lp-msg-meta"><b>Mara Kühn</b><time>09:12</time></p><p class="lp-msg-text" data-i18n="lp_msg1">Elbstraße 12 ist in Verhandlung.</p></div></li>
-          <li class="lp-msg"><i class="lp-av lp-av-t">T</i><div><p class="lp-msg-meta"><b>Tim Berger</b><time>09:14</time></p><p class="lp-msg-text" data-i18n="lp_msg2">Besichtigung am Donnerstag, 09:30.</p></div></li>
-        </ul>
-        <p class="lp-typing hidden" id="lp-wk-typing" aria-live="polite"><i></i><i></i><i></i><span id="lp-wk-typing-text"></span></p>
-        <form class="lp-chat-add" id="lp-wk-send"><input type="text" id="lp-wk-msg" autocomplete="off" data-i18n-ph="lp_wk_msg_ph" placeholder="Nachricht an das Team"><button type="submit" class="lp-chat-btn" data-i18n-aria="lp_wk_send" aria-label="Senden"><svg class="lp-ic"><use href="#lp-i-arrow"/></svg></button></form>
+        <div class="lp-toast lp-how-toast"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg><span class="lp-toast-text" data-i18n="lp_how_done">Aufgabe erledigt</span><button type="button" class="lp-toast-undo" id="lp-how-undo" data-i18n="lp_toast_undo">Rückgängig</button></div>
       </div>
     </div>
+    <p class="lp-cap lp-how-cap" data-i18n="lp_s7_cap">Kein Termin geht mehr unter. Das ganze Team sieht, was ansteht.</p>
   </div>
 </section>
 

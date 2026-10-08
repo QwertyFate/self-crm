@@ -295,7 +295,7 @@ describe('the superseded modal code is removed, the kept code uses the new primi
     for (const fn of ['openTaskModal', 'saveTask', 'deleteTaskFromModal', 'renderTaskLinks', 'toggleTaskLinkPicker', 'renderSubtasksList', 'loadTaskAttachments', 'uploadAttachments', 'openLinkedTaskObject', 'openTaskModalForContact']) assert.equal(count(tasks, `function ${fn}(`), 0, fn);
     assert.equal(count(tasks, 'currentTaskId'), 0); assert.equal(count(tasks, 'task-drop-zone'), 0);
     assert.equal(count(auth, 'taskLinkOptionsCache'), 0);
-    assert.match(sliceFn(tasks, 'deleteTask', 'tasks.js'), /ui\.confirm\(/);
+    assert.match(sliceFn(tasks, 'deleteTasks', 'tasks.js'), /ui\.confirm\(/);   // Part 40: deleteTask delegates to the plural
   });
   test('objects.js: the listing detail is a ui.modal with kv details, person/deal lists and link menus; the search dropdowns are gone', () => {
     const o = sliceFn(objects, 'openObjectDetail', 'objects.js');

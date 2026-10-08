@@ -207,7 +207,9 @@ async function openDealForm(opts = {}) {
    ══════════════════════════════════════════════════════════════════════════ */
 let dvDeal = null;   // the open deal detail instance (one at a time)
 
-async function openDealDetail(id) {
+// opts.onClose: fired when the pop window closes by any path (button, scrim, Escape, close()) — the
+// Activities page uses it to reload its feed, since entries can be logged or deleted in here.
+async function openDealDetail(id, opts = {}) {
   if (dvDeal) dvDeal.close();
   await Promise.all([ensureMembers(), pipelines.length ? null : api.get('/api/pipelines').then(r => { pipelines = r; }), dealFields.length ? null : api.get('/api/deal-fields').then(r => { dealFields = r; })]);
   const [d, allContacts, allSuppliers, allTasks, objs] = await Promise.all([api.get(`/api/deals/${id}`), dvContacts('contact'), dvContacts('supplier'), dvAllTasks(), api.get('/api/objects')]);
@@ -411,7 +413,7 @@ async function openDealDetail(id) {
   /* ----- rendering ----- */
   const m = ui.modal({ title: 'Deal', size: 'xl', body: `<div class="dd" id="dd-root"><div id="dd-top"></div><section class="card dd-head" id="dd-head" aria-label="Deal summary"></section>
       <div class="split split-2-1"><section class="card dd-main" id="dd-main"></section><div class="dd-side" id="dd-side"></div></div></div>`,
-    onClose: () => { if (dvDeal === inst) dvDeal = null; } });
+    onClose: () => { if (dvDeal === inst) dvDeal = null; opts.onClose && opts.onClose(); } });
   m.el.querySelector('.modal').classList.add('dd-modal');
   const root = m.el.querySelector('#dd-root'), R = sel => root.querySelector(sel);
   function keep(fn) {
@@ -678,7 +680,8 @@ async function openContactDetail(id, opts = {}) {
     host = document.getElementById('side-panel-body'); host.innerHTML = ''; host.scrollTop = 0;
     document.getElementById('contact-side-panel').classList.remove('hidden');
   } else {
-    modal = ui.modal({ title: sup ? dvSupplierWord() : 'Contact', size: 'xl', body: '<div></div>' });
+    // opts.onClose fires for the pop-window host only; the side panel (Contacts/Suppliers page) has no caller that needs it
+    modal = ui.modal({ title: sup ? dvSupplierWord() : 'Contact', size: 'xl', body: '<div></div>', onClose: opts.onClose });
     modal.el.querySelector('.modal').classList.add('ct-modal'); host = modal.body;
   }
   if (host._ctOff) host._ctOff.forEach(f => f()); const offs = []; host._ctOff = offs;
@@ -786,7 +789,7 @@ const dvListOpts = (pid, cur) => { const p = taskProjects.find(x => x.id === Num
 async function openTaskForm(opts = {}) {
   await ensureMembers(); const { dealList, contactList } = await dvTaskLists();
   const fid = 'tkf-' + uid();
-  const init = { project_id: opts.projectId !== undefined ? opts.projectId : (currentProjectId || taskProjects[0]?.id || ''), list_id: opts.listId !== undefined ? opts.listId : (currentListId || ''), status: dvFirstKey(), priority: 'medium', assigned_to: currentUser?.id || '', deal_id: opts.dealId || '', contact_id: opts.contactId || '', due_date: '', due_time: '' };
+  const init = { project_id: opts.projectId !== undefined ? opts.projectId : (currentProjectId || taskProjects[0]?.id || ''), list_id: opts.listId !== undefined ? opts.listId : (currentListId || ''), status: opts.status || dvFirstKey(), priority: 'medium', assigned_to: currentUser?.id || '', deal_id: opts.dealId || '', contact_id: opts.contactId || '', due_date: '', due_time: '' };
   if (!init.list_id && init.project_id) init.list_id = (taskProjects.find(p => p.id === Number(init.project_id))?.lists || [])[0]?.id || '';
   if (init.deal_id && !init.contact_id) { const d = dealList.find(x => x.id === Number(init.deal_id)); if (d?.contact_id) init.contact_id = d.contact_id; }
   const cf = f => { const id = `${fid}-cf-${f.field_key}`; const typeMap = { text: 'text', email: 'email', phone: 'tel', number: 'number', date: 'date', url: 'url' };
@@ -827,7 +830,8 @@ async function openTaskForm(opts = {}) {
       custom_data: Object.fromEntries([...f.querySelectorAll('[data-cf]')].map(el => [el.dataset.cf, el.value])) };
     const res = await api.post('/api/tasks', payload); if (res?.error) return ui.toast(res.error);
     m.close();
-    if (currentListId && typeof renderTasksCurrent === 'function') { tasks = await api.get(`/api/tasks?list_id=${currentListId}`); dvRefreshTasks(); }
+    // the Tasks page holds every task of the workspace now (Part 40): reload it all, then re-render
+    if (typeof reloadTasksData === 'function' && document.getElementById('page-tasks')?.classList.contains('active')) { await reloadTasksData(); dvRefreshTasks(); }
     opts.onSave && opts.onSave(res);
     ui.toast('Task created', { action: { label: 'View', onClick: () => openTaskDrawer(res.id) } });
   });
@@ -869,7 +873,8 @@ async function openTaskDrawer(id, opts = {}) {
     onClose: () => { if (dvDrawer === dr) dvDrawer = null; } });
   dvDrawer = dr; dr.el.querySelector('.drawer').classList.add('tk-drawer');
   const q = sel => dr.el.querySelector(sel);
-  const syncRow = () => { const row = tasks.find(y => y.id === id); if (row) Object.assign(row, { title: x.title, status: x.status, priority: x.priority, assigned_to: x.assigned_to, assigned_to_name: members.find(mm => mm.id === x.assigned_to)?.name || null, due_date: x.due_date, due_time: x.due_time, due_tz: x.due_tz, description: x.description }); dvRefreshTasks(); opts.onChange && opts.onChange(x); };
+  // The Tasks page groups by project / list and shows the links, so a move or relink in here must land in its row too (Part 40).
+  const syncRow = () => { const row = tasks.find(y => y.id === id); if (row) Object.assign(row, { title: x.title, status: x.status, priority: x.priority, assigned_to: x.assigned_to, assigned_to_name: members.find(mm => mm.id === x.assigned_to)?.name || null, due_date: x.due_date, due_time: x.due_time, due_tz: x.due_tz, description: x.description, project_id: x.project_id, list_id: x.list_id, deal_id: x.deal_id || null, deal_title: x.deal_title || null, contact_id: x.contact_id || null, contact_name: x.contact_name || null }); dvRefreshTasks(); opts.onChange && opts.onChange(x); };
   const payload = () => ({ title: x.title, description: x.description, status: x.status, priority: x.priority, assigned_to: x.assigned_to || null, due_date: x.due_date ? dvIso(x.due_date) : null, due_time: x.due_time || null, project_id: x.project_id || null, list_id: x.list_id || null, deal_id: x.deal_id || null, contact_id: x.contact_id || null, custom_data: x.custom_data || {} });
   async function save(patch, msg) { const prev = {}; Object.keys(patch).forEach(k => prev[k] = x[k]); Object.assign(x, patch); const res = await api.put(`/api/tasks/${id}`, payload()); if (res?.error) { Object.assign(x, prev); return ui.toast(res.error); } syncRow(); if (msg) ui.toast(msg, { ms: 1800 }); }
   const titleEl = q(`#${fid}-t`), titleErr = q(`#${fid}-te`);
@@ -917,7 +922,8 @@ async function openTaskDrawer(id, opts = {}) {
       <div class="row" style="margin-top:8px"><input class="input input-sm" id="${fid}-sin" placeholder="Add a subtask" aria-label="New subtask" autocomplete="off"><button class="btn btn-secondary btn-sm" data-subadd>Add</button></div>`;
     if (focus) { const el = focus === 'add' ? q(`#${fid}-sin`) : subHost.querySelector(`[data-sub="${focus}"]`); el && el.focus(); }
   }
-  const reloadSubs = async () => { const fresh = await api.get(`/api/tasks/${id}`); if (fresh && !fresh.error) x.subtasks = fresh.subtasks || []; const row = tasks.find(y => y.id === id); if (row) { row.subtask_count = (x.subtasks || []).length; row.subtask_done = (x.subtasks || []).filter(s => s.status === dvDoneKey()).length; } dvRefreshTasks(); };
+  // The page's expandable subtask rows come from the shared `tasks` global, so the fresh subtasks replace the parent's there as well (Part 40).
+  const reloadSubs = async () => { const fresh = await api.get(`/api/tasks/${id}`); if (fresh && !fresh.error) x.subtasks = fresh.subtasks || []; const row = tasks.find(y => y.id === id); if (row) { row.subtask_count = (x.subtasks || []).length; row.subtask_done = (x.subtasks || []).filter(s => s.status === dvDoneKey()).length; } tasks = tasks.filter(y => y.parent_id !== id).concat((x.subtasks || []).map(s => ({ ...s, parent_id: id }))); dvRefreshTasks(); };
   const addSub = async () => { const inp = q(`#${fid}-sin`), v = inp.value.trim(); if (!v) { inp.focus(); return; } const res = await api.post('/api/tasks', { title: v, parent_id: id, project_id: x.project_id || null, list_id: x.list_id || null, status: dvFirstKey(), priority: 'medium' }); if (res?.error) return ui.toast(res.error); await reloadSubs(); paintSubs('add'); };
   on(dr.el, 'click', '[data-subadd]', addSub);
   dr.el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === `${fid}-sin`) { e.preventDefault(); addSub(); } });

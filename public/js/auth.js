@@ -557,7 +557,7 @@ function resetClientState() {
   pipelines = []; deals = []; dealFields = []; dealColumns = []; currentPipelineId = null; dragDealId = null;
   kanbanFields = ['company', 'email']; dealKanbanFields = ['contact', 'value']; contactColumns = []; colWidths = {};
   objects = []; objectFields = []; objectColumns = []; objCurrentPage = 1;
-  tasks = []; taskProjects = []; currentProjectId = null; currentListId = null; currentProject = null; taskFields = []; collapsedTasks = new Set();
+  tasks = []; taskProjects = []; currentProjectId = null; currentListId = null; currentProject = null; taskFields = []; collapsedTasks = new Set(); resetTasksUI(); resetActivitiesUI();   // the Tasks and Activities pages clear their own scope, filters and drafts (tasks.js, objects.js)
   analyticsData = null; trendRawData = null; calEvents = [];
   intgData = null; engineData = null; activeGuideId = null; activeCustomKeys = [];
   currentSettingsTab = 'workspace'; currentIntgTab = 'webhook';
@@ -567,6 +567,7 @@ function resetClientState() {
   const notifList = document.getElementById('notif-list'); if (notifList) notifList.innerHTML = '';
   document.getElementById('notif-panel')?.classList.add('hidden');
   localStorage.removeItem('lastTaskListId');
+  localStorage.removeItem('taskScope');
   Object.keys(localStorage).filter(k => k.startsWith('proj-collapsed-')).forEach(k => localStorage.removeItem(k));
 }
 async function ensureFields()   { if (!fields.length)   fields   = await api.get('/api/fields'); }

@@ -248,7 +248,7 @@ public/
       objects.js       Listings ("objects"), the Miro board page, AND the Activities page
       settings.js      Settings tabs: pipelines, custom fields, columns, invites, members
       modals.js        The small shared modals (contact, activity) + closeSidePanel()
-      tasks.js         Tasks page: projects, lists, list/kanban views, due-date helpers
+      tasks.js         Tasks page: All / My tasks + project / list scopes, summary, chips, grouped table or board, due-date helpers
       notifications.js Bell panel, polling, preferences
       calendar.js      Calendar page: month/week/upcoming over /api/calendar
       clock.js         Top-bar clock + the timezone preference, and nowInTimezone():

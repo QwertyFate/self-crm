@@ -25,11 +25,15 @@
       getMiroBoardUrl() converts a normal Miro link into an embed link.
       updateBoardNavVisibility() hides the nav item when no URL is set.
 
-   3. ACTIVITIES  — the feed of everything logged against any contact.
-      loadActivities → GET /api/activities (newest 200) → renderActivitiesFeed.
-      Filters live in activitiesUI (search, type, person) and are applied by
-      visibleActivities(). Creating one is modals.js (openActivityModal); the
-      timelines inside the deal and contact views are detail-views.js.
+   3. ACTIVITIES  — the feed of everything logged against any contact, ported
+      in full from reference/pro (screen: activities.js).
+      loadActivities → GET /api/deals + GET /api/activities (newest 200) →
+      renderActivities (sub line, toolbar, compose card, feed, rail).
+      Filters live in activitiesUI (search, type, person, deal, period) and are
+      applied by visibleActivities(). Logging one is the inline compose card
+      (submitActivityCompose → POST /api/activities); the Calendar still logs
+      through modals.js (openActivityModal). The timelines inside the deal and
+      contact views are detail-views.js.
 
    FUNCTION MAP
      listings     loadObjects, renderObjectsCurrent, renderObjectsTable,
@@ -47,11 +51,20 @@
      suppliers    updateSuppliersNav, saveSupplierName
      board        updateBoardNavVisibility, loadBoard, getMiroBoardUrl,
                   reloadMiroIframe, saveMiroUrl
-     activities   loadActivities, visibleActivities, renderActivities,
-                  renderActivitiesToolbar, renderActivitiesFeed,
-                  activitiesChip, openActivitiesChip, onActivitiesSearch,
-                  clearActivitiesFilters, openActivityKebab, deleteActivity,
-                  exportActivitiesCsv, openActivitiesMoreMenu
+     activities   resetActivitiesUI, activityDealOptions, actLocale, actStartOfDay, actDayDiff, actDayLabel, actAgo,
+                  actTime, actPlural, actContactOf, activityDetailOpts,
+                  openActivityDeal, openActivityContact,
+                  loadActivities, visibleActivities,
+                  activitiesAnyFilter, renderActivities,
+                  renderActivitiesToolbar, activitiesChip, openActivitiesChip,
+                  onActivitiesSearch, clearActivitiesFilters,
+                  renderActivityCompose, setActivityComposeType,
+                  activityComposeClearError, onActivityComposeInput,
+                  onActivityComposeDeal, onActivityComposeContact,
+                  onActivityComposeKey, focusActivityCompose,
+                  submitActivityCompose, renderActivitiesFeed,
+                  renderActivitiesRail, toggleActivitiesStat,
+                  openActivityKebab, deleteActivity, exportActivitiesCsv
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function updateSuppliersNav() {
@@ -521,31 +534,92 @@ async function saveMiroUrl() {
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
-// Toolbar/feed state for the Activities page: search, type, and who logged it.
-let activitiesUI = { q: '', type: null, by: null, deal: null };
+/* ───────────────────────────────────────────────────────────────────────────
+   ACTIVITIES — ported in full from reference/pro/crm-pro.html (screen:
+   activities.js): toolbar (search + Type / Person / Deal / Period chips), an
+   inline compose card, the feed grouped by day, a rail that breaks the visible
+   entries down by type, by person and by deal, a kebab per row, CSV export.
+
+   The four types are the activities table's CHECK constraint set. The
+   reference's fifth type (meeting) is not in it and is left out on purpose —
+   the table is not changed. The reference's delete-undo re-inserts the row
+   into its in-memory store; the API cannot restore a deleted row (new id,
+   new timestamp, comments gone), so delete here confirms and has no undo.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+// Toolbar/feed state for the Activities page: search, type, who logged it, deal, period.
+let activitiesUI = { q: '', type: null, by: null, deal: null, period: 'all' };
 let activityDeals = [];   // deals that have notes, captured from an unfiltered load — the Deal chip's options
+let activityDealList = [];   // every deal of the workspace (GET /api/deals): the compose card's Deal picker, and stage + value for the rail
+// Every contact of the workspace, BOTH types (GET /api/contacts, no filter): the compose card's Contact
+// picker, the kebab's supplier label, the company in search. Not the shared `contacts` global — the
+// Contacts/Suppliers page loads that filtered to whichever type was last shown.
+let activityContactList = [];
+let activitiesLoadSeq = 0;   // the Deal chip refetches; only the most recent request may write `activities`
+// The compose card's draft lives here, not in the DOM, so re-rendering the card (a filter click, the
+// reload after saving) never loses what was typed.
+let activityCompose = { type: 'note', text: '', deal: '', contact: '', err: '' };
+// Logout (auth.js resetClientState) clears the page's filters, the unsent compose draft and the
+// cached deal / contact lists, so nothing of one workspace survives into the next login.
+function resetActivitiesUI() {
+  activitiesUI = { q: '', type: null, by: null, deal: null, period: 'all' };
+  activityDeals = []; activityDealList = []; activityContactList = [];
+  activityCompose = { type: 'note', text: '', deal: '', contact: '', err: '' };
+}
+const ACT_TYPES = ['note', 'call', 'email', 'whatsapp'];
+const ACT_PERIODS = ['all', 'today', '7d', '30d'];
+
+function actLocale() { return currentLang === 'de' ? 'de-DE' : 'en-GB'; }
+function actStartOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+function actDayDiff(a) { return Math.round((actStartOfDay(Date.now()) - actStartOfDay(a.created_at)) / 864e5); }
+function actDayLabel(n, ts) { return n === 0 ? t('today') : n === 1 ? t('yesterday') : new Date(ts).toLocaleDateString(actLocale(), { weekday: 'long', day: 'numeric', month: 'long' }); }
+function actAgo(ts) { const h = (Date.now() - new Date(ts).getTime()) / 36e5; return h < 1 ? t('ago_now') : h < 24 ? tf('ago_h', { n: Math.round(h) }) : h < 48 ? t('yesterday') : tf('ago_d', { n: Math.round(h / 24) }); }
+function actTime(ts) { return new Date(ts).toLocaleTimeString(actLocale(), { hour: '2-digit', minute: '2-digit' }); }
+function actPlural(n) { return n === 1 ? t('one_activity') : tf('n_activities', { n }); }
+function actContactOf(a) { return a.contact_id ? activityContactList.find(c => c.id === a.contact_id) || null : null; }
+// A detail opened from this page can log or delete entries. The reference re-renders on every store
+// change; here the feed reloads when the pop-up closes (while the page is still the one shown).
+function activityDetailOpts() { return { onClose: () => document.getElementById('page-activities')?.classList.contains('active') ? loadActivities() : undefined }; }
+function openActivityDeal(id) { openDealDetail(id, activityDetailOpts()); }
+function openActivityContact(id) { openContactDetail(id, activityDetailOpts()); }
 
 async function loadActivities() {
+  const seq = ++activitiesLoadSeq;
   await ensureMembers();
+  const [dealList, contactList] = await Promise.all([api.get('/api/deals'), api.get('/api/contacts')]);
+  if (seq !== activitiesLoadSeq) return;   // a newer load is under way; its answer is the one to show
+  activityDealList = Array.isArray(dealList) ? dealList : [];
+  activityContactList = Array.isArray(contactList) ? contactList : [];
   // The Deal filter is applied by the SERVER (?deal_id=): "bound to the deal, or a contact-level
-  // note on its contact" is one SQL rule, not a second copy here. Type, person and search stay local.
-  activities = await api.get(activitiesUI.deal ? `/api/activities?deal_id=${activitiesUI.deal}` : '/api/activities');
-  if (!Array.isArray(activities)) activities = [];
-  // Options are the deals that actually have notes BOUND to them (bound_deal_id) — not deal_id, which
-  // for an unbound note is the derived fallback and would be an option that matches nothing.
-  if (!activitiesUI.deal) activityDeals = [...new Map(activities.filter(a => a.bound_deal_id).map(a => [a.bound_deal_id, { id: a.bound_deal_id, title: a.deal_title || 'Deal' }])).values()];
+  // note on its contact" is one SQL rule, not a second copy here. Type, person, period and search stay local.
+  const rows = await api.get(activitiesUI.deal ? `/api/activities?deal_id=${activitiesUI.deal}` : '/api/activities');
+  if (seq !== activitiesLoadSeq) return;
+  activities = Array.isArray(rows) ? rows : [];
+  if (!activitiesUI.deal) activityDeals = activityDealOptions();
   renderActivities();
 }
+// The Deal chip's options: the deals that actually have notes BOUND to them (bound_deal_id) — not
+// deal_id, which for an unbound note is the derived fallback and would be an option matching nothing.
+function activityDealOptions() {
+  return [...new Map(activities.filter(a => a.bound_deal_id).map(a => [a.bound_deal_id, { id: a.bound_deal_id, title: a.deal_title || 'Deal' }])).values()];
+}
 
-function visibleActivities() {
+// skip: 'type' | 'by' — ignore that one filter, so the rail can count the options the user did not pick.
+function visibleActivities(skip) {
   const q = activitiesUI.q.trim().toLowerCase();
   return activities.filter(a => {
-    if (activitiesUI.type && a.type !== activitiesUI.type) return false;
-    if (activitiesUI.by != null && a.created_by !== activitiesUI.by) return false;
-    if (q && !`${dvActText(a.content)} ${a.contact_name || ''} ${a.deal_title || ''}`.toLowerCase().includes(q)) return false;   // search the visible text (not stored <br>/entities), the contact and the deal
+    if (skip !== 'type' && activitiesUI.type && a.type !== activitiesUI.type) return false;
+    if (skip !== 'by' && activitiesUI.by != null && a.created_by !== activitiesUI.by) return false;
+    if (activitiesUI.period && activitiesUI.period !== 'all') {
+      const n = actDayDiff(a);
+      if (activitiesUI.period === 'today' ? n !== 0 : activitiesUI.period === '7d' ? n > 6 : n > 29) return false;
+    }
+    // search the visible text (not stored <br>/entities), the type label, the contact and their company, the deal and the author
+    if (q && !`${dvActText(a.content)} ${t('act_' + a.type)} ${a.contact_name || ''} ${actContactOf(a)?.company || ''} ${a.deal_title || ''} ${a.logged_by_name || ''}`.toLowerCase().includes(q)) return false;
     return true;
   });
 }
+function activitiesAnyFilter() { return !!(activitiesUI.q.trim() || activitiesUI.type || activitiesUI.by != null || activitiesUI.deal != null || activitiesUI.period !== 'all'); }
 
 function renderActivities() {
   const sub = document.getElementById('activities-page-sub');
@@ -554,30 +628,36 @@ function renderActivities() {
     sub.textContent = tf('activities_logged', { n: activities.length, m: week });
   }
   renderActivitiesToolbar();
+  renderActivityCompose();
   renderActivitiesFeed();
 }
 
+/* ----- toolbar ----- */
 function renderActivitiesToolbar() {
   const el = document.getElementById('activities-toolbar');
   if (!el) return;
   const active = document.activeElement && document.activeElement.id === 'activities-q';
-  const types = [...new Set(activities.map(a => a.type))];
-  const any = activitiesUI.q || activitiesUI.type || activitiesUI.by != null || activitiesUI.deal != null;
   el.innerHTML = `<div class="input-group" style="width:260px">${icon('search')}<input class="input" id="activities-q" type="search" placeholder="${esc(t('search_activities'))}" value="${esc(activitiesUI.q)}" aria-label="${esc(t('search_activities'))}" oninput="onActivitiesSearch(this.value)"></div>
-    ${activitiesChip('type', types)}${activitiesChip('by', members)}${activitiesChip('deal', activityDeals)}
-    ${any ? `<button class="btn btn-ghost btn-sm" type="button" onclick="clearActivitiesFilters()">${esc(t('clear_filters'))}</button>` : ''}`;
+    ${activitiesChip('type')}${activitiesChip('by')}${activitiesChip('deal')}${activitiesChip('period')}
+    ${activitiesAnyFilter() ? `<button class="btn btn-ghost btn-sm" type="button" onclick="clearActivitiesFilters()">${esc(t('clear_filters'))}</button>` : ''}`;
   if (active) { const q = document.getElementById('activities-q'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
 }
-function activitiesChip(key, opts) {
-  const v = activitiesUI[key], on = v != null && v !== '';
-  const txt = on ? (key === 'type' ? t('act_' + v) : key === 'deal' ? (activityDeals.find(d => d.id === v)?.title || '') : (members.find(m => m.id === v)?.name || '')) : '';
-  return `<button class="chip ${on ? 'on' : ''}" type="button" onclick="openActivitiesChip(this,'${key}')" aria-haspopup="menu">${esc(t('chip_' + (key === 'by' ? 'person' : key)))}${on ? ': ' + esc(txt) : ''}${icon('chevron-down', 'ic-sm')}</button>`;
+function activitiesChip(key) {
+  const v = activitiesUI[key], on = key === 'period' ? v !== 'all' : v != null && v !== '';
+  const txt = !on ? '' : key === 'type' ? t('act_' + v) : key === 'deal' ? (activityDeals.find(d => d.id === v)?.title || '') : key === 'period' ? t('period_' + v) : (members.find(m => m.id === v)?.name || '');
+  return `<button class="chip ${on ? 'on' : ''}" type="button" id="activities-chip-${key}" onclick="openActivitiesChip(this,'${key}')" aria-haspopup="menu">${esc(t('chip_' + (key === 'by' ? 'person' : key)))}${on ? ': ' + esc(txt) : ''}${icon('chevron-down', 'ic-sm')}</button>`;
 }
 function openActivitiesChip(anchor, key) {
-  const opts = key === 'type' ? [...new Set(activities.map(a => a.type))].map(v => ({ value: v, label: t('act_' + v) }))
+  const opts = key === 'type' ? ACT_TYPES.map(v => ({ value: v, label: t('act_' + v), icon: v }))
     : key === 'deal' ? activityDeals.map(d => ({ value: d.id, label: d.title }))
+    : key === 'period' ? ACT_PERIODS.map(p => ({ value: p, label: t('period_' + p) }))
     : members.map(m => ({ value: m.id, label: m.name }));
-  ui.select(anchor, [{ value: null, label: t('filter_all') }, ...opts], activitiesUI[key], v => { activitiesUI[key] = v; if (key === 'deal') loadActivities(); else renderActivities(); });
+  const all = key === 'period' ? [] : [{ value: null, label: t('filter_all') }];   // "All time" is one of the periods, so no extra "All"
+  ui.select(anchor, [...all, ...opts], activitiesUI[key], v => {
+    activitiesUI[key] = v;
+    if (key === 'deal') loadActivities(); else renderActivities();
+    document.getElementById('activities-chip-' + key)?.focus();
+  });
 }
 let activitiesSearchTimer = null;
 function onActivitiesSearch(value) {
@@ -585,43 +665,162 @@ function onActivitiesSearch(value) {
   clearTimeout(activitiesSearchTimer);
   activitiesSearchTimer = setTimeout(() => { renderActivitiesToolbar(); renderActivitiesFeed(); }, 120);
 }
-function clearActivitiesFilters() { const refetch = activitiesUI.deal != null; activitiesUI = { q: '', type: null, by: null, deal: null }; if (refetch) loadActivities(); else renderActivities(); }
+function clearActivitiesFilters() { const refetch = activitiesUI.deal != null; activitiesUI = { q: '', type: null, by: null, deal: null, period: 'all' }; if (refetch) loadActivities(); else renderActivities(); }
 
+/* ----- compose card ----- */
+function renderActivityCompose() {
+  const el = document.getElementById('activities-compose');
+  if (!el) return;
+  const C = activityCompose, L = actLocale();
+  const deals = [...activityDealList].sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), L));
+  const people = [...activityContactList].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), L));
+  // keep the caret where it was when the card is rebuilt under the user's hands
+  const ae = document.activeElement, focusId = ae && ae.id && el.contains(ae) ? ae.id : null;
+  const sel = focusId && typeof ae.selectionStart === 'number' ? [ae.selectionStart, ae.selectionEnd] : null;
+  el.innerHTML = `<form class="card ac-compose" id="ac-form" novalidate aria-label="${esc(t('act_compose_aria'))}" onsubmit="submitActivityCompose(event)"><div class="card-body">
+    <div class="seg" role="group" aria-label="${esc(t('lbl_type'))}" style="align-self:flex-start">${ACT_TYPES.map(x => `<button type="button" data-ctype="${x}" aria-pressed="${C.type === x}" onclick="setActivityComposeType('${x}')">${icon(x, 'ic-sm')}${esc(t('act_' + x))}</button>`).join('')}</div>
+    <div class="field"><label class="sr-only" for="ac-text">${esc(t('lbl_content'))}</label><textarea class="textarea" id="ac-text" rows="2" placeholder="${esc(t('act_ph_' + C.type))}" ${C.err && !C.text.trim() ? 'aria-invalid="true"' : ''} oninput="onActivityComposeInput(this)" onkeydown="onActivityComposeKey(event)">${esc(C.text)}</textarea></div>
+    <div class="ac-compose-row">
+      <div class="field"><label class="label" for="ac-deal">${esc(t('lbl_deal'))}</label><select class="select" id="ac-deal" onchange="onActivityComposeDeal(this)"><option value="">${esc(t('opt_no_deal'))}</option>${deals.map(d => `<option value="${d.id}" ${String(d.id) === C.deal ? 'selected' : ''}>${esc(d.title)}</option>`).join('')}</select></div>
+      <div class="field"><label class="label" for="ac-contact">${esc(t('lbl_contact'))}</label><select class="select" id="ac-contact" onchange="onActivityComposeContact(this)"><option value="">${esc(t('opt_no_contact'))}</option>${people.map(c => `<option value="${c.id}" ${String(c.id) === C.contact ? 'selected' : ''}>${esc(c.name)}${c.company ? ', ' + esc(c.company) : ''}</option>`).join('')}</select></div>
+      <button class="btn btn-primary" type="submit" id="ac-go">${esc(t('act_verb_' + C.type))}</button></div>
+    <div class="error-text" id="ac-err" role="alert">${esc(C.err)}</div></div></form>`;
+  if (focusId) { const n = document.getElementById(focusId); if (n) { n.focus(); if (sel && n.setSelectionRange) try { n.setSelectionRange(sel[0], sel[1]); } catch (e) { /* not a text control */ } } }
+}
+function setActivityComposeType(type) {
+  activityCompose.type = type; activityCompose.err = '';
+  renderActivityCompose();
+  document.querySelector(`#ac-form [data-ctype="${type}"]`)?.focus();
+}
+function activityComposeClearError() {
+  if (!activityCompose.err) return;
+  activityCompose.err = '';
+  document.getElementById('ac-text')?.removeAttribute('aria-invalid');
+  const e = document.getElementById('ac-err'); if (e) e.textContent = '';
+}
+function onActivityComposeInput(el) { activityCompose.text = el.value; activityComposeClearError(); }
+function onActivityComposeDeal(el) {
+  // Choosing a deal links its contact as well (the reference overwrites, so the pair stays consistent).
+  activityCompose.deal = el.value;
+  const d = activityDealList.find(x => x.id === +el.value);
+  if (d && d.contact_id) { activityCompose.contact = String(d.contact_id); const c = document.getElementById('ac-contact'); if (c) c.value = activityCompose.contact; }
+  activityComposeClearError();
+}
+function onActivityComposeContact(el) { activityCompose.contact = el.value; activityComposeClearError(); }
+function onActivityComposeKey(e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submitActivityCompose(); } }
+function focusActivityCompose() {
+  const ta = document.getElementById('ac-text'); if (!ta) return;
+  ta.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  ta.focus({ preventScroll: true });
+}
+async function submitActivityCompose(e) {
+  if (e) e.preventDefault();
+  const C = activityCompose, text = C.text.trim(), type = C.type;
+  C.err = !text ? t('act_err_text') : !C.deal && !C.contact ? t('act_err_link') : '';
+  if (C.err) { renderActivityCompose(); document.getElementById(!text ? 'ac-text' : 'ac-deal')?.focus(); return; }
+  const res = await api.post('/api/activities', {
+    contact_id: C.contact || null,
+    deal_id:    C.deal || null,
+    type,
+    content:    esc(text).replace(/\n/g, '<br>'),   // the same stored shape as the modal and the timeline editors
+  });
+  if (!res || res.error) { C.err = (res && res.error) || t('act_err_save'); renderActivityCompose(); return; }
+  C.text = ''; C.err = '';
+  await loadActivities();
+  document.getElementById('ac-text')?.focus();
+  ui.toast(tf('act_logged', { type: t('act_' + type) }), { action: { label: t('undo'), onClick: async () => { await api.del(`/api/activities/${res.id}`); loadActivities(); } } });
+}
+
+/* ----- feed ----- */
 function renderActivitiesFeed() {
   const el = document.getElementById('activities-list');
   if (!el) return;
-  const rows = visibleActivities();
-  if (!activities.length) { el.innerHTML = `<p style="color:var(--muted);padding:8px">${t('no_activities')}</p>`; return; }
-  if (!rows.length) { el.innerHTML = `<div class="empty">${icon('search')}<b>${esc(t('no_activities_match'))}</b></div>`; return; }
-  el.innerHTML = rows.map(a => `
-    <div class="activity-item">
-      <div class="act-icon ${a.type}">${icon(a.type)}</div>
-      <div class="act-body">
-        <div class="act-meta"><strong>${t('act_' + a.type)}</strong>${a.contact_id ? ` · <a href="#" class="act-link" onclick="event.preventDefault();openContactDetail(${a.contact_id})">${esc(a.contact_name || 'Contact')}</a>` : a.contact_name ? ` · ${esc(a.contact_name)}` : ''}${a.deal_id ? ` · <a href="#" class="act-link" onclick="event.preventDefault();openDealDetail(${a.deal_id})">${esc(a.deal_title || 'Deal')}</a>` : ''} · ${fmtDate(a.created_at)}</div>
-        ${a.logged_by_name ? `<div class="act-logged-by">${t('logged_by')} ${esc(a.logged_by_name)} · <span class="act-logged-email">${esc(a.logged_by_email||'')}</span></div>` : ''}
-        <div class="act-content">${dvActHtml(a.content)}</div>
-      </div>
-      <button class="iconbtn" onclick="openActivityKebab(this,${a.id})" aria-label="Actions" aria-haspopup="menu">${icon('ellipsis')}</button>
-    </div>`).join('');
+  const rows = visibleActivities(), total = activities.length;
+  if (!rows.length) {
+    el.innerHTML = `<div class="card"><div class="empty">${icon(total ? 'search' : 'activity')}<b>${esc(t(total ? 'no_activities_match' : 'no_activities'))}</b><div>${esc(t(total ? 'no_activities_match_sub' : 'no_activities_sub'))}</div>${total ? `<div style="margin-top:14px"><button class="btn btn-secondary btn-sm" type="button" onclick="clearActivitiesFilters()">${esc(t('clear_filters'))}</button></div>` : ''}</div></div>`;
+    renderActivitiesRail();
+    return;
+  }
+  const row = a => {
+    const label = t('act_' + a.type);
+    const full = new Date(a.created_at).toLocaleString(actLocale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return `<div class="ac-row" data-aid="${a.id}"><span class="tl-ic ${a.type}" title="${esc(label)}">${icon(a.type)}</span>
+      <div style="min-width:0"><div class="ac-head"><b>${esc(label)}</b>
+        ${a.deal_id ? `<a href="#" class="ac-link" title="${esc(a.deal_title || '')}" onclick="event.preventDefault();openActivityDeal(${a.deal_id})">${icon('deals')}<span>${esc(a.deal_title || 'Deal')}</span></a>` : ''}
+        ${a.contact_id ? `<a href="#" class="ac-link" title="${esc(actContactOf(a)?.company || '')}" onclick="event.preventDefault();openActivityContact(${a.contact_id})">${icon('users')}<span>${esc(a.contact_name || 'Contact')}</span></a>` : ''}
+        <span class="ac-time" title="${esc(full)}">${esc(actAgo(a.created_at))}</span></div>
+        <div class="tl-text ac-text">${dvActHtml(a.content)}</div>
+        <div class="ac-meta">${a.logged_by_name ? avatar(a.logged_by_name, 'sm') + `<span>${esc(a.logged_by_name)}</span><span class="ac-dot"></span>` : ''}<span>${esc(actTime(a.created_at))}</span></div></div>
+      <button class="iconbtn kebab" type="button" onclick="openActivityKebab(this,${a.id})" aria-label="Actions" aria-haspopup="menu">${icon('ellipsis')}</button></div>`;
+  };
+  // the server returns newest first; consecutive rows of the same calendar day form one group
+  const groups = [];
+  rows.forEach(a => { const n = actDayDiff(a), g = groups[groups.length - 1]; if (g && g.n === n) g.items.push(a); else groups.push({ n, ts: a.created_at, items: [a] }); });
+  el.innerHTML = groups.map(g => `<section class="ac-group" aria-label="${esc(actDayLabel(g.n, g.ts))}"><div class="ac-day"><h2 class="section-title">${esc(actDayLabel(g.n, g.ts))}</h2><span class="muted">${esc(actPlural(g.items.length))}</span></div>
+    <div class="card">${g.items.map(row).join('')}</div></section>`).join('');
+  renderActivitiesRail();
 }
 
-function openActivityKebab(anchor, id) {
-  ui.menu(anchor, [{ label: t('delete_activity'), icon: 'trash', danger: true, onSelect: () => deleteActivity(id) }], { align: 'right' });
+/* ----- rail ----- */
+function renderActivitiesRail() {
+  const el = document.getElementById('activities-rail');
+  if (!el) return;
+  const vis = visibleActivities();
+  const byType = ACT_TYPES.map(ty => ({ ty, n: visibleActivities('type').filter(a => a.type === ty).length })), maxT = Math.max(1, ...byType.map(x => x.n));
+  const byPerson = members.map(m => ({ m, n: visibleActivities('by').filter(a => a.created_by === m.id).length })), maxP = Math.max(1, ...byPerson.map(x => x.n));
+  const count = {}; vis.forEach(a => { if (a.deal_id) count[a.deal_id] = (count[a.deal_id] || 0) + 1; });
+  const top = Object.entries(count).sort((x, y) => y[1] - x[1]).slice(0, 4);
+  const bar = (n, max) => `<span class="bar"><i style="width:${Math.round(n / max * 100)}%"></i></span>`;
+  const dealRow = ([id, n]) => {
+    const d = activityDealList.find(x => x.id === +id);
+    const title = d ? d.title : (vis.find(a => a.deal_id === +id)?.deal_title || 'Deal');
+    const sub = d ? [d.stage_name, d.value != null && d.value !== '' ? fmtEURShort(d.value) : ''].filter(Boolean).join(', ') : '';
+    return `<a class="ac-deal-row" href="#" onclick="event.preventDefault();openActivityDeal(${+id})"><span class="grow"><span class="truncate" style="display:block;font-weight:600">${esc(title)}</span>${sub ? `<span class="muted">${esc(sub)}</span>` : ''}</span><span class="n">${n}</span></a>`;
+  };
+  el.innerHTML = `<section class="card" aria-label="${esc(t('rail_by_type'))}"><div class="card-header"><h2 class="card-title">${esc(t('rail_by_type'))}</h2><span class="muted">${esc(actPlural(vis.length))}</span></div><div class="card-body">
+      ${byType.map(({ ty, n }) => `<button class="ac-stat" type="button" data-stat-type="${ty}" aria-pressed="${activitiesUI.type === ty}" onclick="toggleActivitiesStat('type','${ty}')"><span class="tl-ic ${ty} ac-ic">${icon(ty)}</span><span><span class="nm">${esc(t('act_' + ty))}</span>${bar(n, maxT)}</span><span class="n">${n}</span></button>`).join('')}</div></section>
+    <section class="card" aria-label="${esc(t('rail_by_person'))}"><div class="card-header"><h2 class="card-title">${esc(t('rail_by_person'))}</h2></div><div class="card-body">
+      ${byPerson.map(({ m, n }) => `<button class="ac-stat" type="button" data-stat-by="${m.id}" aria-pressed="${activitiesUI.by === m.id}" onclick="toggleActivitiesStat('by',${m.id})">${avatar(m.name, 'sm')}<span><span class="nm">${esc(m.name)}</span>${bar(n, maxP)}</span><span class="n">${n}</span></button>`).join('')}</div></section>
+    <section class="card" aria-label="${esc(t('rail_top_deals'))}"><div class="card-header"><h2 class="card-title">${esc(t('rail_top_deals'))}</h2></div><div class="card-body">
+      ${top.length ? top.map(dealRow).join('') : `<div class="ac-rail-empty">${esc(t('rail_no_deals'))}</div>`}</div></section>`;
 }
-async function deleteActivity(id) { await api.del(`/api/activities/${id}`); activities = activities.filter(a => a.id !== id); renderActivities(); ui.toast(t('activity_deleted')); }
+function toggleActivitiesStat(key, value) { activitiesUI[key] = activitiesUI[key] === value ? null : value; renderActivities(); }
+
+/* ----- row actions, export ----- */
+function openActivityKebab(anchor, id) {
+  const a = activities.find(x => x.id === id); if (!a) return;
+  const items = [];
+  if (a.deal_id) items.push({ label: t('open_deal'), icon: 'deals', onSelect: () => openActivityDeal(a.deal_id) });
+  if (a.contact_id) {
+    // "Open supplier" (the workspace's own word, singular) for a supplier contact — the reference's linkBase rule
+    const word = (currentWorkspace?.supplier_name || 'Suppliers').replace(/s$/i, '');
+    const label = actContactOf(a)?.contact_type === 'supplier' ? tf('open_supplier', { name: currentLang === 'de' ? word : word.toLowerCase() }) : t('open_contact');
+    items.push({ label, icon: 'users', onSelect: () => openActivityContact(a.contact_id) });
+  }
+  if (items.length) items.push({ sep: true });
+  items.push({ label: t('delete_activity'), icon: 'trash', danger: true, onSelect: () => deleteActivity(id) });
+  ui.menu(anchor, items, { align: 'right' });
+}
+async function deleteActivity(id) {
+  const ok = await ui.confirm({ title: t('delete_activity_q'), message: t('delete_activity_msg'), confirmLabel: t('btn_delete'), danger: true });
+  if (!ok) return;
+  const res = await api.del(`/api/activities/${id}`);
+  if (res?.error) return ui.toast(res.error);
+  activities = activities.filter(a => a.id !== id);
+  if (!activitiesUI.deal) activityDeals = activityDealOptions();   // the chip must not offer a deal that no longer has a note
+  renderActivities();
+  ui.toast(t('activity_deleted'));
+}
 
 function exportActivitiesCsv() {
   const rows = visibleActivities();
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const head = ['Type', 'Contact', 'Logged by', 'Date', 'Content'];
-  const lines = rows.map(a => [t('act_' + a.type), a.contact_name || '', a.logged_by_name || '', a.created_at ? new Date(a.created_at).toISOString().slice(0, 10) : '', dvActText(a.content)].map(q).join(','));
-  const csv = [head.map(q).join(','), ...lines].join('\n');
+  const head = ['Type', 'Person', 'Deal', 'Contact', 'Date', 'Text'];
+  const lines = rows.map(a => [t('act_' + a.type), a.logged_by_name || '', a.deal_title || '', a.contact_name || '', a.created_at ? new Date(a.created_at).toISOString() : '', dvActText(a.content)].map(q).join(','));
+  const csv = [head.map(q).join(','), ...lines].join('\r\n');
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }));
+  link.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
   link.download = `activities-${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(link); link.click(); link.remove();
   ui.toast(tf('export_activities_csv', { n: rows.length }));
-}
-function openActivitiesMoreMenu(anchor) {
-  ui.menu(anchor, [{ label: t('export_csv'), icon: 'download', onSelect: () => exportActivitiesCsv() }], { align: 'right' });
 }

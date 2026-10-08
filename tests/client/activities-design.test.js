@@ -1,8 +1,8 @@
 // CLIENT (static + sandboxed) tests for the Activities page, ported from
-// reference/pro/src/screens/activities.js within the data the backend
-// supports: a flat feed (not the reference's two-column stats rail), search
-// + Type + Person chips (the reference's Period chip has no equivalent
-// here and is deferred), a kebab menu, CSV export, a subtitle count.
+// reference/pro/src/screens/activities.js: search + Type + Person chips, a
+// kebab menu, CSV export, a subtitle count. The rest of the reference screen
+// (compose card, Period chip, day groups, the breakdown rail) is covered by
+// activities-port.test.js.
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
@@ -18,10 +18,10 @@ const count = (src, needle) => src.split(needle).length - 1;
 
 describe('markup: header, more menu, toolbar container', () => {
   test('files parse', () => execFileSync('node', ['--check', path.join(ROOT, 'public/js/objects.js')]));
-  test('sub line, more menu, sprite plus on Log Activity', () => {
+  test('sub line, Export CSV button, sprite plus on Log Activity (which focuses the inline card)', () => {
     assert.match(section, /<p class="page-sub" id="activities-page-sub">/);
-    assert.match(section, /onclick="openActivitiesMoreMenu\(this\)"[^>]*><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"\/><\/svg>/);
-    assert.match(section, /onclick="openActivityModal\(\)"><svg class="ic" aria-hidden="true"><use href="#i-plus"\/><\/svg><span data-i18n="log_activity">/);
+    assert.match(section, /onclick="exportActivitiesCsv\(\)"><svg class="ic" aria-hidden="true"><use href="#i-download"\/><\/svg>/);
+    assert.match(section, /onclick="focusActivityCompose\(\)"><svg class="ic" aria-hidden="true"><use href="#i-plus"\/><\/svg><span data-i18n="log_activity">/);
   });
   test('toolbar container exists', () => {
     assert.match(section, /<div id="activities-toolbar" class="toolbar"><\/div>/);
@@ -35,7 +35,7 @@ describe('markup: header, more menu, toolbar container', () => {
 describe('objects.js: renderers follow the reference idiom', () => {
   test('the feed uses sprite type icons and a kebab menu, not emoji or a bare delete button', () => {
     const r = sliceFn(objects, 'renderActivitiesFeed', 'objects.js');
-    assert.match(r, /class="act-icon \$\{a\.type\}">\$\{icon\(a\.type\)\}/);
+    assert.match(r, /class="tl-ic \$\{a\.type\}" title="\$\{esc\(label\)\}">\$\{icon\(a\.type\)\}/);
     assert.match(r, /openActivityKebab\(this,\$\{a\.id\}\)/);
     assert.doesNotMatch(r, /ICONS\[a\.type\]|btn-danger btn-icon.*✕|>✕</);
   });
@@ -50,8 +50,8 @@ describe('objects.js: renderers follow the reference idiom', () => {
     assert.match(r, /activitiesChip\('type'/); assert.match(r, /activitiesChip\('by'/);
     assert.match(r, /document\.activeElement/, 'keeps focus across re-renders like the Deals toolbar');
   });
-  test('the more menu calls the CSV export', () => {
-    assert.match(sliceFn(objects, 'openActivitiesMoreMenu', 'objects.js'), /exportActivitiesCsv\(\)/);
+  test('the CSV export writes the visible rows (filters respected)', () => {
+    assert.match(sliceFn(objects, 'exportActivitiesCsv', 'objects.js'), /const rows = visibleActivities\(\)/);
   });
   test('loadActivities fetches members too (for the Person chip) and renders through renderActivities', () => {
     const l = sliceFn(objects, 'loadActivities', 'objects.js');
@@ -63,9 +63,10 @@ describe('objects.js: filtering logic in a sandbox', () => {
   // visibleActivities searches the VISIBLE text of a note (dvActText — tags stripped, entities
   // decoded) rather than the stored <br>/entities, so the real helper is sliced in; the seed
   // notes are plain strings and pass through it unchanged.
-  const extra = `const esc = s => String(s ?? ''); ${sliceFn(read('public/js/detail-views.js'), 'dvActText', 'detail-views.js')}`;
-  const F = loadFns('public/js/objects.js', ['visibleActivities'], {
-    state: { activities: [], activitiesUI: { q: '', type: null, by: null } },
+  // The ported search also matches the type label (t('act_' + type)), so a label stub is in too.
+  const extra = `const esc = s => String(s ?? ''); const t = k => k; ${sliceFn(read('public/js/detail-views.js'), 'dvActText', 'detail-views.js')}`;
+  const F = loadFns('public/js/objects.js', ['visibleActivities', 'actDayDiff', 'actStartOfDay', 'actContactOf'], {
+    state: { activities: [], activitiesUI: { q: '', type: null, by: null, period: 'all' }, activityContactList: [] },
     extra,
   });
   const seed = [
@@ -75,7 +76,7 @@ describe('objects.js: filtering logic in a sandbox', () => {
   ];
   test('filters by type, by person, and by a search term over content/contact', () => {
     F.__set('activities', seed);
-    const ui = patch => F.__set('activitiesUI', { q: '', type: null, by: null, ...patch });
+    const ui = patch => F.__set('activitiesUI', { q: '', type: null, by: null, period: 'all', ...patch });
     ui({}); assert.deepEqual(F.visibleActivities().map(a => a.id), [1, 2, 3]);
     ui({ type: 'call' }); assert.deepEqual(F.visibleActivities().map(a => a.id), [2]);
     ui({ by: 1 }); assert.deepEqual(F.visibleActivities().map(a => a.id), [1, 3]);

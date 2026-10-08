@@ -478,17 +478,20 @@
         </div>
       </section>
 
-      <!-- ── Activities ── -->
+      <!-- ── Activities ── (reference screen: activities.js — toolbar, compose card + day-grouped feed, breakdown rail) -->
       <section id="page-activities" class="page">
         <div class="page-header">
           <div><h1 data-i18n="page_activities">Activities</h1><p class="page-sub" id="activities-page-sub"></p></div>
           <div class="page-actions">
-            <button class="btn btn-secondary btn-icon" onclick="openActivitiesMoreMenu(this)" type="button" aria-label="More actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
-            <button class="btn btn-primary" onclick="openActivityModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="log_activity">Log Activity</span></button>
+            <button class="btn btn-secondary" type="button" onclick="exportActivitiesCsv()"><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg><span data-i18n="export_csv">Export to CSV</span></button>
+            <button class="btn btn-primary" type="button" onclick="focusActivityCompose()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="log_activity">Log Activity</span></button>
           </div>
         </div>
         <div id="activities-toolbar" class="toolbar"></div>
-        <div id="activities-list" class="activities-list"></div>
+        <div class="split split-2-1 ac-split">
+          <div class="ac-left"><div id="activities-compose"></div><div id="activities-list" class="ac-feed"></div></div>
+          <aside class="ac-rail" id="activities-rail" aria-label="Breakdown"></aside>
+        </div>
       </section>
 
       <!-- ── Calendar ── -->
@@ -543,61 +546,10 @@
         <div id="objects-pagination" class="pagination-bar"></div>
       </section>
 
-      <!-- ── Tasks ── -->
+      <!-- ── Tasks ── (reference screen: tasks.js — Views + projects sidebar, summary, chips, grouped table or board; both hosts are rendered by tasks.js) -->
       <section id="page-tasks" class="page page-tasks-layout">
-
-        <!-- ── Left: Project / List sidebar ── -->
-        <div class="tasks-sidebar">
-          <div class="tasks-sidebar-header">
-            <span class="tasks-sidebar-title">Projects</span>
-            <button class="btn btn-sm btn-primary" onclick="openProjectModal()" title="New project"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg></button>
-          </div>
-          <div id="tasks-project-nav" class="tasks-project-nav"></div>
-        </div>
-
-        <!-- ── Right: Main content ── -->
-        <div class="tasks-main" id="tasks-main">
-          <!-- Empty state when no project selected -->
-          <div id="tasks-empty-state" class="tasks-empty-state">
-            <p>Select a project and list from the sidebar,<br>or create a new project to get started.</p>
-            <button class="btn btn-primary" onclick="openProjectModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span>New Project</span></button>
-          </div>
-
-          <!-- Active list content (hidden until list selected) -->
-          <div id="tasks-content" class="hidden" style="display:flex;flex-direction:column;height:100%;gap:16px">
-            <div class="page-header">
-              <div>
-                <div class="tasks-breadcrumb" id="tasks-breadcrumb"></div>
-                <h1 id="tasks-main-title" style="margin:0">Tasks</h1>
-              </div>
-              <div class="page-actions">
-                <div class="seg" role="group" aria-label="View">
-                  <button class="view-toggle-btn" aria-pressed="true" id="task-view-list" onclick="setTaskView('list')" title="List view"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-list"/></svg></button>
-                  <button class="view-toggle-btn" aria-pressed="false" id="task-view-kanban" onclick="setTaskView('kanban')" title="Kanban view"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-kanban"/></svg></button>
-                </div>
-                <button class="btn btn-primary" onclick="openTaskModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span>Add Task</span></button>
-              </div>
-            </div>
-            <div class="toolbar">
-              <input type="text" id="task-search" placeholder="Search tasks…" oninput="filterTasks()" />
-              <div class="toolbar-actions">
-                <select id="task-filter-priority" onchange="filterTasks()" class="btn btn-sm">
-                  <option value="">All priorities</option>
-                  <option value="urgent">Urgent</option>
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                </select>
-                <select id="task-filter-assignee" onchange="filterTasks()" class="btn btn-sm">
-                  <option value="">All assignees</option>
-                </select>
-              </div>
-            </div>
-            <div id="tasks-list-view" class="tasks-list-view"></div>
-            <div id="tasks-kanban-view" class="tasks-kanban hidden"></div>
-          </div>
-        </div>
-
+        <aside class="tk-side" id="tasks-side" aria-label="Task projects"></aside>
+        <div class="tk-main" id="tasks-main"></div>
       </section>
 
       <!-- ── Board (Miro) ── -->

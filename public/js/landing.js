@@ -4,7 +4,7 @@
    A product page in the manner of a consumer launch page: one statement per
    section, set large and centred, the product shown big and working under
    it, light and dark bands alternating, a slim translucent bar on top, a
-   the working day (tasks, calendar, chat) near the end, one closing call to action.
+   a four-step walkthrough of one task near the end, one closing call to action.
 
      board    drag and drop between stage columns; once, on first sight, a
               visible cursor drags the deal into Won, then the visitor takes
@@ -21,6 +21,10 @@
      engine   from our system to the next: closing the deal moves it to Won
               and a packet travels to the next system, which confirms receipt;
               no code on the page (the real transfer is utils/engine.js)
+     work     how a task is used, in four explained steps: the form, the list
+              (All / My tasks), the week, the tick; the steps play once in
+              view and are clickable; the form's button and the row's tick
+              move the walkthrough on, as they would in the app
 
    German is the default and the markup text IS the German dictionary (the
    client test checks that key for key). Every string claims only what the
@@ -90,11 +94,17 @@ const LP_I18N = {
     lp_en_send: 'Deal abschließen', lp_en_to: 'Nächstes System', lp_en_to_sub: 'Abwicklung, Buchhaltung, Verwaltung', lp_en_received: 'Empfangen',
     lp_en_idle: 'Wartet auf den Abschluss', lp_en_pending: 'Wird übertragen', lp_en_done: 'Empfangen und bestätigt',
 
-    lp_s7_t: 'Aufgaben. Kalender. Chat.', lp_s7_d: 'Ein Termin an der Aufgabe steht im Kalender. Das Team redet live.',
-    lp_wk_tasks: 'Aufgaben', lp_wk_cal: 'Kalender', lp_wk_team: 'Team', lp_wk_online: '3 online', lp_wk_add: 'Hinzufügen', lp_wk_task_ph: 'Neue Aufgabe', lp_wk_msg_ph: 'Nachricht an das Team', lp_wk_send: 'Senden', lp_wk_typing: '{name} schreibt',
-    lp_w1: 'Exposé senden', lp_w1_due: 'Mi, 14:00', lp_w2: 'Rückruf Weber', lp_w2_due: 'Do, 11:00', lp_w3: 'Energieausweis anfordern', lp_w3_due: 'Di, 11:00', lp_w_new_due: 'Do, 10:00',
-    lp_wd1: 'Mo', lp_wd2: 'Di', lp_wd3: 'Mi', lp_wd4: 'Do', lp_wd5: 'Fr', lp_wd6: 'Sa', lp_wd7: 'So', lp_ev1: 'Besichtigung',
-    lp_msg1: 'Elbstraße 12 ist in Verhandlung.', lp_msg2: 'Besichtigung am Donnerstag, 09:30.', lp_msg_reply: 'Alles klar, Donnerstag passt.',
+    lp_s7_t: 'Eine Aufgabe, vier Schritte.', lp_s7_d: 'Anlegen, in der Liste, im Kalender, erledigt. So arbeitet das Team.',
+    lp_how1: 'Aufgabe anlegen', lp_how1_d: 'Am Deal oder auf der Aufgabenseite: Titel, Datum, Uhrzeit und wer es macht.',
+    lp_how2: 'In der Liste', lp_how2_d: 'Alle Aufgaben des Teams, nach Projekt gruppiert. Überfälliges steht rot.',
+    lp_how3: 'Im Kalender', lp_how3_d: 'Mit Uhrzeit steht sie im Wochenplan des Teams. Jeder in seiner Zeitzone.',
+    lp_how4: 'Abhaken', lp_how4_d: 'Ein Haken in der Liste, im Kalender oder am Deal. Überall erledigt.',
+    lp_how_new: 'Neue Aufgabe', lp_how_f_title: 'Titel', lp_how_f_date: 'Mi, 7. Okt', lp_how_f_time: 'Uhrzeit', lp_how_f_deal: 'Deal', lp_how_f_hint: 'Mit Uhrzeit steht sie im Kalender.', lp_how_cancel: 'Abbrechen',
+    lp_how_all: 'Alle Aufgaben', lp_how_mine: 'Meine Aufgaben', lp_how_task: 'Aufgabe', lp_how_prio: 'Priorität', lp_how_due: 'Fällig', lp_how_t4: 'Besichtigung bestätigen', lp_how_t4_due: 'Mo, 09:00', lp_how_foot: '4 offen, 1 überfällig',
+    lp_how_cal: 'Kalender', lp_how_range: '5. bis 11. Okt', lp_how_month: 'Monat', lp_how_week: 'Woche', lp_how_e1: 'Besichtigung Hafenstraße', lp_how_e2: 'Übergabe Kanalweg',
+    lp_how_p_list: 'Liste', lp_how_done: 'Aufgabe erledigt', lp_s7_cap: 'Kein Termin geht mehr unter. Das ganze Team sieht, was ansteht.',
+    lp_w1: 'Exposé senden', lp_w1_due: 'Mi, 14:00',
+    lp_wd1: 'Mo', lp_wd2: 'Di', lp_wd3: 'Mi', lp_wd4: 'Do', lp_wd5: 'Fr', lp_wd6: 'Sa', lp_wd7: 'So',
 
     lp_cta_t: 'Bereit, wenn das Team es ist.', lp_cta_d: 'Zugang anfragen. Der Einladungscode kommt per E-Mail.',
     lp_foot_tag: 'Upgrads CRM. Ein Board. Jeder Deal.',
@@ -161,11 +171,17 @@ const LP_I18N = {
     lp_en_send: 'Close the deal', lp_en_to: 'Next system', lp_en_to_sub: 'Fulfilment, accounting, administration', lp_en_received: 'Received',
     lp_en_idle: 'Waiting for the close', lp_en_pending: 'Transferring', lp_en_done: 'Received and confirmed',
 
-    lp_s7_t: 'Tasks. Calendar. Chat.', lp_s7_d: 'A dated task is on the calendar. The team talks live.',
-    lp_wk_tasks: 'Tasks', lp_wk_cal: 'Calendar', lp_wk_team: 'Team', lp_wk_online: '3 online', lp_wk_add: 'Add', lp_wk_task_ph: 'New task', lp_wk_msg_ph: 'Message the team', lp_wk_send: 'Send', lp_wk_typing: '{name} is typing',
-    lp_w1: 'Send exposé', lp_w1_due: 'Wed, 14:00', lp_w2: 'Call back Weber', lp_w2_due: 'Thu, 11:00', lp_w3: 'Request energy certificate', lp_w3_due: 'Tue, 11:00', lp_w_new_due: 'Thu, 10:00',
-    lp_wd1: 'Mon', lp_wd2: 'Tue', lp_wd3: 'Wed', lp_wd4: 'Thu', lp_wd5: 'Fri', lp_wd6: 'Sat', lp_wd7: 'Sun', lp_ev1: 'Viewing',
-    lp_msg1: 'Elbstraße 12 is in negotiation.', lp_msg2: 'Viewing on Thursday, 09:30.', lp_msg_reply: 'Got it, Thursday works.',
+    lp_s7_t: 'One task, four steps.', lp_s7_d: 'Added, in the list, on the calendar, done. How the team works.',
+    lp_how1: 'Create the task', lp_how1_d: 'On the deal or the Tasks page: title, date, time and who does it.',
+    lp_how2: 'In the list', lp_how2_d: 'Every task of the team, grouped by project. Overdue shows in red.',
+    lp_how3: 'On the calendar', lp_how3_d: 'A time puts it on the team calendar. Everyone in their own time zone.',
+    lp_how4: 'Tick it off', lp_how4_d: 'One tick in the list, on the calendar or on the deal. Done everywhere.',
+    lp_how_new: 'New task', lp_how_f_title: 'Title', lp_how_f_date: 'Wed, 7 Oct', lp_how_f_time: 'Time', lp_how_f_deal: 'Deal', lp_how_f_hint: 'With a time it is on the calendar.', lp_how_cancel: 'Cancel',
+    lp_how_all: 'All tasks', lp_how_mine: 'My tasks', lp_how_task: 'Task', lp_how_prio: 'Priority', lp_how_due: 'Due', lp_how_t4: 'Confirm the viewing', lp_how_t4_due: 'Mon, 09:00', lp_how_foot: '4 open, 1 overdue',
+    lp_how_cal: 'Calendar', lp_how_range: '5 to 11 Oct', lp_how_month: 'Month', lp_how_week: 'Week', lp_how_e1: 'Viewing Hafenstraße', lp_how_e2: 'Handover Kanalweg',
+    lp_how_p_list: 'List', lp_how_done: 'Task completed', lp_s7_cap: 'No deadline slips through. The whole team sees what is due.',
+    lp_w1: 'Send exposé', lp_w1_due: 'Wed, 14:00',
+    lp_wd1: 'Mon', lp_wd2: 'Tue', lp_wd3: 'Wed', lp_wd4: 'Thu', lp_wd5: 'Fri', lp_wd6: 'Sat', lp_wd7: 'Sun',
 
     lp_cta_t: 'Ready when the team is.', lp_cta_d: 'Request access. The invite code arrives by email.',
     lp_foot_tag: 'Upgrads CRM. One board. Every deal.',
@@ -812,84 +828,60 @@ function lpInitEngine() {
   paint();
 }
 
-// ── the working day: tasks, the calendar that carries them, the team chat ──
-// A task with a date is a calendar entry (the real feed does the same, keyed by
-// kind+id); ticking it off ticks the entry; a new task lands on Thursday in both
-// places. The chat is one room with presence: a sent message is answered live.
+// ── how it works: one task in four steps ────────────────────────────────────
+// The steps on the left explain; the frame on the right shows each one as the app draws
+// it (the form, the list, the week, the tick). The walkthrough plays once when the stage
+// is in view (a bar under the step that is on counts the seconds down) and stops at the
+// last step; clicking a step takes over. Inside the frame, the form's button creates the
+// task (step 2), the new row's tick completes it (step 4), the toast's undo reopens it,
+// and All / My tasks filters the rows, as the Tasks page does. Reduced motion: no play.
 function lpInitWork() {
   const root = document.getElementById('work');
   if (!root) return;
   const q = sel => root.querySelector(sel);
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const list = q('#lp-wk-tasks'), cal = q('#lp-wk-cal'), form = q('#lp-wk-add'), input = q('#lp-wk-input');
-  const progress = q('#lp-wk-progress'), bar = q('#lp-wk-bar'), count = q('#lp-wk-count');
-  let next = 10;
-  const chipFor = id => cal?.querySelector(`.lp-cal-chip[data-task="${id}"]`);
-  // the same progress line the deal record shows: done of all, and a bar
-  function refresh() {
-    const rows = [...(list?.querySelectorAll('.lp-task') || [])];
-    const done = rows.filter(r => r.querySelector('input')?.checked).length;
-    if (progress) progress.textContent = lpT('lp_tasks_progress', { d: done, n: rows.length });
-    if (bar) bar.style.width = (rows.length ? (done / rows.length) * 100 : 0) + '%';
-    if (count) count.textContent = String(rows.length - done);
+  const stage = q('#lp-how'), steps = [...root.querySelectorAll('.lp-how-step')], shots = [...root.querySelectorAll('.lp-shot')];
+  const STEP_MS = 4800;
+  let i = 0, timer = 0, auto = false;
+  function stop() { clearTimeout(timer); timer = 0; auto = false; stage?.classList.remove('is-auto'); }
+  // light the step, show its screen (popping in), fill the rail to it
+  function show(n, manual) {
+    i = Math.max(0, Math.min(steps.length - 1, n));
+    steps.forEach((s, k) => { const on = k === i; s.classList.toggle('is-on', on); s.classList.toggle('is-past', k < i); s.setAttribute('aria-selected', String(on)); s.tabIndex = on ? 0 : -1; });
+    shots.forEach((p, k) => { const on = k === i; p.classList.toggle('hidden', !on); if (on && !reduce) { p.classList.remove('is-in'); void p.offsetWidth; p.classList.add('is-in'); } });
+    stage?.style.setProperty('--lp-how-prog', String(steps.length > 1 ? i / (steps.length - 1) : 0));
+    if (manual) stop();
   }
-  function wire(row) {
-    const cb = row.querySelector('input');
-    cb?.addEventListener('change', () => { row.classList.toggle('is-done', cb.checked); chipFor(row.dataset.task)?.classList.toggle('is-done', cb.checked); refresh(); });
+  function play() {
+    if (reduce) return;
+    stop(); auto = true; stage?.classList.add('is-auto');
+    const next = () => { if (!auto) return; if (i >= steps.length - 1) { stop(); return; } show(i + 1); timer = setTimeout(next, STEP_MS); };
+    show(0); timer = setTimeout(next, STEP_MS);
   }
-  list?.querySelectorAll('.lp-task').forEach(wire);
-  function named(el, title) { if (title) el.textContent = title; else { el.dataset.i18n = 'lp_wk_task_ph'; el.textContent = lpT('lp_wk_task_ph'); } return el; }
-  function addTask(title) {
-    if (!list) return;
-    const id = String(next++);
-    const li = document.createElement('li'); li.className = 'lp-task is-new'; li.dataset.task = id;
-    const label = document.createElement('label');
-    const cb = document.createElement('input'); cb.type = 'checkbox';
-    const check = list.querySelector('.lp-check')?.cloneNode(true);
-    const t = named(document.createElement('span'), title); t.className = 'lp-task-title';
-    label.appendChild(cb); if (check) label.appendChild(check); label.appendChild(t);
-    const due = document.createElement('small'); due.dataset.i18n = 'lp_w_new_due'; due.textContent = lpT('lp_w_new_due');
-    const who = document.createElement('i'); who.className = 'lp-av lp-av-xs'; who.textContent = 'M';
-    li.appendChild(label); li.appendChild(due); li.appendChild(who); list.appendChild(li); wire(li);
-    const day = cal?.querySelector('.lp-cal-day[data-day="4"] .lp-cal-items');
-    if (day) {
-      const chip = document.createElement('span'); chip.className = 'lp-cal-chip is-new'; chip.dataset.task = id;
-      const at = document.createElement('time'); at.textContent = '10:00';
-      chip.appendChild(at); chip.appendChild(named(document.createElement('span'), title)); day.appendChild(chip);
-    }
-    refresh();
-  }
-  form?.addEventListener('submit', e => { e.preventDefault(); addTask((input?.value || '').trim()); if (input) input.value = ''; });
-  // the chat
-  const msgs = q('#lp-wk-msgs'), send = q('#lp-wk-send'), msgInput = q('#lp-wk-msg'), online = q('#lp-wk-online'), typing = q('#lp-wk-typing'), typingText = q('#lp-wk-typing-text');
-  let busy = false;
-  function post(initial, cls, name, text, key) {
-    if (!msgs) return;
-    const li = document.createElement('li'); li.className = 'lp-msg is-new';
-    const av = document.createElement('i'); av.className = 'lp-av' + (cls ? ' ' + cls : ''); av.textContent = initial;
-    const box = document.createElement('div');
-    const meta = document.createElement('p'); meta.className = 'lp-msg-meta';
-    const b = document.createElement('b'); b.textContent = name;
-    const time = document.createElement('time'); time.textContent = new Date().toLocaleTimeString(lpLang === 'de' ? 'de-DE' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
-    meta.appendChild(b); meta.appendChild(time);
-    const p = document.createElement('p'); p.className = 'lp-msg-text';
-    if (key) { p.dataset.i18n = key; p.textContent = lpT(key); } else p.textContent = text;
-    box.appendChild(meta); box.appendChild(p); li.appendChild(av); li.appendChild(box); msgs.appendChild(li);
-    msgs.scrollTop = msgs.scrollHeight;
-  }
-  send?.addEventListener('submit', e => {
-    e.preventDefault();
-    const text = (msgInput?.value || '').trim();
-    if (!text || busy) return;
-    if (msgInput) msgInput.value = '';
-    post('M', '', 'Mara Kühn', text);
-    busy = true; online?.classList.add('is-live');
-    if (typingText) typingText.textContent = lpT('lp_wk_typing', { name: 'Tim Berger' });
-    typing?.classList.toggle('hidden', reduce);
-    setTimeout(() => { typing?.classList.add('hidden'); post('T', 'lp-av-t', 'Tim Berger', '', 'lp_msg_reply'); online?.classList.remove('is-live'); busy = false; }, reduce ? 0 : 1400);
+  steps.forEach((s, k) => {
+    s.addEventListener('click', () => show(k, true));
+    s.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(k, true); return; }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      const j = (k + (e.key === 'ArrowDown' ? 1 : steps.length - 1)) % steps.length;
+      show(j, true); steps[j].focus();
+    });
   });
-  lpRerender.push(refresh);
-  refresh();
+  // inside the frame: the app's own controls move the walkthrough on
+  q('#lp-how-create')?.addEventListener('click', () => show(1, true));
+  const tick = q('#lp-how-tick');
+  tick?.addEventListener('change', () => { if (!tick.checked) return; stop(); timer = setTimeout(() => { tick.checked = false; show(3, true); }, reduce ? 0 : 350); });
+  q('#lp-how-undo')?.addEventListener('click', () => show(1, true));
+  const list = q('#lp-how-list'), scopes = [...root.querySelectorAll('.lp-how-scope')];
+  scopes.forEach(b => b.addEventListener('click', () => { scopes.forEach(x => x.setAttribute('aria-pressed', String(x === b))); list?.classList.toggle('is-mine', b.dataset.scope === 'mine'); }));
+  const progress = q('#lp-how-progress');
+  lpRerender.push(() => { if (progress) progress.textContent = lpT('lp_tasks_progress', { d: 3, n: 4 }); });
+  show(0);
+  if ('IntersectionObserver' in window && !reduce) {
+    const io = new IntersectionObserver(entries => { if (entries.some(e => e.isIntersecting)) { io.disconnect(); play(); } }, { threshold: 0.35 });
+    io.observe(stage || root);
+  }
 }
 
 // ── boot ────────────────────────────────────────────────────────────────────

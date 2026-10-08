@@ -64,7 +64,7 @@ describe('contact detail', () => {
 
 describe('Activities page: a Deal filter through the server', () => {
   test('filter state has a deal slot; clearing resets it', () => {
-    assert.match(objects, /^let activitiesUI = \{ q: '', type: null, by: null, deal: null \};/m);
+    assert.match(objects, /^let activitiesUI = \{ q: '', type: null, by: null, deal: null, period: 'all' \};/m);
     assert.match(sliceFn(objects, 'clearActivitiesFilters', 'objects.js'), /deal: null/);
   });
   test('loading refetches with ?deal_id= when a deal is chosen', () => {

@@ -7,12 +7,14 @@
 // hard cap on words, the claims audit, and the working pieces: the board (a
 // visible cursor drags the deal into Won once, then drag and drop), leads
 // (one button, three real payload shapes through the webhook's own mapping),
-// the deal record's tabs, the contacts (search, pick, reach), three periods of figures, and the
+// the deal record's tabs, the contacts (search, pick, reach), three periods of figures, the
 // hand-over from our system to the next shown as a packet that travels and a
 // receipt, no code on the page (2026-10-07: the user asked for the lead
 // sources with their logos and for the Engine as a visible workflow, not the
-// payload and the signature). Pure functions are sliced out of
-// public/js/landing.js and run in a sandbox.
+// payload and the signature), and the four-step walkthrough of a task
+// (2026-10-08, Part 14o: "explain the process, show how it is used", so the
+// steps explain and the one frame shows each as the app draws it). Pure
+// functions are sliced out of public/js/landing.js and run in a sandbox.
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs     = require('fs');
@@ -105,31 +107,57 @@ describe('document', () => {
     assert.doesNotMatch(body, /lp-frame lp-tilt lp-board-wrap|lp-board-wrap lp-tilt/);
     const all = new Set([...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]));
     for (const a of [...html.matchAll(/href="#([^"]+)"/g)].map(m => m[1])) assert.ok(all.has(a), `#${a} resolves`);
-    assert.doesNotMatch(body, /lp-eyebrow|lp-ch\b|lp-ch-time|lp-scene|lp-inst\b|lp-notes|lp-passage|lp-panel|lp-index|lp-wall|lp-faq/);
+    assert.doesNotMatch(body, /lp-eyebrow|lp-ch\b|lp-ch-time|lp-scene|lp-inst\b|lp-notes|lp-passage|lp-panel|lp-index|lp-wall|lp-faq|lp-beat|lp-st-|lp-story/, 'nothing of the rejected designs, the three-beat story included');
     assert.doesNotMatch(body, />(Montag|Dienstag|Mittwoch|Donnerstag|Freitag)(, \d\d:\d\d)?</);
   });
-  test('the working day: the record\'s own task rows (three, one done) with a composer, a seven-day week carrying the dated tasks and one viewing, and the team room with presence, two messages and a composer; then the closing and a one-line footer', () => {
+  test('how it works: four steps on the left (number, heading, one line, a bar), each the tab for one screen in the one frame on the right: the form, the list with All / My tasks and an overdue row, the week with the task at its time, done in three places with the toast; a benefit line; no seal, no replay, no packet', () => {
     const w = section('work');
-    assert.match(w, /<h2 data-i18n="lp_s7_t">Aufgaben\. Kalender\. Chat\.<\/h2>\s*<p class="lp-sub" data-i18n="lp_s7_d">/);
-    assert.match(w, /<div class="lp-frame lp-tilt lp-work" id="lp-work">\s*<div class="lp-wk-left">/);
-    assert.match(w, /<span class="lp-wk-count" id="lp-wk-count"><\/span><\/p>\s*<div class="lp-task-head"><span class="lp-task-progress" id="lp-wk-progress"><\/span><span class="lp-task-bar"><i id="lp-wk-bar"><\/i><\/span><\/div>/, 'the record\'s progress line and bar');
-    const tasks = [...w.matchAll(/<li class="lp-task( is-done)?" data-task="(\d)"><label><input type="checkbox"( checked)?><span class="lp-check">[\s\S]*?<span class="lp-task-title" data-i18n="(lp_w\d)">[^<]*<\/span><\/label><small( class="is-today")? data-i18n="(lp_w\d_due)">([^<]*)<\/small><i class="lp-av lp-av-xs( lp-av-t)?">(\w)<\/i><\/li>/g)];
-    assert.deepEqual(tasks.map(x => [x[2], !!x[1], !!x[3], x[4], x[6], !!x[5], x[9]]), [['1', false, false, 'lp_w1', 'lp_w1_due', true, 'M'], ['2', false, false, 'lp_w2', 'lp_w2_due', false, 'T'], ['3', true, true, 'lp_w3', 'lp_w3_due', false, 'M']], 'the record\'s row plus the owner; today\'s due is lit');
-    assert.equal(dict.de.lp_w1_due.slice(0, 2), dict.de.lp_wd3, 'the lit due is today, Wednesday');
-    assert.match(w, /<form class="lp-wk-add" id="lp-wk-add"><input type="text" id="lp-wk-input" autocomplete="off" data-i18n-ph="lp_wk_task_ph" placeholder="[^"]+"><button type="submit" class="lp-pill lp-pill-sm" data-i18n="lp_wk_add">/);
-    const days = [...w.matchAll(/<div class="lp-cal-day( is-today)?" data-day="(\d)"><b data-i18n="(lp_wd\d)">[^<]*<\/b><i>(\d+)<\/i>/g)];
-    assert.deepEqual(days.map(x => [x[2], x[3], x[4], !!x[1]]), [['1', 'lp_wd1', '5', false], ['2', 'lp_wd2', '6', false], ['3', 'lp_wd3', '7', true], ['4', 'lp_wd4', '8', false], ['5', 'lp_wd5', '9', false], ['6', 'lp_wd6', '10', false], ['7', 'lp_wd7', '11', false]], 'one week, Wednesday the 7th today');
-    const chips = [...w.matchAll(/<span class="lp-cal-chip( is-done| lp-cal-ev)?"(?: data-task="(\d)")?><time>(\d\d:\d\d)<\/time><span data-i18n="(lp_\w+)">/g)].map(x => [x[1] || '', x[2] || '', x[3], x[4]]);
-    assert.deepEqual(chips, [[' is-done', '3', '11:00', 'lp_w3'], ['', '1', '14:00', 'lp_w1'], [' lp-cal-ev', '', '09:30', 'lp_ev1'], ['', '2', '11:00', 'lp_w2']], 'every dated task is on its day with its time under the same key; the done one is done there too');
-    for (const [, id, time, key] of chips) if (id) assert.ok(dict.de[key + '_due'].endsWith(time), `${key}: the chip time is the due time`);
-    assert.match(dict.de.lp_msg2, /Donnerstag, 09:30/); assert.ok(chips.some(x => x[0] === ' lp-cal-ev' && x[2] === '09:30'), 'the viewing Tim mentions is the one on the week');
-    for (const [, id] of tasks.map(x => [0, x[2]])) assert.ok(chips.some(c => c[1] === id), `task ${id} is on the calendar`);
-    assert.match(w, /<p class="lp-online" id="lp-wk-online"><i class="lp-av">M<\/i><i class="lp-av lp-av-t">T<\/i><i class="lp-av lp-av-n">N<\/i><span class="lp-online-dot"><\/span><span data-i18n="lp_wk_online">/, 'presence, as the real chat bar shows it');
-    const msgs = [...w.matchAll(/<li class="lp-msg"><i class="lp-av( lp-av-t)?">(\w)<\/i><div><p class="lp-msg-meta"><b>([^<]+)<\/b><time>(\d\d:\d\d)<\/time><\/p><p class="lp-msg-text" data-i18n="(lp_msg\d)">/g)];
-    assert.deepEqual(msgs.map(x => [x[2], x[3], x[4], x[5]]), [['M', 'Mara Kühn', '09:12', 'lp_msg1'], ['T', 'Tim Berger', '09:14', 'lp_msg2']]);
-    assert.match(w, /<\/ul>\s*<p class="lp-typing hidden" id="lp-wk-typing" aria-live="polite"><i><\/i><i><\/i><i><\/i><span id="lp-wk-typing-text"><\/span><\/p>\s*<form class="lp-chat-add"/, 'a typing indicator between the messages and the composer');
-    assert.match(w, /<form class="lp-chat-add" id="lp-wk-send"><input type="text" id="lp-wk-msg" autocomplete="off" data-i18n-ph="lp_wk_msg_ph" placeholder="[^"]+"><button type="submit" class="lp-chat-btn" data-i18n-aria="lp_wk_send" aria-label="[^"]+"><svg class="lp-ic"><use href="#lp-i-arrow"\/><\/svg><\/button><\/form>/);
-    assert.doesNotMatch(w, /lp-grid|<pre|<code|\{|\}|channel|Kanal|#general|\bDM\b/, 'one room, no channels, no code');
+    assert.match(w, /<section id="work" class="lp-sec">/);
+    assert.match(w, /<h2 data-i18n="lp_s7_t">Eine Aufgabe, vier Schritte\.<\/h2>\s*<p class="lp-sub" data-i18n="lp_s7_d">/);
+    assert.match(w, /<div class="lp-stage lp-reveal lp-how" id="lp-how">\s*<ol class="lp-how-steps" role="tablist" aria-orientation="vertical">/);
+    const steps = [...w.matchAll(/<li class="lp-how-step( is-on)?" role="tab" id="(lp-how-t\d)" aria-controls="(lp-how-s\d)" aria-selected="(true|false)" tabindex="(0|-1)"><span class="lp-how-n" aria-hidden="true">(\d)<\/span><h3 data-i18n="(lp_how\d)">[^<]+<\/h3><p data-i18n="(lp_how\d_d)">[^<]+<\/p><i class="lp-how-bar" aria-hidden="true"><\/i><\/li>/g)].map(m => [m[1] ? 'on' : '', m[2], m[3], m[4], m[5], m[6], m[7], m[8]]);
+    assert.deepEqual(steps, [['on', 'lp-how-t1', 'lp-how-s1', 'true', '0', '1', 'lp_how1', 'lp_how1_d'], ['', 'lp-how-t2', 'lp-how-s2', 'false', '-1', '2', 'lp_how2', 'lp_how2_d'], ['', 'lp-how-t3', 'lp-how-s3', 'false', '-1', '3', 'lp_how3', 'lp_how3_d'], ['', 'lp-how-t4', 'lp-how-s4', 'false', '-1', '4', 'lp_how4', 'lp_how4_d']], 'four steps, each explained, the first on');
+    assert.match(w, /<div class="lp-frame lp-tilt lp-how-frame" id="lp-how-frame">/);
+    const shots = [...w.matchAll(/<div class="lp-shot lp-shot-(\w+)( hidden)?" id="(lp-how-s\d)" role="tabpanel" aria-labelledby="(lp-how-t\d)">/g)].map(m => [m[1], Boolean(m[2]), m[3], m[4]]);
+    assert.deepEqual(shots, [['form', false, 'lp-how-s1', 'lp-how-t1'], ['list', true, 'lp-how-s2', 'lp-how-t2'], ['week', true, 'lp-how-s3', 'lp-how-t3'], ['done', true, 'lp-how-s4', 'lp-how-t4']], 'one screen per step, the first shown');
+    // 1 · the form, with the fields the real one has
+    const form = w.slice(w.indexOf('id="lp-how-s1"'), w.indexOf('id="lp-how-s2"'));
+    assert.match(form, /<div class="lp-frame-bar"><b data-i18n="lp_tab_tasks">[^<]+<\/b><span class="lp-crumb" data-i18n="lp_how_new">/, 'where it happens: Tasks, New task');
+    assert.deepEqual([...form.matchAll(/<span class="lp-fm-l" data-i18n="(\w+)">/g)].map(m => m[1]), ['lp_how_f_title', 'lp_how_due', 'lp_how_f_time', 'lp_kpi_owner', 'lp_how_f_deal', 'lp_how_prio'], 'title, due, time, owner, deal, priority');
+    assert.match(form, /<span class="lp-fm-v lp-fm-title" data-i18n="lp_w1">/); assert.match(form, /<span class="lp-fm-v lp-how-mark">14:00<\/span>/, 'the time is the marked field: it is what puts the task on the calendar');
+    assert.match(form, /<span class="lp-hint" data-i18n="lp_how_f_hint">[^<]+<\/span><span class="lp-fm-actions"><span class="lp-btn lp-btn-sm" data-i18n="lp_how_cancel">[^<]+<\/span><button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lp-how-create" data-i18n="lp_how1">/, 'the hint, cancel as a picture, create as the one control');
+    assert.doesNotMatch(form, /<input|<select|<textarea|<form/, 'a picture of the form, not a form');
+    assert.ok(dict.de.lp_how_f_date.startsWith(dict.de.lp_wd3 + ', 7.') && dict.de.lp_w1_due === dict.de.lp_wd3 + ', 14:00', 'the form\'s date and time are the list\'s due and the week\'s slot');
+    // 2 · the list, as the Tasks page draws it
+    const list = w.slice(w.indexOf('id="lp-how-s2"'), w.indexOf('id="lp-how-s3"'));
+    assert.match(list, /<div class="lp-seg" id="lp-how-scope"><button type="button" class="lp-how-scope" data-scope="all" aria-pressed="true" data-i18n="lp_how_all">[^<]+<\/button><button type="button" class="lp-how-scope" data-scope="mine" aria-pressed="false" data-i18n="lp_how_mine">/, 'All tasks / My tasks, as real toggles');
+    assert.deepEqual([...list.matchAll(/<div class="lp-list-head">((?:<span data-i18n="\w+">[^<]+<\/span>)+)<\/div>/g)].flatMap(m => [...m[1].matchAll(/data-i18n="(\w+)"/g)].map(x => x[1])), ['lp_how_task', 'lp_how_prio', 'lp_how_due', 'lp_kpi_owner']);
+    assert.match(list, /<p class="lp-list-group"><i><\/i><span data-i18n="lp_board_pipeline">[^<]+<\/span><span class="lp-count">4<\/span><\/p>/, 'grouped by project');
+    assert.deepEqual([...list.matchAll(/<li class="lp-task( lp-how-mark)?" data-owner="(\w+)">/g)].map(m => [Boolean(m[1]), m[2]]), [[true, 'mk'], [false, 'tb'], [false, 'mk'], [false, 'nf']], 'four rows with owners; the new one marked');
+    assert.match(list, /<li class="lp-task lp-how-mark" data-owner="mk"><label><input type="checkbox" id="lp-how-tick">/); assert.equal(count(list, '<input'), 1, 'only the new row ticks');
+    assert.match(list, /<small class="is-late" data-i18n="lp_how_t4_due">/, 'one overdue row'); assert.match(list, /<div class="lp-frame-foot"><span class="lp-hint" data-i18n="lp_how_foot">/);
+    // 3 · the week, as the calendar draws it
+    const week = w.slice(w.indexOf('id="lp-how-s3"'), w.indexOf('id="lp-how-s4"'));
+    assert.match(week, /<div class="lp-frame-bar"><b data-i18n="lp_how_cal">[^<]+<\/b><span class="lp-crumb" data-i18n="lp_how_range">[^<]+<\/span><div class="lp-seg"><span data-i18n="lp_how_month">[^<]+<\/span><span class="is-on" data-i18n="lp_how_week">/);
+    assert.deepEqual([...week.matchAll(/<span( class="is-today")? data-i18n="(lp_wd\d)">/g)].map(m => m[2]), ['lp_wd1', 'lp_wd2', 'lp_wd3', 'lp_wd4', 'lp_wd5', 'lp_wd6', 'lp_wd7'], 'seven days');
+    assert.match(week, /<div class="lp-week-days"><span><\/span><b>5<\/b><b>6<\/b><b class="is-today">7<\/b><b>8<\/b><b>9<\/b><b>10<\/b><b>11<\/b><\/div>/, 'Wednesday the 7th is today');
+    assert.deepEqual([...week.matchAll(/<div class="lp-week-gutter">((?:<span>\d\d:00<\/span>)+)<\/div>/g)].flatMap(m => [...m[1].matchAll(/>(\d\d:00)</g)].map(x => x[1])), ['09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00'], 'eight hours down');
+    assert.equal(count(week, '<div class="lp-week-col'), 7); assert.equal(count(week, '<div class="lp-week-rules" aria-hidden="true">' + '<i></i>'.repeat(8) + '</div>'), 1, 'an hour rule per hour');
+    assert.match(week, /<div class="lp-week-col is-today"><i class="lp-week-now" aria-hidden="true"><\/i><div class="lp-week-ev at-14 lp-how-mark"><b>14:00<\/b><span data-i18n="lp_w1">/, 'the task sits on Wednesday at 14:00, marked; the now line is on today');
+    const evs = [...week.matchAll(/<div class="lp-week-ev( is-ev)? (at-\d+)( lp-how-mark)?"><b>(\d\d:\d\d)<\/b><span data-i18n="(\w+)">/g)].map(m => [Boolean(m[1]), m[2], m[4], m[5]]);
+    assert.deepEqual(evs, [[true, 'at-10', '10:00', 'lp_how_e1'], [false, 'at-1430', '14:30', 'lp_task3'], [false, 'at-14', '14:00', 'lp_w1'], [true, 'at-11', '11:00', 'lp_how_e2'], [false, 'at-10', '10:00', 'lp_task1']], 'tasks and events, each at its hour');
+    for (const [, at, time] of evs) assert.equal(at, 'at-' + time.replace(':00', '').replace(':', ''), 'the class is the time');
+    assert.ok(dict.de.lp_task3_due.endsWith('14:30') && dict.de.lp_task1_due.endsWith('10:00'), 'the week agrees with the list');
+    // 4 · done, in the three places, and the toast
+    const done = w.slice(w.indexOf('id="lp-how-s4"'));
+    assert.deepEqual([...done.matchAll(/<span class="lp-label" data-i18n="(\w+)">/g)].map(m => m[1]), ['lp_how_p_list', 'lp_how_cal', 'lp_how_f_deal'], 'the list, the calendar, the deal');
+    assert.match(done, /<div class="lp-task is-done lp-how-mark"><label><span class="lp-check is-on"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"\/><\/svg><\/span><span class="lp-task-title" data-i18n="lp_w1">[^<]+<\/span><\/label><small data-i18n="lp_w1_due">/);
+    assert.match(done, /<div class="lp-week-ev is-done"><b>14:00<\/b><span data-i18n="lp_w1">/);
+    assert.match(done, /<div class="lp-done-deal"><b data-i18n="lp_deal_name">[^<]+<\/b><div class="lp-task-head"><span class="lp-task-progress" id="lp-how-progress"><\/span><span class="lp-task-bar"><i><\/i><\/span><\/div><\/div>/, 'the deal\'s progress, filled by the script');
+    assert.match(done, /<div class="lp-toast lp-how-toast"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"\/><\/svg><span class="lp-toast-text" data-i18n="lp_how_done">[^<]+<\/span><button type="button" class="lp-toast-undo" id="lp-how-undo" data-i18n="lp_toast_undo">/, 'the toast with its undo, as the app shows it');
+    assert.match(w, /<\/div>\s*<p class="lp-cap lp-how-cap" data-i18n="lp_s7_cap">[^<]+<\/p>\s*<\/div>\s*<\/section>/, 'the benefit line closes the band');
+    assert.equal(count(w, 'lp-how-mark'), 4, 'one marked element per screen: the time, the new row, the slot, the struck row');
+    assert.doesNotMatch(w, /lp-packet|lp-pill|replay|lp-chat|lp-msg|<pre|<code|\{|\}/, 'no seal, no replay pill, no packet, no chat, no code');
     assert.match(html, /<symbol id="lp-i-calendar" viewBox="0 0 24 24">/);
     const cta = section('cta');
     assert.match(cta, /<h2 data-i18n="lp_cta_t">[\s\S]*<p class="lp-sub" data-i18n="lp_cta_d">[\s\S]*<a class="lp-pill lp-request"[\s\S]*<a class="lp-pill lp-pill-line" href="\/" data-i18n="lp_login">/);
@@ -161,7 +189,8 @@ describe('copy', () => {
     assert.deepEqual([...used].filter(k => !(k in dict.de)), []);
     const logic = js.slice(js.indexOf('let lpLang'));
     const dynamic = k => (/^lp_f_(name|email|phone|company)$/.test(k) && logic.includes("lpT('lp_f_' + f)"))   // the lead card builds these keys
-      || (/^lp_h\d[ab]$/.test(k) && contacts.some(c => c.history.some(h => h.key === k)));                        // the contacts' history carries these
+      || (/^lp_h\d[ab]$/.test(k) && contacts.some(c => c.history.some(h => h.key === k)))                         // the contacts' history carries these
+      ;
     assert.deepEqual(Object.keys(dict.de).filter(k => !used.has(k) && !logic.includes(`'${k}'`) && !dynamic(k) && k !== 'lp_request_subject'), [], 'no dead keys');
   });
   test('short, in the manner of a launch page: statements at most 6 words, lines at most 12, every value at most 90 characters; under 500 German words on the whole page', () => {
@@ -170,8 +199,13 @@ describe('copy', () => {
       if (/^(lp_s\d_t|lp_hero_title|lp_cta_t)$/.test(k)) assert.ok(v.split(/\s+/).length <= 6, `${lang}.${k} statement: ${v}`);
       if (/^(lp_s\d_d|lp_hero_sub|lp_cta_d)$/.test(k)) assert.ok(v.split(/\s+/).length <= 12, `${lang}.${k} line: ${v}`);
     }
-    const words = [...body.matchAll(/>([^<]+)</g)].map(m => m[1].trim()).filter(Boolean).join(' ').split(/\s+/).length;
-    assert.ok(words < 500, `German words on the page: ${words}`);
+    const tokens = src => [...src.matchAll(/>([^<]+)</g)].map(m => m[1].trim()).filter(Boolean).join(' ').split(/\s+/).length;
+    const words = tokens(body);
+    assert.ok(words < 650, `German words on the page: ${words}`);   // 500 until Part 14o: the walkthrough explains four steps and shows four screens of the product
+    const w = section('work');
+    const own = tokens(w.slice(0, w.indexOf('<div class="lp-frame')) + w.slice(w.indexOf('<p class="lp-cap lp-how-cap"')));
+    assert.ok(own <= 100, `the walkthrough's own copy, outside the frame: ${own}`);
+    for (const lang of ['de', 'en']) for (const k of ['lp_how1_d', 'lp_how2_d', 'lp_how3_d', 'lp_how4_d']) assert.ok(dict[lang][k].split(/\s+/).length <= 14, `${lang}.${k} explains in one line: ${dict[lang][k]}`);
   });
   test('headings, lines, links, buttons, list items and labels carry a key; only names and numbers are untranslated', () => {
     const allow = /^(DE|EN|Make\.com|Zapier|n8n|Upgrads|Mara Kühn|Tim Berger|Jana Weber|Elbstraße 12, Whg\. 3|Notariat Feld &amp; Kollegen|jana\.weber@example\.de|\+49 171 2345678|X-Upgrads[\s\S]*|\{[\s\S]*|[\d€.,:%\s+()-]*)$/;
@@ -196,10 +230,10 @@ describe('copy', () => {
       assert.doesNotMatch(all, /\b[A-Z]{5,}\b/, 'no shouting labels');
     }
     const en = Object.values(dict.en).join('\n').toLowerCase();
-    for (const word of ['make', 'zapier', 'n8n', 'facebook', 'instagram', 'tiktok', 'invite code', 'upgrads engine', 'tasks', 'calendar', 'chat', 'team', 'contact', 'whatsapp']) assert.ok(en.includes(word), `en mentions ${word}`);
+    for (const word of ['make', 'zapier', 'n8n', 'facebook', 'instagram', 'tiktok', 'invite code', 'upgrads engine', 'tasks', 'calendar', 'team', 'contact', 'whatsapp']) assert.ok(en.includes(word), `en mentions ${word}`);   // chat left the page in Part 14i
     const de = Object.values(dict.de).join('\n');
     assert.doesNotMatch(en + '\n' + de, /hmac|sha256|signiert|signed with|payload|json|curl|header|endpoint|\bapi\b|webhook-url|vertrag\.unterschrieben/i, 'nothing technical in the copy: the page shows the hand-over, not the code behind it');
-    for (const word of ['Make', 'Zapier', 'n8n', 'Einladungscode', 'Upgrads Engine', 'Facebook', 'Instagram', 'TikTok', 'Aufgaben', 'Kalender', 'Chat', 'Team', 'Kontakt', 'WhatsApp']) assert.ok(de.includes(word), `de mentions ${word}`);
+    for (const word of ['Make', 'Zapier', 'n8n', 'Einladungscode', 'Upgrads Engine', 'Facebook', 'Instagram', 'TikTok', 'Aufgaben', 'Kalender', 'Team', 'Kontakt', 'WhatsApp']) assert.ok(de.includes(word), `de mentions ${word}`);   // chat left the page in Part 14i
   });
   test('the language toggle and the mailto subject follow the chosen language', () => {
     assert.equal(count(html, 'class="lp-lang-btn" data-lang="de"'), 1); assert.equal(count(html, 'class="lp-lang-btn" data-lang="en"'), 1);
@@ -262,8 +296,9 @@ describe('the frames', () => {
     assert.doesNotMatch(ct, /<pre|<code|\{|\}|href="tel:|href="mailto:/, 'no code; the pills demonstrate, they do not dial a demo number');
     assert.match(html, /<symbol id="lp-i-search" viewBox="0 0 24 24">/);
     assert.equal(contacts.length, 5);
-    for (const c of contacts) { assert.ok(c.name && c.phone && c.email && Array.isArray(c.deals) && c.deals.length >= 1 && c.history.length === 2, c.name); for (const hh of c.history) { assert.ok(['note', 'call', 'email', 'wa'].includes(hh.type), hh.type); assert.ok(dict.de[hh.key] && dict.en[hh.key], hh.key); assert.ok(hh.day >= 1 && hh.day <= 7 && /^\d\d:\d\d$/.test(hh.time)); } for (const d of c.deals) assert.ok(/^lp_col_/.test(d.stage), d.stage); }
+    for (const c of contacts) { assert.ok(c.name && c.phone && c.email && Array.isArray(c.deals) && c.deals.length >= 1 && c.history.length === 2, c.name); for (const hh of c.history) { assert.ok(['note', 'call', 'email', 'wa'].includes(hh.type), hh.type); assert.ok(dict.de[hh.key] && dict.en[hh.key], hh.key); assert.ok(hh.day >= 1 && hh.day <= 7 && /^\d\d:\d\d$/.test(hh.time)); assert.ok(dict.de['lp_wd' + hh.day] && dict.en['lp_wd' + hh.day], `lp_wd${hh.day} exists: the history builds the key from the day (Part 14n dropped lp_wd1/2 and the history showed raw keys)`); } for (const d of c.deals) assert.ok(/^lp_col_/.test(d.stage), d.stage); }
     assert.equal(new Set(contacts.map(c => c.name)).size, 5, 'five different people');
+    for (let d = 1; d <= 7; d++) assert.ok(dict.de['lp_wd' + d] && dict.en['lp_wd' + d], 'lp_wd' + d);
     assert.ok(contacts.some(c => c.company === 'Notariat Feld & Kollegen'), 'the notary from the record is a contact too');
     const n = section('numbers');
     const periods = [...n.matchAll(/class="lp-period-btn" data-period="(\d+)" aria-pressed="(true|false)"/g)];
@@ -376,17 +411,24 @@ describe('landing.js: behaviour hooks', () => {
     assert.match(b, /wonCol\.classList\.add\('is-flash'\)/);
     const an = sliceFn(js, 'lpInitAnalytics', 'landing.js');
     assert.match(an, /lpCountUp\(el, value, fmt, 900\)/); assert.match(an, /animateNext = true; render\(\)/); assert.match(an, /threshold: 0\.4/);
-    assert.equal(count(js, 'new IntersectionObserver('), 3, 'reveal, the board start, the figures');
+    assert.equal(count(js, 'new IntersectionObserver('), 4, 'reveal, the board start, the figures, the walkthrough');
     const wk = sliceFn(js, 'lpInitWork', 'landing.js');
-    assert.match(wk, /chipFor\(row\.dataset\.task\)\?\.classList\.toggle\('is-done', cb\.checked\)/, 'ticking a task ticks its calendar entry');
-    assert.match(wk, /\.lp-cal-day\[data-day="4"\] \.lp-cal-items/, 'a new task lands on Thursday'); assert.match(wk, /due\.dataset\.i18n = 'lp_w_new_due'/);
-    assert.match(wk, /list\.querySelector\('\.lp-check'\)\?\.cloneNode\(true\)/, 'the new row reuses the record\'s check');
-    assert.match(wk, /post\('M', '', 'Mara Kühn', text\)/); assert.match(wk, /post\('T', 'lp-av-t', 'Tim Berger', '', 'lp_msg_reply'\)/);
-    assert.match(wk, /online\?\.classList\.add\('is-live'\)/); assert.match(wk, /e\.preventDefault\(\)/); assert.match(wk, /msgs\.scrollTop = msgs\.scrollHeight/);
-    assert.match(wk, /lpT\('lp_tasks_progress', \{ d: done, n: rows\.length \}\)/, 'the record\'s progress line'); assert.match(wk, /count\.textContent = String\(rows\.length - done\)/);
-    assert.match(wk, /lpT\('lp_wk_typing', \{ name: 'Tim Berger' \}\)/); assert.match(wk, /typing\?\.classList\.toggle\('hidden', reduce\)/, 'no typing dots under reduced motion'); assert.match(wk, /reduce \? 0 : 1400/);
-    assert.match(wk, /at\.textContent = '10:00'/, 'the new chip carries its time');
-    assert.doesNotMatch(wk, /innerHTML|fetch\(|socket/);
+    assert.match(wk, /const STEP_MS = 4800;/);
+    assert.match(wk, /function show\(n, manual\)/); assert.match(wk, /s\.classList\.toggle\('is-on', on\); s\.classList\.toggle\('is-past', k < i\); s\.setAttribute\('aria-selected', String\(on\)\); s\.tabIndex = on \? 0 : -1;/, 'the steps are tabs');
+    assert.match(wk, /p\.classList\.toggle\('hidden', !on\)/, 'one screen at a time'); assert.match(wk, /p\.classList\.add\('is-in'\)/, 'the screen pops in');
+    assert.match(wk, /stage\?\.style\.setProperty\('--lp-how-prog', String\(steps\.length > 1 \? i \/ \(steps\.length - 1\) : 0\)\)/, 'the rail fills to the step that is on');
+    assert.match(wk, /if \(manual\) stop\(\);/, 'a click takes over');
+    assert.match(wk, /function play\(\) \{\s*if \(reduce\) return;/); assert.match(wk, /if \(i >= steps\.length - 1\) \{ stop\(\); return; \}/, 'the walkthrough stops at the last step; it does not loop');
+    assert.match(wk, /stage\?\.classList\.add\('is-auto'\)/); assert.match(wk, /stage\?\.classList\.remove\('is-auto'\)/);
+    assert.match(wk, /e\.key === 'Enter' \|\| e\.key === ' '/); assert.match(wk, /e\.key !== 'ArrowDown' && e\.key !== 'ArrowUp'/, 'the arrow keys walk the steps');
+    assert.match(wk, /q\('#lp-how-create'\)\?\.addEventListener\('click', \(\) => show\(1, true\)\)/, 'the form\'s button creates the task: step 2');
+    assert.match(wk, /tick\.checked = false; show\(3, true\);/, 'the row\'s tick completes it: step 4, the row left open for a second look');
+    assert.match(wk, /q\('#lp-how-undo'\)\?\.addEventListener\('click', \(\) => show\(1, true\)\)/, 'undo reopens it');
+    assert.match(wk, /list\?\.classList\.toggle\('is-mine', b\.dataset\.scope === 'mine'\)/, 'My tasks filters the rows');
+    assert.match(wk, /lpT\('lp_tasks_progress', \{ d: 3, n: 4 \}\)/, 'the deal\'s progress reads the same key as the record'); assert.match(wk, /lpRerender\.push/);
+    assert.match(wk, /threshold: 0\.35/); assert.match(wk, /io\.disconnect\(\); play\(\)/);
+    assert.match(wk, /^\s*show\(0\);\s*if \('IntersectionObserver' in window && !reduce\)/m, 'without an observer or under reduced motion the first step stands, explained, for the visitor to click');
+    assert.doesNotMatch(wk, /innerHTML|fetch\(|socket|lpFly|setScene|runStory|endState|is-ticked|typing|online|msgs/, 'no chat, no flying packet, no seal');
   });
   test('all helpers are top-level function declarations; no wall, no stage, no API calls, no eval, no innerHTML', () => {
     for (const f of ['lpT', 'lpApplyLang', 'lpSetLang', 'lpInitNav', 'lpInitReveal', 'lpTiltFor', 'lpInitFx', 'lpCountUp', 'lpFmtEur', 'lpFmtEurShort', 'lpBoardStats', 'lpFlip', 'lpEase', 'lpInitBoard', 'lpInitRecord', 'lpGetPath', 'lpMapLead', 'lpInitLeads', 'lpInitContacts', 'lpInitAnalytics', 'lpFly', 'lpInitEngine', 'lpInitWork', 'lpInit']) assert.match(js, new RegExp(`^function ${f}\\(`, 'm'), f);
@@ -444,21 +486,30 @@ describe('landing.css', () => {
     assert.match(css, /\.lp-glow::after \{[^}]*animation: lp-drift 18s/);
     assert.match(css, /\.lp-tilt \{ transform-style: preserve-3d; transition: transform \.18s/);
     assert.match(css, /\.lp-tilt::after \{[^}]*radial-gradient\(520px circle at var\(--sx, 50%\) var\(--sy, 50%\)/);
-    assert.match(css, /\.lp-work \{ display: grid; grid-template-columns: minmax\(0, 1\.25fr\) minmax\(0, 1fr\); \}/, 'tasks and week left, the room right');
+    assert.match(css, /\.lp-how \{ --lp-how-prog: 0; display: grid; grid-template-columns: minmax\(0, 2fr\) minmax\(0, 3fr\);[^}]*text-align: left; \}/, 'the steps left, the product right');
+    assert.match(css, /\.lp-how-steps::after \{ background: var\(--sky-300\); transform-origin: top; transform: scaleY\(var\(--lp-how-prog, 0\)\);/, 'the rail fills to the step that is on');
+    assert.match(css, /\.lp-how-step \{[^}]*opacity: \.5;/); assert.match(css, /\.lp-how-step\.is-on \{ opacity: 1; \}/); assert.match(css, /\.lp-how-step\.is-on \.lp-how-n \{ background: var\(--sky-300\);/);
+    assert.match(css, /\.lp-how\.is-auto \.lp-how-step\.is-on \.lp-how-bar::after \{ animation: lp-how-fill 4\.8s linear both; \}/, 'the bar counts the step down only while the walkthrough plays'); assert.match(js, /const STEP_MS = 4800;/, 'and the script agrees on the seconds');
+    assert.match(css, /\.lp-how-frame \{ min-height: 480px;/); assert.match(css, /\.lp-shot\.is-in \{ animation: lp-pop/); assert.match(css, /\.lp-how-mark \{ box-shadow: 0 0 0 3px rgba\(150, 202, 226, \.4\); \}/, 'the mark stands still too'); assert.match(css, /\.lp-shot\.is-in \.lp-how-mark \{ animation: lp-ring/);
+    assert.match(css, /\.lp-fm \{[^}]*grid-template-columns: 1fr 1fr;/); assert.match(css, /\.lp-list\.is-mine \.lp-task:not\(\[data-owner="mk"\]\) \{ display: none; \}/, 'My tasks hides the others\' rows'); assert.match(css, /\.lp-list \.lp-task small\.is-late \{ color: var\(--danger\);/, 'overdue in red');
+    assert.match(css, /\.lp-week \{ --lp-hh: 40px;/); assert.match(css, /\.lp-week-head, \.lp-week-days, \.lp-week-body \{ display: grid; grid-template-columns: 46px repeat\(7, minmax\(0, 1fr\)\); \}/, 'seven days across'); assert.match(css, /\.lp-week-body \{ position: relative; height: calc\(var\(--lp-hh\) \* 8\); \}/, 'eight hours down');
+    for (const [cls, k] of [['at-10', '1'], ['at-11', '2'], ['at-14', '5'], ['at-1430', '5.5']]) assert.match(css, new RegExp(`\\.lp-week-ev\\.${cls} \\{ top: ${k === '1' ? 'var\\(--lp-hh\\)' : `calc\\(var\\(--lp-hh\\) \\* ${k.replace('.', '\\.')}\\)`}; \\}`), cls + ' sits at its hour, counted from 09:00');
+    assert.match(css, /\.lp-week-ev\.is-done \{ opacity: \.55; \}\n\.lp-week-ev\.is-done span \{ text-decoration: line-through; \}/, 'done is struck on the week'); assert.match(css, /\.lp-done-deal \.lp-task-bar i \{ width: 75%; \}/, 'three of four on the deal'); assert.match(css, /\.lp-how-toast \{ bottom: 22px; \}/);
+    assert.doesNotMatch(css, /\.lp-wk-|\.lp-cal|\.lp-step|\.lp-chat|\.lp-msg|\.lp-typing|\.lp-online|lp-blink|nth-child\(n\+6\)|\.lp-beat|\.lp-st-|\.lp-story/, 'nothing of the rejected designs is left: the window, the rows, the rail, the room, the three-beat story');
     assert.match(css, /\.lp-ct \{ display: grid; grid-template-columns: minmax\(0, 2fr\) minmax\(0, 3fr\); \}/, 'the list left, the card right'); assert.match(css, /\.lp-ct-act\[aria-pressed="true"\] \{ background: var\(--n-0\);/); assert.match(css, /\.lp-ct-bubble \{[^}]*animation: lp-pop/);
     assert.doesNotMatch(css, /lp-tz|lp-stage-tight/, 'the clocks are gone');
-    assert.match(css, /\.lp-cal \{ display: grid; grid-template-columns: repeat\(7, minmax\(0, 1fr\)\);/); assert.match(css, /\.lp-cal-day\.is-today \{ border-color: var\(--sky-400\); background: var\(--accent-subtle\); \}/);
-    assert.match(css, /\.lp-cal-chip\.is-done \{ opacity: \.5; \}\n\.lp-cal-chip\.is-done span \{ text-decoration: line-through; \}/); assert.match(css, /\.lp-cal-day\.is-today \{ border-color: var\(--sky-400\); background: var\(--accent-subtle\); \}/); assert.match(css, /\.lp-typing i \{[^}]*animation: lp-blink/); assert.match(css, /\.lp-task\.is-done \.lp-task-title \{ color: var\(--ink-muted\); text-decoration: line-through; \}/, 'done looks the same in the list and on the day');
-    assert.match(css, /\.lp-msg \{ display: grid; grid-template-columns: 32px minmax\(0, 1fr\);/); assert.match(css, /\.lp-online\.is-live \.lp-online-dot \{ animation: lp-pulse/);
+    assert.match(css, /\.lp-task\.is-done \.lp-task-title \{ color: var\(--ink-muted\); text-decoration: line-through; \}/, 'done looks the same in the list and on the week');
     assert.doesNotMatch(css, /\.lp-grid li|lp-span-|lp-big/, 'no tile kit left');
     const bp = css.slice(css.indexOf('@media (max-width: 860px)'));
-    assert.match(bp, /\.lp-work, \.lp-ct \{ grid-template-columns: 1fr; \}/); assert.match(bp, /\.lp-ct-list ul \{ flex-direction: row; overflow-x: auto;/, 'on a phone the list becomes a row to swipe'); assert.match(bp, /\.lp-cal-chip \{ height: 8px; padding: 0; \}\n\s*\.lp-cal-chip time, \.lp-cal-chip span \{ display: none; \}/, 'on a phone the week shows bars, not words');
+    assert.match(bp, /\.lp-ct \{ grid-template-columns: 1fr; \}/); assert.match(bp, /\.lp-how \{ grid-template-columns: 1fr; gap: 28px; \}/, 'on a phone the steps stack above the frame');
+    const bp6 = css.slice(css.indexOf('@media (max-width: 600px)'));
+    assert.match(bp6, /\.lp-week-head, \.lp-week-days, \.lp-week-body \{ grid-template-columns: 40px repeat\(5, minmax\(0, 1fr\)\); \}\n\s*\.lp-week-head span:nth-child\(n\+7\), \.lp-week-days b:nth-child\(n\+7\), \.lp-week-col:nth-child\(n\+8\) \{ display: none; \}/, 'on a small phone the week shows Monday to Friday'); assert.doesNotMatch(bp, /lp-msgs|lp-wk-|lp-cal|lp-steps/); assert.match(bp, /\.lp-ct-list ul \{ flex-direction: row; overflow-x: auto;/, 'on a phone the list becomes a row to swipe');
     assert.match(css, /\.lp-col\.is-flash \{ animation: lp-flash/);
-    assert.deepEqual([...css.matchAll(/@keyframes ([\w-]+)/g)].map(m => m[1]), ['lp-fade', 'lp-pulse', 'lp-flash', 'lp-drift', 'lp-hit', 'lp-stream', 'lp-pop', 'lp-blink']);
+    assert.deepEqual([...css.matchAll(/@keyframes ([\w-]+)/g)].map(m => m[1]), ['lp-fade', 'lp-pulse', 'lp-flash', 'lp-drift', 'lp-hit', 'lp-stream', 'lp-pop', 'lp-how-fill', 'lp-ring']);
     assert.match(css, /\.lp-packet \{ position: absolute; left: 0; top: 0; z-index: 8;[^}]*pointer-events: none; \}/, 'the packet is positioned by the script, never in the way');
     assert.match(css, /\.lp-flow-engine\.is-pending \.lp-link-line \{ opacity: 1; animation: lp-stream/); assert.match(css, /\.lp-target\.is-hit \{ animation: lp-hit/);
     const rm = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
-    assert.match(rm, /\.lp-glow::after, \.lp-col\.is-flash, \.lp-task\.is-new, \.lp-cal-chip\.is-new, \.lp-msg\.is-new, \.lp-online\.is-live \.lp-online-dot, \.lp-typing i \{ animation: none; \}/); assert.match(rm, /\.lp-tilt, \.lp-pill, \.lp-chat-btn \{ transition: none; \}/); assert.match(rm, /\.lp-ct-bubble \{ animation: none; \}/); assert.match(rm, /\.lp-target\.is-hit, \.lp-flow-engine\.is-pending \.lp-link-line \{ animation: none; \}/);
+    assert.match(rm, /\.lp-glow::after, \.lp-col\.is-flash, \.lp-shot\.is-in, \.lp-shot\.is-in \.lp-how-mark, \.lp-how\.is-auto \.lp-how-step\.is-on \.lp-how-bar::after \{ animation: none; \}/); assert.match(rm, /\.lp-tilt, \.lp-pill, \.lp-how-step, \.lp-how-n, \.lp-how-steps::after \{ transition: none; \}/); assert.match(rm, /\.lp-ct-bubble \{ animation: none; \}/); assert.match(rm, /\.lp-target\.is-hit, \.lp-flow-engine\.is-pending \.lp-link-line \{ animation: none; \}/);
   });
   test('the stylesheet parses; the app stylesheet is untouched', () => {
     let depth = 0, inC = false;

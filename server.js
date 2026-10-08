@@ -54,6 +54,13 @@ const app        = express();
 const httpServer = http.createServer(app);
 const PORT       = process.env.PORT || 3000;
 
+// Node exits on an unhandled promise rejection. Socket.IO does not await or catch what an
+// async listener returns, so without this one bad payload in any listener would take the whole
+// process down for every tenant (it did: 'chat_message' with a non-string). Log and carry on.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+
 app.set('trust proxy', 1);
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -184,6 +191,16 @@ io.engine.use(sessionMiddleware);
 
 const presence = new Map();
 
+// The only chat payload that reaches the database: a non-empty string of at most 2000
+// characters, trimmed. Anything else (a number, an object, an array — a client can emit any
+// JSON value) is null, never an exception: the listener below is async and nothing catches
+// what it throws.
+function chatMessageText(content) {
+  if (typeof content !== 'string' || content.length > 2000) return null;
+  const text = content.trim();
+  return text ? text : null;
+}
+
 function getOnlineList(workspaceId) {
   const ws = presence.get(workspaceId);
   if (!ws) return [];
@@ -205,8 +222,11 @@ io.on('connection', async (socket) => {
     if (!mem) { socket.disconnect(); return; }
   } catch { socket.disconnect(); return; }
 
-  const { rows: [user] } = await pool.query('SELECT name FROM users WHERE id=$1', [userId]);
-  const userName = user?.name || 'Unknown';
+  let userName = 'Unknown';
+  try {
+    const { rows: [user] } = await pool.query('SELECT name FROM users WHERE id=$1', [userId]);
+    userName = user?.name || 'Unknown';
+  } catch { socket.disconnect(); return; }
 
   socket.join(`ws-${workspaceId}`);
 
@@ -218,11 +238,12 @@ io.on('connection', async (socket) => {
   io.to(`ws-${workspaceId}`).emit('online_users', getOnlineList(workspaceId));
 
   socket.on('chat_message', async (content) => {
-    if (!content?.trim() || content.length > 2000) return;
+    const text = chatMessageText(content);
+    if (text === null) return;
     try {
       const { rows: [msg] } = await pool.query(
         `INSERT INTO chat_messages (workspace_id, user_id, content) VALUES ($1,$2,$3) RETURNING id, created_at`,
-        [workspaceId, userId, content.trim()]
+        [workspaceId, userId, text]
       );
       await pool.query(
         `INSERT INTO chat_reads (user_id, workspace_id, last_read_at) VALUES ($1,$2,NOW())
@@ -231,7 +252,7 @@ io.on('connection', async (socket) => {
       );
       io.to(`ws-${workspaceId}`).emit('new_message', {
         id: msg.id,
-        content: content.trim(),
+        content: text,
         created_at: msg.created_at,
         user_id: userId,
         user_name: userName,

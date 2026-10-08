@@ -72,7 +72,9 @@ describe('auth flow', () => {
     assert.match(s, /stopNotifPolling\(\)/);
     assert.match(s, /stopClock\(\)/);
     assert.match(s, /updateChatBadge\(0\)/);
+    assert.match(s, /resetTasksUI\(\)/, 'the Tasks page scope and filters (Part 40)');
     assert.match(s, /localStorage\.removeItem\('lastTaskListId'\)/);
+    assert.match(s, /localStorage\.removeItem\('taskScope'\)/, "the Tasks page's remembered scope (Part 40)");
     assert.match(s, /proj-collapsed-/);
     for (const keep of ['dealViewMode', 'taskViewMode', "'lang'", "'theme'"]) assert.ok(!s.includes(keep), `${keep} is a browser preference and stays`);
   });
@@ -84,12 +86,14 @@ describe('resetClientState in a sandbox', () => {
     function stopNotifPolling() { __calls.push('stopNotifPolling'); }
     function stopClock() { __calls.push('stopClock'); }
     function updateChatBadge(n) { __calls.push('badge:' + n); }
+    function resetTasksUI() { __calls.push('resetTasksUI'); }
+    function resetActivitiesUI() { __calls.push('resetActivitiesUI'); }
     let socket = { disconnected: false, disconnect() { this.disconnected = true; __calls.push('socket.disconnect'); } };
     const __sock = socket;
     let collapsedTasks = new Set([1, 2]);
     let selectedContactIds = new Set([1]);
     const localStorage = Object.create({ removeItem(k) { delete this[k]; } });
-    Object.assign(localStorage, { lastTaskListId: '7', 'proj-collapsed-2': '1', 'proj-collapsed-9': '1', dealViewMode: 'list', taskViewMode: 'board', lang: 'de', theme: 'dark', crm_guide_seen_v1: '1' });
+    Object.assign(localStorage, { lastTaskListId: '7', taskScope: '{"kind":"mine"}', 'proj-collapsed-2': '1', 'proj-collapsed-9': '1', dealViewMode: 'list', taskViewMode: 'board', lang: 'de', theme: 'dark', crm_guide_seen_v1: '1' });
     const document = { getElementById: () => null };
     function __snapshot() { return { state: { ${Object.keys(INITIAL).join(', ')} }, calls: __calls, socket, sockDisconnected: __sock.disconnected, storage: Object.keys(localStorage), collapsedTasks: collapsedTasks.size, selectedContactIds: selectedContactIds.size }; }
   `;

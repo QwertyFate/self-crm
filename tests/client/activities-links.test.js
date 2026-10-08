@@ -16,20 +16,23 @@ const feed = sliceFn(objects, 'renderActivitiesFeed', 'objects.js');
 
 describe('the Activities feed links to the contact and the deal', () => {
   test('the contact name is a link to openContactDetail, only when there is a contact_id', () => {
-    assert.match(feed, /a\.contact_id \? `[^`]*onclick="event\.preventDefault\(\);openContactDetail\(\$\{a\.contact_id\}\)">\$\{esc\(a\.contact_name \|\| 'Contact'\)\}<\/a>/);
+    // the reference row: an icon, then the name in a <span> so it can truncate
+    assert.match(feed, /a\.contact_id \? `[^`]*onclick="event\.preventDefault\(\);openActivityContact\(\$\{a\.contact_id\}\)">\$\{icon\('users'\)\}<span>\$\{esc\(a\.contact_name \|\| 'Contact'\)\}<\/span><\/a>/);
   });
   test('the deal title is a link to openDealDetail, only when there is a deal_id', () => {
-    assert.match(feed, /a\.deal_id \? `[^`]*onclick="event\.preventDefault\(\);openDealDetail\(\$\{a\.deal_id\}\)">\$\{esc\(a\.deal_title \|\| 'Deal'\)\}<\/a>/);
+    assert.match(feed, /a\.deal_id \? `[^`]*onclick="event\.preventDefault\(\);openActivityDeal\(\$\{a\.deal_id\}\)">\$\{icon\('deals'\)\}<span>\$\{esc\(a\.deal_title \|\| 'Deal'\)\}<\/span><\/a>/);
   });
   test('both links are real anchors that do not navigate (href="#" + preventDefault)', () => {
-    const anchors = feed.match(/<a href="#"[^>]*onclick="event\.preventDefault\(\);open(Contact|Deal)Detail/g) || [];
+    const anchors = feed.match(/<a href="#"[^>]*onclick="event\.preventDefault\(\);openActivity(Contact|Deal)\(/g) || [];
     assert.equal(anchors.length, 2);
   });
   test('names are escaped — a contact called <b>x</b> cannot inject markup into the feed', () => {
     assert.doesNotMatch(feed, /\$\{a\.contact_name\}/);
     assert.doesNotMatch(feed, /\$\{a\.deal_title\}/);
   });
-  test('the openers it calls exist and are the ones the calendar uses', () => {
+  test('the openers it calls exist and delegate to the ones the calendar uses (plus a reload when the pop-up closes)', () => {
+    assert.match(sliceFn(objects, 'openActivityDeal', 'objects.js'), /openDealDetail\(id, activityDetailOpts\(\)\)/);
+    assert.match(sliceFn(objects, 'openActivityContact', 'objects.js'), /openContactDetail\(id, activityDetailOpts\(\)\)/);
     const dv = read('public/js/detail-views.js');
     assert.match(dv, /async function openContactDetail\(id/);
     assert.match(dv, /async function openDealDetail\(id/);

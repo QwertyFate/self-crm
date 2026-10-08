@@ -70,14 +70,14 @@ describe('dvActHtml: stored note → safe HTML, same picture for every stored sh
 describe('the Activities page', () => {
   test('the feed renders notes through dvActHtml, never esc(a.content)', () => {
     const f = sliceFn(objects, 'renderActivitiesFeed', 'objects.js');
-    assert.match(f, /<div class="act-content">\$\{dvActHtml\(a\.content\)\}<\/div>/);
+    assert.match(f, /<div class="tl-text ac-text">\$\{dvActHtml\(a\.content\)\}<\/div>/);
     assert.doesNotMatch(f, /esc\(a\.content\)/);
   });
   test('search matches the VISIBLE text of a note, not its stored <br> and entities', () => {
     assert.match(sliceFn(objects, 'visibleActivities', 'objects.js'), /dvActText\(a\.content\)/);
   });
   test('the CSV export writes the visible text, not stored markup', () => {
-    assert.match(objects, /a\.created_at \? new Date\(a\.created_at\)\.toISOString\(\)\.slice\(0, 10\) : '', dvActText\(a\.content\)\]/);
+    assert.match(objects, /a\.created_at \? new Date\(a\.created_at\)\.toISOString\(\) : '', dvActText\(a\.content\)\]/);
   });
 });
 
