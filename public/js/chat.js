@@ -1,3 +1,37 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   TEAM CHAT — one room per workspace, over socket.io, plus a REST fallback.
+
+   TWO SURFACES, ONE ROOM: a slide-out panel available from anywhere, and a
+   full Chat page. chatOpen / chatPageOpen say which is visible; both render
+   the same messages through different renderers (renderMessages vs
+   renderMessagesToPage).
+
+   HOW THE LIVE PART WORKS
+     initChatSocket()  — called from showApp() once per session. The socket
+       handshake reuses the session cookie, so there is no separate chat login;
+       the server disconnects anyone who is not a member of the workspace.
+       socket.on('new_message')  → append + bump the unread badge
+       socket.on('online_users') → the presence list (renderOnlineUsers)
+       socket.emit('chat_message', text) → send
+     Presence is kept in memory ON THE SERVER, so it resets on restart and does
+     not work across multiple instances.
+
+   HISTORY AND UNREAD go over REST, not the socket:
+     GET  /api/chat/messages?before=<id>  paginate backwards (50 at a time);
+          chatOldestId / chatNewestId are the cursors
+     GET  /api/chat/unread                drives the sidebar badge
+     PATCH /api/chat/read                 marks the room read
+
+   FUNCTION MAP
+     socket    initChatSocket
+     render    renderMessages, renderMessagesToPage, renderChatRoom,
+               renderOnlineUsers, renderPageOnlineUsers, chatAvatar,
+               chatLocale, chatTimeLabel, dayLabel, isSameDay
+     paging    loadOlderMessages, scrollChatBottom, scrollChatPageBottom
+     page      loadChatPage, sendChatMessageFromPage
+     badge     updateChatBadge, refreshChatBadge
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 let chatOpen         = false;
 let chatPageOpen     = false;
 let chatOldestId     = null;
@@ -10,16 +44,19 @@ function chatAvatar(name) {
   return (name || '?')[0].toUpperCase();
 }
 
+// Dates follow the UI language, not the browser's locale (same rule as objects.js actLocale()).
+function chatLocale() { return currentLang === 'de' ? 'de-DE' : 'en-GB'; }
+
 function chatTimeLabel(dateStr) {
   const d    = new Date(dateStr);
   const now  = new Date();
   const diff = now - d;
   const mins = Math.floor(diff / 60000);
-  if (mins < 1)   return 'just now';
-  if (mins < 60)  return `${mins}m ago`;
+  if (mins < 1)   return t('ago_now');
+  if (mins < 60)  return tf('chat_ago_m', { n: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24)   return `${hrs}h ago`;
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (hrs < 24)   return tf('ago_h', { n: hrs });
+  return d.toLocaleDateString(chatLocale(), { month: 'short', day: 'numeric' });
 }
 
 function isSameDay(a, b) {
@@ -32,10 +69,10 @@ function isSameDay(a, b) {
 function dayLabel(dateStr) {
   const d   = new Date(dateStr);
   const now = new Date();
-  if (isSameDay(d, now)) return 'Today';
+  if (isSameDay(d, now)) return t('today');
   const yest = new Date(now); yest.setDate(yest.getDate() - 1);
-  if (isSameDay(d, yest)) return 'Yesterday';
-  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  if (isSameDay(d, yest)) return t('yesterday');
+  return d.toLocaleDateString(chatLocale(), { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
 function renderMessages(messages, prepend = false) {
@@ -67,7 +104,7 @@ function renderMessages(messages, prepend = false) {
         ${!isMe && !grouped ? `<div class="chat-avatar">${chatAvatar(msg.user_name)}</div>` : ''}
         ${!isMe && grouped  ? `<div class="chat-avatar-spacer"></div>` : ''}
         <div class="chat-bubble-wrap">
-          ${!grouped ? `<div class="chat-meta">${isMe ? 'You' : esc(msg.user_name)} <span class="chat-time">${chatTimeLabel(msg.created_at)}</span></div>` : ''}
+          ${!grouped ? `<div class="chat-meta">${isMe ? esc(t('chat_you')) : esc(msg.user_name)} <span class="chat-time">${chatTimeLabel(msg.created_at)}</span></div>` : ''}
           <div class="chat-bubble">${esc(msg.content)}</div>
         </div>
       </div>`;
@@ -160,11 +197,11 @@ function renderOnlineUsers() {
   if (!bar) return;
 
   if (!onlineUsers.length) {
-    bar.innerHTML = '<span style="color:var(--muted);font-size:12px">No one online</span>';
+    bar.innerHTML = `<span style="color:var(--muted);font-size:12px">${esc(t('chat_no_one_online'))}</span>`;
     return;
   }
 
-  let html = '<span style="color:var(--muted);font-size:12px">Online: </span>';
+  let html = `<span style="color:var(--muted);font-size:12px">${esc(t('chat_online'))} </span>`;
   onlineUsers.forEach(user => {
     html += `<div class="chat-online-item"><div class="chat-online-dot"></div>${esc(user.name)}</div>`;
   });
@@ -176,11 +213,11 @@ function renderPageOnlineUsers() {
   if (!bar) return;
 
   if (!onlineUsers.length) {
-    bar.innerHTML = '<span style="color:var(--muted);font-size:12px">No one online</span>';
+    bar.innerHTML = `<span style="color:var(--muted);font-size:12px">${esc(t('chat_no_one_online'))}</span>`;
     return;
   }
 
-  let html = '<span style="color:var(--muted);font-size:12px">Online: </span>';
+  let html = `<span style="color:var(--muted);font-size:12px">${esc(t('chat_online'))} </span>`;
   onlineUsers.forEach(user => {
     html += `<div class="chat-online-item"><div class="chat-online-dot"></div>${esc(user.name)}</div>`;
   });
@@ -201,12 +238,12 @@ async function loadChatPage() {
   try {
     const data = await api.get('/api/chat/messages');
     if (!data || data.error) {
-      el.innerHTML = '<div class="chat-empty">Could not load messages.</div>';
+      el.innerHTML = `<div class="chat-empty">${esc(t('chat_err_load'))}</div>`;
       return;
     }
 
     if (!data.messages || !data.messages.length) {
-      el.innerHTML = '<div class="chat-empty">No messages yet. Say hello to your team!</div>';
+      el.innerHTML = `<div class="chat-empty">${esc(t('chat_empty'))}</div>`;
     } else {
       el.innerHTML = '';
       renderMessagesToPage(data.messages);
@@ -226,7 +263,7 @@ async function loadChatPage() {
     }
   } catch (err) {
     console.error('Error in loadChatPage:', err);
-    el.innerHTML = '<div class="chat-empty">Error loading messages.</div>';
+    el.innerHTML = `<div class="chat-empty">${esc(t('chat_err_loading'))}</div>`;
   }
 }
 
@@ -238,16 +275,16 @@ async function renderChatRoom() {
   chatNewestId = null;
   chatLoadingMore = false;
   if (!socket) initChatSocket();
-  el.innerHTML = '<div class="chat-empty">Loading…</div>';
+  el.innerHTML = `<div class="chat-empty">${esc(t('chat_loading'))}</div>`;
   try {
     const data = await api.get('/api/chat/messages');
     if (!data || data.error || !data.messages) {
-      el.innerHTML = '<div class="chat-empty">Could not load messages.</div>';
+      el.innerHTML = `<div class="chat-empty">${esc(t('chat_err_load'))}</div>`;
       return;
     }
     el.innerHTML = data.messages.length
       ? ''
-      : '<div class="chat-empty">No messages yet. Say hello to your team!</div>';
+      : `<div class="chat-empty">${esc(t('chat_empty'))}</div>`;
     if (data.messages.length) {
       renderMessagesToPage(data.messages);
       chatOldestId = data.messages[0].id;
@@ -258,7 +295,7 @@ async function renderChatRoom() {
     updateChatBadge(0);
   } catch (err) {
     console.error('Error in renderChatRoom:', err);
-    el.innerHTML = '<div class="chat-empty">Error loading messages.</div>';
+    el.innerHTML = `<div class="chat-empty">${esc(t('chat_err_loading'))}</div>`;
   }
 }
 
@@ -274,7 +311,7 @@ function renderMessagesToPage(messages, prepend = false) {
   let lastUser = null;
 
   if (!prepend && el.innerHTML) {
-    const lastMsg = el.querySelectorAll('.chat-msg:not(.chat-day-sep)');
+    const lastMsg = el.querySelectorAll('.msg:not(.chat-day-sep)');
     if (lastMsg.length > 0) {
       const lastMsgEl = lastMsg[lastMsg.length - 1];
       const prevDaySep = lastMsgEl.previousElementSibling;
@@ -284,6 +321,9 @@ function renderMessagesToPage(messages, prepend = false) {
     }
   }
 
+  // Message rows follow the reference's flat .msg convention (00b): avatar once per
+  // run of consecutive messages from the same sender, a grouped row's own time shows
+  // only on hover (.gtime), same-day messages are separated by one .chat-day-sep.
   messages.forEach((msg) => {
     const isMe = msg.user_id === myId;
     const msgDate = msg.created_at;
@@ -298,12 +338,11 @@ function renderMessagesToPage(messages, prepend = false) {
     lastUser = msg.user_id;
 
     html += `
-      <div class="chat-msg${isMe ? ' me' : ''}${grouped ? ' grouped' : ''}" data-id="${msg.id}" data-created="${msg.created_at}">
-        ${!isMe && !grouped ? `<div class="chat-avatar">${chatAvatar(msg.user_name)}</div>` : ''}
-        ${!isMe && grouped ? `<div class="chat-avatar-spacer"></div>` : ''}
-        <div class="chat-bubble-wrap">
-          ${!grouped ? `<div class="chat-meta">${isMe ? 'You' : esc(msg.user_name)} <span class="chat-time">${chatTimeLabel(msg.created_at)}</span></div>` : ''}
-          <div class="chat-bubble">${esc(msg.content)}</div>
+      <div class="msg${grouped ? ' grouped' : ''}" data-id="${msg.id}" data-created="${msg.created_at}">
+        ${grouped ? `<span class="gtime">${chatTimeLabel(msg.created_at)}</span>` : avatar(msg.user_name)}
+        <div>
+          ${!grouped ? `<div><span class="who">${isMe ? esc(t('chat_you')) : esc(msg.user_name)}</span><span class="when">${chatTimeLabel(msg.created_at)}</span></div>` : ''}
+          <div class="ch-text">${esc(msg.content)}</div>
         </div>
       </div>`;
   });

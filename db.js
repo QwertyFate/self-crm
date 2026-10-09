@@ -1,3 +1,48 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   DATABASE — the connection pool, the schema, and the migration system.
+
+   THERE IS NO MIGRATION TOOL. initDb() runs on every boot and is the whole
+   story. It is idempotent: CREATE TABLE IF NOT EXISTS for the base schema,
+   then a long list of ALTER TABLE ... ADD COLUMN IF NOT EXISTS for everything
+   added since. Nothing is ever backfilled.
+
+   HOW TO CHANGE THE SCHEMA
+     new column      append one ALTER TABLE ... ADD COLUMN IF NOT EXISTS at the
+                     END of initDb(), nullable or with a default.
+     new table       add it to SCHEMA (or as its own CREATE TABLE IF NOT EXISTS
+                     inside initDb() when it must run after another one), with
+                     workspace_id INTEGER NOT NULL REFERENCES workspaces(id)
+                     ON DELETE CASCADE.
+     changed CHECK   DROP CONSTRAINT IF EXISTS then ADD CONSTRAINT, inside a
+                     try/catch that rethrows anything but error code 42710.
+     NEVER edit a statement that already shipped — live databases have run it.
+     Add a new one instead.
+   A new column exists only AFTER A RESTART. That is the usual reason a new
+   field "doesn't save" right after a change.
+
+   TENANCY  almost every table has workspace_id with ON DELETE CASCADE, and
+   every query in routes/ filters on it. The exceptions are deliberate:
+   platform_invites and platform_settings are platform-wide, and password_resets
+   hangs off a user.
+
+   TWO THINGS THAT LOOK LIKE BUGS AND ARE NOT
+     - the `stages` table and contacts.stage_id are DEAD. Contact stages were
+       removed from the product; both are kept so old rows survive. Nothing
+       reads them.
+     - users.workspace_id is the user's single home workspace. Membership and
+       authorisation live in user_workspaces; a person in three workspaces has
+       three users rows sharing an email. The backfill INSERT near the bottom
+       copies users.role into user_workspaces on every boot.
+
+   ALSO HERE
+     seedDefaultPipeline()  the pipeline + stages every new workspace gets,
+                            overridable per platform via the admin console
+                            (platform_settings.default_stages).
+     first-run invite       with no workspaces and no platform invites, boot
+                            prints a one-time platform invite code so the very
+                            first account can be created.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const { Pool } = require('pg');
 const crypto   = require('crypto');
 
@@ -35,6 +80,9 @@ const SCHEMA = `
     created_at   TIMESTAMPTZ DEFAULT NOW()
   );
 
+  -- Contact stages were removed from the product (Part 19): nothing reads or writes this
+  -- table or contacts.stage_id any more. Both are left in place so existing rows are not
+  -- destroyed; drop them with a migration if you decide the old values are not worth keeping.
   CREATE TABLE IF NOT EXISTS stages (
     id           SERIAL PRIMARY KEY,
     workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -148,35 +196,8 @@ const SCHEMA = `
   );
 `;
 
-const DEFAULT_STAGES = [
-  ['Lead',        '#6b7280', 0],
-  ['Qualified',   '#3b82f6', 1],
-  ['Proposal',    '#f59e0b', 2],
-  ['Negotiation', '#8b5cf6', 3],
-  ['Won',         '#22c55e', 4],
-  ['Lost',        '#ef4444', 5],
-];
 
-async function getAdminDefaultStages(client) {
-  try {
-    const { rows: [saved] } = await client.query('SELECT value FROM platform_settings WHERE key=$1', ['default_stages']);
-    if (saved && saved.value?.contactStages) {
-      return saved.value.contactStages;
-    }
-  } catch (e) {
-  }
-  return DEFAULT_STAGES.map(([name, color, pos]) => ({ name, color, position: pos }));
-}
 
-async function seedDefaultStages(workspaceId, client) {
-  const stages = await getAdminDefaultStages(client);
-  for (const stage of stages) {
-    await client.query(
-      'INSERT INTO stages (workspace_id, name, color, position) VALUES ($1,$2,$3,$4)',
-      [workspaceId, stage.name, stage.color, stage.position || 0]
-    );
-  }
-}
 
 async function initDb() {
   await pool.query(SCHEMA);
@@ -193,6 +214,10 @@ async function initDb() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Europe/Berlin'`);
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS event_date DATE`);
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS completed BOOLEAN NOT NULL DEFAULT false`);
+  // A scheduled activity may also carry a time of day, which is what lets the Calendar's week
+  // view place it on an hour grid. Nullable on purpose: an activity with a date and no time is
+  // an all-day entry, and every activity that existed before this column is exactly that.
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS event_time TIME`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_activities_event_date ON activities (workspace_id, event_date)`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS analytics_layout JSONB NOT NULL DEFAULT '{}'`);
   // Workspace roles: invite codes carry the role the joiner will receive (member or admin).
@@ -328,6 +353,10 @@ async function initDb() {
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS list_id    INTEGER REFERENCES task_lists(id)    ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deal_id    INTEGER REFERENCES deals(id)    ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL`);
+  // A task may also be due at a time, not just on a day; that is what puts it on the
+  // calendar's hour grid rather than its all-day strip. Nullable: a task without a time
+  // is still a whole-day task, which is what every task before this column was.
+  await pool.query(`ALTER TABLE tasks      ADD COLUMN IF NOT EXISTS due_time   TIME`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS task_attachments (
@@ -436,6 +465,61 @@ async function initDb() {
     if (e.code !== '42710') throw e;
   }
 
+  // Upgrads Engine: per-workspace outgoing webhook settings and the delivery log (utils/engine.js).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_engine (
+      id                SERIAL PRIMARY KEY,
+      workspace_id      INTEGER NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+      engine_url        TEXT,
+      active            BOOLEAN NOT NULL DEFAULT false,
+      trigger_stage_ids JSONB NOT NULL DEFAULT '[]',
+      webhook_secret    TEXT NOT NULL,
+      created_at        TIMESTAMPTZ DEFAULT NOW(),
+      updated_at        TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS engine_deliveries (
+      id               SERIAL PRIMARY KEY,
+      workspace_id     INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      event            TEXT NOT NULL,
+      event_id         TEXT NOT NULL UNIQUE,
+      deal_id          INTEGER REFERENCES deals(id)    ON DELETE SET NULL,
+      contact_id       INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+      url              TEXT NOT NULL,
+      payload          JSONB NOT NULL,
+      raw_body         TEXT NOT NULL,
+      status           TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','success','failed')),
+      attempts         INTEGER NOT NULL DEFAULT 0,
+      last_status_code INTEGER,
+      last_error       TEXT,
+      next_attempt_at  TIMESTAMPTZ,
+      delivered_at     TIMESTAMPTZ,
+      created_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS engine_deliveries_ws_created_idx ON engine_deliveries (workspace_id, created_at DESC)`);
+
+  // Marks a workspace created by POST /api/admin/provision, so the admin console
+  // can tell a provisioned tenant from a self-served signup. NULL for every row
+  // that existed before this column — nothing is backfilled, and "unknown" is the
+  // honest answer for those.
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS provisioned_at TIMESTAMPTZ`);
+
+  // The timezone a task's due_time / an activity's event_time was ENTERED in, stamped by the
+  // server from users.timezone (middleware/auth.js → req.userTimezone). due_date/due_time are
+  // naive wall-clock values; with the zone beside them the row is an unambiguous instant and
+  // the client shows it on each viewer's own clock. NULL = written before this column, read
+  // as the default zone (Europe/Berlin) — nothing is backfilled.
+  await pool.query(`ALTER TABLE tasks      ADD COLUMN IF NOT EXISTS due_tz   TEXT`);
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS event_tz TEXT`);
+
+  // The deal a note was composed ON. NULL = a contact-level note (everything written before this
+  // column, and notes logged from the contact page), which still shows on every deal of its
+  // contact; a bound note shows only on its deal. ON DELETE SET NULL: deleting the deal unbinds
+  // the note, it never deletes it.
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS deal_id  INTEGER REFERENCES deals(id) ON DELETE SET NULL`);
+
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');
   if (wsCount === 0 && piCount === 0) {
@@ -496,4 +580,4 @@ async function seedDefaultPipeline(workspaceId, client) {
   }
 }
 
-module.exports = { pool, initDb, seedDefaultStages, seedDefaultPipeline };
+module.exports = { pool, initDb, seedDefaultPipeline };

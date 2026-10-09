@@ -1,3 +1,45 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/workspace — members, roles, and every per-workspace setting.
+
+   TWO KINDS OF ENDPOINT HERE
+     1. MEMBER MANAGEMENT, owner-only: list, remove, change role, rename the
+        workspace, delete the workspace.
+     2. CONFIG PATCHES, one per column on `workspaces`: the table columns, the
+        kanban fields, the task statuses, the labels for suppliers and
+        listings, the Miro URL, the WhatsApp template.
+
+   ROLE GATING IS PER HANDLER (`if (req.userRole !== 'owner')`), not on the
+   router, because members legitimately edit some settings. Read the guard at
+   the top of each handler rather than assuming.
+
+   A ROLE LIVES IN TWO PLACES: users.role (displayed) and user_workspaces.role
+   (what middleware/auth.js actually enforces). PATCH /members/:id/role writes
+   BOTH in one transaction — keep any future writer in step or the UI and the
+   authorisation will disagree.
+
+   DELETE / removes the workspace's data table by table in one transaction
+   rather than relying on ON DELETE CASCADE, and refuses when it is your only
+   workspace, so nobody can lock themselves out.
+
+   POST / creates another workspace for an existing user and copies that user's
+   real password_hash into the new users row, the same as the (uncalled) twin
+   POST /api/auth/create-workspace. It used to store the literal string
+   'placeholder' there, which could refuse the user their own password — see
+   §8 of readmedev.md. One email means one password across every row; do not
+   reintroduce a per-row credential here.
+
+   ENDPOINTS
+     POST   /                       new workspace (platform invite required)
+     GET    /members
+     DELETE /members/:id            owner · not yourself · not the owner
+     PATCH  /members/:id/role       owner · member <-> admin
+     PATCH  /name                   owner
+     DELETE /                       owner · not your last workspace
+     PATCH  /contact-columns · /object-columns · /task-statuses ·
+            /kanban-fields · /miro-url · /whatsapp-template      any member
+     PATCH  /supplier-name · /object-name                        owner
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
@@ -26,7 +68,6 @@ router.post('/', async (req, res, next) => {
         { key: 'company', label: 'Company', visible: true, isCustom: false },
         { key: 'email', label: 'Email', visible: true, isCustom: false },
         { key: 'phone', label: 'Phone', visible: true, isCustom: false },
-        { key: 'stage_id', label: 'Stage', visible: true, isCustom: false },
         { key: 'assigned_to', label: 'Assignee', visible: true, isCustom: false },
         { key: 'created_at', label: 'Created At', visible: false, isCustom: false },
       ];
@@ -81,10 +122,17 @@ router.post('/', async (req, res, next) => {
         }
       }
 
-      const { rows: [currentUser] } = await client.query('SELECT name, email FROM users WHERE id=$1', [req.userId]);
+      // Copy the creator's REAL password_hash, the way POST /api/auth/create-workspace
+      // does. This used to insert the literal string 'placeholder', which no password
+      // can ever match, and because login reads `WHERE email=$1` with no ORDER BY it
+      // could be the row checked — refusing the user their own correct password.
+      // Locked in by tests/routes/workspace-password-hash.test.js.
+      const { rows: [currentUser] } = await client.query(
+        'SELECT name, email, password_hash FROM users WHERE id=$1', [req.userId]
+      );
       const { rows: [newUser] } = await client.query(
         'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-        [ws.id, currentUser.name, currentUser.email, 'placeholder', 'owner']
+        [ws.id, currentUser.name, currentUser.email, currentUser.password_hash, 'owner']
       );
 
       await client.query(

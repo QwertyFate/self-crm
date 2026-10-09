@@ -1,3 +1,31 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   createFieldRouter(table) — ONE router behind all four custom-field tables.
+
+   custom_fields (contacts), deal_fields, task_fields and object_fields have
+   the same shape and the same CRUD, so routes/fields.js, deal-fields.js,
+   task-fields.js and object-fields.js are each a single line that calls this
+   factory. Change the behaviour here and all four change together.
+
+   WHAT A CUSTOM FIELD IS  a row here is only the DEFINITION (name, field_key,
+   type, options, position). The VALUE lives in the owning record's custom_data
+   JSONB column under field_key. That is why a workspace can add fields without
+   a schema change — and why deleting a definition leaves the values behind in
+   every row.
+
+   VALID_TYPES is the whitelist: text, email, phone, number, dropdown, date,
+   url. Adding a type here makes it available on contacts, deals, tasks and
+   listings at once; the client side is renderFieldInput() in public/js/modals.js.
+   It is exported because routes/admin-provision.js validates the fields an
+   admin seeds a new workspace with against the same list.
+
+   `table` is interpolated into the SQL. That is safe ONLY because the four
+   callers pass hardcoded literals — never let a request-supplied value reach
+   this argument.
+
+   Routes: GET / · POST / · PUT /:id · DELETE /:id, all workspace-scoped.
+   A duplicate field_key surfaces as Postgres error 23505 → 400.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const { pool } = require('../db');
 
 const VALID_TYPES = ['text','email','phone','number','dropdown','date','url'];
@@ -75,4 +103,4 @@ function createFieldRouter(tableName) {
   return router;
 }
 
-module.exports = { createFieldRouter };
+module.exports = { createFieldRouter, VALID_TYPES };

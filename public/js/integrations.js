@@ -1,12 +1,72 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   INTEGRATIONS — two independent halves on one page, switched by switchIntgTab().
+
+   1. INBOUND WEBHOOK ("webhook" tab) — getting leads INTO the CRM.
+      Every workspace has one webhook URL ending in a secret key. An external
+      form posts JSON to it; a field_map says which incoming key becomes which
+      CRM field, and dot paths ("data.contact.email") are supported. Optionally
+      each lead also creates a deal in a chosen pipeline and stage.
+        loadIntegrations → GET /api/integrations/settings (creates the row and
+        the key on first view) → renderIntgFieldMap + renderIntgStageOptions
+        saveIntegration  → PATCH /api/integrations/settings
+        loadIntgLogs     → GET /api/integrations/logs (last 50 deliveries, with
+                           what was captured and what was skipped)
+      renderIntgPlatforms / showIntgGuide / buildGuideJson produce the
+      copy-paste setup snippet per external platform.
+
+   2. OUTBOUND ENGINE ("engine" tab) — pushing events OUT of the CRM.
+      When a deal moves into one of the configured trigger stages, the server
+      POSTs a signed vertrag.unterschrieben event to the Engine URL
+      (utils/engine.js). This tab edits those settings and shows the delivery log.
+        loadEngineSettings    → GET  /api/engine/settings
+        saveEngineSettings    → PATCH /api/engine/settings
+        regenerateEngineSecret→ POST /api/engine/settings/regenerate-secret
+        sendEngineTestEvent   → POST /api/engine/test-event
+        loadEngineDeliveries  → GET  /api/engine/deliveries
+      READ-ONLY FOR MEMBERS: the server returns can_manage:false and omits the
+      secret for non owner/admin; setEngineReadOnly() disables the inputs to
+      match. The disabling is cosmetic — the server is the real gate.
+
+   FUNCTION MAP
+     shell     switchIntgTab, loadIntegrations
+     inbound   intgPlatformName, renderIntgPlatforms, showIntgGuide, buildGuideJson,
+               refreshGuideJson, renderIntgFieldMap, renderFieldRow,
+               intgToggleKeyEdit, intgKeyBlur, intgAddField, intgRemoveField,
+               getIntgFieldMap, renderIntgStageOptions, loadIntgStages,
+               toggleIntgDeal, saveIntegration, copyWebhookUrl,
+               regenerateWebhookKey, loadIntgLogs
+     engine    loadEngineSettings, saveEngineSettings, setEngineReadOnly,
+               renderEngineStages, getEngineTriggerIds, maskSecret,
+               copyEngineSecret, regenerateEngineSecret, sendEngineTestEvent,
+               loadEngineDeliveries, engineDeliveryHtml, showEngineMsg
+     clipboard copyIntgText, copyIntgJson, fallbackCopy
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 let intgData = null;
+let currentIntgTab = 'webhook';   // remembered for the session, like the Settings rail
+
+// The page reuses the Settings rail markup. Scoped to this page so the two rails
+// (same class names) never toggle each other.
+function switchIntgTab(tab) {
+  currentIntgTab = tab;
+  const root = document.getElementById('page-integrations');
+  if (!root) return;
+  root.querySelectorAll('.settings-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+  root.querySelectorAll('.settings-pane').forEach(pane => pane.classList.toggle('active', pane.id === `intg-pane-${tab}`));
+}
 
 const INTG_BUILTIN_FIELDS = [
-  { key: 'name',    label: 'Name',    placeholder: 'full_name'     },
-  { key: 'email',   label: 'Email',   placeholder: 'email'         },
-  { key: 'phone',   label: 'Phone',   placeholder: 'phone_number'  },
-  { key: 'company', label: 'Company', placeholder: 'company'       },
+  { key: 'name',    labelKey: 'lbl_name',    placeholder: 'full_name'     },
+  { key: 'email',   labelKey: 'lbl_email',   placeholder: 'email'         },
+  { key: 'phone',   labelKey: 'lbl_phone',   placeholder: 'phone_number'  },
+  { key: 'company', labelKey: 'lbl_company', placeholder: 'company'       },
 ];
 
+// steps / jsonNote / jsonLabel (and the optional nameKey) are dictionary keys (intg_*),
+// resolved with t() in showIntgGuide / intgPlatformName so a language switch re-renders
+// the open guide. The strings carry <strong>/<code> markup; literal names of Make /
+// Zapier / n8n options (e.g. "HTTP → Make a request", "No authentication") stay English
+// in both languages because the user has to find them in those products' UI.
 const INTG_PLATFORMS = [
   {
     id: 'make',
@@ -23,17 +83,9 @@ const INTG_PLATFORMS = [
       <rect x="14" y="4"  width="9" height="32" rx="4.5" transform="rotate(-15 18.5 20)" fill="url(#make-g)"/>
       <rect x="27" y="2"  width="9" height="36" rx="4.5" transform="rotate(-15 31.5 20)" fill="url(#make-g)"/>
     </svg>`,
-    steps: [
-      'Create a new Scenario in Make.com. Add a trigger — e.g. <strong>Facebook Lead Ads → Watch leads</strong> or <strong>New lead</strong>, or any other lead source.',
-      'Add module: <strong>HTTP → Make a request</strong>. Authentication: <strong>No authentication</strong>. Method: <code>POST</code>.',
-      'Paste your Webhook URL (copy from the field at the top).',
-      'Body type: <code>Raw</code> · Content-Type: <code>application/json</code>.',
-      'Paste the JSON body below into the Body field.',
-      'For each value shown as <code>{{1.field_name}}</code> — click that value in Make and select the matching field from your trigger module (module 1). The <code>1</code> is the module number; the part after the dot is the field name from your trigger output.',
-      'Save and activate.',
-    ],
-    jsonNote: `Each value like <code>{{1.full_name}}</code> is a <strong>Make variable</strong>. In the HTTP Body field, click where the value is and use Make's variable picker to select the matching output from your trigger module instead of typing it manually.`,
-    jsonLabel: 'JSON Body — paste into Make HTTP module',
+    steps: ['intg_make_step1', 'intg_make_step2', 'intg_step_paste_url', 'intg_make_step4', 'intg_make_step5', 'intg_make_step6', 'intg_make_step7'],
+    jsonNote:  'intg_make_note',
+    jsonLabel: 'intg_make_json_label',
   },
   {
     id: 'zapier',
@@ -49,15 +101,9 @@ const INTG_PLATFORMS = [
         <circle cx="0" cy="0" r="2.5" fill="white"/>
       </g>
     </svg>`,
-    steps: [
-      'Create a new Zap. Trigger: e.g. <strong>Facebook Lead Ads → New Lead</strong>, or any lead source.',
-      'Add Action: <strong>Webhooks by Zapier → POST</strong>. Authentication: <strong>No authentication</strong>.',
-      'Paste your Webhook URL (copy from the field at the top). Payload Type: <code>JSON</code>.',
-      'In the <strong>Data</strong> section, add one row per field. The key on the left is fixed (e.g. <code>full_name</code>). For the value on the right, click the field and use Zapier\'s field picker to select the matching data from your trigger step.',
-      'Test and publish.',
-    ],
-    jsonNote: `The keys on the left (e.g. <code>full_name</code>) must match exactly. For the values — <strong>do not type them manually</strong>. In Zapier's data section, click the value field and pick the corresponding output from your trigger step using the dropdown.`,
-    jsonLabel: 'Key/value pairs to add in Zapier',
+    steps: ['intg_zapier_step1', 'intg_zapier_step2', 'intg_zapier_step3', 'intg_zapier_step4', 'intg_zapier_step5'],
+    jsonNote:  'intg_zapier_note',
+    jsonLabel: 'intg_zapier_json_label',
   },
   {
     id: 'n8n',
@@ -81,36 +127,27 @@ const INTG_PLATFORMS = [
       <line x1="24" y1="11" x2="27" y2="9"  stroke="white" stroke-width="2.5" stroke-linecap="round"/>
       <line x1="24" y1="29" x2="27" y2="31" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
     </svg>`,
-    steps: [
-      'Add your trigger node (e.g. a lead source), then an <strong>HTTP Request</strong> node.',
-      'Method: <code>POST</code>. Authentication: <strong>No authentication</strong>.',
-      'Paste your Webhook URL (copy from the field at the top).',
-      'Body Content Type: <code>JSON</code>.',
-      'Paste the JSON below. Each value like <code>{{ $json.field_name }}</code> is an n8n expression — it reads the field named <code>field_name</code> from your trigger node\'s output.',
-      'To find the correct field name: run your trigger once, click the output of the trigger node, and check the JSON keys shown there. Use those exact key names inside <code>{{ $json.KEY_HERE }}</code>.',
-      'Activate the workflow.',
-    ],
-    jsonNote: `Each value like <code>{{ $json.full_name }}</code> pulls data from your trigger node. Replace <code>full_name</code> with the exact key name shown in your trigger node's output data. You can drag fields directly from the n8n data panel into the expression editor.`,
-    jsonLabel: 'JSON Body — paste into HTTP Request node',
+    steps: ['intg_n8n_step1', 'intg_n8n_step2', 'intg_step_paste_url', 'intg_n8n_step4', 'intg_n8n_step5', 'intg_n8n_step6', 'intg_n8n_step7'],
+    jsonNote:  'intg_n8n_note',
+    jsonLabel: 'intg_n8n_json_label',
   },
   {
     id: 'custom',
     name: 'Custom / API',
+    nameKey: 'intg_platform_custom',   // the only non-product name: shown through t()
     color: '#64748b',
     logo: `<svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
-    steps: [
-      'Send a <code>POST</code> request to your Webhook URL below (copy it from the field at the top).',
-      'Authentication: <strong>No authentication</strong> required.',
-      'Set <code>Content-Type: application/json</code>.',
-      'Send the JSON body below. The keys are fixed — replace the example values with real data from your source.',
-      'A successful response returns <code>{"success": true, "contact_id": 42}</code>.',
-    ],
-    jsonNote: `The JSON keys (left side, e.g. <code>"full_name"</code>) must match exactly as shown. Replace only the values (right side) with actual data from your source system.`,
-    jsonLabel: 'JSON Body',
+    steps: ['intg_custom_step1', 'intg_custom_step2', 'intg_custom_step3', 'intg_custom_step4', 'intg_custom_step5'],
+    jsonNote:  'intg_custom_note',
+    jsonLabel: 'intg_custom_json_label',
   },
 ];
 
 let activeGuideId = null;
+
+// Product names (Make.com, Zapier, n8n) are shown as they are; a platform with a
+// nameKey (the custom/API entry) is shown in the UI language.
+function intgPlatformName(p) { return p.nameKey ? t(p.nameKey) : p.name; }
 
 function renderIntgPlatforms() {
   const list = document.getElementById('intg-platform-list');
@@ -119,7 +156,7 @@ function renderIntgPlatforms() {
     <button class="intg-platform-card${activeGuideId === p.id ? ' active' : ''}"
       onclick="showIntgGuide('${p.id}')" data-platform="${p.id}">
       <div class="intg-platform-logo">${p.logo}</div>
-      <div class="intg-platform-name">${p.name}</div>
+      <div class="intg-platform-name">${esc(intgPlatformName(p))}</div>
     </button>`).join('');
 }
 
@@ -151,7 +188,7 @@ function buildGuideJson(platformId) {
     } else if (platformId === 'n8n') {
       val = `"{{ $json.${incomingKey} }}"`;
     } else {
-      const sample = INTG_SAMPLE_VALUES[incomingKey] || INTG_SAMPLE_VALUES[crmKey] || 'example value';
+      const sample = INTG_SAMPLE_VALUES[incomingKey] || INTG_SAMPLE_VALUES[crmKey] || t('intg_example_value');
       val = JSON.stringify(sample);
     }
     return `  "${incomingKey}": ${val}`;
@@ -170,9 +207,9 @@ function showIntgGuide(id) {
   );
 
   const json      = buildGuideJson(id);
-  const steps     = platform.steps.map(s => `<li>${s}</li>`).join('');
+  const steps     = platform.steps.map(k => `<li>${t(k)}</li>`).join('');   // dictionary strings with markup — inserted as-is
   const noteHtml  = platform.jsonNote
-    ? `<div class="intg-json-note">${platform.jsonNote}</div>`
+    ? `<div class="intg-json-note">${t(platform.jsonNote)}</div>`
     : '';
 
   const webhookUrl = document.getElementById('intg-url').value;
@@ -180,29 +217,33 @@ function showIntgGuide(id) {
     <div class="intg-guide-header">
       <div class="intg-guide-logo-sm">${platform.logo}</div>
       <div>
-        <div class="intg-guide-title-text">${platform.name}</div>
-        <div class="intg-guide-subtitle">Setup Guide</div>
+        <div class="intg-guide-title-text">${esc(intgPlatformName(platform))}</div>
+        <div class="intg-guide-subtitle">${esc(t('intg_setup_guide'))}</div>
       </div>
     </div>
-    <div style="margin:16px 0;padding:12px;background:var(--bg-secondary);border-radius:4px;border-left:3px solid var(--primary)">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Webhook URL</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <code style="flex:1;word-break:break-all;font-size:12px">${webhookUrl}</code>
-        <button class="btn btn-sm" onclick="navigator.clipboard.writeText('${webhookUrl}');alert('Copied to clipboard!')">Copy</button>
+    <div class="intg-guide-url">
+      <div class="intg-guide-url-label">${esc(t('intg_guide_url'))}</div>
+      <div class="intg-guide-url-row">
+        <code>${esc(webhookUrl)}</code>
+        <button class="btn btn-sm" onclick="copyIntgText(this, this.previousElementSibling.textContent)">${esc(t('btn_copy'))}</button>
       </div>
     </div>
     <ol class="intg-guide-steps">${steps}</ol>
     ${noteHtml}
     <div class="intg-json-block">
       <div class="intg-json-header">
-        <span>${platform.jsonLabel}</span>
-        <button class="intg-copy-btn" onclick="copyIntgJson(this)">Copy</button>
+        <span>${esc(t(platform.jsonLabel))}</span>
+        <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)">${esc(t('btn_copy'))}</button>
       </div>
       <pre class="intg-code">${json}</pre>
     </div>`;
 }
 
+// The Engine card loads on its own and the remembered rail tab is re-applied first, so neither is
+// blocked by the lead-webhook early return below.
 async function loadIntegrations() {
+  loadEngineSettings();
+  switchIntgTab(currentIntgTab);
   const intgFieldMap = document.getElementById('intg-field-map');
   if (intgFieldMap) intgFieldMap.innerHTML = '';
 
@@ -232,13 +273,13 @@ async function loadIntegrations() {
   renderIntgStageOptions(webhook.stage_id);
 
   const assigneeEl = document.getElementById('intg-assignee');
-  assigneeEl.innerHTML = `<option value="">— Not set (assigned to self) —</option>` +
+  assigneeEl.innerHTML = `<option value="">${esc(t('opt_assignee_self'))}</option>` +
     members.map(m =>
       `<option value="${m.id}" ${webhook.default_assignee_id == m.id ? 'selected' : ''}>${esc(m.name)}</option>`
     ).join('');
 
   renderIntgPlatforms();
-  if (!activeGuideId) showIntgGuide('make');
+  showIntgGuide(activeGuideId || 'make');   // re-render the open guide too (language switch re-runs this loader)
   loadIntgLogs();
 }
 
@@ -254,10 +295,10 @@ function renderIntgFieldMap(fieldMap) {
   activeCustomKeys = [...new Set([...savedCustomKeys, ...activeCustomKeys])];
 
   el.innerHTML = `
-    <div class="intg-map-section-label">Built-in fields</div>
-    ${INTG_BUILTIN_FIELDS.map(f => renderFieldRow(f.key, f.label, f.placeholder, fieldMap[f.key] || '', false)).join('')}
+    <div class="intg-map-section-label">${esc(t('intg_builtin_fields'))}</div>
+    ${INTG_BUILTIN_FIELDS.map(f => renderFieldRow(f.key, t(f.labelKey), f.placeholder, fieldMap[f.key] || '', false)).join('')}
 
-    ${activeCustomKeys.length ? `<div class="intg-map-section-label" style="margin-top:14px">Custom fields</div>` : ''}
+    ${activeCustomKeys.length ? `<div class="intg-map-section-label">${esc(t('intg_custom_fields'))}</div>` : ''}
     ${activeCustomKeys.map(key => {
       const cf = customFields.find(f => f.field_key === key);
       if (!cf) return '';
@@ -266,20 +307,20 @@ function renderIntgFieldMap(fieldMap) {
 
     <div class="intg-map-add-row">
       <select id="intg-add-field-select" class="form-control intg-add-select">
-        <option value="">+ Add custom field…</option>
+        <option value="">${esc(t('intg_add_field_ph'))}</option>
         ${customFields
           .filter(f => !activeCustomKeys.includes(f.field_key))
           .map(f => `<option value="${f.field_key}">${esc(f.name)}</option>`)
           .join('')}
       </select>
-      <button class="btn btn-sm" onclick="intgAddField()">Add</button>
+      <button class="btn btn-sm" onclick="intgAddField()">${UI_ICON.plus}<span>${esc(t('add_btn'))}</span></button>
     </div>`;
 }
 
 function renderFieldRow(key, label, placeholder, value, isCustom) {
   const displayVal = value || placeholder;
   const removeBtn  = isCustom
-    ? `<button class="intg-map-remove" onclick="intgRemoveField('${key}')" title="Remove">×</button>`
+    ? `<span class="intg-map-end"><span class="intg-map-custom-tag">${esc(t('intg_custom_tag'))}</span><button class="intg-map-remove" onclick="intgRemoveField('${key}')" title="${esc(t('btn_delete'))}" aria-label="${esc(t('btn_delete'))}">${UI_ICON.remove}</button></span>`
     : '<span></span>';
   return `
     <div class="intg-map-row">
@@ -292,9 +333,7 @@ function renderFieldRow(key, label, placeholder, value, isCustom) {
           readonly
           onblur="intgKeyBlur(this)"
           oninput="refreshGuideJson()" />
-        <button class="intg-key-edit-btn" onclick="intgToggleKeyEdit(this)" title="Edit key">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" width="13" height="13"><path d="M11 2l3 3-9 9H2v-3L11 2z"/></svg>
-        </button>
+        <button class="btn btn-sm btn-icon intg-key-edit-btn" onclick="intgToggleKeyEdit(this)" title="${esc(t('intg_edit_key'))}" aria-label="${esc(t('intg_edit_key'))}">${UI_ICON.edit}</button>
       </div>
       ${removeBtn}
     </div>`;
@@ -373,7 +412,7 @@ function renderIntgStageOptions(selectedStageId) {
   const stages     = (intgData?.stages || []).filter(s => !pipeline || s.pipeline_name === pipeline.name);
 
   if (!dealOn) {
-    stageEl.innerHTML = `<option value="">— No stage —</option>` +
+    stageEl.innerHTML = `<option value="">${esc(t('opt_no_deal_stage'))}</option>` +
       stages.map(s => `<option value="${s.id}"${selectedStageId == s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
     return;
   }
@@ -381,7 +420,7 @@ function renderIntgStageOptions(selectedStageId) {
   if (!stages.length) {
     // Only reachable for a pipeline without stages: nothing to pick, so say so
     // instead of silently offering a deal without a stage.
-    stageEl.innerHTML = `<option value="" disabled selected>— No stages in this pipeline —</option>`;
+    stageEl.innerHTML = `<option value="" disabled selected>${esc(t('intg_no_stages_in_pipeline'))}</option>`;
     return;
   }
 
@@ -419,8 +458,8 @@ async function saveIntegration(silent = false) {
     const el = document.getElementById('intg-field-map');
     if (el) {
       const tip = document.createElement('div');
-      tip.style.cssText = 'font-size:11px;color:var(--primary);text-align:right;margin-top:4px';
-      tip.textContent = '✓ Auto-saved';
+      tip.className = 'intg-autosaved';
+      tip.textContent = t('intg_autosaved');
       el.parentNode.insertBefore(tip, el.nextSibling);
       setTimeout(() => tip.remove(), 2000);
     }
@@ -431,7 +470,7 @@ async function saveIntegration(silent = false) {
     msgEl.textContent = res.error;
     msgEl.className   = 'workspace-name-msg error';
   } else {
-    msgEl.textContent = '✓ Saved';
+    msgEl.textContent = t('msg_saved');
     msgEl.className   = 'workspace-name-msg success';
   }
   msgEl.classList.remove('hidden');
@@ -443,13 +482,13 @@ function copyWebhookUrl() {
   navigator.clipboard.writeText(url).then(() => {
     const btn = event.target;
     const orig = btn.textContent;
-    btn.textContent = 'Copied!';
+    btn.textContent = t('copied');
     setTimeout(() => btn.textContent = orig, 1500);
   });
 }
 
 async function regenerateWebhookKey() {
-  if (!confirm('This will invalidate your current webhook URL. Any active Zapier/Make scenarios will need to be updated. Continue?')) return;
+  if (!confirm(t('intg_confirm_regen_url'))) return;
   const res = await api.post('/api/integrations/settings/regenerate-key', {});
   if (res.error) { alert(res.error); return; }
   const origin = intgData?.base_url || window.location.origin;
@@ -461,7 +500,7 @@ async function loadIntgLogs() {
   const data = await api.get('/api/integrations/logs');
   const el   = document.getElementById('intg-logs');
   if (!data || data.error || !data.logs.length) {
-    el.innerHTML = '<p class="settings-hint">No activity yet.</p>';
+    el.innerHTML = `<p class="empty-inline">${esc(t('intg_no_activity'))}</p>`;
     return;
   }
   el.innerHTML = data.logs.map(l => {
@@ -472,8 +511,8 @@ async function loadIntgLogs() {
 
     return `<div class="intg-log-entry${l.status === 'error' ? ' error' : ''}">
       <div class="intg-log-entry-header">
-        <span class="intg-log-badge ${l.status}">${l.status}</span>
-        <span class="intg-log-time">${new Date(l.created_at).toLocaleString()}</span>
+        <span class="intg-log-badge ${l.status}">${esc(t('intg_log_' + l.status))}</span>
+        <span class="intg-log-time">${new Date(l.created_at).toLocaleString(currentLang === 'de' ? 'de-DE' : 'en-GB')}</span>
         <span class="intg-log-contact">${l.contact_name ? esc(l.contact_name) : (l.error ? esc(l.error) : '—')}</span>
       </div>
       ${l.status === 'success' ? `
@@ -483,24 +522,28 @@ async function loadIntgLogs() {
           ).join('')}
         </div>
         ${hasSkips ? `<div class="intg-log-skipped">
-          Fields not found in payload: ${Object.keys(skipped).map(k => `<code>${esc(k)}</code>`).join(', ')}
-          — check that your field mapping keys match the incoming payload.
+          ${esc(t('intg_fields_missing'))} ${Object.keys(skipped).map(k => `<code>${esc(k)}</code>`).join(', ')}
+          ${esc(t('intg_fields_missing_hint'))}
         </div>` : ''}` : ''}
-      <div class="intg-log-raw-toggle" onclick="this.nextElementSibling.classList.toggle('hidden')">View raw payload</div>
+      <div class="intg-log-raw-toggle" onclick="this.nextElementSibling.classList.toggle('hidden')">${esc(t('intg_view_raw'))}</div>
       <pre class="intg-log-raw hidden">${esc(JSON.stringify(l.payload || {}, null, 2))}</pre>
     </div>`;
   }).join('');
 }
 
-function copyIntgJson(btn) {
-  const pre  = btn.closest('.intg-json-block').querySelector('pre');
-  const text = pre.textContent.trim();
-  const done = () => { const o = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = o, 1500); };
+// Copies `text` and flashes the button label; used by the guide URL and the sample payload.
+function copyIntgText(btn, text) {
+  const done = () => { const o = btn.textContent; btn.textContent = t('copied'); setTimeout(() => btn.textContent = o, 1500); };
   if (navigator.clipboard) {
     navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
   } else {
     fallbackCopy(text, done);
   }
+}
+
+function copyIntgJson(btn) {
+  const pre = btn.closest('.intg-json-block').querySelector('pre');
+  copyIntgText(btn, pre.textContent.trim());
 }
 
 function fallbackCopy(text, cb) {
@@ -511,4 +554,138 @@ function fallbackCopy(text, cb) {
   ta.focus(); ta.select();
   try { document.execCommand('copy'); cb(); } catch(e) {}
   document.body.removeChild(ta);
+}
+
+// ── Upgrads Engine card (outgoing vertrag.unterschrieben webhook) ──────────────
+let engineData = null;
+
+async function loadEngineSettings() {
+  const data = await api.get('/api/engine/settings');
+  if (!data || data.error || !data.engine) return;
+  engineData = data;
+  const e = data.engine;
+  const urlEl    = document.getElementById('engine-url');    if (urlEl)    urlEl.value = e.engine_url || '';
+  const activeEl = document.getElementById('engine-active'); if (activeEl) activeEl.checked = !!e.active;
+  const secretEl = document.getElementById('engine-secret'); if (secretEl) secretEl.value = maskSecret(e.webhook_secret);
+  const stagesEl = document.getElementById('engine-stages'); if (stagesEl) stagesEl.innerHTML = renderEngineStages(data.stages || [], e.trigger_stage_ids || []);
+  setEngineReadOnly(!data.can_manage);
+  loadEngineDeliveries();
+}
+
+// Only the last four characters are ever shown; the full value stays in engineData.
+function maskSecret(v) {
+  if (!v) return '—';
+  return '••••••••' + String(v).slice(-4);
+}
+
+function setEngineReadOnly(readOnly) {
+  const card = document.getElementById('engine-card'); if (!card) return;
+  card.querySelectorAll('.engine-manage-input, #engine-stages input').forEach(el => { el.disabled = readOnly; });
+  card.querySelectorAll('.engine-manage').forEach(el => el.classList.toggle('hidden', readOnly));
+  const hint = document.getElementById('engine-readonly-hint'); if (hint) hint.classList.toggle('hidden', !readOnly);
+}
+
+// Same chip markup as the Analytics won/lost pickers, grouped by pipeline.
+function renderEngineStages(stages, selectedIds) {
+  const selected = (selectedIds || []).map(Number);
+  const groups = [], byKey = {};
+  for (const s of stages || []) {
+    const key = s.pipeline_id != null ? String(s.pipeline_id) : String(s.pipeline_name || '');
+    if (!byKey[key]) { byKey[key] = { name: s.pipeline_name || '', stages: [] }; groups.push(byKey[key]); }
+    byKey[key].stages.push(s);
+  }
+  if (!groups.length) return `<p class="settings-hint">${esc(t('engine_no_stages'))}</p>`;
+  return groups.map(g => `
+    <div class="analytics-pipeline-group">
+      <div class="analytics-pipeline-sep">${esc(g.name)}</div>
+      <div class="analytics-stage-chips">
+        ${g.stages.map(s => `<label class="analytics-stage-option"><input type="checkbox" data-id="${Number(s.id)}"${selected.includes(Number(s.id)) ? ' checked' : ''}><span class="analytics-stage-dot" style="background:${esc(s.color || '')}"></span>${esc(s.name)}</label>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function getEngineTriggerIds() {
+  return [...document.querySelectorAll('#engine-stages input[data-id]:checked')].map(el => parseInt(el.dataset.id, 10)).filter(n => n > 0);
+}
+
+function showEngineMsg(text, ok) {
+  const msgEl = document.getElementById('engine-msg'); if (!msgEl) return;
+  msgEl.textContent = text;
+  msgEl.className   = 'workspace-name-msg ' + (ok ? 'success' : 'error');
+  setTimeout(() => msgEl.classList.add('hidden'), ok ? 2500 : 6000);
+}
+
+async function saveEngineSettings(silent = false) {
+  const res = await api.patch('/api/engine/settings', {
+    engine_url:        document.getElementById('engine-url').value.trim(),
+    active:            document.getElementById('engine-active').checked,
+    trigger_stage_ids: getEngineTriggerIds(),
+  });
+  if (res.error) {
+    // The server refused (e.g. activating without a URL): undo the toggle so the UI tells the truth.
+    if (engineData?.engine) document.getElementById('engine-active').checked = !!engineData.engine.active;
+    showEngineMsg(res.error, false);
+    return;
+  }
+  if (engineData) engineData.engine = { ...engineData.engine, ...res.engine, webhook_secret: engineData.engine.webhook_secret };
+  if (!silent) showEngineMsg(t('engine_saved'), true);
+}
+
+function copyEngineSecret(btn) {
+  const secret = engineData?.engine?.webhook_secret;
+  if (!secret) return;
+  const done = () => { const o = btn.textContent; btn.textContent = t('copied'); setTimeout(() => btn.textContent = o, 1500); };
+  if (navigator.clipboard) navigator.clipboard.writeText(secret).then(done).catch(() => fallbackCopy(secret, done));
+  else fallbackCopy(secret, done);
+}
+
+async function regenerateEngineSecret() {
+  if (!confirm(t('engine_confirm_regen_secret'))) return;
+  const res = await api.post('/api/engine/settings/regenerate-secret', {});
+  if (res.error) { showEngineMsg(res.error, false); return; }
+  if (engineData?.engine) engineData.engine.webhook_secret = res.webhook_secret;
+  const secretEl = document.getElementById('engine-secret'); if (secretEl) secretEl.value = maskSecret(res.webhook_secret);
+}
+
+async function sendEngineTestEvent(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.post('/api/engine/test-event', {});
+    if (res.error) { showEngineMsg(res.error, false); return; }
+    const d = res.delivery || {};
+    if (d.status === 'success') showEngineMsg(t('engine_test_ok'), true);
+    else showEngineMsg(`${t('engine_test_failed')} ${d.last_error || ''}`.trim(), false);
+    loadEngineDeliveries();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function loadEngineDeliveries() {
+  const el = document.getElementById('engine-deliveries'); if (!el) return;
+  const data = await api.get('/api/engine/deliveries');
+  const list = data && !data.error ? (data.deliveries || []) : [];
+  if (!list.length) { el.innerHTML = `<p class="empty-inline">${esc(t('engine_no_deliveries'))}</p>`; return; }
+  el.innerHTML = list.map(engineDeliveryHtml).join('');
+}
+
+function engineDeliveryHtml(d) {
+  const status = ['success', 'failed', 'pending'].includes(d.status) ? d.status : 'pending';
+  const label  = d.deal_title || d.event || '';
+  const meta   = [
+    `${Number(d.attempts) || 0} ${t(Number(d.attempts) === 1 ? 'engine_attempt_one' : 'engine_attempts')}`,
+    d.last_status_code ? `HTTP ${Number(d.last_status_code)}` : '',
+    d.contact_name || '',
+  ].filter(Boolean).map(m => `<span>${esc(m)}</span>`).join('');
+  return `<div class="intg-log-entry${status === 'failed' ? ' error' : ''}">
+    <div class="intg-log-entry-header">
+      <span class="intg-log-badge ${status}">${esc(t('engine_status_' + status))}</span>
+      <span class="intg-log-time">${esc(new Date(d.created_at).toLocaleString(currentLang === 'de' ? 'de-DE' : 'en-GB'))}</span>
+      <span class="intg-log-contact">${esc(label)}</span>
+      <span class="engine-delivery-meta">${meta}</span>
+    </div>
+    ${d.last_error ? `<div class="intg-log-skipped">${esc(d.last_error)}</div>` : ''}
+    <div class="intg-log-raw-toggle" onclick="this.nextElementSibling.classList.toggle('hidden')">${esc(t('engine_view_payload'))}</div>
+    <pre class="intg-log-raw hidden">${esc(JSON.stringify(d.payload || {}, null, 2))}</pre>
+  </div>`;
 }

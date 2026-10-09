@@ -1,3 +1,60 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   AUTH + APP SHELL — getting in, choosing a workspace, and page navigation.
+   This file owns the app's lifecycle. Loaded second, right after core.js.
+
+   THE ENTRY POINT is init(), called once when index.html finishes loading:
+
+     init()
+       ├─ ?admin in the URL  → the in-app admin screen (admin-import.js)
+       ├─ ?reset=<token>     → the password-reset form
+       ├─ GET /api/auth/me   → logged in?  yes → showApp()   no → showAuth()
+       └─ showApp() fills currentUser / currentWorkspace, paints the shell, and
+          calls switchPage('deals'). Every session starts on Deals, never on
+          whatever page the previous user left open.
+
+   switchPage(page) IS THE ROUTER. There is no URL routing in this app: it
+   hides every .page section, shows one, and calls that page's loader
+   (loadDeals, loadContacts, loadTasks, …). To add a page: add the section to
+   index.html, the sidebar link, and one line here.
+
+   WORKSPACES — THE PART THAT SURPRISES PEOPLE
+     A person with three workspaces has THREE rows in the users table, one per
+     workspace, sharing an email and password hash. Switching workspace changes
+     session.userId on the server to the other row's id. So a user id is only
+     meaningful together with a workspace.
+       login  → one membership  : straight in
+              → several         : showWorkspacePicker() → selectWorkspace()
+       inside : switchWorkspace() → POST /api/auth/switch-workspace → reload
+
+   resetClientState() PUTS THE TAB BACK TO BOOT STATE — stops pollers and the
+   socket, clears every workspace-scoped global and the per-workspace
+   localStorage keys. It runs on logout and on workspace switch.
+   ⚠ ADD A NEW GLOBAL ANYWHERE IN public/js → ADD IT HERE TOO. Forgetting is
+   how one user's data leaks into the next user's session in the same tab.
+
+   ensureFields / ensureContacts / ensureMembers / ensurePipelines are lazy
+   caches: they fetch only when the array is still empty. invalidate() empties
+   them so the next ensureX() refetches.
+
+   FUNCTION MAP
+     lifecycle   init, showApp, showAuth, showAuthView, switchPage,
+                 resetClientState, invalidate, logout
+     login       handleLogin, handleSignup, toggleSignupMode, togglePassword,
+                 setAuthBusy, startLoginCooldown, showForgotPassword, handleForgotPassword,
+                 copyResetLink, showResetForm, handleResetPassword, showMainAuth
+     workspaces  showWorkspacePicker, selectWorkspace, switchWorkspace,
+                 loadWorkspacesPage, wsGradient, openAddWorkspaceChoice,
+                 pickAddWorkspace, openCreateWorkspaceModal,
+                 closeCreateWorkspaceModal, handleCreateWorkspace,
+                 openJoinWorkspaceModal, showJoinWorkspace, closeJoinWorkspace,
+                 handleJoinWorkspace
+     caches      ensureFields, ensureContacts, ensureMembers, ensurePipelines
+
+   ⚠ handleCreateWorkspace posts to /api/workspace, which stores the literal
+     string 'placeholder' as the new users row's password_hash. See §8 of
+     readmedev.md before touching it.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 async function init() {
   const params     = new URLSearchParams(window.location.search);
   const resetToken = params.get('reset');
@@ -30,16 +87,25 @@ function showAuth() {
   document.getElementById('auth-screen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
   ['login-form', 'signup-form'].forEach(id => document.getElementById(id).reset());
-  ['login-error', 'signup-error', 'forgot-error', 'forgot-success', 'forgot-link-box'].forEach(id =>
+  ['login-error', 'signup-error', 'forgot-error', 'forgot-success', 'forgot-link-box', 'login-notice', 'login-hint'].forEach(id =>
     document.getElementById(id).classList.add('hidden')
   );
   document.getElementById('forgot-btn').disabled = false;
   document.getElementById('reset-error').classList.add('hidden');
-  document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'login'));
+  loginFails = 0; clearInterval(loginCooldown); loginCooldown = null;   // door state, not workspace state: every entry to the door starts clean
+  const loginBtn = document.querySelector('#login-form .au-submit');
+  if (loginBtn) { loginBtn.disabled = false; if (loginBtn.dataset.label) loginBtn.textContent = loginBtn.dataset.label; }
+  document.querySelectorAll('.auth-tab').forEach(t => {
+    const on = t.dataset.tab === 'login';
+    t.classList.toggle('active', on); t.setAttribute('aria-selected', String(on));
+  });
+  // a password revealed with Show never survives a logout
+  document.querySelectorAll('#auth-screen .au-pw-btn[aria-pressed="true"]').forEach(togglePassword);
   document.getElementById('login-form').classList.remove('hidden');
   document.getElementById('signup-form').classList.add('hidden');
   const createRadio = document.querySelector('input[name="signup-mode"][value="create"]');
   if (createRadio) { createRadio.checked = true; toggleSignupMode(); }
+  applyTranslations();   // the door is the one screen showApp() never translates
   showAuthView('main');
 }
 
@@ -47,12 +113,15 @@ function showApp() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   window.history.replaceState({}, '', window.location.pathname);
-  document.getElementById('sidebar-workspace').textContent = currentWorkspace?.name || '';
+  setSidebarWorkspace(currentWorkspace?.name);
   const settingsLabel = document.getElementById('settings-workspace-label');
   if (settingsLabel) settingsLabel.textContent = currentWorkspace?.name || '';
   document.getElementById('sidebar-user').textContent = currentUser?.name || '';
   const av = document.getElementById('sidebar-user-avatar');
   if (av) av.textContent = (currentUser?.name || '?')[0].toUpperCase();
+  const roleEl = document.getElementById('sidebar-user-role');
+  if (roleEl) roleEl.textContent = currentUser?.role ? (t(`role_${currentUser.role}`) === `role_${currentUser.role}` ? currentUser.role : t(`role_${currentUser.role}`)) : '';
+  applyRailState();
   applyTranslations();
   loadColWidths();
   updateBoardNavVisibility();
@@ -61,7 +130,7 @@ function showApp() {
   loadNotifPrefs();
   startNotifPolling();
   startClock();
-  loadDeals();
+  switchPage('deals');   // every entry lands on a freshly loaded Deals page, never on whatever page the previous user left active
   initChatSocket();
   refreshChatBadge();
   setTimeout(maybeStartGuide, 800);
@@ -77,6 +146,8 @@ function showAuthView(view) {
 function showForgotPassword(e) {
   e?.preventDefault();
   document.getElementById('forgot-email').value = document.getElementById('login-email').value;
+  document.getElementById('login-notice').classList.add('hidden');
+  document.getElementById('login-hint').classList.add('hidden');
   document.getElementById('forgot-error').classList.add('hidden');
   document.getElementById('forgot-success').classList.add('hidden');
   document.getElementById('forgot-link-box').classList.add('hidden');
@@ -94,8 +165,8 @@ function showResetForm(token) {
 
 document.querySelectorAll('.auth-tab').forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
+    document.querySelectorAll('.auth-tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-selected', 'false'); });
+    tab.classList.add('active'); tab.setAttribute('aria-selected', 'true');
     const isLogin = tab.dataset.tab === 'login';
     document.getElementById('login-form').classList.toggle('hidden', !isLogin);
     document.getElementById('signup-form').classList.toggle('hidden', isLogin);
@@ -109,15 +180,73 @@ function toggleSignupMode() {
   document.getElementById('su-code-field').classList.toggle('hidden', mode !== 'join');
 }
 
+// The Show/Hide button beside every password field; `btn.dataset.pw` names its input.
+function togglePassword(btn) {
+  const input = document.getElementById(btn.dataset.pw);
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.setAttribute('aria-pressed', String(show));
+  btn.querySelector('use').setAttribute('href', show ? '#i-eye-off' : '#i-eye');
+  btn.querySelector('span').textContent = t(show ? 'auth_hide' : 'auth_show');
+}
+
+// While a request is out the submit button says what is happening ("Logging in…")
+// and cannot be pressed twice; `on = false` gives it its label back.
+function setAuthBusy(form, on, key) {
+  const btn = form.querySelector('.au-submit');
+  if (!btn) return;
+  if (on) { btn.dataset.label = btn.textContent; btn.setAttribute('aria-busy', 'true'); btn.textContent = t(key); }
+  else { btn.removeAttribute('aria-busy'); if (btn.dataset.label) btn.textContent = btn.dataset.label; }
+}
+
+// After a wrong password the button counts down LOGIN_COOLDOWN_S seconds before it can be pressed
+// again — so a refused attempt reads as deliberate, not as a broken button — and from the
+// LOGIN_FAILS_HINT-th failure on, #login-hint points to the password reset. Client-side only; the
+// server's own limit (10 failures / 15 min) still stands behind it.
+const LOGIN_COOLDOWN_S = 8, LOGIN_FAILS_HINT = 5;
+let loginFails = 0, loginCooldown = null;
+
+function startLoginCooldown(form, seconds) {
+  const btn = form.querySelector('.au-submit');
+  if (!btn) return;
+  clearInterval(loginCooldown);
+  const label = btn.dataset.label || btn.textContent;
+  btn.dataset.label = label;
+  let left = seconds;
+  const show = () => { btn.textContent = t('auth_retry_in').replace('%s', left); };
+  btn.disabled = true; show();
+  loginCooldown = setInterval(() => {
+    left -= 1;
+    if (left > 0) { show(); return; }
+    clearInterval(loginCooldown); loginCooldown = null;
+    btn.disabled = false; btn.textContent = label;
+  }, 1000);
+}
+
+// The two server messages the door can show, as translation keys (the server speaks English).
+const AUTH_ERRORS = { 'Invalid email or password': 'auth_err_invalid', 'Too many login attempts. Please try again in 15 minutes.': 'auth_err_limit' };
+
 async function handleLogin(e) {
   e.preventDefault();
   const errEl = document.getElementById('login-error');
   errEl.classList.add('hidden');
+  document.getElementById('login-notice').classList.add('hidden');
+  setAuthBusy(e.target, true, 'auth_logging_in');
   const data = await api.post('/api/auth/login', {
     email:    document.getElementById('login-email').value,
     password: document.getElementById('login-password').value,
   });
-  if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
+  setAuthBusy(e.target, false);
+  if (data.error) {
+    errEl.textContent = AUTH_ERRORS[data.error] ? t(AUTH_ERRORS[data.error]) : data.error; errEl.classList.remove('hidden');
+    if (AUTH_ERRORS[data.error] === 'auth_err_invalid') {
+      loginFails += 1;
+      startLoginCooldown(e.target, LOGIN_COOLDOWN_S);
+      if (loginFails >= LOGIN_FAILS_HINT) document.getElementById('login-hint').classList.remove('hidden');
+    }
+    return;
+  }
+  loginFails = 0;
 
   if (data.needs_workspace_picker) {
     showWorkspacePicker(data.workspaces, data.user);
@@ -129,6 +258,7 @@ async function handleLogin(e) {
   kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = data.workspace.contact_columns || [];
   dealColumns      = Array.isArray(data.user?.deal_columns) ? data.user.deal_columns : [];
+  objectColumns    = data.workspace.object_columns  || [];
   showApp();
 }
 
@@ -171,10 +301,10 @@ function wsGradient(id) {
 async function loadWorkspacesPage() {
   const grid = document.getElementById('workspaces-grid');
   if (!grid) return;
-  grid.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';
+  grid.innerHTML = `<p style="color:var(--muted);font-size:13px">${esc(t('ws_loading'))}</p>`;
 
   const data = await api.get('/api/auth/my-workspaces');
-  if (!data || data.error) { grid.innerHTML = '<p style="color:var(--muted)">Could not load workspaces.</p>'; return; }
+  if (!data || data.error) { grid.innerHTML = `<p style="color:var(--muted)">${esc(t('ws_load_error'))}</p>`; return; }
 
   const cards = data.workspaces.map(w => {
     const isActive = w.id === currentWorkspace?.id;
@@ -183,14 +313,14 @@ async function loadWorkspacesPage() {
     <div class="ws-page-card${isActive ? ' active' : ''}" onclick="switchWorkspace(${w.id})">
       <div class="ws-page-card-banner" style="background:${grad}">
         <div class="ws-page-avatar-lg">${(w.name||'?')[0].toUpperCase()}</div>
-        ${isActive ? '<div class="ws-page-active-badge">Active</div>' : ''}
+        ${isActive ? `<div class="ws-page-active-badge">${esc(t('ws_active'))}</div>` : ''}
       </div>
       <div class="ws-page-card-body">
         <div class="ws-page-name">${esc(w.name)}</div>
         <div class="ws-page-role">${roleLabel(w.role)}</div>
       </div>
       <div class="ws-page-card-footer">
-        <span class="ws-page-open-btn">${isActive ? 'Currently open' : 'Switch →'}</span>
+        <span class="ws-page-open-btn">${isActive ? esc(t('ws_current')) : `${esc(t('ws_switch'))} ${icon('arrow-up-right', 'ic-sm')}`}</span>
       </div>
     </div>`;
   }).join('');
@@ -198,14 +328,14 @@ async function loadWorkspacesPage() {
   grid.innerHTML = cards + `
     <div class="ws-page-card ws-page-add" onclick="openAddWorkspaceChoice()">
       <div class="ws-page-card-banner ws-page-add-banner">
-        <div class="ws-page-add-icon">+</div>
+        <div class="ws-page-add-icon">${icon('plus')}</div>
       </div>
       <div class="ws-page-card-body">
-        <div class="ws-page-name">Add a Workspace</div>
-        <div class="ws-page-role">Join or create</div>
+        <div class="ws-page-name">${esc(t('ws_add_title'))}</div>
+        <div class="ws-page-role">${esc(t('ws_join_or_create'))}</div>
       </div>
       <div class="ws-page-card-footer">
-        <span class="ws-page-open-btn">Get started →</span>
+        <span class="ws-page-open-btn">${esc(t('ws_get_started'))} ${icon('arrow-up-right', 'ic-sm')}</span>
       </div>
     </div>`;
 }
@@ -221,7 +351,7 @@ async function switchWorkspace(workspaceId) {
   kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = data.workspace.contact_columns || [];
   objectColumns    = data.workspace.object_columns  || [];
-  document.getElementById('sidebar-workspace').textContent = data.workspace.name || '';
+  setSidebarWorkspace(data.workspace.name);
   const settingsLabel = document.getElementById('settings-workspace-label');
   if (settingsLabel) settingsLabel.textContent = data.workspace.name || '';
   invalidate();
@@ -273,8 +403,8 @@ function showJoinWorkspace(e) {
   e?.preventDefault();
   wsSwitcherOpen = false;
   document.getElementById('ws-dropdown').classList.add('hidden');
-  document.getElementById('join-ws-code').value = '';
-  document.getElementById('join-ws-error').classList.add('hidden');
+  document.getElementById('join-ws-auth-code').value = '';
+  document.getElementById('join-ws-auth-error').classList.add('hidden');
   showAuthView('join-workspace');
   document.getElementById('auth-screen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
@@ -290,21 +420,25 @@ function closeJoinWorkspace(e) {
 
 async function handleJoinWorkspace(e) {
   e.preventDefault();
-  const errEl = document.getElementById('join-ws-error');
+  // Two forms submit here — the in-app modal and the auth-screen view — each with
+  // its own input and error box, so read from the form that fired, not by id.
+  const form = e.target.closest('form');
+  const errEl = form.querySelector('.au-alert, .auth-error');
   errEl.classList.add('hidden');
-  const codeInput = document.querySelector('#join-workspace-modal input[id="join-ws-code"]');
-  const code = (codeInput?.value || '').trim();
-  if (!code) { errEl.textContent = 'Invite code required'; errEl.classList.remove('hidden'); return; }
+  const code = (form.querySelector('input[type="text"]')?.value || '').trim();
+  if (!code) { errEl.textContent = t('auth_code_required'); errEl.classList.remove('hidden'); return; }
 
   const data = await api.post('/api/auth/join-workspace', { invite_code: code });
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
 
   document.getElementById('join-workspace-modal').classList.add('hidden');
+  document.getElementById('auth-screen').classList.add('hidden');   // the auth-screen view hides the app while open
+  document.getElementById('app').classList.remove('hidden');
   currentWorkspace = data.workspace;
   kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = data.workspace.contact_columns || [];
   objectColumns    = data.workspace.object_columns  || [];
-  document.getElementById('sidebar-workspace').textContent = data.workspace.name || '';
+  setSidebarWorkspace(data.workspace.name);
   invalidate();
   loadWorkspacesPage();
   switchPage('workspaces');
@@ -349,8 +483,12 @@ async function handleForgotPassword(e) {
   if (data.resetUrl) { document.getElementById('forgot-link-val').value = data.resetUrl; linkBox.classList.remove('hidden'); }
 }
 
-function copyResetLink() {
-  navigator.clipboard.writeText(document.getElementById('forgot-link-val').value).then(() => alert('Copied to clipboard'));
+function copyResetLink(btn) {
+  navigator.clipboard.writeText(document.getElementById('forgot-link-val').value).then(() => {
+    const label = btn.querySelector('span'), use = btn.querySelector('use');
+    label.textContent = t('copied'); use.setAttribute('href', '#i-check');
+    setTimeout(() => { label.textContent = t('btn_copy'); use.setAttribute('href', '#i-copy'); }, 1500);
+  });
 }
 
 async function handleResetPassword(e) {
@@ -360,29 +498,31 @@ async function handleResetPassword(e) {
   const password = document.getElementById('reset-password').value;
   const confirm  = document.getElementById('reset-confirm').value;
   errEl.classList.add('hidden');
-  if (password !== confirm) { errEl.textContent = 'Passwords do not match'; errEl.classList.remove('hidden'); return; }
+  if (password !== confirm) { errEl.textContent = t('auth_pw_mismatch'); errEl.classList.remove('hidden'); return; }
   const data = await api.post('/api/auth/reset-password', { token, password });
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
-  alert('Password updated — please log in.');
   showMainAuth();
+  const notice = document.getElementById('login-notice');   // inline, where the person now has to act
+  notice.textContent = t('auth_pw_updated'); notice.classList.remove('hidden');
 }
 
 async function logout(e) {
   e?.preventDefault();
   await api.post('/api/auth/logout', {});
-  currentUser = currentWorkspace = null;
-  contacts = stages = fields = activities = members = [];
+  resetClientState();
   showAuth();
 }
 
-document.querySelectorAll('.sidebar-nav a[data-page]').forEach(link => {
+document.querySelectorAll('.sb-link[data-page]').forEach(link => {
   link.addEventListener('click', e => { e.preventDefault(); switchPage(link.dataset.page); });
 });
 
 async function switchPage(page) {
-  document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+  document.querySelectorAll('.sb-link[data-page]').forEach(a => a.removeAttribute('aria-current'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelector(`.sidebar-nav a[data-page="${page}"]`)?.classList.add('active');
+  document.querySelector(`.sb-link[data-page="${page}"]`)?.setAttribute('aria-current', 'page');
+  setCrumbs(page);
+  ui.closePopover();
   const pageElId = page === 'suppliers' ? 'page-contacts' : `page-${page}`;
   document.getElementById(pageElId)?.classList.add('active');
   if (page === 'deals')      { closeSidePanel(); await loadDeals(); }
@@ -400,8 +540,37 @@ async function switchPage(page) {
   if (page === 'chat')         await loadChatPage();
 }
 
-function invalidate() { contacts = []; stages = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }
-async function ensureStages()   { if (!stages.length)   stages   = await api.get('/api/stages'); }
+function invalidate() { contacts = []; fields = []; members = []; deals = []; pipelines = []; dealFields = []; }
+
+// Puts the browser back to the state it has on a fresh page load, so a login in the
+// same tab (no reload) can never show anything of the previous user's workspace:
+// background work stops, every workspace-scoped value returns to its initial value,
+// and the per-workspace storage keys go. Browser preferences (language, theme,
+// view modes, the guide flag) stay.
+function resetClientState() {
+  stopNotifPolling(); stopClock();
+  if (socket) { socket.disconnect(); socket = null; }
+  onlineUsers = []; chatOldestId = null; chatNewestId = null; chatOpen = false; chatPageOpen = false; chatLoadingMore = false;
+  updateChatBadge(0);
+  currentUser = null; currentWorkspace = null;
+  contacts = []; fields = []; activities = []; members = [];
+  pipelines = []; deals = []; dealFields = []; dealColumns = []; currentPipelineId = null; dragDealId = null;
+  kanbanFields = ['company', 'email']; dealKanbanFields = ['contact', 'value']; contactColumns = []; colWidths = {};
+  objects = []; objectFields = []; objectColumns = []; objCurrentPage = 1;
+  tasks = []; taskProjects = []; currentProjectId = null; currentListId = null; currentProject = null; taskFields = []; collapsedTasks = new Set(); resetTasksUI(); resetActivitiesUI();   // the Tasks and Activities pages clear their own scope, filters and drafts (tasks.js, objects.js)
+  analyticsData = null; trendRawData = null; calEvents = [];
+  intgData = null; engineData = null; activeGuideId = null; activeCustomKeys = [];
+  currentSettingsTab = 'workspace'; currentIntgTab = 'webhook';
+  currentContactType = 'contact'; filteredContacts = []; selectedContactIds = new Set(); selectionModeOn = false;
+  currentPage = 1; sortKey = null; sortDir = 'asc'; activeFilters = {};
+  notifPanelOpen = false;
+  const notifList = document.getElementById('notif-list'); if (notifList) notifList.innerHTML = '';
+  document.getElementById('notif-panel')?.classList.add('hidden');
+  localStorage.removeItem('lastTaskListId');
+  localStorage.removeItem('taskScope');
+  Object.keys(localStorage).filter(k => k.startsWith('proj-collapsed-')).forEach(k => localStorage.removeItem(k));
+}
 async function ensureFields()   { if (!fields.length)   fields   = await api.get('/api/fields'); }
 async function ensureContacts() { if (!contacts.length) contacts = await api.get('/api/contacts'); }
 async function ensureMembers()  { if (!members.length)  members  = await api.get('/api/workspace/members'); }
+async function ensurePipelines() { if (!pipelines.length) pipelines = await api.get('/api/pipelines'); }

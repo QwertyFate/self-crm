@@ -1,3 +1,28 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   NOTIFICATIONS — the bell panel in the top bar.
+
+   NOT REALTIME: this polls. startNotifPolling() runs loadNotifications() on an
+   interval and is started by showApp() / stopped by resetClientState(). It
+   uses apiFetchSilent() so the global loading bar does not flash every tick.
+
+   WHERE NOTIFICATIONS COME FROM: the server creates them, never this file.
+   Routes call notify() in notifications.js (server) after a contact, deal or
+   task changes, and the activity routes create 'mention' rows when someone is
+   @-named in a note or comment. Each row carries entity_type + entity_id, and
+   onNotifClick() uses those to jump to the deal or contact.
+
+   PREFERENCES are per user (users.notification_prefs), one boolean per
+   category (contacts, deals, tasks, objects, activities). The server honours
+   them when fanning out, so an unchecked box means the row is never created —
+   turning one back on does not backfill what you missed.
+
+   FUNCTION MAP
+     poll      startNotifPolling, stopNotifPolling, loadNotifications
+     render    renderNotifList, notifIcon, notifTimeAgo
+     actions   toggleNotifPanel, onNotifClick, markAllNotifRead, clearReadNotifs
+     prefs     loadNotifPrefs, saveNotifPrefs
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 let notifPanelOpen = false;
 let notifPollTimer = null;
 
@@ -17,12 +42,12 @@ function notifIcon(type) { return NOTIF_ICONS[type] || NOTIF_ICONS.default; }
 function notifTimeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1)   return 'just now';
-  if (m < 60)  return `${m}m ago`;
+  if (m < 1)   return t('ago_now');
+  if (m < 60)  return tf('chat_ago_m', { n: m });
   const h = Math.floor(m / 60);
-  if (h < 24)  return `${h}h ago`;
+  if (h < 24)  return tf('ago_h', { n: h });
   const d = Math.floor(h / 24);
-  return `${d}d ago`;
+  return tf('ago_d', { n: d });
 }
 
 async function loadNotifications(showLoader = false) {
@@ -47,7 +72,7 @@ function renderNotifList(notifications) {
   if (!notifications.length) {
     el.innerHTML = `<div class="notif-empty">
       <div style="font-size:32px;margin-bottom:8px">🔔</div>
-      You're all caught up!<br>Notifications will appear here.
+      ${esc(t('notif_caught_up'))}<br>${esc(t('notif_appear_here'))}
     </div>`;
     return;
   }
@@ -59,7 +84,7 @@ function renderNotifList(notifications) {
       <div class="notif-content">
         <div class="notif-title">${esc(n.title)}</div>
         ${n.body ? `<div class="notif-body">${esc(n.body)}</div>` : ''}
-        ${n.actor_name ? `<div class="notif-body">By ${esc(n.actor_name)}</div>` : ''}
+        ${n.actor_name ? `<div class="notif-body">${tf('notif_by', { name: esc(n.actor_name) })}</div>` : ''}
         <div class="notif-time">${notifTimeAgo(n.created_at)}</div>
       </div>
     </div>`).join('');
@@ -122,11 +147,12 @@ async function saveNotifPrefs() {
     return;
   }
   if (currentUser) currentUser.notification_prefs = prefs;
-  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = t('msg_saved'); msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
 function startNotifPolling() {
+  clearInterval(notifPollTimer);   // a second login in the same tab replaces the poller instead of stacking one
   loadNotifications(false);
   notifPollTimer = setInterval(() => { loadNotifications(false); }, 30000);
 }

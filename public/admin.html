@@ -192,6 +192,73 @@
       .admin-header { padding: 20px; align-items: flex-start; flex-direction: column; }
       .section { padding: 18px; }
     }
+
+    /* ── Tabs (the console was a single scroll until the Provisioning panel) ── */
+    .admin-tabs { display: flex; gap: 4px; border-bottom: 1px solid #e5e7eb; margin-bottom: 24px; }
+    .admin-tab {
+      background: none; border: none; border-bottom: 2px solid transparent;
+      padding: 10px 16px; font-size: 14px; font-weight: 500; color: #6b7280;
+      cursor: pointer; font-family: inherit;
+    }
+    .admin-tab:hover { color: #374151; }
+    .admin-tab.active { color: #4f6ef7; border-bottom-color: #4f6ef7; }
+
+    /* ── Provisioning form ── */
+    .prov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .prov-field-row { display: grid; grid-template-columns: 1fr 140px 1fr auto; gap: 8px; align-items: end; margin-bottom: 8px; }
+    .prov-field-row .input-group { margin: 0; }
+    .prov-remove {
+      background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 6px;
+      padding: 8px 12px; cursor: pointer; font-family: inherit; font-size: 13px; height: 38px;
+    }
+    .prov-hint { color: #6b7280; font-size: 13px; margin: 0 0 12px 0; }
+    .prov-check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: #374151; }
+
+    /* ── The one-time credentials panel ── */
+    .prov-result { border: 1px solid #bbf7d0; background: #f0fdf4; border-radius: 8px; padding: 20px; margin-top: 20px; }
+    .prov-result h3 { margin: 0 0 4px 0; font-size: 16px; }
+    .prov-warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; border-radius: 6px; padding: 10px 12px; font-size: 13px; margin: 12px 0; }
+    .prov-copy-row { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .prov-copy-row label { min-width: 120px; font-size: 13px; color: #374151; font-weight: 500; }
+    .prov-copy-row input {
+      flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+      padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #111827;
+    }
+    .prov-copy-btn {
+      background: #fff; border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 12px;
+      cursor: pointer; font-family: inherit; font-size: 13px; white-space: nowrap;
+    }
+    .prov-copy-btn:hover { background: #f9fafb; }
+    .prov-curl {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+      background: #111827; color: #e5e7eb; padding: 12px; border-radius: 6px;
+      overflow-x: auto; white-space: pre; margin: 0;
+    }
+
+    /* ── API Tutorial tab ── */
+    .tut-h { margin: 22px 0 4px 0; font-size: 14px; color: #374151; }
+    .tut-code { position: relative; margin: 8px 0 4px 0; }
+    .tut-code .prov-copy-btn { position: absolute; top: 8px; right: 8px; padding: 4px 10px; font-size: 12px; }
+    .tut-table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 8px 0 14px 0; }
+    .tut-table th, .tut-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+    .tut-table th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
+    .tut-list { margin: 8px 0 0 0; padding-left: 20px; font-size: 14px; color: #374151; line-height: 1.55; }
+    .tut-list li { margin-bottom: 6px; }
+    #tab-tutorial code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
+
+    /* ── Workspace table ── */
+    .prov-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .prov-table th {
+      text-align: left; padding: 10px 12px; border-bottom: 1px solid #e5e7eb;
+      color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+    }
+    .prov-table td { padding: 12px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+    .prov-table tr:last-child td { border-bottom: none; }
+    .prov-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+    .prov-badge.yes { background: #dcfce7; color: #166534; }
+    .prov-badge.no  { background: #f3f4f6; color: #6b7280; }
+    .prov-badge.off { background: #fef2f2; color: #b91c1c; }
+    .prov-table-wrap { overflow-x: auto; }
   </style>
 </head>
 <body>
@@ -228,6 +295,13 @@
     </div>
 
     <div id="admin-dashboard">
+      <div class="admin-tabs">
+        <button class="admin-tab active" id="tabbtn-defaults"    onclick="showAdminTab('defaults')">Platform Defaults</button>
+        <button class="admin-tab"        id="tabbtn-provisioning" onclick="showAdminTab('provisioning')">Provisioning</button>
+        <button class="admin-tab"        id="tabbtn-tutorial"     onclick="showAdminTab('tutorial')">API Tutorial</button>
+      </div>
+
+      <div id="tab-defaults">
       <!-- Stats -->
       <div class="admin-grid" id="stats-grid">
         <div class="stat-card">
@@ -319,6 +393,239 @@
         </div>
         <p class="feature-note">Changes apply the next time each user loads the app.</p>
       </div>
+      </div><!-- /#tab-defaults -->
+
+      <div id="tab-provisioning" class="hidden">
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Provision a new workspace</h2>
+          <p class="prov-hint">
+            Creates the workspace, its owner and a ready-to-use inbound webhook in one go. Only the
+            workspace name and the owner's email are required — everything else is optional.
+            Custom fields are seeded into <strong>this new workspace only</strong>; afterwards its own
+            members manage them in Settings.
+          </p>
+
+          <div class="prov-grid" style="margin-bottom: 20px;">
+            <div class="input-group">
+              <label>Workspace name *</label>
+              <input type="text" id="prov-ws-name" placeholder="Acme Corp" />
+            </div>
+            <div class="input-group">
+              <label>Owner email *</label>
+              <input type="email" id="prov-owner-email" placeholder="maria@acmecorp.com" />
+            </div>
+            <div class="input-group">
+              <label>Owner name (optional)</label>
+              <input type="text" id="prov-owner-name" placeholder="defaults to the email name" />
+            </div>
+          </div>
+
+          <div style="margin-bottom: 24px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+            <h3 style="margin: 0 0 4px 0; font-size: 14px; color: #6b7280;">Contact custom fields</h3>
+            <p class="prov-hint">Stored on every contact in this workspace, and mapped into the inbound webhook automatically.</p>
+            <div id="prov-contact-fields"></div>
+            <button class="prov-copy-btn" onclick="addProvField('contact')">+ Add contact field</button>
+          </div>
+
+          <div style="margin-bottom: 24px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+            <h3 style="margin: 0 0 4px 0; font-size: 14px; color: #6b7280;">Deal custom fields</h3>
+            <p class="prov-hint">
+              Available on the deal board and the deal modal. The inbound webhook does
+              <strong>not</strong> fill these — an auto-created deal gets a title, pipeline and stage only.
+            </p>
+            <div id="prov-deal-fields"></div>
+            <button class="prov-copy-btn" onclick="addProvField('deal')">+ Add deal field</button>
+          </div>
+
+          <div style="display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb;">
+            <label class="prov-check"><input type="checkbox" id="prov-create-deal" checked /> Inbound leads also open a deal</label>
+            <label class="prov-check"><input type="checkbox" id="prov-webhook-active" checked /> Webhook active immediately</label>
+          </div>
+
+          <button class="btn btn-primary" id="prov-submit" onclick="submitProvision()">Create workspace</button>
+          <div id="prov-error" style="margin-top: 14px"></div>
+          <div id="prov-result"></div>
+        </div>
+
+        <div class="section">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <h2 style="margin: 0;">Workspaces &amp; owners</h2>
+            <button class="prov-copy-btn" onclick="loadProvisionList()">Refresh</button>
+          </div>
+          <p class="prov-hint">
+            Every workspace on the platform, newest first. "Provisioned" means it was created here;
+            workspaces that predate this panel show "—" because nothing was backfilled.
+          </p>
+          <div class="prov-table-wrap">
+            <table class="prov-table">
+              <thead>
+                <tr>
+                  <th>Workspace</th><th>Owner</th><th>Created</th><th>Provisioned</th>
+                  <th>Members</th><th>Fields (C/D)</th><th>Data (C/D)</th><th>Webhook</th>
+                </tr>
+              </thead>
+              <tbody id="prov-list-body">
+                <tr><td colspan="8" class="loading">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div><!-- /#tab-provisioning -->
+
+      <div id="tab-tutorial" class="hidden">
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Using the provisioning API</h2>
+          <p class="prov-hint">
+            One request creates a customer workspace, its owner account, any custom fields it should start with,
+            and a working inbound webhook — and hands back the owner's password and the webhook URL to send on.
+            The Provisioning tab is a form over exactly this API. Every snippet below already uses this console's
+            host; copy and run.
+          </p>
+
+          <h3 class="tut-h">1 · Authenticate: the admin secret goes in the payload</h3>
+          <p class="prov-hint">
+            No login step. Put <code>admin_secret</code> (the server's <code>ADMIN_SECRET</code>) in the JSON of the request
+            itself — one request does everything. For <code>GET</code> requests send it as the <code>X-Admin-Secret</code>
+            header instead. The secret is checked in constant time and dropped before the request is processed; it never
+            appears in a response. Treat it like a password: HTTPS only, never in a URL.
+          </p>
+          <p class="prov-hint">The console's own way still works too — <code>POST /api/admin/login</code> once and reuse the session cookie:</p>
+          <div class="tut-code"><pre class="prov-curl" id="tut-login">curl -c cookies.txt -X POST <span class="tut-host">https://YOUR-HOST</span>/api/admin/login \
+  -H 'Content-Type: application/json' \
+  -d '{"secret":"YOUR_ADMIN_SECRET"}'
+# then add  -b cookies.txt  to the requests below and leave admin_secret out</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('tut-login').textContent, this)">Copy</button></div>
+
+          <h3 class="tut-h">2 · Provision — the smallest request</h3>
+          <p class="prov-hint"><code>POST /api/admin/provision</code> — the secret plus the workspace name and the owner's email. Nothing else is required.</p>
+          <div class="tut-code"><pre class="prov-curl" id="tut-minimal">curl -X POST <span class="tut-host">https://YOUR-HOST</span>/api/admin/provision \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "admin_secret": "YOUR_ADMIN_SECRET",
+    "workspace_name": "Acme Corp",
+    "owner_email": "maria@acmecorp.com"
+  }'</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('tut-minimal').textContent, this)">Copy</button></div>
+
+          <h3 class="tut-h">3 · A full request</h3>
+          <p class="prov-hint">Everything the endpoint accepts. Custom fields apply to <strong>this new workspace only</strong>; afterwards its own members manage them in Settings.</p>
+          <div class="tut-code"><pre class="prov-curl" id="tut-full">{
+  "admin_secret":   "YOUR_ADMIN_SECRET",      // required (unless you sent the session cookie)
+  "workspace_name": "Acme Corp",              // required
+  "owner_email":    "maria@acmecorp.com",     // required
+  "owner_name":     "Maria Schmidt",          // optional — defaults to the part before the @
+
+  "contact_fields": [                         // optional — extra fields on every contact
+    { "name": "Lead Source", "type": "dropdown", "options": ["Google Ads", "Referral"] },
+    { "name": "LinkedIn",    "type": "url" }
+  ],
+
+  "deal_fields": [                            // optional — extra fields on every deal
+    { "name": "Contract Start", "type": "date" },
+    { "name": "Seats", "field_key": "seat_count", "type": "number" }
+  ],
+
+  "create_deal":    true,                     // optional, default true — inbound leads also open a deal
+  "webhook_active": true                      // optional, default true
+}</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('tut-full').textContent, this)">Copy</button></div>
+
+          <h3 class="tut-h">4 · What comes back (201)</h3>
+          <div class="tut-code"><pre class="prov-curl" id="tut-response">{
+  "workspace": { "id": 42, "name": "Acme Corp" },
+
+  "owner": {
+    "email": "maria@acmecorp.com",
+    "password": "Z5ri-jBxY-cQ3V-QJgV",        // send this. Shown once — not stored, not emailed.
+    "existing_account": false,
+    "credentials_note": "Shown once only, and not recoverable…"
+  },
+
+  "login_url": "<span class="tut-host">https://YOUR-HOST</span>",
+
+  "custom_fields": {
+    "contact": [ { "field_key": "lead_source", "type": "dropdown", … } ],
+    "deal":    [ { "field_key": "contract_start", "type": "date", … } ]
+  },
+
+  "integration": {
+    "webhook_url": "<span class="tut-host">https://YOUR-HOST</span>/api/integrations/receive/cd9dd4cd863a…",
+    "field_map":   { "name": "full_name", "email": "email", "lead_source": "lead_source", … },
+    "sample_payload": { "full_name": "Jane Doe", "email": "jane@example.com", … },
+    "sample_curl":    "curl -X POST …",
+    "success_response": { "success": true, "contact_id": 123, "deal_id": 456 },
+    "error_responses":  [ … ],
+    "rate_limits":      { "per_key": "120 requests per minute", … },
+    "notes":            [ … ]
+  }
+}</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('tut-response').textContent, this)">Copy</button></div>
+          <p class="prov-hint">Send the customer three things: the <strong>login URL</strong>, the <strong>password</strong>, and the <strong>webhook URL</strong> (plus <code>sample_curl</code> if they are wiring up an integration).</p>
+
+          <h3 class="tut-h">5 · The list</h3>
+          <p class="prov-hint"><code>GET /api/admin/provision/list</code> — every workspace with its owner, newest first; <code>provisioned_at</code> is set only for workspaces created through this API.</p>
+          <div class="tut-code"><pre class="prov-curl" id="tut-list">curl -H 'X-Admin-Secret: YOUR_ADMIN_SECRET' <span class="tut-host">https://YOUR-HOST</span>/api/admin/provision/list</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('tut-list').textContent, this)">Copy</button></div>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Custom fields</h2>
+          <p class="prov-hint">Each entry in <code>contact_fields</code> / <code>deal_fields</code> takes:</p>
+          <table class="tut-table">
+            <thead><tr><th>Key</th><th>Required</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td><code>name</code></td><td>yes</td><td>What the user sees, e.g. <code>"Lead Source"</code></td></tr>
+              <tr><td><code>type</code></td><td>no</td><td>Defaults to <code>text</code>. One of <code>text</code>, <code>email</code>, <code>phone</code>, <code>number</code>, <code>dropdown</code>, <code>date</code>, <code>url</code></td></tr>
+              <tr><td><code>options</code></td><td>only for <code>dropdown</code></td><td>A dropdown with no options is rejected</td></tr>
+              <tr><td><code>field_key</code></td><td>no</td><td>Auto-generated from <code>name</code> (<code>"Lead Source"</code> → <code>lead_source</code>). Set it if you need a specific key</td></tr>
+            </tbody>
+          </table>
+          <ul class="tut-list">
+            <li>Up to 50 fields per object. A contact field key may not collide with a built-in column (<code>name</code>, <code>email</code>, <code>phone</code>, <code>company</code>, <code>assigned_to</code>, …) — that is a <code>400</code>.</li>
+            <li><strong>Contact fields are wired into the webhook automatically</strong>: each one is added to <code>field_map</code>, so the customer can send <code>lead_source</code> in their payload and it lands on the contact.</li>
+            <li><strong>Deal fields are not fillable by the webhook.</strong> They work on the deal board and in the deal modal, but an auto-created deal gets a title, pipeline and stage only. This is repeated in <code>integration.notes</code> of every response.</li>
+            <li>Fields can only be seeded here, at creation. The API cannot add fields to an existing workspace — once it is live, its owner/admins manage fields in <strong>Settings → Custom fields</strong>.</li>
+          </ul>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">The owner's password</h2>
+          <ul class="tut-list">
+            <li>Generated per workspace: 16 characters in four groups, e.g. <code>Z5ri-jBxY-cQ3V-QJgV</code>; look-alike characters (<code>0</code>/<code>O</code>, <code>1</code>/<code>l</code>/<code>I</code>) are excluded so it survives being retyped.</li>
+            <li><strong>Shown once, in the response. Not stored, not emailed.</strong> Only a bcrypt hash is kept — nobody can read it back later. Copy it before closing the response.</li>
+            <li>Lost? The owner uses <strong>Forgot password</strong> on the login page and sets their own. Suggest they do that anyway, since you have seen the first one.</li>
+            <li><strong>If the email already has an account</strong>, the owner keeps their existing password and <code>existing_account</code> is <code>true</code> — no new credentials. One person can own several workspaces with one password; at login they are asked which workspace to open.</li>
+          </ul>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Handing over the integration</h2>
+          <p class="prov-hint">Give the customer <code>integration.webhook_url</code> and <code>integration.sample_curl</code>. The webhook takes a <code>POST</code> with JSON and needs no header or token — <strong>the key in the URL is the secret, so treat the URL itself as a credential.</strong></p>
+          <ol class="tut-list">
+            <li>The payload is mapped through <code>field_map</code> (nested paths work: <code>"data.contact.email"</code>).</li>
+            <li>At least a <strong>name or an email</strong> is required, otherwise <code>422</code>.</li>
+            <li>An existing contact is matched and updated <strong>by email</strong>; with no email a new one is always created.</li>
+            <li>Anything mapped that is not <code>name</code>/<code>email</code>/<code>phone</code>/<code>company</code> is stored on the contact as a custom field.</li>
+            <li>A deal is opened in the first pipeline stage, if <code>create_deal</code> was on.</li>
+            <li>The delivery is logged either way.</li>
+          </ol>
+          <p class="prov-hint">Rate limits: 120 requests per minute per key, 120 per 15 minutes per IP. The owner can change the mapping, rotate the key or switch the webhook off under <strong>Settings → Integrations</strong>, where the last 50 deliveries are listed — the first place to look when "my form isn't coming through".</p>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Errors</h2>
+          <p class="prov-hint">Every failure is <code>{ "error": "…" }</code> with a message meant to be read. Nothing is half-created: the whole thing runs in one database transaction.</p>
+          <table class="tut-table">
+            <thead><tr><th>Status</th><th>Means</th></tr></thead>
+            <tbody>
+              <tr><td><code>400</code></td><td>Something in the request is wrong — the message names the field, e.g. <code>contact_fields[1].type "money" is not valid</code></td></tr>
+              <tr><td><code>401</code></td><td><code>admin_secret</code> (or the <code>X-Admin-Secret</code> header) missing or wrong, and no admin session</td></tr>
+              <tr><td><code>503</code></td><td><code>ADMIN_SECRET</code> is not configured on the server — the admin API is off</td></tr>
+            </tbody>
+          </table>
+          <ul class="tut-list">
+            <li><strong>Workspace names are not unique.</strong> Provisioning twice with the same name gives two separate workspaces — check the list first.</li>
+            <li><strong>It can only create.</strong> A stray <code>workspace_id</code> in the body is ignored; there is no way to point it at an existing workspace.</li>
+            <li><strong><code>APP_URL</code> must be set on the server</strong>, or the generated login and webhook URLs point at the wrong host.</li>
+            <li><strong>Nothing is emailed</strong> — not the password, not the webhook URL. Handing them over is a manual step, by design.</li>
+          </ul>
+        </div>
+      </div><!-- /#tab-tutorial -->
 
       <div id="message" class="message" style="display: none;"></div>
     </div>
@@ -712,6 +1019,212 @@
         showMessage(`Error updating the tutorial: ${e.message}`, 'error');
         renderTourState();
       }
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       PROVISIONING TAB
+       Form → POST /api/admin/provision → the one-time credentials panel,
+       plus the workspace/owner table from GET /api/admin/provision/list.
+       ══════════════════════════════════════════════════════════════════════ */
+
+    function showAdminTab(name) {
+      for (const t of ['defaults', 'provisioning', 'tutorial']) {
+        document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== name);
+        document.getElementById(`tabbtn-${t}`).classList.toggle('active', t === name);
+      }
+      if (name === 'provisioning') loadProvisionList();
+      if (name === 'tutorial') fillTutorialHost();
+    }
+
+    // The tutorial's snippets name this console's own host, so they are copy-and-run.
+    function fillTutorialHost() {
+      document.querySelectorAll('.tut-host').forEach(el => { el.textContent = location.origin; });
+    }
+
+    // One row of the contact/deal custom-field editors. `kind` is 'contact' or
+    // 'deal' and is only used to pick the container.
+    function addProvField(kind) {
+      const wrap = document.getElementById(`prov-${kind}-fields`);
+      const row = document.createElement('div');
+      row.className = 'prov-field-row';
+      row.innerHTML = `
+        <div class="input-group"><label>Field name</label><input type="text" class="prov-f-name" placeholder="Lead Source" /></div>
+        <div class="input-group"><label>Type</label><select class="prov-f-type">
+          ${FIELD_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
+        </select></div>
+        <div class="input-group"><label>Options (dropdown only, comma separated)</label><input type="text" class="prov-f-options" placeholder="Google Ads, Referral" /></div>
+        <button class="prov-remove" onclick="this.closest('.prov-field-row').remove()">Remove</button>`;
+      wrap.appendChild(row);
+    }
+
+    // Read one field editor into the shape the API wants. Rows with no name are
+    // dropped, so an empty row the admin added and ignored is not an error.
+    // Options are only sent for a dropdown — the API rejects a dropdown with none.
+    function readProvFields(kind) {
+      const rows = [...document.querySelectorAll(`#prov-${kind}-fields .prov-field-row`)];
+      return rows.map(r => {
+        const name = r.querySelector('.prov-f-name').value.trim();
+        if (!name) return null;
+        const type = r.querySelector('.prov-f-type').value;
+        const field = { name, type };
+        if (type === 'dropdown') {
+          field.options = r.querySelector('.prov-f-options').value
+            .split(',').map(o => o.trim()).filter(Boolean);
+        }
+        return field;
+      }).filter(Boolean);
+    }
+
+    // The whole request body, from the form. Kept pure and separate from the
+    // fetch so it can be unit tested (tests/client/admin-provisioning.test.js).
+    function buildProvisionPayload(form) {
+      const body = {
+        workspace_name: form.workspaceName.trim(),
+        owner_email:    form.ownerEmail.trim(),
+        create_deal:    !!form.createDeal,
+        webhook_active: !!form.webhookActive,
+      };
+      if (form.ownerName && form.ownerName.trim()) body.owner_name = form.ownerName.trim();
+      if (form.contactFields?.length) body.contact_fields = form.contactFields;
+      if (form.dealFields?.length)    body.deal_fields    = form.dealFields;
+      return body;
+    }
+
+    async function submitProvision() {
+      const btn    = document.getElementById('prov-submit');
+      const errEl  = document.getElementById('prov-error');
+      errEl.innerHTML = '';
+
+      const payload = buildProvisionPayload({
+        workspaceName: document.getElementById('prov-ws-name').value,
+        ownerEmail:    document.getElementById('prov-owner-email').value,
+        ownerName:     document.getElementById('prov-owner-name').value,
+        createDeal:    document.getElementById('prov-create-deal').checked,
+        webhookActive: document.getElementById('prov-webhook-active').checked,
+        contactFields: readProvFields('contact'),
+        dealFields:    readProvFields('deal'),
+      });
+
+      if (!payload.workspace_name) { errEl.innerHTML = '<div class="message error">Workspace name is required.</div>'; return; }
+      if (!payload.owner_email)    { errEl.innerHTML = '<div class="message error">Owner email is required.</div>'; return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Creating…';
+      try {
+        const res = await fetch(`${API_BASE}/provision`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          errEl.innerHTML = `<div class="message error">${data.error || 'Provisioning failed.'}</div>`;
+          return;
+        }
+        renderProvisionResult(data);
+        resetProvisionForm();
+        loadProvisionList();
+        showMessage(`Workspace "${data.workspace.name}" created.`, 'success');
+      } catch (e) {
+        errEl.innerHTML = `<div class="message error">Error: ${e.message}</div>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Create workspace';
+      }
+    }
+
+    function resetProvisionForm() {
+      for (const id of ['prov-ws-name', 'prov-owner-email', 'prov-owner-name']) document.getElementById(id).value = '';
+      document.getElementById('prov-contact-fields').innerHTML = '';
+      document.getElementById('prov-deal-fields').innerHTML = '';
+      document.getElementById('prov-create-deal').checked = true;
+      document.getElementById('prov-webhook-active').checked = true;
+    }
+
+    // The credentials panel. The password is in this response and NOWHERE else —
+    // only its bcrypt hash is stored — so the panel says so loudly and the copy
+    // buttons exist to make sending it a single click.
+    function renderProvisionResult(data) {
+      const o = data.owner, i = data.integration;
+      const pw = o.existing_account
+        ? '<div class="prov-warn">This email already had an account, so it keeps its existing password. No new credentials were issued — the owner signs in as usual and picks the new workspace from the workspace picker.</div>'
+        : `<div class="prov-warn"><strong>Copy the password now.</strong> It is shown only here and cannot be recovered — only its bcrypt hash is stored, and nothing is emailed. If it is lost, the owner must use "Forgot password".</div>
+           ${copyRow('Password', o.password)}`;
+
+      document.getElementById('prov-result').innerHTML = `
+        <div class="prov-result">
+          <h3>${esc(data.workspace.name)} is ready</h3>
+          <p class="prov-hint">Workspace #${data.workspace.id} · owner ${esc(o.email)}${o.existing_account ? ' (existing account)' : ''}</p>
+          ${pw}
+          ${copyRow('Login URL', data.login_url)}
+          ${copyRow('Webhook URL', i.webhook_url)}
+          <p class="prov-hint" style="margin-top:16px">
+            Sample request the customer can fire to test the integration${i.creates_deal ? ' (it will also open a deal in ' + esc(i.stage?.name || 'the first stage') + ')' : ''}:
+          </p>
+          <pre class="prov-curl">${esc(i.sample_curl)}</pre>
+          <button class="prov-copy-btn" style="margin-top:10px" onclick="copyProvText(${JSON.stringify(i.sample_curl).replace(/"/g, '&quot;')}, this)">Copy sample request</button>
+        </div>`;
+    }
+
+    function copyRow(label, value) {
+      const safe = JSON.stringify(value || '').replace(/"/g, '&quot;');
+      return `<div class="prov-copy-row">
+        <label>${label}</label>
+        <input type="text" readonly value="${esc(value || '')}" onclick="this.select()" />
+        <button class="prov-copy-btn" onclick="copyProvText(${safe}, this)">Copy</button>
+      </div>`;
+    }
+
+    async function copyProvText(text, btn) {
+      try { await navigator.clipboard.writeText(text); } catch { return; }
+      const was = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(() => { btn.textContent = was; }, 1500);
+    }
+
+    async function loadProvisionList() {
+      const body = document.getElementById('prov-list-body');
+      try {
+        const res = await fetch(`${API_BASE}/provision/list`);
+        if (!res.ok) throw new Error((await res.json()).error || 'Could not load workspaces');
+        const data = await res.json();
+        body.innerHTML = renderProvisionRows(data.workspaces);
+      } catch (e) {
+        body.innerHTML = `<tr><td colspan="8" class="message error">${esc(e.message)}</td></tr>`;
+      }
+    }
+
+    function renderProvisionRows(rows) {
+      if (!rows || !rows.length) return '<tr><td colspan="8" class="loading">No workspaces yet.</td></tr>';
+      return rows.map(w => `
+        <tr>
+          <td><strong>${esc(w.name)}</strong><br><span class="prov-hint">#${w.id}</span></td>
+          <td>${w.owner_email ? esc(w.owner_name || '') + '<br><span class="prov-hint">' + esc(w.owner_email) + '</span>' : '<span class="prov-hint">no owner row</span>'}</td>
+          <td>${fmtProvDate(w.created_at)}</td>
+          <td>${w.provisioned ? '<span class="prov-badge yes">Provisioned</span>' : '<span class="prov-badge no">—</span>'}</td>
+          <td>${w.member_count}</td>
+          <td>${w.contact_field_count} / ${w.deal_field_count}</td>
+          <td>${w.contact_count} / ${w.deal_count}</td>
+          <td>${w.webhook_url
+                ? (w.webhook_active ? '<span class="prov-badge yes">Active</span>' : '<span class="prov-badge off">Inactive</span>') +
+                  ` <button class="prov-copy-btn" onclick="copyProvText(${JSON.stringify(w.webhook_url).replace(/"/g, '&quot;')}, this)">Copy URL</button>`
+                : '<span class="prov-badge no">none</span>'}</td>
+        </tr>`).join('');
+    }
+
+    function fmtProvDate(value) {
+      if (!value) return '—';
+      const d = new Date(value);
+      return isNaN(d) ? '—' : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    // admin.html has no shared core.js, so it needs its own escape. Every value
+    // rendered above comes from the database (workspace and owner names are
+    // user-supplied), so none of it may be interpolated raw.
+    function esc(value) {
+      return String(value ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
     }
 
     function showMessage(text, type) {

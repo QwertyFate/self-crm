@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Upgrads CRM: Leads per Webhook, Deals auf einem Board mit eigenen Phasen, Kontakte, Aufgaben, Team-Chat und eine signierte Meldung an das nächste System, wenn ein Vertrag unterschrieben ist.">
+  <title>Upgrads CRM</title>
+  <link rel="icon" href="/images/logo.png" type="image/png">
+  <link rel="preload" href="/fonts/Manrope.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/landing.css">
+</head>
+<body class="lp">
+
+<svg class="lp-sprite" aria-hidden="true" focusable="false">
+  <symbol id="lp-i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="lp-i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+  <symbol id="lp-i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="lp-i-message" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-5A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="lp-i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></symbol>
+  <symbol id="lp-i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></symbol>
+  <symbol id="lp-i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+  <symbol id="lp-i-building" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h2"/><path d="M13 7h2"/><path d="M9 11h2"/><path d="M13 11h2"/><path d="M9 15h2"/><path d="M13 15h2"/><path d="M10 21v-3h4v3"/></symbol>
+  <symbol id="lp-i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="lp-i-pointer" viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-3 7z"/></symbol>
+  <symbol id="lp-i-kanban" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="9.5" y="4" width="5" height="11" rx="1"/><rect x="16" y="4" width="5" height="7" rx="1"/></symbol>
+  <symbol id="lp-i-sliders" viewBox="0 0 24 24"><path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h4"/><path d="M12 17h8"/><circle cx="10" cy="17" r="2"/></symbol>
+  <symbol id="lp-i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="lp-i-key" viewBox="0 0 24 24"><circle cx="8" cy="14" r="4"/><path d="M11 11l9-9"/><path d="M16 6l3 3"/><path d="M13 9l3 3"/></symbol>
+  <symbol id="lp-i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M17 13.5a6 6 0 0 1 4.5 6.5"/></symbol>
+  <symbol id="lp-i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></symbol>
+  <symbol id="lp-i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
+  <symbol id="lp-l-fb" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#1877F2"/><path fill="#FFFFFF" d="M13.5 20.5v-6.6h2.2l.4-2.6h-2.6V9.6c0-.7.3-1.3 1.4-1.3h1.3V6.1c-.2 0-1-.1-2-.1-2 0-3.3 1.2-3.3 3.4v1.9H8.7v2.6h2.2v6.6z"/></symbol>
+  <symbol id="lp-l-ig" viewBox="0 0 24 24"><defs><linearGradient id="lp-ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#F9A23B"/><stop offset=".45" stop-color="#E1306C"/><stop offset="1" stop-color="#833AB4"/></linearGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6.5" fill="url(#lp-ig-g)"/><circle cx="12" cy="12" r="4.4" fill="none" stroke="#FFFFFF" stroke-width="1.9"/><circle cx="17.3" cy="6.7" r="1.25" fill="#FFFFFF"/></symbol>
+  <symbol id="lp-l-tt" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#111111"/><path fill="#25F4EE" d="M12.6 7.2v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3V7.2z" opacity=".9"/><path fill="#FE2C55" d="M13.6 6.4v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3V10a4.6 4.6 0 0 0 2.6.8V8.5a2.7 2.7 0 0 1-2.6-2.1z" opacity=".9"/><path fill="#FFFFFF" d="M13.1 6.8v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3v-4.7a4.6 4.6 0 0 0 2.6.8V9a2.7 2.7 0 0 1-2.6-2.2z"/></symbol>
+  <symbol id="lp-i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="lp-i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="lp-i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></symbol>
+</svg>
+
+<!-- ══ The bar ══════════════════════════════════════════════════════════════ -->
+<header class="lp-nav">
+  <div class="lp-nav-in">
+    <a class="lp-brand" href="#top"><img src="/images/logo.png" alt="Upgrads"></a>
+    <nav class="lp-nav-links">
+      <a href="#top" data-i18n="lp_overview">Übersicht</a>
+      <a href="/" data-i18n="lp_login">Anmelden</a>
+      <div class="lp-lang" role="group" data-i18n-aria="lp_lang" aria-label="Sprache">
+        <button type="button" class="lp-lang-btn" data-lang="de" aria-pressed="true">DE</button>
+        <button type="button" class="lp-lang-btn" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <a class="lp-pill lp-pill-sm lp-request" href="mailto:hello@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="lp_request">Zugang anfragen</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<!-- ══ Hero ═════════════════════════════════════════════════════════════════ -->
+<section id="top" class="lp-sec lp-hero">
+  <div class="lp-glow" aria-hidden="true"></div>
+  <div class="lp-head lp-reveal">
+    <p class="lp-kicker"><img class="lp-kicker-mark" src="/images/logo.png" alt="Upgrads"><span class="lp-kicker-crm" data-i18n="lp_hero_kicker">CRM</span></p>
+    <h1 class="lp-hero-title" data-i18n="lp_hero_title">Ein Board. Jeder Deal.</h1>
+    <p class="lp-hero-sub" data-i18n="lp_hero_sub">Vom ersten Lead bis zur Unterschrift.</p>
+    <div class="lp-actions">
+      <a class="lp-pill lp-request" href="mailto:hello@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="lp_request">Zugang anfragen</a>
+      <a class="lp-pill lp-pill-line" href="/" data-i18n="lp_login">Anmelden</a>
+    </div>
+  </div>
+
+  <div class="lp-stage lp-reveal">
+    <div class="lp-frame lp-board-wrap">
+      <div class="lp-frame-bar"><span class="lp-dot s1"></span><b data-i18n="lp_board_pipeline">Vertrieb</b><button type="button" class="lp-link-btn" id="lp-demo-replay"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-play"/></svg><span data-i18n="lp_demo_replay">Noch einmal zeigen</span></button></div>
+      <div class="lp-board" id="lp-board" data-i18n-aria="lp_board_aria" aria-label="Beispiel-Board. Karten mit der Maus oder den Pfeiltasten verschieben.">
+        <section class="lp-col" data-stage="new">
+          <header class="lp-col-head"><span class="lp-dot s1"></span><h3 data-i18n="lp_col_new">Neu</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
+          <div class="lp-col-cards">
+            <article class="lp-card u3" tabindex="0" data-value="485000" data-hero><span class="lp-card-stripe"></span><h4 class="lp-card-title">Elbstraße 12, 3 Zimmer</h4><p class="lp-card-sub">Jana Weber</p><div class="lp-card-foot"><span class="lp-card-value">485.000 €</span><span class="lp-badge lp-badge-u3" data-i18n="lp_urg_high">Hoch</span><span class="lp-avatar">MK</span></div></article>
+            <article class="lp-card u2" tabindex="0" data-value="128000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Gewerbefläche Nordwind GmbH</h4><p class="lp-card-sub">Tim Berger</p><div class="lp-card-foot"><span class="lp-card-value">128.000 €</span><span class="lp-badge lp-badge-u2" data-i18n="lp_urg_medium">Mittel</span><span class="lp-avatar">TB</span></div></article>
+          </div>
+        </section>
+        <section class="lp-col" data-stage="offer">
+          <header class="lp-col-head"><span class="lp-dot s2"></span><h3 data-i18n="lp_col_offer">Angebot</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
+          <div class="lp-col-cards">
+            <article class="lp-card u1" tabindex="0" data-value="62500"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Lagerfläche Hafenweg 4</h4><p class="lp-card-sub">Hafenwerk KG</p><div class="lp-card-foot"><span class="lp-card-value">62.500 €</span><span class="lp-badge lp-badge-u1" data-i18n="lp_urg_low">Niedrig</span><span class="lp-avatar">LA</span></div></article>
+            <article class="lp-card u4" tabindex="0" data-value="310000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Wohnung Lindenhof 7</h4><p class="lp-card-sub">Sofia Marin</p><div class="lp-card-foot"><span class="lp-card-value">310.000 €</span><span class="lp-badge lp-badge-u4" data-i18n="lp_urg_very">Sehr dringend</span><span class="lp-avatar">MK</span></div></article>
+          </div>
+        </section>
+        <section class="lp-col" data-stage="nego">
+          <header class="lp-col-head"><span class="lp-dot s3"></span><h3 data-i18n="lp_col_nego">Verhandlung</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
+          <div class="lp-col-cards">
+            <article class="lp-card" tabindex="0" data-value="210000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Büroetage Kaistraße 9</h4><p class="lp-card-sub">Lenz &amp; Partner</p><div class="lp-card-foot"><span class="lp-card-value">210.000 €</span><span class="lp-avatar">TB</span></div></article>
+          </div>
+        </section>
+        <section class="lp-col is-won" data-stage="won">
+          <header class="lp-col-head"><span class="lp-dot s4"></span><h3 data-i18n="lp_col_won">Gewonnen</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
+          <div class="lp-col-cards">
+            <article class="lp-card is-won" tabindex="0" data-value="395000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Reihenhaus Am Anger 3</h4><p class="lp-card-sub">Familie Roth</p><div class="lp-card-foot"><span class="lp-card-value">395.000 €</span><span class="lp-avatar">LA</span></div></article>
+          </div>
+        </section>
+      </div>
+      <div class="lp-frame-foot">
+        <p class="lp-stats-line" id="lp-stats-line" aria-live="polite"></p>
+        <p class="lp-engine-line" id="lp-engine-line" aria-live="polite"><i></i><span data-i18n="lp_delivery_idle">Upgrads Engine wartet auf einen Deal in Gewonnen.</span></p>
+      </div>
+      <svg class="lp-demo-cursor hidden" id="lp-cursor" aria-hidden="true"><use href="#lp-i-pointer"/></svg>
+      <div class="lp-toast hidden" id="lp-toast" role="status"><span class="lp-toast-text"></span><button type="button" class="lp-toast-undo" data-i18n="lp_toast_undo">Rückgängig</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 1 · the board, said once more ════════════════════════════════════════ -->
+<section id="board" class="lp-sec lp-alt">
+  <div class="lp-head lp-reveal">
+    <h2 data-i18n="lp_s1_t">Ziehen. Fertig.</h2>
+    <p class="lp-sub" data-i18n="lp_s1_d">Deals durch eigene Phasen. Summen folgen live.</p>
+  </div>
+</section>
+
+<!-- ══ 2 · leads: from the ad platforms and the website into the board ═════ -->
+<section id="leads" class="lp-sec">
+  <div class="lp-head lp-reveal">
+    <h2 data-i18n="lp_s2_t">Leads kommen an. Von selbst.</h2>
+    <p class="lp-sub" data-i18n="lp_s2_d">Aus Facebook, Instagram, TikTok und der Website. Über Make, Zapier oder n8n.</p>
+  </div>
+  <div class="lp-stage lp-stage-narrow lp-reveal">
+    <div class="lp-frame lp-tilt lp-flow" id="lp-flow-leads">
+      <ul class="lp-sources">
+        <li class="lp-source is-on" data-src="fb"><svg class="lp-logo"><use href="#lp-l-fb"/></svg><span data-i18n="lp_src_fb">Facebook Ads</span></li>
+        <li class="lp-source" data-src="ig"><svg class="lp-logo"><use href="#lp-l-ig"/></svg><span data-i18n="lp_src_ig">Instagram Ads</span></li>
+        <li class="lp-source" data-src="tt"><svg class="lp-logo"><use href="#lp-l-tt"/></svg><span data-i18n="lp_src_tt">TikTok Ads</span></li>
+        <li class="lp-source" data-src="web"><svg class="lp-logo lp-logo-web"><use href="#lp-i-globe"/></svg><span data-i18n="lp_src_web">Website-Formular</span></li>
+      </ul>
+      <div class="lp-via"><span data-i18n="lp_via">über</span><b>Make</b><b>Zapier</b><b>n8n</b><i class="lp-via-line" aria-hidden="true"></i></div>
+      <div class="lp-target" id="lp-lead-target">
+        <p class="lp-target-name"><img src="/images/logo.png" alt="Upgrads"></p>
+        <div class="lp-lead-card" id="lp-lead-card">
+          <p class="lp-label" data-i18n="lp_lead_contact">Kontakt angelegt</p>
+          <dl class="lp-fields" id="lp-lead-fields"></dl>
+          <p class="lp-chips" id="lp-lead-chips"></p>
+        </div>
+      </div>
+      <span class="lp-packet hidden" id="lp-lead-packet" aria-hidden="true"></span>
+    </div>
+    <div class="lp-actions"><button type="button" class="lp-pill" id="lp-lead-send"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-bolt"/></svg><span data-i18n="lp_lead_send">Lead senden</span></button></div>
+  </div>
+</section>
+
+<!-- ══ 3 · the deal ═════════════════════════════════════════════════════════ -->
+<section id="deal" class="lp-sec lp-alt">
+  <div class="lp-head lp-reveal">
+    <h2 data-i18n="lp_s3_t">Alles an einem Ort.</h2>
+    <p class="lp-sub" data-i18n="lp_s3_d">Kontakt, Aufgaben, Notizen, Objekte. Am Deal.</p>
+  </div>
+  <div class="lp-stage lp-stage-narrow lp-reveal">
+    <div class="lp-frame lp-tilt lp-record" id="lp-record">
+      <div class="lp-record-head">
+        <div>
+          <h3 class="lp-record-title" data-i18n="lp_deal_name">Elbstraße 12, 3 Zimmer</h3>
+          <p class="lp-record-meta"><span class="lp-stagepill" data-i18n="lp_col_nego">Verhandlung</span><span class="lp-badge lp-badge-u3" data-i18n="lp_urg_high">Hoch</span><span class="lp-record-created" data-i18n="lp_deal_created">Angelegt vor 11 Tagen</span></p>
+        </div>
+        <div class="lp-record-actions">
+          <button type="button" class="lp-btn lp-btn-sm"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-phone"/></svg><span data-i18n="lp_act_call">Anrufen</span></button>
+          <button type="button" class="lp-btn lp-btn-sm"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-mail"/></svg><span data-i18n="lp_act_email">E-Mail</span></button>
+          <button type="button" class="lp-btn lp-btn-sm"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-message"/></svg><span data-i18n="lp_act_wa">WhatsApp</span></button>
+        </div>
+      </div>
+      <div class="lp-tabs" role="tablist">
+        <button type="button" role="tab" id="lp-tab-overview" aria-controls="lp-pan-overview" aria-selected="true" data-i18n="lp_tab_overview">Übersicht</button>
+        <button type="button" role="tab" id="lp-tab-contact" aria-controls="lp-pan-contact" aria-selected="false" tabindex="-1" data-i18n="lp_tab_contact">Kontakt</button>
+        <button type="button" role="tab" id="lp-tab-tasks" aria-controls="lp-pan-tasks" aria-selected="false" tabindex="-1" data-i18n="lp_tab_tasks">Aufgaben</button>
+        <button type="button" role="tab" id="lp-tab-activity" aria-controls="lp-pan-activity" aria-selected="false" tabindex="-1" data-i18n="lp_tab_activity">Aktivität</button>
+        <button type="button" role="tab" id="lp-tab-objects" aria-controls="lp-pan-objects" aria-selected="false" tabindex="-1" data-i18n="lp_tab_objects">Objekte</button>
+      </div>
+      <div class="lp-pan" role="tabpanel" id="lp-pan-overview" aria-labelledby="lp-tab-overview">
+        <dl class="lp-kpis">
+          <div><dt data-i18n="lp_kpi_value">Deal-Wert</dt><dd>485.000 €</dd></div>
+          <div><dt data-i18n="lp_kpi_stage">Phase</dt><dd data-i18n="lp_col_nego">Verhandlung</dd></div>
+          <div><dt data-i18n="lp_kpi_urg">Dringlichkeit</dt><dd data-i18n="lp_urg_high">Hoch</dd></div>
+          <div><dt data-i18n="lp_kpi_owner">Zuständig</dt><dd>Mara Kühn</dd></div>
+          <div><dt data-i18n="lp_kpi_last">Letzte Aktivität</dt><dd data-i18n="lp_kpi_last_v">vor 2 Std.</dd></div>
+        </dl>
+        <div class="lp-ov-grid">
+          <div class="lp-ov-card"><h4><span data-i18n="lp_ov_next">Nächste Aufgaben</span> <span class="lp-count lp-ov-open">3</span></h4><ul class="lp-mini-list"><li><span class="lp-mini-dot"></span><span data-i18n="lp_task1">Finanzierungsbestätigung anfordern</span><small data-i18n="lp_task1_due">Fr, 10:00</small></li><li><span class="lp-mini-dot"></span><span data-i18n="lp_task3">Notartermin abstimmen</span><small data-i18n="lp_task3_due">Di, 14:30</small></li></ul></div>
+          <div class="lp-ov-card"><h4 data-i18n="lp_ov_latest">Letzte Aktivität</h4><p class="lp-ov-latest-meta" data-i18n="lp_tl1_meta">Mara Kühn, gestern 15:20</p><p class="lp-ov-latest-text" data-i18n="lp_tl1_text">Kaufpreis besprochen, Finanzierung in Prüfung.</p></div>
+        </div>
+      </div>
+      <div class="lp-pan hidden" role="tabpanel" id="lp-pan-contact" aria-labelledby="lp-tab-contact">
+        <div class="lp-contact">
+          <span class="lp-avatar lp-avatar-lg">JW</span>
+          <div class="lp-contact-body">
+            <h4>Jana Weber</h4>
+            <dl class="lp-fields">
+              <dt data-i18n="lp_f_email">E-Mail</dt><dd>jana.weber@example.de</dd>
+              <dt data-i18n="lp_f_phone">Telefon</dt><dd>+49 171 2345678</dd>
+              <dt data-i18n="lp_f_owner">Zuständig</dt><dd>Mara Kühn</dd>
+              <dt data-i18n="lp_f_last">Letzter Kontakt</dt><dd data-i18n="lp_f_last_v">gestern, 15:20</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="lp-supplier">
+          <p class="lp-label" data-i18n="lp_supplier_label">Lieferant</p>
+          <div class="lp-supplier-row"><span class="lp-avatar">NF</span><div><b>Notariat Feld &amp; Kollegen</b><small data-i18n="lp_supplier_role">Notariat</small></div></div>
+        </div>
+      </div>
+      <div class="lp-pan hidden" role="tabpanel" id="lp-pan-tasks" aria-labelledby="lp-tab-tasks">
+        <div class="lp-task-head"><span class="lp-task-progress"></span><span class="lp-task-bar"><i></i></span></div>
+        <ul class="lp-task-list">
+          <li class="lp-task"><label><input type="checkbox"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task1">Finanzierungsbestätigung anfordern</span></label><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span><small data-i18n="lp_task1_due">Fr, 10:00</small></li>
+          <li class="lp-task"><label><input type="checkbox" checked><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task2">Energieausweis senden</span></label><span class="lp-badge lp-badge-u2" data-i18n="lp_prio_medium">Mittel</span><small data-i18n="lp_task2_due">erledigt</small></li>
+          <li class="lp-task"><label><input type="checkbox"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task3">Notartermin abstimmen</span></label><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span><small data-i18n="lp_task3_due">Di, 14:30</small></li>
+          <li class="lp-task"><label><input type="checkbox"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task4">Exposé aktualisieren</span></label><span class="lp-badge lp-badge-u1" data-i18n="lp_prio_low">Niedrig</span><small data-i18n="lp_task4_due">ohne Datum</small></li>
+        </ul>
+      </div>
+      <div class="lp-pan hidden" role="tabpanel" id="lp-pan-activity" aria-labelledby="lp-tab-activity">
+        <div class="lp-composer">
+          <div class="lp-type-chips">
+            <button type="button" class="lp-type-chip" data-type="note" aria-pressed="true" data-i18n="lp_type_note">Notiz</button>
+            <button type="button" class="lp-type-chip" data-type="call" aria-pressed="false" data-i18n="lp_type_call">Anruf</button>
+            <button type="button" class="lp-type-chip" data-type="email" aria-pressed="false" data-i18n="lp_type_email">E-Mail</button>
+            <button type="button" class="lp-type-chip" data-type="wa" aria-pressed="false" data-i18n="lp_type_wa">WhatsApp</button>
+          </div>
+          <textarea rows="2" data-i18n-ph="lp_note_ph" placeholder="Notiz schreiben, Strg+Enter speichert"></textarea>
+          <button type="button" class="lp-btn lp-btn-primary lp-btn-sm lp-note-save" data-i18n="lp_note_save">Speichern</button>
+        </div>
+        <ol class="lp-timeline">
+          <li class="lp-tl-item"><span class="lp-tl-ic type-call"></span><div><p class="lp-tl-meta"><b data-i18n="lp_type_call">Anruf</b> <span data-i18n="lp_tl1_meta">Mara Kühn, gestern 15:20</span></p><p class="lp-tl-text" data-i18n="lp_tl1_text">Kaufpreis besprochen, Finanzierung in Prüfung.</p></div></li>
+          <li class="lp-tl-item"><span class="lp-tl-ic type-email"></span><div><p class="lp-tl-meta"><b data-i18n="lp_type_email">E-Mail</b> <span data-i18n="lp_tl2_meta">Mara Kühn, Montag 09:05</span></p><p class="lp-tl-text" data-i18n="lp_tl2_text">Exposé gesendet, Besichtigung Mittwoch.</p></div></li>
+          <li class="lp-tl-item"><span class="lp-tl-ic type-note"></span><div><p class="lp-tl-meta"><b data-i18n="lp_type_note">Notiz</b> <span data-i18n="lp_tl3_meta">Tim Berger, letzte Woche</span></p><p class="lp-tl-text" data-i18n="lp_tl3_text">Erstkontakt über das Formular. Sucht 3 Zimmer, Altbau.</p></div></li>
+        </ol>
+      </div>
+      <div class="lp-pan hidden" role="tabpanel" id="lp-pan-objects" aria-labelledby="lp-tab-objects">
+        <p class="lp-label" data-i18n="lp_obj_title">Verknüpfte Objekte</p>
+        <div class="lp-object"><span class="lp-object-ic"><svg class="lp-ic"><use href="#lp-i-building"/></svg></span><div><b>Elbstraße 12, Whg. 3</b><small data-i18n="lp_obj_meta">87 m², 3 Zimmer, Baujahr 1962</small></div><button type="button" class="lp-btn lp-btn-sm" data-i18n="lp_obj_open">Öffnen</button></div>
+        <button type="button" class="lp-link-btn"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-plus"/></svg><span data-i18n="lp_obj_add">Objekt verknüpfen</span></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 4 · contacts: find one, see the whole history, reach them in a click ═══ -->
+<section id="contacts" class="lp-sec">
+  <div class="lp-head lp-reveal">
+    <h2 data-i18n="lp_s4_t">Jeder Kontakt. Sofort gefunden.</h2>
+    <p class="lp-sub" data-i18n="lp_s4_d">Suchen, anrufen, schreiben. Die ganze Geschichte an einem Kontakt.</p>
+  </div>
+  <div class="lp-stage lp-reveal">
+    <div class="lp-frame lp-tilt lp-ct" id="lp-ct">
+      <div class="lp-ct-list">
+        <label class="lp-ct-search"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-search"/></svg><input type="search" id="lp-ct-q" autocomplete="off" data-i18n-ph="lp_ct_search_ph" placeholder="Kontakt suchen"></label>
+        <ul id="lp-ct-rows" role="listbox" data-i18n-aria="lp_ct_list" aria-label="Kontakte"></ul>
+        <p class="lp-ct-none hidden" id="lp-ct-none" data-i18n="lp_ct_none">Kein Treffer</p>
+      </div>
+      <div class="lp-ct-card" id="lp-ct-card">
+        <div class="lp-ct-head">
+          <i class="lp-av lp-av-lg" id="lp-ct-av"></i>
+          <div><p class="lp-ct-name" id="lp-ct-name"></p><p class="lp-ct-sub" id="lp-ct-company"></p></div>
+        </div>
+        <div class="lp-ct-actions">
+          <button type="button" class="lp-ct-act" data-act="call" aria-pressed="false"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-phone"/></svg><span data-i18n="lp_ct_call">Anrufen</span></button>
+          <button type="button" class="lp-ct-act" data-act="mail" aria-pressed="false"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-mail"/></svg><span data-i18n="lp_ct_mail">E-Mail</span></button>
+          <button type="button" class="lp-ct-act" data-act="wa" aria-pressed="false"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-message"/></svg><span data-i18n="lp_ct_wa">WhatsApp</span></button>
+        </div>
+        <div class="lp-ct-bubble hidden" id="lp-ct-bubble"><small id="lp-ct-bubble-label"></small><p id="lp-ct-bubble-text"></p></div>
+        <p class="lp-label" data-i18n="lp_ct_deals">Deals</p>
+        <ul class="lp-ct-deals" id="lp-ct-deals"></ul>
+        <p class="lp-label" data-i18n="lp_ct_history">Verlauf</p>
+        <ul class="lp-ct-hist" id="lp-ct-hist"></ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 5 · numbers ══════════════════════════════════════════════════════════ -->
+<section id="numbers" class="lp-sec">
+  <div class="lp-head lp-reveal">
+    <h2 data-i18n="lp_s5_t">Zahlen, die stimmen.</h2>
+    <p class="lp-sub" data-i18n="lp_s5_d">Gewinnquote und Trichter nach den eigenen Phasen.</p>
+  </div>
+  <div class="lp-stage lp-stage-narrow lp-reveal">
+    <div class="lp-frame lp-tilt lp-an">
+      <div class="lp-frame-bar">
+        <div class="lp-seg" role="group" aria-label="Zeitraum">
+          <button type="button" class="lp-period-btn" data-period="3" aria-pressed="false" data-i18n="lp_an_period_3">3 Monate</button>
+          <button type="button" class="lp-period-btn" data-period="6" aria-pressed="true" data-i18n="lp_an_period_6">6 Monate</button>
+          <button type="button" class="lp-period-btn" data-period="12" aria-pressed="false" data-i18n="lp_an_period_12">12 Monate</button>
+        </div>
+      </div>
+      <dl class="lp-an-cards">
+        <div><dt data-i18n="lp_an_c_open">Offene Pipeline</dt><dd id="lp-an-open"></dd></div>
+        <div><dt data-i18n="lp_an_c_won">Gewonnener Wert</dt><dd id="lp-an-won"></dd></div>
+        <div><dt data-i18n="lp_an_c_rate">Gewinnquote</dt><dd id="lp-an-rate"></dd></div>
+        <div><dt data-i18n="lp_an_c_new">Neue Deals</dt><dd id="lp-an-new"></dd></div>
+      </dl>
+      <div class="lp-an-grid">
+        <div class="lp-an-card">
+          <p class="lp-label" data-i18n="lp_an_rate_m">Gewinnquote je Monat</p>
+          <div id="lp-an-line-wrap"><svg id="lp-an-line" viewBox="0 0 560 180" preserveAspectRatio="none" role="img" aria-hidden="true"></svg><div class="lp-an-tip hidden" id="lp-an-tip"></div></div>
+        </div>
+        <div class="lp-an-card">
+          <p class="lp-label" data-i18n="lp_an_funnel">Trichter</p>
+          <ol class="lp-funnel" id="lp-an-funnel"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 6 · from our system to the next ═════════════════════════════════════ -->
+<section id="engine" class="lp-sec lp-alt">
+  <div class="lp-head lp-reveal">
+    <h2 data-i18n="lp_s6_t">Unterschrieben. Weitergemeldet.</h2>
+    <p class="lp-sub" data-i18n="lp_s6_d">Ein Zug nach Gewonnen, und das nächste System weiß Bescheid.</p>
+  </div>
+  <div class="lp-stage lp-stage-narrow lp-reveal">
+    <div class="lp-frame lp-tilt lp-flow lp-flow-engine" id="lp-flow-engine">
+      <div class="lp-node" id="lp-en-from">
+        <p class="lp-target-name"><img src="/images/logo.png" alt="Upgrads"></p>
+        <div class="lp-deal-mini">
+          <b>Elbstraße 12, 3 Zimmer</b>
+          <span class="lp-stagepill" id="lp-en-stage" data-i18n="lp_col_nego">Verhandlung</span>
+        </div>
+      </div>
+      <div class="lp-link">
+        <i class="lp-link-line" aria-hidden="true"></i>
+        <p class="lp-en-state"><i></i><span id="lp-en-state"></span></p>
+      </div>
+      <div class="lp-node lp-node-to" id="lp-en-to">
+        <p class="lp-node-name" data-i18n="lp_en_to">Nächstes System</p>
+        <p class="lp-node-sub" data-i18n="lp_en_to_sub">Abwicklung, Buchhaltung, Verwaltung</p>
+        <p class="lp-receipt" id="lp-en-receipt"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg><span data-i18n="lp_en_received">Empfangen</span></p>
+      </div>
+      <span class="lp-packet hidden" id="lp-en-packet" aria-hidden="true"></span>
+    </div>
+    <div class="lp-actions"><button type="button" class="lp-pill" id="lp-en-send"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-sparkle"/></svg><span data-i18n="lp_en_send">Deal abschließen</span></button></div>
+    <p class="lp-cap" data-i18n="lp_en_cap">Sicher übertragen, Empfang bestätigt. Jede Übertragung im Protokoll.</p>
+  </div>
+</section>
+
+<!-- ══ 7 · how it works: one task in four steps, each explained, the product showing it ═ -->
+<section id="work" class="lp-sec">
+  <div class="lp-head lp-reveal">
+    <h2 data-i18n="lp_s7_t">Eine Aufgabe, vier Schritte.</h2>
+    <p class="lp-sub" data-i18n="lp_s7_d">Anlegen, in der Liste, im Kalender, erledigt. So arbeitet das Team.</p>
+  </div>
+  <div class="lp-stage lp-reveal lp-how" id="lp-how">
+    <ol class="lp-how-steps" role="tablist" aria-orientation="vertical">
+      <li class="lp-how-step is-on" role="tab" id="lp-how-t1" aria-controls="lp-how-s1" aria-selected="true" tabindex="0"><span class="lp-how-n" aria-hidden="true">1</span><h3 data-i18n="lp_how1">Aufgabe anlegen</h3><p data-i18n="lp_how1_d">Am Deal oder auf der Aufgabenseite: Titel, Datum, Uhrzeit und wer es macht.</p><i class="lp-how-bar" aria-hidden="true"></i></li>
+      <li class="lp-how-step" role="tab" id="lp-how-t2" aria-controls="lp-how-s2" aria-selected="false" tabindex="-1"><span class="lp-how-n" aria-hidden="true">2</span><h3 data-i18n="lp_how2">In der Liste</h3><p data-i18n="lp_how2_d">Alle Aufgaben des Teams, nach Projekt gruppiert. Überfälliges steht rot.</p><i class="lp-how-bar" aria-hidden="true"></i></li>
+      <li class="lp-how-step" role="tab" id="lp-how-t3" aria-controls="lp-how-s3" aria-selected="false" tabindex="-1"><span class="lp-how-n" aria-hidden="true">3</span><h3 data-i18n="lp_how3">Im Kalender</h3><p data-i18n="lp_how3_d">Mit Uhrzeit steht sie im Wochenplan des Teams. Jeder in seiner Zeitzone.</p><i class="lp-how-bar" aria-hidden="true"></i></li>
+      <li class="lp-how-step" role="tab" id="lp-how-t4" aria-controls="lp-how-s4" aria-selected="false" tabindex="-1"><span class="lp-how-n" aria-hidden="true">4</span><h3 data-i18n="lp_how4">Abhaken</h3><p data-i18n="lp_how4_d">Ein Haken in der Liste, im Kalender oder am Deal. Überall erledigt.</p><i class="lp-how-bar" aria-hidden="true"></i></li>
+    </ol>
+    <div class="lp-frame lp-tilt lp-how-frame" id="lp-how-frame">
+      <!-- 1 · the form, as the app opens it: title, date, time, owner, deal, priority -->
+      <div class="lp-shot lp-shot-form" id="lp-how-s1" role="tabpanel" aria-labelledby="lp-how-t1">
+        <div class="lp-frame-bar"><b data-i18n="lp_tab_tasks">Aufgaben</b><span class="lp-crumb" data-i18n="lp_how_new">Neue Aufgabe</span></div>
+        <div class="lp-fm">
+          <div class="lp-fm-row lp-fm-wide"><span class="lp-fm-l" data-i18n="lp_how_f_title">Titel</span><span class="lp-fm-v lp-fm-title" data-i18n="lp_w1">Exposé senden</span></div>
+          <div class="lp-fm-row"><span class="lp-fm-l" data-i18n="lp_how_due">Fällig</span><span class="lp-fm-v"><svg class="lp-ic"><use href="#lp-i-calendar"/></svg><span data-i18n="lp_how_f_date">Mi, 7. Okt</span></span></div>
+          <div class="lp-fm-row"><span class="lp-fm-l" data-i18n="lp_how_f_time">Uhrzeit</span><span class="lp-fm-v lp-how-mark">14:00</span></div>
+          <div class="lp-fm-row"><span class="lp-fm-l" data-i18n="lp_kpi_owner">Zuständig</span><span class="lp-fm-v"><i class="lp-avatar">MK</i><span>Mara Kühn</span></span></div>
+          <div class="lp-fm-row"><span class="lp-fm-l" data-i18n="lp_how_f_deal">Deal</span><span class="lp-fm-v"><span data-i18n="lp_deal_name">Elbstraße 12, 3 Zimmer</span></span></div>
+          <div class="lp-fm-row"><span class="lp-fm-l" data-i18n="lp_how_prio">Priorität</span><span class="lp-fm-v"><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span></span></div>
+        </div>
+        <div class="lp-frame-foot"><span class="lp-hint" data-i18n="lp_how_f_hint">Mit Uhrzeit steht sie im Kalender.</span><span class="lp-fm-actions"><span class="lp-btn lp-btn-sm" data-i18n="lp_how_cancel">Abbrechen</span><button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lp-how-create" data-i18n="lp_how1">Aufgabe anlegen</button></span></div>
+      </div>
+      <!-- 2 · the list: All tasks / My tasks, grouped by project, the new row marked, one overdue in red -->
+      <div class="lp-shot lp-shot-list hidden" id="lp-how-s2" role="tabpanel" aria-labelledby="lp-how-t2">
+        <div class="lp-frame-bar"><b data-i18n="lp_tab_tasks">Aufgaben</b><div class="lp-seg" id="lp-how-scope"><button type="button" class="lp-how-scope" data-scope="all" aria-pressed="true" data-i18n="lp_how_all">Alle Aufgaben</button><button type="button" class="lp-how-scope" data-scope="mine" aria-pressed="false" data-i18n="lp_how_mine">Meine Aufgaben</button></div></div>
+        <div class="lp-list" id="lp-how-list">
+          <div class="lp-list-head"><span data-i18n="lp_how_task">Aufgabe</span><span data-i18n="lp_how_prio">Priorität</span><span data-i18n="lp_how_due">Fällig</span><span data-i18n="lp_kpi_owner">Zuständig</span></div>
+          <p class="lp-list-group"><i></i><span data-i18n="lp_board_pipeline">Vertrieb</span><span class="lp-count">4</span></p>
+          <ul class="lp-task-list">
+            <li class="lp-task lp-how-mark" data-owner="mk"><label><input type="checkbox" id="lp-how-tick"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_w1">Exposé senden</span></label><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span><small data-i18n="lp_w1_due">Mi, 14:00</small><i class="lp-avatar">MK</i></li>
+            <li class="lp-task" data-owner="tb"><label><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task1">Finanzierungsbestätigung anfordern</span></label><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span><small data-i18n="lp_task1_due">Fr, 10:00</small><i class="lp-avatar">TB</i></li>
+            <li class="lp-task" data-owner="mk"><label><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task3">Notartermin abstimmen</span></label><span class="lp-badge lp-badge-u2" data-i18n="lp_prio_medium">Mittel</span><small data-i18n="lp_task3_due">Di, 14:30</small><i class="lp-avatar">MK</i></li>
+            <li class="lp-task" data-owner="nf"><label><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_how_t4">Besichtigung bestätigen</span></label><span class="lp-badge lp-badge-u2" data-i18n="lp_prio_medium">Mittel</span><small class="is-late" data-i18n="lp_how_t4_due">Mo, 09:00</small><i class="lp-avatar">NF</i></li>
+          </ul>
+        </div>
+        <div class="lp-frame-foot"><span class="lp-hint" data-i18n="lp_how_foot">4 offen, 1 überfällig</span></div>
+      </div>
+      <!-- 3 · the week, as the calendar draws it: hours down, days across, the task on its day at its time -->
+      <div class="lp-shot lp-shot-week hidden" id="lp-how-s3" role="tabpanel" aria-labelledby="lp-how-t3">
+        <div class="lp-frame-bar"><b data-i18n="lp_how_cal">Kalender</b><span class="lp-crumb" data-i18n="lp_how_range">5. bis 11. Okt</span><div class="lp-seg"><span data-i18n="lp_how_month">Monat</span><span class="is-on" data-i18n="lp_how_week">Woche</span></div></div>
+        <div class="lp-week">
+          <div class="lp-week-head"><span></span><span data-i18n="lp_wd1">Mo</span><span data-i18n="lp_wd2">Di</span><span class="is-today" data-i18n="lp_wd3">Mi</span><span data-i18n="lp_wd4">Do</span><span data-i18n="lp_wd5">Fr</span><span data-i18n="lp_wd6">Sa</span><span data-i18n="lp_wd7">So</span></div>
+          <div class="lp-week-days"><span></span><b>5</b><b>6</b><b class="is-today">7</b><b>8</b><b>9</b><b>10</b><b>11</b></div>
+          <div class="lp-week-body">
+            <div class="lp-week-rules" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="lp-week-gutter"><span>09:00</span><span>10:00</span><span>11:00</span><span>12:00</span><span>13:00</span><span>14:00</span><span>15:00</span><span>16:00</span></div>
+            <div class="lp-week-col"><div class="lp-week-ev is-ev at-10"><b>10:00</b><span data-i18n="lp_how_e1">Besichtigung Hafenstraße</span></div></div>
+            <div class="lp-week-col"><div class="lp-week-ev at-1430"><b>14:30</b><span data-i18n="lp_task3">Notartermin abstimmen</span></div></div>
+            <div class="lp-week-col is-today"><i class="lp-week-now" aria-hidden="true"></i><div class="lp-week-ev at-14 lp-how-mark"><b>14:00</b><span data-i18n="lp_w1">Exposé senden</span></div></div>
+            <div class="lp-week-col"><div class="lp-week-ev is-ev at-11"><b>11:00</b><span data-i18n="lp_how_e2">Übergabe Kanalweg</span></div></div>
+            <div class="lp-week-col"><div class="lp-week-ev at-10"><b>10:00</b><span data-i18n="lp_task1">Finanzierungsbestätigung anfordern</span></div></div>
+            <div class="lp-week-col"></div>
+            <div class="lp-week-col"></div>
+          </div>
+        </div>
+      </div>
+      <!-- 4 · done: the same task struck in the list, on the calendar and on the deal; the toast with its undo -->
+      <div class="lp-shot lp-shot-done hidden" id="lp-how-s4" role="tabpanel" aria-labelledby="lp-how-t4">
+        <div class="lp-frame-bar"><b data-i18n="lp_tab_tasks">Aufgaben</b></div>
+        <div class="lp-done">
+          <div class="lp-done-cell"><span class="lp-label" data-i18n="lp_how_p_list">Liste</span><div class="lp-task is-done lp-how-mark"><label><span class="lp-check is-on"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_w1">Exposé senden</span></label><small data-i18n="lp_w1_due">Mi, 14:00</small><i class="lp-avatar">MK</i></div></div>
+          <div class="lp-done-cell"><span class="lp-label" data-i18n="lp_how_cal">Kalender</span><div class="lp-week-ev is-done"><b>14:00</b><span data-i18n="lp_w1">Exposé senden</span></div></div>
+          <div class="lp-done-cell"><span class="lp-label" data-i18n="lp_how_f_deal">Deal</span><div class="lp-done-deal"><b data-i18n="lp_deal_name">Elbstraße 12, 3 Zimmer</b><div class="lp-task-head"><span class="lp-task-progress" id="lp-how-progress"></span><span class="lp-task-bar"><i></i></span></div></div></div>
+        </div>
+        <div class="lp-toast lp-how-toast"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg><span class="lp-toast-text" data-i18n="lp_how_done">Aufgabe erledigt</span><button type="button" class="lp-toast-undo" id="lp-how-undo" data-i18n="lp_toast_undo">Rückgängig</button></div>
+      </div>
+    </div>
+    <p class="lp-cap lp-how-cap" data-i18n="lp_s7_cap">Kein Termin geht mehr unter. Das ganze Team sieht, was ansteht.</p>
+  </div>
+</section>
+
+<!-- ══ Closing ══════════════════════════════════════════════════════════════ -->
+<section id="cta" class="lp-sec lp-cta">
+  <div class="lp-head lp-reveal">
+    <h2 data-i18n="lp_cta_t">Bereit, wenn das Team es ist.</h2>
+    <p class="lp-sub" data-i18n="lp_cta_d">Zugang anfragen. Der Einladungscode kommt per E-Mail.</p>
+    <div class="lp-actions">
+      <a class="lp-pill lp-request" href="mailto:hello@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="lp_request">Zugang anfragen</a>
+      <a class="lp-pill lp-pill-line" href="/" data-i18n="lp_login">Anmelden</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="lp-footer">
+  <div class="lp-footer-in">
+    <a class="lp-brand" href="#top"><img src="/images/logo.png" alt="Upgrads"></a>
+    <p data-i18n="lp_foot_tag">Upgrads CRM. Ein Board. Jeder Deal.</p>
+  </div>
+</footer>
+
+<script src="/js/landing.js"></script>
+</body>
+</html>

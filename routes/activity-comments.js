@@ -1,3 +1,25 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/activity-comments — threaded replies under one activity.
+
+   A COMMENT belongs to an activity and may have a parent_id pointing at
+   another comment, which is what makes threads. GET / returns them already
+   ASSEMBLED INTO A TREE: flat rows come back from Postgres ordered by
+   created_at, and the handler builds roots with nested children[] in JS. A
+   comment whose parent is missing is dropped from the tree rather than
+   orphaned at the root.
+
+   POST / verifies the activity belongs to this workspace before inserting,
+   then runs its own @mention scan. That scanner matches names EXACTLY
+   (LOWER(name) = ANY(...)) while the one in routes/activities.js matches
+   loosely — the same @ab can notify in one place and not the other. Worth
+   unifying if you touch mentions.
+
+   ENDPOINTS
+     GET    /?activity_id=    required; returns the tree
+     POST   /                 { activity_id, parent_id?, content }
+     DELETE /:id
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');

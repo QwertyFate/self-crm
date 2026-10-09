@@ -1,3 +1,22 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   EMAIL — SMTP via nodemailer. Currently only password-reset mail.
+
+   OPTIONAL. With no SMTP_HOST, getTransport() returns null and
+   sendPasswordReset() logs the reset link to stdout and returns
+   { sent:false, resetUrl } instead of sending anything. That is a development
+   convenience so you can reset a password with no mail server.
+
+   ⚠ The caller (routes/auth.js) puts that resetUrl in the HTTP RESPONSE when
+     sent is false. On a production server without SMTP configured, anyone who
+     can post an email address to /api/auth/forgot-password gets a working
+     reset link back. Configure SMTP in production, or gate that branch on
+     NODE_ENV.
+
+   Adding a second email: export another function here rather than calling
+   nodemailer from a route, so the "no SMTP configured" fallback stays in one
+   place.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const nodemailer = require('nodemailer');
 
 function getTransport() {

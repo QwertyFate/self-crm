@@ -1,3 +1,24 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/invites — WORKSPACE invite codes (not to be confused with the PLATFORM
+   invite codes in routes/admin.js, which create whole workspaces).
+
+   A code is single-use and CARRIES THE ROLE its user will get. That is the
+   whole point: inviting an admin and inviting a member are the same flow with
+   a different code. Redemption happens in routes/auth.js — POST /signup with
+   mode 'join', or POST /join-workspace for someone who already has an account.
+
+   WHO MAY DO WHAT
+     owner   mint and revoke codes of any role
+     admin   mint and revoke MEMBER codes only — the roleFilter in DELETE and
+             the explicit check in POST are what enforce that
+     member  403
+
+   ENDPOINTS
+     GET    /         with creator and consumer names
+     POST   /         { role: 'member' | 'admin' }
+     DELETE /:id      unused codes only
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const crypto      = require('crypto');

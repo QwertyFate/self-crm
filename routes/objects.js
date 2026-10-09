@@ -1,3 +1,29 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/objects — "listings", the workspace-defined record type.
+
+   DELIBERATELY GENERIC: an object is a name plus custom_data. What it
+   represents is up to the workspace, which also names it
+   (workspaces.object_name, default "Listings"). Its fields are rows in
+   object_fields, so a workspace models properties, vehicles or SKUs without a
+   schema change.
+
+   IT EARNS ITS KEEP THROUGH LINKS, two many-to-many join tables:
+     deal_objects    (deal_id, object_id)
+     object_contacts (object_id, contact_id)
+   GET /:id returns the object with both sides resolved — its deals (with
+   stage, pipeline and contact) and its contacts — which is the detail drawer
+   in one request.
+
+   ENDPOINTS
+     GET    /  ·  GET /:id  ·  POST /  ·  PUT /:id  ·  DELETE /:id
+     POST   /:id/deals      { deal_id }      DELETE /:id/deals/:dealId
+     POST   /:id/contacts   { contact_id }   DELETE /:id/contacts/:contactId
+
+   ⚠ POST /:id/deals checks that the DEAL is in this workspace, but none of
+     the link handlers check the OBJECT in the URL, and the contact link
+     handlers check neither side. See §8 of readmedev.md.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');

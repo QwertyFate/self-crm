@@ -1,3 +1,32 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/notifications — reading the bell panel. The rows are WRITTEN elsewhere.
+
+   Who creates them: notify() in notifications.js (called by the contacts,
+   deals and tasks routes) and the @mention scanners in routes/activities.js
+   and routes/activity-comments.js. Nothing in this file creates a
+   notification except /announce.
+
+   SCOPED BY USER, NOT WORKSPACE. Every query here filters on req.userId,
+   because a notification row already belongs to one person. Remember that a
+   person has one users row per workspace, so their notifications are
+   naturally per workspace too.
+
+   PREFERENCES  users.notification_prefs is a map of category → boolean,
+   honoured by notify() at CREATE time. Turning a category off means the rows
+   are never written, so turning it back on shows nothing retroactively.
+
+   ENDPOINTS
+     GET    /                  newest 50 + an unread count
+     PATCH  /:id/read · PATCH /read-all
+     DELETE /clear             removes the already-read ones only
+     PATCH  /preferences       { prefs: {...} }
+     POST   /announce          owner only; a system notice to the workspace
+
+   ⚠ /announce calls notifySystem(), which is broken for workspaces with more
+     than one member (placeholder numbering bug) and swallows the error, so it
+     reports success and delivers nothing. See notifications.js.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');

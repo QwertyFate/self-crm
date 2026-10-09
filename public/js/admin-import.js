@@ -1,3 +1,45 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CSV IMPORT / EXPORT  +  the in-app platform admin screen.
+
+   Two unrelated things share this file because both are "bulk/admin" chores.
+
+   1. THE IMPORT WIZARD (Contacts → ⋯ → Import from CSV)
+      A four-step modal, driven by showImportStep():
+        1 pick a file   handleImportFile / handleImportDrop → processImportFile
+        2 map columns   parseCSV + autoMapHeader guess the mapping,
+                        renderImportMapping lets the user correct it. A column
+                        can map to a built-in field, to an existing custom
+                        field, or create a NEW custom field.
+        3 options       optionally create a deal per row (pipeline + stage +
+                        default assignee)  — toggleImportDealOptions
+        4 run           runImport() POSTs everything as ONE request to
+                        /api/contacts/import, which does it in one transaction.
+      The CSV is parsed in the browser (parseCSV handles quotes and escaped
+      quotes; detectDelimiter picks , or ;). Rows are matched on email: an
+      existing contact is updated, a new one inserted.
+      ⚠ The whole file is sent as a JSON array, which is why server.js raises
+        the body limit to 10 MB for that ONE route. A bigger file gets a 413.
+
+   2. EXPORT  exportContactsCSV() builds the CSV in the browser from whatever
+      the Contacts table currently shows (filters included) and downloads it.
+
+   3. THE ADMIN SCREEN (index.html?admin) — a cut-down console for platform
+      invite codes, separate from the fuller public/admin.html at /adminconsole.
+      It authenticates with ADMIN_SECRET against /api/admin/login and has
+      nothing to do with workspace roles.
+
+   FUNCTION MAP
+     admin    handleAdminLogin, adminLogout, loadAdminInvites,
+              adminGenerateCode, adminDeleteCode, adminCopyCode
+     export   exportContactsCSV
+     csv      readFileText, detectDelimiter, parseCSV, toFieldKey, autoMapHeader
+     wizard   openImportModal, showImportStep, handleImportFile,
+              handleImportDrop, processImportFile, renderImportMapping,
+              onImportMapChange, updateImportNameOptions,
+              toggleImportDealOptions, loadImportPipelines,
+              loadImportAssignees, updateImportStages, importBack, runImport
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 async function handleAdminLogin(e) {
   e.preventDefault();
   const errEl = document.getElementById('admin-login-error'); errEl.classList.add('hidden');
@@ -18,17 +60,17 @@ async function adminLogout(e) {
 async function loadAdminInvites() {
   const invites = await api.get('/api/admin/invites');
   const el = document.getElementById('admin-invites-list');
-  if (!invites.length) { el.innerHTML = '<p class="admin-empty">No invite codes yet. Click + Generate to create one.</p>'; return; }
+  if (!invites.length) { el.innerHTML = `<p class="admin-empty">${esc(t('imp_admin_no_invites'))}</p>`; return; }
   el.innerHTML = invites.map(inv => `
     <div class="admin-invite-row ${inv.used ? 'used' : ''}">
       <div class="admin-invite-code">${inv.code}</div>
       <div class="admin-invite-meta">
-        ${inv.used ? `<span class="admin-badge used">Used · ${esc(inv.used_by_workspace_name || '—')}</span>` : `<span class="admin-badge available">Available</span>`}
+        ${inv.used ? `<span class="admin-badge used">${tf('imp_admin_used', { name: esc(inv.used_by_workspace_name || '—') })}</span>` : `<span class="admin-badge available">${esc(t('imp_admin_available'))}</span>`}
         <span class="admin-invite-date">${fmtDate(inv.created_at)}</span>
       </div>
       <div class="admin-invite-actions">
-        <button class="btn btn-sm btn-ghost" onclick="adminCopyCode('${inv.code}', this)" title="Copy">📋</button>
-        ${!inv.used ? `<button class="btn btn-sm btn-danger" onclick="adminDeleteCode(${inv.id})" title="Delete">✕</button>` : ''}
+        <button class="btn btn-sm btn-ghost" onclick="adminCopyCode('${inv.code}', this)" title="${esc(t('btn_copy'))}">${icon('copy', 'ic-sm')}</button>
+        ${!inv.used ? `<button class="btn btn-sm btn-danger" onclick="adminDeleteCode(${inv.id})" title="${esc(t('btn_delete'))}">${icon('x', 'ic-sm')}</button>` : ''}
       </div>
     </div>`).join('');
 }
@@ -37,18 +79,25 @@ async function adminGenerateCode() {
   const res = await api.post('/api/admin/invites', {}); if (res.error) { alert(res.error); return; } loadAdminInvites();
 }
 async function adminDeleteCode(id) {
-  if (!confirm('Delete this invite code?')) return;
+  if (!confirm(t('imp_admin_confirm_delete'))) return;
   const res = await api.del(`/api/admin/invites/${id}`); if (res.error) { alert(res.error); return; } loadAdminInvites();
 }
+// Swaps the button's markup (not just its text), so the sprite icon it
+// normally holds comes back correctly once the "copied" confirmation fades.
 function adminCopyCode(code, btn) {
-  navigator.clipboard.writeText(code).then(() => { const orig = btn.textContent; btn.textContent = '✓'; setTimeout(() => { btn.textContent = orig; }, 1500); });
+  navigator.clipboard.writeText(code).then(() => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = icon('check', 'ic-sm');
+    setTimeout(() => { btn.innerHTML = orig; }, 1500);
+  });
 }
 
 function exportContactsCSV() {
-  if (!contacts.length) { alert('No contacts to export.'); return; }
-  const hdrs = ['Name','Company','Email','Phone','Stage','Assignee', ...fields.map(f => f.name)];
+  if (!contacts.length) { alert(t('imp_no_contacts_export')); return; }
+  // Header labels follow the UI language; autoMapHeader recognises both the English and the German ones on re-import.
+  const hdrs = [t('lbl_name'), t('lbl_company'), t('lbl_email'), t('lbl_phone'), t('lbl_assignee'), ...fields.map(f => f.name)];
   const rows = contacts.map(c => [
-    c.name, c.company||'', c.email||'', c.phone||'', c.stage_name||'', c.assigned_to_name||'',
+    c.name, c.company||'', c.email||'', c.phone||'', c.assigned_to_name||'',
     ...fields.map(f => c.custom_data?.[f.field_key] ?? '')
   ]);
   const csv = [hdrs, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -98,7 +147,6 @@ function autoMapHeader(header) {
   if (['email','e-mail','email address','e-mail-adresse','emailadresse','e_mail','email_address'].includes(h)) return 'email';
   if (['phone','mobile','telephone','tel','phone number','phone no','telefonnummer','telefon','handy','mobilnummer','mobile number','phone_number','telefonnr'].includes(h)) return 'phone';
   if (['company','organization','org','account','company name','firma','unternehmen','firmenname'].includes(h)) return 'company';
-  if (['stage','status','pipeline stage','deal stage','phase'].includes(h)) return 'stage';
   if (['assignee','owner','assigned to','assigned_to','zuständig'].includes(h)) return 'assignee';
   const cf = fields.find(f => f.name.toLowerCase() === h || f.field_key === toFieldKey(h));
   if (cf) return `custom:${cf.field_key}`;
@@ -106,7 +154,7 @@ function autoMapHeader(header) {
 }
 
 async function openImportModal() {
-  await ensureMembers();
+  await Promise.all([ensureMembers(), ensurePipelines()]);
   importData = null; showImportStep('upload');
   const fi = document.getElementById('import-file-input'); if (fi) fi.value = '';
   document.getElementById('import-modal').classList.remove('hidden');
@@ -123,10 +171,10 @@ function toggleImportDealOptions() {
 function loadImportPipelines() {
   const sel = document.getElementById('import-pipeline');
   if (!pipelines?.length) {
-    sel.innerHTML = '<option value="">— No pipelines available —</option>';
+    sel.innerHTML = `<option value="">${esc(t('imp_opt_no_pipelines'))}</option>`;
     return;
   }
-  sel.innerHTML = '<option value="">— Select a pipeline —</option>' +
+  sel.innerHTML = `<option value="">${esc(t('imp_opt_select_pipeline'))}</option>` +
     pipelines.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
   sel.onchange = updateImportStages;
 }
@@ -134,10 +182,10 @@ function loadImportPipelines() {
 function loadImportAssignees() {
   const sel = document.getElementById('import-assignee');
   if (!members?.length) {
-    sel.innerHTML = '<option value="">— Use default or unassigned —</option>';
+    sel.innerHTML = `<option value="">${esc(t('imp_opt_default_assignee'))}</option>`;
     return;
   }
-  sel.innerHTML = '<option value="">— Use default or unassigned —</option>' +
+  sel.innerHTML = `<option value="">${esc(t('imp_opt_default_assignee'))}</option>` +
     members.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
 }
 
@@ -145,15 +193,15 @@ function updateImportStages() {
   const pipelineId = parseInt(document.getElementById('import-pipeline').value) || null;
   const sel = document.getElementById('import-stage');
   if (!pipelineId) {
-    sel.innerHTML = '<option value="">— Auto (first stage) —</option>';
+    sel.innerHTML = `<option value="">${esc(t('imp_opt_auto_stage'))}</option>`;
     return;
   }
   const pipeline = pipelines.find(p => p.id === pipelineId);
   if (!pipeline || !pipeline.stages?.length) {
-    sel.innerHTML = '<option value="">— Auto (first stage) —</option>';
+    sel.innerHTML = `<option value="">${esc(t('imp_opt_auto_stage'))}</option>`;
     return;
   }
-  sel.innerHTML = '<option value="">— Auto (first stage) —</option>' +
+  sel.innerHTML = `<option value="">${esc(t('imp_opt_auto_stage'))}</option>` +
     pipeline.stages.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
 }
 function showImportStep(step) {
@@ -164,8 +212,8 @@ function handleImportFile(e) { const file = e.target.files?.[0]; if (file) proce
 
 async function processImportFile(file) {
   const text = await readFileText(file), delimiter = detectDelimiter(text), allRows = parseCSV(text, delimiter);
-  if (allRows.length < 2) { alert('CSV must have a header row and at least one data row.'); return; }
-  await Promise.all([ensureStages(), ensureFields(), ensureMembers()]);
+  if (allRows.length < 2) { alert(t('imp_err_csv_rows')); return; }
+  await Promise.all([ensureFields(), ensureMembers()]);
   const headers = allRows[0].map(h => h.trim()), dataRows = allRows.slice(1).filter(r => r.some(v => v.trim())), sampleRow = allRows[1] || [];
   importData = { headers, rows: dataRows, sampleRow, mappings: headers.map(h => ({ mapTo: autoMapHeader(h), newFieldName: h })) };
   renderImportMapping(); showImportStep('map');
@@ -177,16 +225,16 @@ function updateImportNameOptions() {
 
 function renderImportMapping() {
   const { headers, sampleRow, mappings, rows } = importData;
-  document.getElementById('import-info-text').textContent = `${rows.length} row${rows.length !== 1 ? 's' : ''} detected — match each column to a CRM field.`;
+  document.getElementById('import-info-text').textContent = tf(rows.length === 1 ? 'imp_rows_detected_one' : 'imp_rows_detected_many', { n: rows.length });
   const splitName = document.getElementById('import-split-name').checked;
   const builtins = splitName
-    ? [{ val:'first_name', label:'First Name' }, { val:'last_name', label:'Last Name' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'stage', label:'Stage' }, { val:'assignee', label:'Assignee' }]
-    : [{ val:'name', label:'Name *' }, { val:'email', label:'Email' }, { val:'phone', label:'Phone' }, { val:'company', label:'Company' }, { val:'stage', label:'Stage' }, { val:'assignee', label:'Assignee' }];
+    ? [{ val:'first_name', label:t('imp_first_name') }, { val:'last_name', label:t('imp_last_name') }, { val:'email', label:t('lbl_email') }, { val:'phone', label:t('lbl_phone') }, { val:'company', label:t('lbl_company') }, { val:'assignee', label:t('lbl_assignee') }]
+    : [{ val:'name', label:t('imp_name_required') }, { val:'email', label:t('lbl_email') }, { val:'phone', label:t('lbl_phone') }, { val:'company', label:t('lbl_company') }, { val:'assignee', label:t('lbl_assignee') }];
   const buildOptions = cur => {
-    let o = `<option value="skip"${cur==='skip'?' selected':''}>— Don't import —</option>
-      <optgroup label="Contact fields">${builtins.map(b => `<option value="${b.val}"${cur===b.val?' selected':''}>${b.label}</option>`).join('')}</optgroup>`;
-    if (fields.length) o += `<optgroup label="Custom fields">${fields.map(f => `<option value="custom:${f.field_key}"${cur===`custom:${f.field_key}`?' selected':''}>${esc(f.name)}</option>`).join('')}</optgroup>`;
-    o += `<optgroup label="New field"><option value="new"${cur==='new'?' selected':''}>Create as custom field…</option></optgroup>`;
+    let o = `<option value="skip"${cur==='skip'?' selected':''}>${esc(t('imp_opt_skip'))}</option>
+      <optgroup label="${esc(t('imp_group_contact_fields'))}">${builtins.map(b => `<option value="${b.val}"${cur===b.val?' selected':''}>${esc(b.label)}</option>`).join('')}</optgroup>`;
+    if (fields.length) o += `<optgroup label="${esc(t('intg_custom_fields'))}">${fields.map(f => `<option value="custom:${f.field_key}"${cur===`custom:${f.field_key}`?' selected':''}>${esc(f.name)}</option>`).join('')}</optgroup>`;
+    o += `<optgroup label="${esc(t('imp_group_new_field'))}"><option value="new"${cur==='new'?' selected':''}>${esc(t('imp_opt_create_field'))}</option></optgroup>`;
     return o;
   };
   document.getElementById('import-map-rows').innerHTML = headers.map((h, i) => {
@@ -196,7 +244,7 @@ function renderImportMapping() {
       <div class="import-col-arrow">→</div>
       <div class="import-col-map">
         <select class="import-map-sel" onchange="onImportMapChange(this,${i})">${buildOptions(m.mapTo)}</select>
-        <input type="text" class="import-new-name${m.mapTo==='new'?'':' hidden'}" placeholder="Field name" value="${esc(m.newFieldName)}"
+        <input type="text" class="import-new-name${m.mapTo==='new'?'':' hidden'}" placeholder="${esc(t('imp_ph_field_name'))}" value="${esc(m.newFieldName)}"
           oninput="importData.mappings[${i}].newFieldName=this.value" />
       </div>
     </div>`;
@@ -215,12 +263,12 @@ async function runImport() {
 
   if (splitName) {
     if (!mappings.some(m => m.mapTo === 'first_name' || m.mapTo === 'last_name')) {
-      alert('Please map at least "First Name" or "Last Name" when splitting names.');
+      alert(t('imp_err_map_split_name'));
       return;
     }
   } else {
     if (!mappings.some(m => m.mapTo === 'name')) {
-      alert('Please map a column to "Name" before importing.');
+      alert(t('imp_err_map_name'));
       return;
     }
   }
@@ -243,7 +291,6 @@ async function runImport() {
       else if (m.mapTo === 'email')   c.email   = val;
       else if (m.mapTo === 'phone')   c.phone   = val.replace(/^p:/i, '').trim();
       else if (m.mapTo === 'company') c.company = val;
-      else if (m.mapTo === 'stage')   { const s = stages.find(s => s.name.toLowerCase() === val.toLowerCase()); if (s) c.stage_id = s.id; }
       else if (m.mapTo === 'assignee') { const mem = members.find(mem => mem.name.toLowerCase() === val.toLowerCase() || mem.email.toLowerCase() === val.toLowerCase()); if (mem) c.assigned_to = mem.id; }
       else if (m.mapTo.startsWith('custom:')) c.custom_data[m.mapTo.slice(7)] = val;
       else if (m.mapTo === 'new' && newKeyByCol[i]) c.custom_data[newKeyByCol[i]] = val;
@@ -259,7 +306,8 @@ async function runImport() {
   }).filter(c => c.name);
 
   const btn = document.getElementById('import-run-btn');
-  btn.disabled = true; btn.textContent = 'Importing…';
+  const btnLabel = btn.textContent;   // the button's own (translated) label from index.html, restored when the request is done
+  btn.disabled = true; btn.textContent = t('imp_importing');
 
   const createDeals = document.getElementById('import-create-deals').checked;
   const createDealsForNew = document.getElementById('import-deals-new').checked;
@@ -285,10 +333,16 @@ async function runImport() {
     stageId,
     defaultAssigneeId: assigneeId
   });
-  btn.disabled = false; btn.textContent = 'Import contacts';
+  btn.disabled = false; btn.textContent = btnLabel;
+  const errEl = document.getElementById('import-run-error');
+  if (res.error) {
+    if (errEl) { errEl.textContent = res.error; errEl.style.display = ''; }
+    return;
+  }
+  if (errEl) errEl.style.display = 'none';
   const dealsCreated = res.deals_created || 0;
-  let message = `Successfully imported ${res.imported} contact${res.imported !== 1 ? 's' : ''}.`;
-  if (dealsCreated > 0) message += ` Created ${dealsCreated} deal${dealsCreated !== 1 ? 's' : ''}.`;
+  let message = tf(res.imported === 1 ? 'imp_done_one' : 'imp_done_many', { n: res.imported });
+  if (dealsCreated > 0) message += ' ' + tf(dealsCreated === 1 ? 'imp_deals_created_one' : 'imp_deals_created_many', { n: dealsCreated });
   document.getElementById('import-done-text').textContent = message;
   showImportStep('done'); invalidate();
 }

@@ -1,5 +1,82 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   LISTINGS ("objects") + the BOARD page + the ACTIVITIES page.
+
+   Three pages in one file, because all three are small and were ported
+   together. If you are looking for one of them, jump to its section:
+     1. Listings    — a generic record type a workspace names itself
+     2. Board       — an embedded Miro iframe, nothing more
+     3. Activities  — the workspace-wide feed of notes/calls/emails/WhatsApp
+
+   1. LISTINGS  (sidebar label = workspaces.object_name, default "Listings")
+      A deliberately generic record: a name plus custom fields. It exists so a
+      workspace can track whatever its business is about (properties, vehicles,
+      SKUs) without a schema change. A listing can be linked to deals
+      (deal_objects) and to contacts (object_contacts), which is what makes the
+      detail view useful.
+        loadObjects → GET /api/objects → renderObjectsTable (search, paging,
+        inline edit) ;  openObjectDetail(id) → GET /api/objects/:id → a drawer
+        with its linked deals and contacts.
+      Columns work exactly like the Contacts page: effectiveObjectColumns()
+      merges workspaces.object_columns with the workspace's object fields.
+      The nav item hides itself when the workspace has no listings configured —
+      updateObjectsNav(); the same pattern as updateSuppliersNav().
+
+   2. BOARD  — loadBoard() drops workspaces.miro_url into an iframe.
+      getMiroBoardUrl() converts a normal Miro link into an embed link.
+      updateBoardNavVisibility() hides the nav item when no URL is set.
+
+   3. ACTIVITIES  — the feed of everything logged against any contact, ported
+      in full from reference/pro (screen: activities.js).
+      loadActivities → GET /api/deals + GET /api/activities (newest 200) →
+      renderActivities (sub line, toolbar, compose card, feed, rail).
+      Filters live in activitiesUI (search, type, person, deal, period) and are
+      applied by visibleActivities(). Logging one is the inline compose card
+      (submitActivityCompose → POST /api/activities); the Calendar still logs
+      through modals.js (openActivityModal). The timelines inside the deal and
+      contact views are detail-views.js.
+
+   FUNCTION MAP
+     listings     loadObjects, renderObjectsCurrent, renderObjectsTable,
+                  objectMatchesQuery, onObjectSearch, clearObjectSearch,
+                  updateObjectCountTag, objGoToPage, openObjectKebab,
+                  openObjectsMoreMenu, exportObjectsCsv,
+                  startObjectInlineEdit, openObjectModal, saveObject,
+                  deleteObject, openObjectDetail, navigateToDeal
+     obj config   effectiveObjectColumns, renderObjectColumnSettings,
+                  objColDragStart, objColDrop, objColToggle, saveObjectColumns,
+                  saveObjectTypeName, updateObjectsNav, renderObjectFieldsList,
+                  openObjectFieldModal, autoObjectFieldKey,
+                  toggleObjectFieldOptions, refreshObjectFieldViews,
+                  saveObjectField, deleteObjectField
+     words        supplierWord, objectWord  (the workspace's nouns, dictionary fallbacks)
+     suppliers    updateSuppliersNav, saveSupplierName
+     board        updateBoardNavVisibility, loadBoard, getMiroBoardUrl,
+                  reloadMiroIframe, saveMiroUrl
+     activities   resetActivitiesUI, activityDealOptions, actLocale, actStartOfDay, actDayDiff, actDayLabel, actAgo,
+                  actTime, actPlural, actContactOf, activityDetailOpts,
+                  openActivityDeal, openActivityContact,
+                  loadActivities, visibleActivities,
+                  activitiesAnyFilter, renderActivities,
+                  renderActivitiesToolbar, activitiesChip, openActivitiesChip,
+                  onActivitiesSearch, clearActivitiesFilters,
+                  renderActivityCompose, setActivityComposeType,
+                  activityComposeClearError, onActivityComposeInput,
+                  onActivityComposeDeal, onActivityComposeContact,
+                  onActivityComposeKey, focusActivityCompose,
+                  submitActivityCompose, renderActivitiesFeed,
+                  renderActivitiesRail, toggleActivitiesStat,
+                  openActivityKebab, deleteActivity, exportActivitiesCsv
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// The workspace's own words for its second contact list and for its listings, in both numbers
+// (n === 1 → singular). A configured name keeps the trailing-s heuristic the app has always used
+// for its singular; the English fallbacks come from the dictionary, so German shows
+// "Lieferanten"/"Lieferant" and "Objekte"/"Objekt" instead of a plural with its s stripped.
+function supplierWord(n) { const w = currentWorkspace?.supplier_name; if (w) return n === 1 ? w.replace(/s$/i, '') : w; return n === 1 ? t('core_supplier') : t('ct_suppliers_fallback'); }
+function objectWord(n) { const w = currentWorkspace?.object_name; if (w) return n === 1 ? w.replace(/s$/i, '') : w; return n === 1 ? t('obj_listing_fallback') : t('obj_listings_fallback'); }
+
 function updateSuppliersNav() {
-  const name  = currentWorkspace?.supplier_name || 'Suppliers';
+  const name  = supplierWord();
   const label = document.getElementById('nav-suppliers-label');
   if (label) label.textContent = name;
 }
@@ -12,13 +89,12 @@ async function saveSupplierName() {
   currentWorkspace.supplier_name = res.name;
   updateSuppliersNav();
   if (currentContactType === 'supplier') updateContactsPageHeader();
-  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = t('msg_saved'); msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
 function updateObjectsNav() {
-  const name  = currentWorkspace?.object_name || 'Listings';
-  const singular = name.replace(/s$/i, '');
+  const name  = objectWord(), singular = objectWord(1);
   const label = document.getElementById('nav-objects-label');
   const title = document.getElementById('objects-page-title');
   const btn   = document.getElementById('add-object-btn');
@@ -27,9 +103,11 @@ function updateObjectsNav() {
   if (label) label.textContent = name;
   if (title) title.textContent = name;
   // Keep the plus icon: only the label inside the button changes.
-  if (btn)   { const span = btn.querySelector('span'); if (span) span.textContent = `Add ${singular}`; }
+  if (btn)   { const span = btn.querySelector('span'); if (span) span.textContent = tf('obj_add_item', { name: singular }); }
   if (tab)   tab.textContent   = name;
-  if (search) search.placeholder = `Search ${name.toLowerCase()}…`;
+  const paneTitle = document.getElementById('settings-objects-pane-title');   // heading of the settings section for this list
+  if (paneTitle) paneTitle.textContent = name;
+  if (search) search.placeholder = tf('obj_search_ph', { name: currentLang === 'de' ? name : name.toLowerCase() });   // German nouns keep their capital
 }
 
 function effectiveObjectColumns() {
@@ -49,6 +127,7 @@ async function loadObjects() {
   objectFields   = await api.get('/api/object-fields');
   objectColumns  = currentWorkspace?.object_columns || [];
   objects        = await api.get('/api/objects');
+  updateObjectsNav();   // title, Add button and search placeholder follow the current language (setLanguage reloads this page)
   objCurrentPage = 1;
   renderObjectsCurrent();
 }
@@ -80,32 +159,33 @@ function renderObjectsCurrent() {
 
 function renderObjectsTable(list, q = '') {
   const visCols  = effectiveObjectColumns().filter(c => c.visible);
-  const typeName = currentWorkspace?.object_name || 'Listings';
-  const singular = typeName.replace(/s$/i, '');
+  const typeName = objectWord(), singular = objectWord(1);
   const dash     = '<span class="muted-dash">—</span>';
   const colspan  = visCols.length + 2;
 
   document.getElementById('objects-thead').innerHTML =
-    `<tr><th>${esc(singular)} name</th>${visCols.map(c => `<th>${esc(c.label())}</th>`).join('')}<th></th></tr>`;
+    `<tr><th>${esc(tf('obj_name_label', { name: singular }))}</th>${visCols.map(c => `<th>${esc(c.label())}</th>`).join('')}<th></th></tr>`;
 
   const total = list.length, totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   if (objCurrentPage > totalPages) objCurrentPage = totalPages;
   const page = list.slice((objCurrentPage - 1) * PAGE_SIZE, objCurrentPage * PAGE_SIZE);
   const tbody = document.getElementById('objects-tbody');
 
+  // Empty-state copy: English names the type in lower case (singular for "your first …"); German keeps
+  // the noun as typed and uses the plural, whose article fits every gender.
   if (!page.length) {
     tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colspan}">
       <div class="table-empty">
         <div class="empty-state-art"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg></div>
-        <h2>${q ? 'No matches found' : `No ${esc(typeName.toLowerCase())} yet`}</h2>
-        <p>${q
-          ? `Nothing matches “${esc(q)}”. Try a different search term.`
-          : `Add your first ${esc(singular.toLowerCase())} to keep everything in one place.`}</p>
+        <h2>${esc(q ? t('obj_no_matches') : tf('no_contacts_yet', { noun: currentLang === 'de' ? typeName : typeName.toLowerCase() }))}</h2>
+        <p>${esc(q
+          ? tf('obj_nothing_matches', { q })
+          : tf('obj_add_first', { name: currentLang === 'de' ? typeName : singular.toLowerCase() }))}</p>
         ${q
-          ? '<button class="btn btn-sm" onclick="clearObjectSearch()">Clear search</button>'
+          ? `<button class="btn btn-sm" onclick="clearObjectSearch()">${esc(t('obj_clear_search'))}</button>`
           : `<div class="hstack-tight">
-              <button class="btn btn-sm btn-primary" onclick="openObjectModal()">+ Add ${esc(singular)}</button>
-              ${objectFields.length ? '' : '<button class="btn btn-sm" onclick="openObjectFieldModal()">Add column</button>'}
+              <button class="btn btn-sm btn-primary" onclick="openObjectModal()">+ ${esc(tf('obj_add_item', { name: singular }))}</button>
+              ${objectFields.length ? '' : `<button class="btn btn-sm" onclick="openObjectFieldModal()">${esc(t('obj_add_column'))}</button>`}
             </div>`}
       </div>
     </td></tr>`;
@@ -120,10 +200,7 @@ function renderObjectsTable(list, q = '') {
       return `<tr>
         <td class="name-cell" title="${esc(o.name)}"><strong class="contact-name-link" onclick="openObjectDetail(${o.id})">${esc(o.name)}</strong></td>
         ${cells}
-        <td style="white-space:nowrap">
-          <button class="btn btn-sm btn-ghost" onclick="openObjectModal(${o.id})">Edit</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteObject(${o.id})">Delete</button>
-        </td>
+        <td style="white-space:nowrap"><button class="iconbtn" style="width:28px;height:28px" onclick="openObjectKebab(this,${o.id})" aria-label="${esc(tf('tk_actions_for', { name: o.name }))}" aria-haspopup="menu">${icon('ellipsis')}</button></td>
       </tr>`;
     }).join('');
   }
@@ -134,13 +211,37 @@ function renderObjectsTable(list, q = '') {
   if (!pagEl) return;
   if (!total) { pagEl.innerHTML = ''; return; }
   const s = (objCurrentPage - 1) * PAGE_SIZE + 1, e = Math.min(objCurrentPage * PAGE_SIZE, total);
-  pagEl.innerHTML = `<span class="pagination-info">Showing ${s}–${e} of ${total}</span>` + (totalPages > 1
-    ? `<div class="pagination-controls">
-        <button class="page-btn" onclick="objGoToPage(${objCurrentPage-1})" ${objCurrentPage===1?'disabled':''}>‹</button>
-        ${buildPageNumbers(objCurrentPage, totalPages).map(p => p==='…'?'<span class="page-ellipsis">…</span>':`<button class="page-btn${p===objCurrentPage?' active':''}" onclick="objGoToPage(${p})">${p}</button>`).join('')}
-        <button class="page-btn" onclick="objGoToPage(${objCurrentPage+1})" ${objCurrentPage===totalPages?'disabled':''}>›</button>
-      </div>`
+  pagEl.innerHTML = `<span class="tnum">${esc(tf('ct_showing_range', { s, e, n: total }))}</span>` + (totalPages > 1
+    ? `<nav class="ct-pg" aria-label="${esc(t('ct_pagination_aria'))}">
+        <button type="button" onclick="objGoToPage(${objCurrentPage-1})" aria-label="${esc(t('ct_prev_page'))}" ${objCurrentPage===1?'disabled':''}><span class="ct-flip">${icon('chevron-right')}</span></button>
+        ${buildPageNumbers(objCurrentPage, totalPages).map(p => p==='…'?'<span class="gap" aria-hidden="true">…</span>':`<button type="button" onclick="objGoToPage(${p})" ${p===objCurrentPage?'aria-current="page"':''}>${p}</button>`).join('')}
+        <button type="button" onclick="objGoToPage(${objCurrentPage+1})" aria-label="${esc(t('ct_next_page'))}" ${objCurrentPage===totalPages?'disabled':''}>${icon('chevron-right')}</button>
+      </nav>`
     : '');
+}
+
+function openObjectKebab(anchor, id) {
+  ui.menu(anchor, [
+    { label: t('btn_edit'), icon: 'pencil', onSelect: () => openObjectModal(id) },
+    { sep: true },
+    { label: t('btn_delete'), icon: 'trash', danger: true, onSelect: () => deleteObject(id) },
+  ], { align: 'right' });
+}
+
+function exportObjectsCsv() {
+  const visCols = effectiveObjectColumns().filter(c => c.visible);
+  const typeName = objectWord();
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const head = [tf('obj_name_label', { name: objectWord(1) }), ...visCols.map(c => c.label()), t('created_lbl')];
+  const rows = objects.map(o => [o.name, ...visCols.map(c => c.key === 'created_at' ? fmtDate(o.created_at) : (o.custom_data?.[c.key] ?? '')), fmtDate(o.created_at)].map(q).join(','));
+  const csv = [head.map(q).join(','), ...rows].join('\n');
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }));
+  link.download = `${typeName.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link); link.click(); link.remove();
+}
+function openObjectsMoreMenu(anchor) {
+  ui.menu(anchor, [{ label: t('export_csv'), icon: 'download', onSelect: () => exportObjectsCsv() }], { align: 'right' });
 }
 
 // Toolbar feedback: how many rows matched + a Clear button while searching.
@@ -148,8 +249,8 @@ function updateObjectCountTag(total, showing, q) {
   const tag = document.getElementById('object-count');
   if (tag) {
     if (!total)   tag.textContent = '';
-    else if (q)   tag.textContent = `${showing} of ${total} shown`;
-    else          tag.textContent = `${total} item${total === 1 ? '' : 's'}`;
+    else if (q)   tag.textContent = tf('obj_n_of_total_shown', { a: showing, b: total });
+    else          tag.textContent = total === 1 ? t('obj_one_item') : tf('obj_n_items', { n: total });
   }
   document.getElementById('object-search-clear')?.classList.toggle('hidden', !q);
 }
@@ -181,15 +282,15 @@ async function openObjectModal(id) {
   if (!objectFields.length) objectFields = await api.get('/api/object-fields');
   document.getElementById('object-form').reset();
   document.getElementById('object-id').value = id || '';
-  const typeName = (currentWorkspace?.object_name || 'Listing').replace(/s$/i,'');
-  document.getElementById('object-modal-title').textContent = id ? `Edit ${typeName}` : `Add ${typeName}`;
+  const typeName = objectWord(1);
+  document.getElementById('object-modal-title').textContent = id ? tf('obj_edit_item', { name: typeName }) : tf('obj_add_item', { name: typeName });
   const nameLabel = document.getElementById('obj-name-label');
-  if (nameLabel) nameLabel.innerHTML = `${esc(typeName)} name <span class="req">*</span>`;
+  if (nameLabel) nameLabel.innerHTML = `${esc(tf('obj_name_label', { name: typeName }))} <span class="req">*</span>`;
   document.getElementById('obj-custom-fields').innerHTML = objectFields.length
     ? objectFields.map(f =>
-        `<div class="form-group"><label for="dfield-${f.field_key}">${esc(f.name)}</label>${renderDealFieldInput(f,'')}</div>`
+        `<div class="field"><label class="label" for="dfield-${f.field_key}">${esc(f.name)}</label>${renderDealFieldInput(f,'')}</div>`
       ).join('')
-    : '<p class="text-xs text-muted">No extra fields set up yet — the name is all that is needed.</p>';
+    : `<p class="text-xs text-muted">${esc(t('obj_no_extra_fields'))}</p>`;
   if (id) {
     const obj = objects.find(o => o.id === id) || await api.get(`/api/objects/${id}`);
     document.getElementById('obj-name').value = obj.name;
@@ -211,8 +312,9 @@ async function saveObject(e) {
 }
 
 async function deleteObject(id) {
-  const singular = (currentWorkspace?.object_name || 'Listing').replace(/s$/i,'');
-  if (!confirm(`Delete this ${singular.toLowerCase()}?`)) return;
+  const singular = objectWord(1);
+  const ok = await ui.confirm({ title: tf('obj_delete_q', { name: currentLang === 'de' ? singular : singular.toLowerCase() }), message: t('obj_delete_msg'), confirmLabel: t('btn_delete'), danger: true });
+  if (!ok) return;
   await api.del(`/api/objects/${id}`);
   objects = objects.filter(o => o.id !== id); renderObjectsCurrent();
 }
@@ -225,193 +327,83 @@ async function openObjectDetail(id) {
   ]);
   if (!objectFields.length) objectFields = await api.get('/api/object-fields');
   if (!deals.length) deals = await api.get('/api/deals');
+  if (!pipelines.length) pipelines = await api.get('/api/pipelines');
 
-  document.getElementById('object-detail-title').textContent = obj.name;
+  const S = { obj };
+  const supplierLabel = supplierWord();
+  const stageOfDeal = d => (pipelines.find(p => p.id === d.pipeline_id)?.stages || []).find(s => s.id === d.stage_id);
 
-  const supplierLabel = currentWorkspace?.supplier_name || 'Suppliers';
+  function detailsCard() {
+    const rows = objectFields.map(f => { const v = S.obj.custom_data?.[f.field_key]; return v ? `<dt>${esc(f.name)}</dt><dd>${esc(v)}</dd>` : ''; }).join('');
+    return `<section class="card" aria-label="${esc(t('obj_details'))}"><div class="card-header"><h2 class="card-title">${esc(t('obj_details'))}</h2></div>
+      <div class="card-body">${rows ? `<dl class="kv" style="margin:0">${rows}</dl>` : `<p class="muted">${esc(t('obj_no_details'))}</p>`}</div></section>`;
+  }
+  function peopleCard() {
+    const linked = S.obj.contacts || [];
+    const rows = linked.map(c => `<li class="list-item"><div class="person">${avatar(c.name)}<div style="min-width:0"><div class="p-name truncate">${esc(c.name)}${c.company ? ` <span class="muted">${esc(c.company)}</span>` : ''}</div>
+        <div class="p-sub">${esc(c.contact_type === 'supplier' ? supplierWord(1) : t('lbl_contact'))}${c.email ? ` · ${esc(c.email)}` : ''}</div></div></div>
+      <button class="iconbtn" data-act="unlink-contact" data-id="${c.id}" aria-label="${esc(tf('obj_unlink_aria', { name: c.name }))}">${icon('x')}</button></li>`).join('');
+    return `<section class="card" aria-label="${esc(tf('obj_contacts_and', { name: supplierLabel }))}"><div class="card-header"><h2 class="card-title">${esc(tf('obj_contacts_and', { name: supplierLabel }))}</h2>
+        <button class="btn btn-ghost btn-sm" data-act="link-contact">${icon('plus')}${esc(t('obj_link_btn'))}</button></div>
+      ${rows ? `<ul class="list">${rows}</ul>` : `<div class="card-body"><p class="muted">${esc(tf('obj_no_people_linked', { name: currentLang === 'de' ? supplierLabel : supplierLabel.toLowerCase() }))}</p></div>`}</section>`;
+  }
+  function dealsCard() {
+    const linked = S.obj.deals || [];
+    const rows = linked.map(d => { const st = stageOfDeal(d); return `<li class="list-item clickable" data-act="open-deal" data-id="${d.id}"><div class="grow" style="min-width:0"><div class="p-name truncate">${esc(d.title)}</div>
+        <div class="p-sub">${st ? `<span class="stage-pill"><i style="background:${esc(st.color)}"></i>${esc(st.name)}</span>` : esc(t('obj_no_stage'))}${d.value != null ? ` · ${fmtEUR(d.value)}` : ''}</div></div>
+      <button class="iconbtn" data-act="unlink-deal" data-id="${d.id}" aria-label="${esc(tf('obj_unlink_aria', { name: d.title }))}">${icon('x')}</button></li>`; }).join('');
+    return `<section class="card" aria-label="${esc(t('nav_deals'))}"><div class="card-header"><h2 class="card-title">${esc(t('nav_deals'))}</h2>
+        <button class="btn btn-ghost btn-sm" data-act="link-deal">${icon('plus')}${esc(t('obj_link_btn'))}</button></div>
+      ${rows ? `<ul class="list">${rows}</ul>` : `<div class="card-body"><p class="muted">${esc(t('obj_no_deals_linked'))}</p></div>`}</section>`;
+  }
+  function render() { m.body.innerHTML = `<div class="col" style="gap:16px">${detailsCard()}${peopleCard()}${dealsCard()}</div>`; }
 
-  const fieldHtml = objectFields.map(f => {
-    const v = obj.custom_data?.[f.field_key];
-    return v ? `<div class="detail-item"><label>${esc(f.name)}</label><span>${esc(v)}</span></div>` : '';
-  }).join('') || '<p class="text-xs text-muted">No details recorded yet.</p>';
+  const m = ui.modal({ title: obj.name, size: 'lg', body: '<div></div>',
+    footer: `<button class="btn btn-danger-ghost" data-act="delete" style="margin-right:auto">${icon('trash')}${esc(t('btn_delete'))}</button><button class="btn btn-secondary" data-act="edit">${icon('pencil')}${esc(t('btn_edit'))}</button><button class="btn btn-secondary" data-close>${esc(t('btn_close'))}</button>` });
 
-  const linkedContactIds = new Set((obj.contacts || []).map(c => c.id));
-  const contactRows = (obj.contacts || []).map(c => `
-    <div class="contact-deal-row" style="cursor:pointer">
-      <div style="flex:1">
-        <div class="contact-deal-title">${esc(c.name)}${c.company ? ` <span style="font-size:11px;color:var(--muted)">${esc(c.company)}</span>` : ''}</div>
-        <div class="contact-deal-meta">
-          <span style="font-size:11px;color:var(--muted)">${c.contact_type === 'supplier' ? esc(supplierLabel.replace(/s$/i,'')) : 'Contact'}</span>
-          ${c.email ? `<span style="font-size:11px;color:var(--muted)">${esc(c.email)}</span>` : ''}
-        </div>
-      </div>
-      <button class="btn btn-sm btn-danger btn-icon" onclick="unlinkContactFromObject(${id},${c.id})">✕</button>
-    </div>`).join('') || '<p style="color:var(--muted);font-size:12px;padding:4px 0">No contacts or suppliers linked.</p>';
-
-  const availablePeople = [...allContacts, ...allSuppliers].filter(c => !linkedContactIds.has(c.id));
-
-  const linkedDealIds = new Set((obj.deals || []).map(d => d.id));
-  const dealRows = (obj.deals || []).map(d => `
-    <div class="contact-deal-row" style="cursor:pointer" onclick="navigateToDeal(${d.id})">
-      <div class="contact-deal-title">${esc(d.title)}</div>
-      <div class="contact-deal-meta">
-        ${d.stage_name ? `<span class="contact-deal-stage" style="border-color:${d.stage_color||'var(--border)'}">${esc(d.stage_name)}</span>` : ''}
-        ${d.pipeline_name ? `<span style="font-size:11px;color:var(--muted)">${esc(d.pipeline_name)}</span>` : ''}
-        ${d.value != null ? `<span class="contact-deal-value">€ ${Number(d.value).toLocaleString()}</span>` : ''}
-      </div>
-    </div>`).join('') || '<p style="color:var(--muted);font-size:12px;padding:4px 0">No deals linked.</p>';
-
-  document.getElementById('object-detail-body').innerHTML = `
-    <div class="detail-section"><div class="detail-grid">${fieldHtml}</div></div>
-
-    <div class="detail-section">
-      <div class="detail-section-header"><h3>Contacts & ${esc(supplierLabel)}</h3></div>
-      <div class="contact-deals-list" id="obj-detail-contact-rows">${contactRows}</div>
-      <div class="object-panel-add" style="margin-top:10px;align-items:flex-start">
-        <div class="deal-search-wrap">
-          <input type="text" id="obj-contact-search" placeholder="Search contacts or ${esc(supplierLabel.toLowerCase())}…"
-            autocomplete="off" oninput="filterObjectContactSearch(${id})" onfocus="filterObjectContactSearch(${id})" />
-          <div class="deal-search-dropdown hidden" id="obj-contact-dropdown"></div>
-        </div>
-        <button class="btn btn-sm btn-primary" onclick="linkContactToObject(${id})" style="flex-shrink:0">Link</button>
-      </div>
-    </div>
-
-    <div class="detail-section">
-      <div class="detail-section-header"><h3>Deals</h3></div>
-      <div class="contact-deals-list" id="obj-detail-deal-rows">${dealRows}</div>
-      <div class="object-panel-add" style="margin-top:10px;align-items:flex-start">
-        <div class="deal-search-wrap">
-          <input type="text" id="obj-deal-search" placeholder="Search deals by name or contact…"
-            autocomplete="off" oninput="filterDealSearch(${id})" onfocus="filterDealSearch(${id})" />
-          <div class="deal-search-dropdown hidden" id="obj-deal-dropdown"></div>
-        </div>
-        <button class="btn btn-sm btn-primary" onclick="linkDealToObject(${id})" style="flex-shrink:0">Link</button>
-      </div>
-    </div>
-
-    <div class="detail-actions">
-      <button class="btn btn-danger btn-sm" onclick="deleteObject(${id});closeModal('object-detail-modal')">Delete</button>
-      <button class="btn btn-sm" onclick="closeModal('object-detail-modal');openObjectModal(${id})">Edit</button>
-    </div>`;
-
-  const contactInput = document.getElementById('obj-contact-search');
-  contactInput._availablePeople = availablePeople;
-  contactInput._selectedContactId = null;
-
-  const dealInput = document.getElementById('obj-deal-search');
-  dealInput._availableDeals = deals.filter(d => !linkedDealIds.has(d.id));
-  dealInput._selectedDealId = null;
-
-  // The dropdowns live inside the scrolling modal body, so close them when it scrolls.
-  const detailBody = document.getElementById('object-detail-body');
-  if (detailBody) detailBody.onscroll = () => {
-    document.querySelectorAll('.deal-search-dropdown').forEach(dd => dd.classList.add('hidden'));
+  async function reload() { S.obj = await api.get(`/api/objects/${id}`); render(); }
+  const A = {
+    'link-contact': el => {
+      const linkedIds = new Set((S.obj.contacts || []).map(c => c.id));
+      const available = [...allContacts, ...allSuppliers].filter(c => !linkedIds.has(c.id));
+      if (!available.length) return ui.toast(t('obj_all_people_linked'));
+      ui.select(el, available.map(c => ({ value: c.id, label: c.company ? `${c.name}, ${c.company}` : c.name })), null, async v => {
+        const res = await api.post(`/api/objects/${id}/contacts`, { contact_id: v }); if (res?.error) return ui.toast(res.error);
+        await reload(); ui.toast(t('obj_linked'));
+      });
+    },
+    'unlink-contact': async el => { const res = await api.del(`/api/objects/${id}/contacts/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); await reload(); ui.toast(t('obj_unlinked')); },
+    'link-deal': el => {
+      const linkedIds = new Set((S.obj.deals || []).map(d => d.id));
+      const available = deals.filter(d => !linkedIds.has(d.id));
+      if (!available.length) return ui.toast(t('obj_all_deals_linked'));
+      ui.select(el, available.map(d => ({ value: d.id, label: d.contact_name ? `${d.title} — ${d.contact_name}` : d.title })), null, async v => {
+        const res = await api.post(`/api/objects/${id}/deals`, { deal_id: v }); if (res?.error) return ui.toast(res.error);
+        deals = await api.get('/api/deals'); await reload(); ui.toast(t('obj_linked'));
+      });
+    },
+    'unlink-deal': async el => { const res = await api.del(`/api/objects/${id}/deals/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); deals = await api.get('/api/deals'); await reload(); ui.toast(t('obj_unlinked')); },
+    'open-deal': el => { m.close(); openDealDetail(+el.dataset.id); },
+    delete: async () => { m.close(); await deleteObject(id); },
+    edit: () => { m.close(); openObjectModal(id); },
   };
-
-  document.getElementById('object-detail-modal').classList.remove('hidden');
-}
-
-function positionDropdown(input, dropdown) {
-  const rect = input.getBoundingClientRect();
-  dropdown.style.top   = `${rect.bottom + 2}px`;
-  dropdown.style.left  = `${rect.left}px`;
-  dropdown.style.width = `${rect.width}px`;
-}
-
-function filterObjectContactSearch(objectId) {
-  document.getElementById('obj-deal-dropdown')?.classList.add('hidden');
-
-  const input = document.getElementById('obj-contact-search'), dropdown = document.getElementById('obj-contact-dropdown');
-  if (!input || !dropdown) return;
-  positionDropdown(input, dropdown);
-
-  const q = input.value.toLowerCase().trim(), available = input._availablePeople || [];
-  const results = q
-    ? available.filter(c => c.name.toLowerCase().includes(q) || (c.company||'').toLowerCase().includes(q) || (c.email||'').toLowerCase().includes(q)).slice(0, 8)
-    : available.slice(0, 5);
-  const supplierLabel = currentWorkspace?.supplier_name || 'Suppliers';
-  dropdown.innerHTML = results.length
-    ? results.map(c => `
-        <div class="deal-search-item" onclick="selectObjectContactItem(${c.id}, ${objectId})">
-          <div class="dsi-title">${esc(c.name)}${c.company ? ` · ${esc(c.company)}` : ''}</div>
-          <div class="dsi-meta">${c.contact_type === 'supplier' ? esc(supplierLabel.replace(/s$/i,'')) : 'Contact'}${c.email ? ` · ${esc(c.email)}` : ''}</div>
-        </div>`).join('')
-    : `<div class="deal-search-item dsi-empty">${q ? 'No matches' : 'No contacts available to link'}</div>`;
-  dropdown.classList.remove('hidden');
-}
-
-function selectObjectContactItem(contactId, objectId) {
-  const input = document.getElementById('obj-contact-search'), dropdown = document.getElementById('obj-contact-dropdown');
-  const person = (input?._availablePeople || []).find(c => c.id === contactId);
-  if (!person || !input) return;
-  input.value = person.name + (person.company ? ` · ${person.company}` : '');
-  input._selectedContactId = contactId;
-  dropdown?.classList.add('hidden');
-}
-
-async function linkContactToObject(objectId) {
-  const input = document.getElementById('obj-contact-search'), contactId = input?._selectedContactId;
-  if (!contactId) return;
-  await api.post(`/api/objects/${objectId}/contacts`, { contact_id: contactId });
-  await openObjectDetail(objectId);
-}
-
-async function unlinkContactFromObject(objectId, contactId) {
-  await api.del(`/api/objects/${objectId}/contacts/${contactId}`);
-  await openObjectDetail(objectId);
-}
-
-function filterDealSearch(objectId) {
-  document.getElementById('obj-contact-dropdown')?.classList.add('hidden');
-
-  const input = document.getElementById('obj-deal-search'), dropdown = document.getElementById('obj-deal-dropdown');
-  if (!input || !dropdown) return;
-  positionDropdown(input, dropdown);
-
-  const q = input.value.toLowerCase().trim(), available = input._availableDeals || [];
-  const results = q
-    ? available.filter(d => d.title.toLowerCase().includes(q) || (d.contact_name || '').toLowerCase().includes(q)).slice(0, 8)
-    : available.slice(0, 5);
-  dropdown.innerHTML = results.length
-    ? results.map(d => `
-        <div class="deal-search-item" data-id="${d.id}" onclick="selectDealSearchItem(${d.id}, ${objectId})">
-          <div class="dsi-title">${esc(d.title)}</div>
-          <div class="dsi-meta">${d.contact_name ? esc(d.contact_name) + (d.stage_name ? ' · ' : '') : ''}${d.stage_name ? esc(d.stage_name) : ''}</div>
-        </div>`).join('')
-    : `<div class="deal-search-item dsi-empty">${q ? 'No matching deals' : 'No deals available to link'}</div>`;
-  dropdown.classList.remove('hidden');
-}
-
-function selectDealSearchItem(dealId, objectId) {
-  const input = document.getElementById('obj-deal-search'), dropdown = document.getElementById('obj-deal-dropdown');
-  const deal = (input?._availableDeals || []).find(d => d.id === dealId);
-  if (!deal || !input) return;
-  input.value = deal.title + (deal.contact_name ? ` — ${deal.contact_name}` : '');
-  input._selectedDealId = dealId; dropdown?.classList.add('hidden');
-}
-
-async function linkDealToObject(objectId) {
-  const input = document.getElementById('obj-deal-search'), dealId = input?._selectedDealId;
-  if (!dealId) return;
-  await api.post(`/api/objects/${objectId}/deals`, { deal_id: dealId });
-  objects = await api.get('/api/objects'); deals = await api.get('/api/deals');
-  await openObjectDetail(objectId);
+  on(m.el, 'click', '[data-act]', (e, el) => { const fn = A[el.dataset.act]; if (fn) fn(el); });
+  render();
 }
 
 async function navigateToDeal(dealId) {
-  closeModal('object-detail-modal'); switchPage('deals'); await openDealModal(dealId);
+  await openDealDetail(dealId);
 }
 
 function renderObjectFieldsList() {
   const el = document.getElementById('object-fields-list'); if (!el) return;
-  if (!objectFields.length) { el.innerHTML = '<li style="color:var(--muted);font-size:13px;padding:6px 10px">No fields yet.</li>'; return; }
+  if (!objectFields.length) { el.innerHTML = `<li class="settings-empty">${t('no_fields')}</li>`; return; }
   el.innerHTML = objectFields.map(f => `
     <li class="settings-row">
-      <span class="row-label">${esc(f.name)}</span><span class="row-sub">${f.type}</span>
+      <span class="row-label">${esc(f.name)}</span><span class="row-sub">${esc(f.type)}</span>
       <div class="row-actions">
-        <button class="btn btn-sm btn-ghost btn-icon" onclick="openObjectFieldModal(${f.id})">✏️</button>
-        <button class="btn btn-sm btn-danger btn-icon" onclick="deleteObjectField(${f.id})">✕</button>
+        <button class="btn btn-sm btn-ghost btn-icon" title="${t('btn_edit')}" aria-label="${t('btn_edit')}" onclick="openObjectFieldModal(${f.id})">${UI_ICON.edit}</button>
+        <button class="btn btn-sm btn-danger btn-icon" title="${t('btn_delete')}" aria-label="${t('btn_delete')}" onclick="deleteObjectField(${f.id})">${UI_ICON.remove}</button>
       </div>
     </li>`).join('');
 }
@@ -420,10 +412,10 @@ function openObjectFieldModal(id) {
   document.getElementById('object-field-form').reset();
   document.getElementById('objf-id').value = id || '';
   document.getElementById('objf-options-group').classList.add('hidden');
-  const objName = currentWorkspace?.object_name || 'Listings';
-  document.getElementById('object-field-modal-title').textContent = id ? 'Edit Field' : 'Add Field';
+  const objName = objectWord();
+  document.getElementById('object-field-modal-title').textContent = id ? t('edit_field_title') : t('add_field_title');
   const hint = document.getElementById('objf-hint');
-  if (hint) hint.textContent = `Each field becomes a column in ${objName} and a property on every item.`;
+  if (hint) hint.textContent = tf('obj_field_hint', { name: objName });
   if (id) {
     const f = objectFields.find(f => f.id === id);
     document.getElementById('objf-name').value = f.name;
@@ -463,7 +455,7 @@ async function saveObjectField(e) {
   refreshObjectFieldViews();
 }
 async function deleteObjectField(id) {
-  if (!confirm('Delete this column? Values stored in it will no longer show on any item.')) return;
+  if (!confirm(t('obj_delete_column_confirm'))) return;
   await api.del(`/api/object-fields/${id}`);
   objectFields = objectFields.filter(f => f.id !== id);
   refreshObjectFieldViews();
@@ -475,7 +467,7 @@ function renderObjectColumnSettings() {
   el.innerHTML = cols.map((col, i) => `
     <li class="settings-row col-cfg-row" draggable="true"
       ondragstart="objColDragStart(event,${i})" ondragover="colDragOver(event)" ondrop="objColDrop(event,${i})" ondragleave="colDragLeave(event)">
-      <span class="drag-handle">⠿</span>
+      <span class="drag-handle">${UI_ICON.drag}</span>
       <span class="row-label">${col.label()}</span>
       <label class="col-vis-toggle"><input type="checkbox" ${col.visible?'checked':''} onchange="objColToggle(${i},this.checked)" /></label>
     </li>`).join('');
@@ -496,7 +488,7 @@ async function saveObjectColumns(){
   if(btn){btn.disabled=false;btn.textContent=t('btn_save');}
   if(res.error){if(msgEl){msgEl.textContent=res.error;msgEl.className='workspace-name-msg error';msgEl.classList.remove('hidden');}return;}
   objectColumns=toSave; currentWorkspace.object_columns=toSave;
-  if(msgEl){msgEl.textContent='✓ Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
+  if(msgEl){msgEl.textContent=t('msg_saved');msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
   setTimeout(()=>msgEl?.classList.add('hidden'),2500); renderObjectsCurrent();
 }
 async function saveObjectTypeName(){
@@ -505,7 +497,7 @@ async function saveObjectTypeName(){
   const res=await api.patch('/api/workspace/object-name',{name});
   if(res.error){if(msgEl){msgEl.textContent=res.error;msgEl.className='workspace-name-msg error';msgEl.classList.remove('hidden');}return;}
   currentWorkspace.object_name=res.name; updateObjectsNav();
-  if(msgEl){msgEl.textContent='✓ Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
+  if(msgEl){msgEl.textContent=t('msg_saved');msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
   setTimeout(()=>msgEl?.classList.add('hidden'),2500);
 }
 
@@ -518,14 +510,29 @@ function loadBoard() {
   const el = document.getElementById('board-content'), url = currentWorkspace?.miro_url;
   if (!el) return;
   el.innerHTML = '';
-  if (!url) { el.innerHTML = `<div class="board-empty"><p>No Miro board linked yet.</p><p>Go to <strong>Settings → General → Miro Board</strong> and paste your embed URL.</p></div>`; return; }
+  if (!url) {
+    // Step 1 names our own Settings path from its labels (the Miro URL lives in Settings → Integrations);
+    // step 2 keeps Miro's menu names literal. Both are inserted unescaped: the dictionary text carries no
+    // markup, only the already-escaped {path} / {menu} values bring the <strong>.
+    const settingsPath = `${t('nav_settings')} → ${t('tab_integrations')} → ${t('set_miro')}`;
+    el.innerHTML = `<div class="board-empty bd-empty">
+      <div class="hero">${icon('board')}</div>
+      <h2>${esc(t('obj_board_empty_title'))}</h2>
+      <ol class="bd-steps">
+        <li>${tf('obj_board_step1', { path: `<strong>${esc(settingsPath)}</strong>` })}</li>
+        <li>${tf('obj_board_step2', { menu: '<strong>Share → Embed</strong>' })}</li>
+        <li>${esc(t('obj_board_step3'))}</li>
+      </ol>
+    </div>`;
+    return;
+  }
   const boardUrl = getMiroBoardUrl(url);
   el.innerHTML = `
     <div class="board-topbar">
-      <span class="board-topbar-hint">⚠️ Seeing a login page or 403? Google blocks login inside iframes. Open Miro in a new tab, log in, then click Reload.</span>
+      <span class="board-topbar-hint">${icon('alert', 'ic-sm')} ${esc(t('obj_board_login_hint'))}</span>
       <div style="display:flex;gap:8px;flex-shrink:0">
-        <button class="btn btn-sm" onclick="reloadMiroIframe()">🔄 Reload</button>
-        <a class="btn btn-sm btn-primary" href="${esc(boardUrl)}" target="_blank" rel="noopener">Open in Miro ↗</a>
+        <button class="btn btn-sm" onclick="reloadMiroIframe()">${icon('refresh', 'ic-sm')}${esc(t('obj_board_reload'))}</button>
+        <a class="btn btn-sm btn-primary" href="${esc(boardUrl)}" target="_blank" rel="noopener">${icon('arrow-up-right', 'ic-sm')}${esc(t('obj_board_open_miro'))}</a>
       </div>
     </div>
     <iframe id="miro-iframe" src="${esc(url)}" class="miro-iframe" allow="fullscreen; clipboard-read; clipboard-write" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
@@ -536,26 +543,297 @@ async function saveMiroUrl() {
   const res = await api.patch('/api/workspace/miro-url', { url });
   if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
   currentWorkspace.miro_url = url; updateBoardNavVisibility();
-  if (msgEl) { msgEl.textContent = '✓ Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = t('msg_saved'); msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
-async function loadActivities() {
-  const el = document.getElementById('activities-list');
-  if (el) el.innerHTML = '';
+/* ───────────────────────────────────────────────────────────────────────────
+   ACTIVITIES — ported in full from reference/pro/crm-pro.html (screen:
+   activities.js): toolbar (search + Type / Person / Deal / Period chips), an
+   inline compose card, the feed grouped by day, a rail that breaks the visible
+   entries down by type, by person and by deal, a kebab per row, CSV export.
 
-  activities = await api.get('/api/activities');
-  if (!activities.length) { el.innerHTML = `<p style="color:var(--muted);padding:8px">${t('no_activities')}</p>`; return; }
-  el.innerHTML = activities.map(a => `
-    <div class="activity-item">
-      <div class="act-icon ${a.type}">${ICONS[a.type]}</div>
-      <div class="act-body">
-        <div class="act-meta"><strong>${t('act_' + a.type)}</strong>${a.contact_name ? ` · ${esc(a.contact_name)}` : ''} · ${fmtDate(a.created_at)}</div>
-        ${a.logged_by_name ? `<div class="act-logged-by">${t('logged_by')} ${esc(a.logged_by_name)} · <span class="act-logged-email">${esc(a.logged_by_email||'')}</span></div>` : ''}
-        <div class="act-content">${esc(a.content)}</div>
-      </div>
-      <button class="btn btn-sm btn-danger btn-icon" onclick="deleteActivity(${a.id})">✕</button>
-    </div>`).join('');
+   The four types are the activities table's CHECK constraint set. The
+   reference's fifth type (meeting) is not in it and is left out on purpose —
+   the table is not changed. The reference's delete-undo re-inserts the row
+   into its in-memory store; the API cannot restore a deleted row (new id,
+   new timestamp, comments gone), so delete here confirms and has no undo.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+// Toolbar/feed state for the Activities page: search, type, who logged it, deal, period.
+let activitiesUI = { q: '', type: null, by: null, deal: null, period: 'all' };
+let activityDeals = [];   // deals that have notes, captured from an unfiltered load — the Deal chip's options
+let activityDealList = [];   // every deal of the workspace (GET /api/deals): the compose card's Deal picker, and stage + value for the rail
+// Every contact of the workspace, BOTH types (GET /api/contacts, no filter): the compose card's Contact
+// picker, the kebab's supplier label, the company in search. Not the shared `contacts` global — the
+// Contacts/Suppliers page loads that filtered to whichever type was last shown.
+let activityContactList = [];
+let activitiesLoadSeq = 0;   // the Deal chip refetches; only the most recent request may write `activities`
+// The compose card's draft lives here, not in the DOM, so re-rendering the card (a filter click, the
+// reload after saving) never loses what was typed.
+let activityCompose = { type: 'note', text: '', deal: '', contact: '', err: '' };
+// Logout (auth.js resetClientState) clears the page's filters, the unsent compose draft and the
+// cached deal / contact lists, so nothing of one workspace survives into the next login.
+function resetActivitiesUI() {
+  activitiesUI = { q: '', type: null, by: null, deal: null, period: 'all' };
+  activityDeals = []; activityDealList = []; activityContactList = [];
+  activityCompose = { type: 'note', text: '', deal: '', contact: '', err: '' };
+}
+const ACT_TYPES = ['note', 'call', 'email', 'whatsapp'];
+const ACT_PERIODS = ['all', 'today', '7d', '30d'];
+
+function actLocale() { return currentLang === 'de' ? 'de-DE' : 'en-GB'; }
+function actStartOfDay(ts) { const d = new Date(ts); d.setHours(0, 0, 0, 0); return d.getTime(); }
+function actDayDiff(a) { return Math.round((actStartOfDay(Date.now()) - actStartOfDay(a.created_at)) / 864e5); }
+function actDayLabel(n, ts) { return n === 0 ? t('today') : n === 1 ? t('yesterday') : new Date(ts).toLocaleDateString(actLocale(), { weekday: 'long', day: 'numeric', month: 'long' }); }
+function actAgo(ts) { const h = (Date.now() - new Date(ts).getTime()) / 36e5; return h < 1 ? t('ago_now') : h < 24 ? tf('ago_h', { n: Math.round(h) }) : h < 48 ? t('yesterday') : tf('ago_d', { n: Math.round(h / 24) }); }
+function actTime(ts) { return new Date(ts).toLocaleTimeString(actLocale(), { hour: '2-digit', minute: '2-digit' }); }
+function actPlural(n) { return n === 1 ? t('one_activity') : tf('n_activities', { n }); }
+function actContactOf(a) { return a.contact_id ? activityContactList.find(c => c.id === a.contact_id) || null : null; }
+// A detail opened from this page can log or delete entries. The reference re-renders on every store
+// change; here the feed reloads when the pop-up closes (while the page is still the one shown).
+function activityDetailOpts() { return { onClose: () => document.getElementById('page-activities')?.classList.contains('active') ? loadActivities() : undefined }; }
+function openActivityDeal(id) { openDealDetail(id, activityDetailOpts()); }
+function openActivityContact(id) { openContactDetail(id, activityDetailOpts()); }
+
+async function loadActivities() {
+  const seq = ++activitiesLoadSeq;
+  await ensureMembers();
+  const [dealList, contactList] = await Promise.all([api.get('/api/deals'), api.get('/api/contacts')]);
+  if (seq !== activitiesLoadSeq) return;   // a newer load is under way; its answer is the one to show
+  activityDealList = Array.isArray(dealList) ? dealList : [];
+  activityContactList = Array.isArray(contactList) ? contactList : [];
+  // The Deal filter is applied by the SERVER (?deal_id=): "bound to the deal, or a contact-level
+  // note on its contact" is one SQL rule, not a second copy here. Type, person, period and search stay local.
+  const rows = await api.get(activitiesUI.deal ? `/api/activities?deal_id=${activitiesUI.deal}` : '/api/activities');
+  if (seq !== activitiesLoadSeq) return;
+  activities = Array.isArray(rows) ? rows : [];
+  if (!activitiesUI.deal) activityDeals = activityDealOptions();
+  renderActivities();
+}
+// The Deal chip's options: the deals that actually have notes BOUND to them (bound_deal_id) — not
+// deal_id, which for an unbound note is the derived fallback and would be an option matching nothing.
+function activityDealOptions() {
+  return [...new Map(activities.filter(a => a.bound_deal_id).map(a => [a.bound_deal_id, { id: a.bound_deal_id, title: a.deal_title || 'Deal' }])).values()];
 }
 
-async function deleteActivity(id) { await api.del(`/api/activities/${id}`); loadActivities(); }
+// skip: 'type' | 'by' — ignore that one filter, so the rail can count the options the user did not pick.
+function visibleActivities(skip) {
+  const q = activitiesUI.q.trim().toLowerCase();
+  return activities.filter(a => {
+    if (skip !== 'type' && activitiesUI.type && a.type !== activitiesUI.type) return false;
+    if (skip !== 'by' && activitiesUI.by != null && a.created_by !== activitiesUI.by) return false;
+    if (activitiesUI.period && activitiesUI.period !== 'all') {
+      const n = actDayDiff(a);
+      if (activitiesUI.period === 'today' ? n !== 0 : activitiesUI.period === '7d' ? n > 6 : n > 29) return false;
+    }
+    // search the visible text (not stored <br>/entities), the type label, the contact and their company, the deal and the author
+    if (q && !`${dvActText(a.content)} ${t('act_' + a.type)} ${a.contact_name || ''} ${actContactOf(a)?.company || ''} ${a.deal_title || ''} ${a.logged_by_name || ''}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+function activitiesAnyFilter() { return !!(activitiesUI.q.trim() || activitiesUI.type || activitiesUI.by != null || activitiesUI.deal != null || activitiesUI.period !== 'all'); }
+
+function renderActivities() {
+  const sub = document.getElementById('activities-page-sub');
+  if (sub) {
+    const weekMs = 7 * 86400000, week = activities.filter(a => Date.now() - new Date(a.created_at).getTime() < weekMs).length;
+    sub.textContent = tf('activities_logged', { n: activities.length, m: week });
+  }
+  renderActivitiesToolbar();
+  renderActivityCompose();
+  renderActivitiesFeed();
+}
+
+/* ----- toolbar ----- */
+function renderActivitiesToolbar() {
+  const el = document.getElementById('activities-toolbar');
+  if (!el) return;
+  const active = document.activeElement && document.activeElement.id === 'activities-q';
+  el.innerHTML = `<div class="input-group" style="width:260px">${icon('search')}<input class="input" id="activities-q" type="search" placeholder="${esc(t('search_activities'))}" value="${esc(activitiesUI.q)}" aria-label="${esc(t('search_activities'))}" oninput="onActivitiesSearch(this.value)"></div>
+    ${activitiesChip('type')}${activitiesChip('by')}${activitiesChip('deal')}${activitiesChip('period')}
+    ${activitiesAnyFilter() ? `<button class="btn btn-ghost btn-sm" type="button" onclick="clearActivitiesFilters()">${esc(t('clear_filters'))}</button>` : ''}`;
+  if (active) { const q = document.getElementById('activities-q'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+}
+function activitiesChip(key) {
+  const v = activitiesUI[key], on = key === 'period' ? v !== 'all' : v != null && v !== '';
+  const txt = !on ? '' : key === 'type' ? t('act_' + v) : key === 'deal' ? (activityDeals.find(d => d.id === v)?.title || '') : key === 'period' ? t('period_' + v) : (members.find(m => m.id === v)?.name || '');
+  return `<button class="chip ${on ? 'on' : ''}" type="button" id="activities-chip-${key}" onclick="openActivitiesChip(this,'${key}')" aria-haspopup="menu">${esc(t('chip_' + (key === 'by' ? 'person' : key)))}${on ? ': ' + esc(txt) : ''}${icon('chevron-down', 'ic-sm')}</button>`;
+}
+function openActivitiesChip(anchor, key) {
+  const opts = key === 'type' ? ACT_TYPES.map(v => ({ value: v, label: t('act_' + v), icon: v }))
+    : key === 'deal' ? activityDeals.map(d => ({ value: d.id, label: d.title }))
+    : key === 'period' ? ACT_PERIODS.map(p => ({ value: p, label: t('period_' + p) }))
+    : members.map(m => ({ value: m.id, label: m.name }));
+  const all = key === 'period' ? [] : [{ value: null, label: t('filter_all') }];   // "All time" is one of the periods, so no extra "All"
+  ui.select(anchor, [...all, ...opts], activitiesUI[key], v => {
+    activitiesUI[key] = v;
+    if (key === 'deal') loadActivities(); else renderActivities();
+    document.getElementById('activities-chip-' + key)?.focus();
+  });
+}
+let activitiesSearchTimer = null;
+function onActivitiesSearch(value) {
+  activitiesUI.q = value;
+  clearTimeout(activitiesSearchTimer);
+  activitiesSearchTimer = setTimeout(() => { renderActivitiesToolbar(); renderActivitiesFeed(); }, 120);
+}
+function clearActivitiesFilters() { const refetch = activitiesUI.deal != null; activitiesUI = { q: '', type: null, by: null, deal: null, period: 'all' }; if (refetch) loadActivities(); else renderActivities(); }
+
+/* ----- compose card ----- */
+function renderActivityCompose() {
+  const el = document.getElementById('activities-compose');
+  if (!el) return;
+  const C = activityCompose, L = actLocale();
+  const deals = [...activityDealList].sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), L));
+  const people = [...activityContactList].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), L));
+  // keep the caret where it was when the card is rebuilt under the user's hands
+  const ae = document.activeElement, focusId = ae && ae.id && el.contains(ae) ? ae.id : null;
+  const sel = focusId && typeof ae.selectionStart === 'number' ? [ae.selectionStart, ae.selectionEnd] : null;
+  el.innerHTML = `<form class="card ac-compose" id="ac-form" novalidate aria-label="${esc(t('act_compose_aria'))}" onsubmit="submitActivityCompose(event)"><div class="card-body">
+    <div class="seg" role="group" aria-label="${esc(t('lbl_type'))}" style="align-self:flex-start">${ACT_TYPES.map(x => `<button type="button" data-ctype="${x}" aria-pressed="${C.type === x}" onclick="setActivityComposeType('${x}')">${icon(x, 'ic-sm')}${esc(t('act_' + x))}</button>`).join('')}</div>
+    <div class="field"><label class="sr-only" for="ac-text">${esc(t('lbl_content'))}</label><textarea class="textarea" id="ac-text" rows="2" placeholder="${esc(t('act_ph_' + C.type))}" ${C.err && !C.text.trim() ? 'aria-invalid="true"' : ''} oninput="onActivityComposeInput(this)" onkeydown="onActivityComposeKey(event)">${esc(C.text)}</textarea></div>
+    <div class="ac-compose-row">
+      <div class="field"><label class="label" for="ac-deal">${esc(t('lbl_deal'))}</label><select class="select" id="ac-deal" onchange="onActivityComposeDeal(this)"><option value="">${esc(t('opt_no_deal'))}</option>${deals.map(d => `<option value="${d.id}" ${String(d.id) === C.deal ? 'selected' : ''}>${esc(d.title)}</option>`).join('')}</select></div>
+      <div class="field"><label class="label" for="ac-contact">${esc(t('lbl_contact'))}</label><select class="select" id="ac-contact" onchange="onActivityComposeContact(this)"><option value="">${esc(t('opt_no_contact'))}</option>${people.map(c => `<option value="${c.id}" ${String(c.id) === C.contact ? 'selected' : ''}>${esc(c.name)}${c.company ? ', ' + esc(c.company) : ''}</option>`).join('')}</select></div>
+      <button class="btn btn-primary" type="submit" id="ac-go">${esc(t('act_verb_' + C.type))}</button></div>
+    <div class="error-text" id="ac-err" role="alert">${esc(C.err)}</div></div></form>`;
+  if (focusId) { const n = document.getElementById(focusId); if (n) { n.focus(); if (sel && n.setSelectionRange) try { n.setSelectionRange(sel[0], sel[1]); } catch (e) { /* not a text control */ } } }
+}
+function setActivityComposeType(type) {
+  activityCompose.type = type; activityCompose.err = '';
+  renderActivityCompose();
+  document.querySelector(`#ac-form [data-ctype="${type}"]`)?.focus();
+}
+function activityComposeClearError() {
+  if (!activityCompose.err) return;
+  activityCompose.err = '';
+  document.getElementById('ac-text')?.removeAttribute('aria-invalid');
+  const e = document.getElementById('ac-err'); if (e) e.textContent = '';
+}
+function onActivityComposeInput(el) { activityCompose.text = el.value; activityComposeClearError(); }
+function onActivityComposeDeal(el) {
+  // Choosing a deal links its contact as well (the reference overwrites, so the pair stays consistent).
+  activityCompose.deal = el.value;
+  const d = activityDealList.find(x => x.id === +el.value);
+  if (d && d.contact_id) { activityCompose.contact = String(d.contact_id); const c = document.getElementById('ac-contact'); if (c) c.value = activityCompose.contact; }
+  activityComposeClearError();
+}
+function onActivityComposeContact(el) { activityCompose.contact = el.value; activityComposeClearError(); }
+function onActivityComposeKey(e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submitActivityCompose(); } }
+function focusActivityCompose() {
+  const ta = document.getElementById('ac-text'); if (!ta) return;
+  ta.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  ta.focus({ preventScroll: true });
+}
+async function submitActivityCompose(e) {
+  if (e) e.preventDefault();
+  const C = activityCompose, text = C.text.trim(), type = C.type;
+  C.err = !text ? t('act_err_text') : !C.deal && !C.contact ? t('act_err_link') : '';
+  if (C.err) { renderActivityCompose(); document.getElementById(!text ? 'ac-text' : 'ac-deal')?.focus(); return; }
+  const res = await api.post('/api/activities', {
+    contact_id: C.contact || null,
+    deal_id:    C.deal || null,
+    type,
+    content:    esc(text).replace(/\n/g, '<br>'),   // the same stored shape as the modal and the timeline editors
+  });
+  if (!res || res.error) { C.err = (res && res.error) || t('act_err_save'); renderActivityCompose(); return; }
+  C.text = ''; C.err = '';
+  await loadActivities();
+  document.getElementById('ac-text')?.focus();
+  ui.toast(tf('act_logged', { type: t('act_' + type) }), { action: { label: t('undo'), onClick: async () => { await api.del(`/api/activities/${res.id}`); loadActivities(); } } });
+}
+
+/* ----- feed ----- */
+function renderActivitiesFeed() {
+  const el = document.getElementById('activities-list');
+  if (!el) return;
+  const rows = visibleActivities(), total = activities.length;
+  if (!rows.length) {
+    el.innerHTML = `<div class="card"><div class="empty">${icon(total ? 'search' : 'activity')}<b>${esc(t(total ? 'no_activities_match' : 'no_activities'))}</b><div>${esc(t(total ? 'no_activities_match_sub' : 'no_activities_sub'))}</div>${total ? `<div style="margin-top:14px"><button class="btn btn-secondary btn-sm" type="button" onclick="clearActivitiesFilters()">${esc(t('clear_filters'))}</button></div>` : ''}</div></div>`;
+    renderActivitiesRail();
+    return;
+  }
+  const row = a => {
+    const label = t('act_' + a.type);
+    const full = new Date(a.created_at).toLocaleString(actLocale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return `<div class="ac-row" data-aid="${a.id}"><span class="tl-ic ${a.type}" title="${esc(label)}">${icon(a.type)}</span>
+      <div style="min-width:0"><div class="ac-head"><b>${esc(label)}</b>
+        ${a.deal_id ? `<a href="#" class="ac-link" title="${esc(a.deal_title || '')}" onclick="event.preventDefault();openActivityDeal(${a.deal_id})">${icon('deals')}<span>${esc(a.deal_title || 'Deal')}</span></a>` : ''}
+        ${a.contact_id ? `<a href="#" class="ac-link" title="${esc(actContactOf(a)?.company || '')}" onclick="event.preventDefault();openActivityContact(${a.contact_id})">${icon('users')}<span>${esc(a.contact_name || t('lbl_contact'))}</span></a>` : ''}
+        <span class="ac-time" title="${esc(full)}">${esc(actAgo(a.created_at))}</span></div>
+        <div class="tl-text ac-text">${dvActHtml(a.content)}</div>
+        <div class="ac-meta">${a.logged_by_name ? avatar(a.logged_by_name, 'sm') + `<span>${esc(a.logged_by_name)}</span><span class="ac-dot"></span>` : ''}<span>${esc(actTime(a.created_at))}</span></div></div>
+      <button class="iconbtn kebab" type="button" onclick="openActivityKebab(this,${a.id})" aria-label="${esc(t('obj_actions_aria'))}" aria-haspopup="menu">${icon('ellipsis')}</button></div>`;
+  };
+  // the server returns newest first; consecutive rows of the same calendar day form one group
+  const groups = [];
+  rows.forEach(a => { const n = actDayDiff(a), g = groups[groups.length - 1]; if (g && g.n === n) g.items.push(a); else groups.push({ n, ts: a.created_at, items: [a] }); });
+  el.innerHTML = groups.map(g => `<section class="ac-group" aria-label="${esc(actDayLabel(g.n, g.ts))}"><div class="ac-day"><h2 class="section-title">${esc(actDayLabel(g.n, g.ts))}</h2><span class="muted">${esc(actPlural(g.items.length))}</span></div>
+    <div class="card">${g.items.map(row).join('')}</div></section>`).join('');
+  renderActivitiesRail();
+}
+
+/* ----- rail ----- */
+function renderActivitiesRail() {
+  const el = document.getElementById('activities-rail');
+  if (!el) return;
+  const vis = visibleActivities();
+  const byType = ACT_TYPES.map(ty => ({ ty, n: visibleActivities('type').filter(a => a.type === ty).length })), maxT = Math.max(1, ...byType.map(x => x.n));
+  const byPerson = members.map(m => ({ m, n: visibleActivities('by').filter(a => a.created_by === m.id).length })), maxP = Math.max(1, ...byPerson.map(x => x.n));
+  const count = {}; vis.forEach(a => { if (a.deal_id) count[a.deal_id] = (count[a.deal_id] || 0) + 1; });
+  const top = Object.entries(count).sort((x, y) => y[1] - x[1]).slice(0, 4);
+  const bar = (n, max) => `<span class="bar"><i style="width:${Math.round(n / max * 100)}%"></i></span>`;
+  const dealRow = ([id, n]) => {
+    const d = activityDealList.find(x => x.id === +id);
+    const title = d ? d.title : (vis.find(a => a.deal_id === +id)?.deal_title || 'Deal');
+    const sub = d ? [d.stage_name, d.value != null && d.value !== '' ? fmtEURShort(d.value) : ''].filter(Boolean).join(', ') : '';
+    return `<a class="ac-deal-row" href="#" onclick="event.preventDefault();openActivityDeal(${+id})"><span class="grow"><span class="truncate" style="display:block;font-weight:600">${esc(title)}</span>${sub ? `<span class="muted">${esc(sub)}</span>` : ''}</span><span class="n">${n}</span></a>`;
+  };
+  el.innerHTML = `<section class="card" aria-label="${esc(t('rail_by_type'))}"><div class="card-header"><h2 class="card-title">${esc(t('rail_by_type'))}</h2><span class="muted">${esc(actPlural(vis.length))}</span></div><div class="card-body">
+      ${byType.map(({ ty, n }) => `<button class="ac-stat" type="button" data-stat-type="${ty}" aria-pressed="${activitiesUI.type === ty}" onclick="toggleActivitiesStat('type','${ty}')"><span class="tl-ic ${ty} ac-ic">${icon(ty)}</span><span><span class="nm">${esc(t('act_' + ty))}</span>${bar(n, maxT)}</span><span class="n">${n}</span></button>`).join('')}</div></section>
+    <section class="card" aria-label="${esc(t('rail_by_person'))}"><div class="card-header"><h2 class="card-title">${esc(t('rail_by_person'))}</h2></div><div class="card-body">
+      ${byPerson.map(({ m, n }) => `<button class="ac-stat" type="button" data-stat-by="${m.id}" aria-pressed="${activitiesUI.by === m.id}" onclick="toggleActivitiesStat('by',${m.id})">${avatar(m.name, 'sm')}<span><span class="nm">${esc(m.name)}</span>${bar(n, maxP)}</span><span class="n">${n}</span></button>`).join('')}</div></section>
+    <section class="card" aria-label="${esc(t('rail_top_deals'))}"><div class="card-header"><h2 class="card-title">${esc(t('rail_top_deals'))}</h2></div><div class="card-body">
+      ${top.length ? top.map(dealRow).join('') : `<div class="ac-rail-empty">${esc(t('rail_no_deals'))}</div>`}</div></section>`;
+}
+function toggleActivitiesStat(key, value) { activitiesUI[key] = activitiesUI[key] === value ? null : value; renderActivities(); }
+
+/* ----- row actions, export ----- */
+function openActivityKebab(anchor, id) {
+  const a = activities.find(x => x.id === id); if (!a) return;
+  const items = [];
+  if (a.deal_id) items.push({ label: t('open_deal'), icon: 'deals', onSelect: () => openActivityDeal(a.deal_id) });
+  if (a.contact_id) {
+    // "Open supplier" (the workspace's own word, singular) for a supplier contact — the reference's linkBase rule
+    const word = supplierWord(1);
+    const label = actContactOf(a)?.contact_type === 'supplier' ? tf('open_supplier', { name: currentLang === 'de' ? word : word.toLowerCase() }) : t('open_contact');
+    items.push({ label, icon: 'users', onSelect: () => openActivityContact(a.contact_id) });
+  }
+  if (items.length) items.push({ sep: true });
+  items.push({ label: t('delete_activity'), icon: 'trash', danger: true, onSelect: () => deleteActivity(id) });
+  ui.menu(anchor, items, { align: 'right' });
+}
+async function deleteActivity(id) {
+  const ok = await ui.confirm({ title: t('delete_activity_q'), message: t('delete_activity_msg'), confirmLabel: t('btn_delete'), danger: true });
+  if (!ok) return;
+  const res = await api.del(`/api/activities/${id}`);
+  if (res?.error) return ui.toast(res.error);
+  activities = activities.filter(a => a.id !== id);
+  if (!activitiesUI.deal) activityDeals = activityDealOptions();   // the chip must not offer a deal that no longer has a note
+  renderActivities();
+  ui.toast(t('activity_deleted'));
+}
+
+function exportActivitiesCsv() {
+  const rows = visibleActivities();
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const head = [t('lbl_type'), t('chip_person'), t('lbl_deal'), t('lbl_contact'), t('obj_csv_date'), t('obj_csv_text')];
+  const lines = rows.map(a => [t('act_' + a.type), a.logged_by_name || '', a.deal_title || '', a.contact_name || '', a.created_at ? new Date(a.created_at).toISOString() : '', dvActText(a.content)].map(q).join(','));
+  const csv = [head.map(q).join(','), ...lines].join('\r\n');
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
+  link.download = `activities-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link); link.click(); link.remove();
+  ui.toast(tf('export_activities_csv', { n: rows.length }));
+}

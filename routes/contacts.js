@@ -1,3 +1,41 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/contacts — contacts AND suppliers, plus the CSV import.
+
+   ONE TABLE, TWO RECORD TYPES. contact_type is 'contact' or 'supplier';
+   the UI shows them as two pages but everything here is shared. Filter with
+   ?contact_type= and remember that PUT COALESCEs the column, so omitting it
+   does not silently turn a supplier into a contact.
+
+   CUSTOM FIELDS live in contacts.custom_data (JSONB), keyed by the field_key
+   of a row in custom_fields. No schema change per field — see
+   middleware/field-crud.js.
+
+   THE LIST QUERY also computes last_activity_at as a correlated MAX over
+   activities, which is what the "Last contact" filter on the Contacts page
+   sorts by.
+
+   POST /import IS THE INTERESTING ONE. The browser parses the CSV and posts
+   the whole thing as one JSON array, so:
+     - server.js gives THIS ROUTE ALONE a 10 MB body limit; over that the
+       error handler turns body-parser's entity.too.large into a 413.
+     - everything happens in ONE transaction: create any new custom fields,
+       then per row upsert the contact BY EMAIL (update when it exists, insert
+       when it does not), then optionally create a deal.
+     - a row with no name is skipped; a row with no email can never match an
+       existing contact, so it always inserts.
+     - when deals are requested with no stage, it falls back to the pipeline's
+       FIRST stage — the same rule as the inbound webhook. Change one, change
+       both.
+
+   ENDPOINTS
+     GET    /?contact_type=&contact_id=    list (+ assignee, + last activity)
+     POST   /import                        bulk upsert, see above
+     GET    /:id                           one contact + its activities
+     POST   /                              409 on a duplicate email
+     PUT    /:id · DELETE /:id
+     POST   /bulk/delete                   { contactIds: [...] }
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
@@ -14,10 +52,10 @@ router.get('/', async (req, res, next) => {
     if (contact_type) { params.push(contact_type); filter += ` AND c.contact_type = $${params.length}`; }
     if (contact_id)   { params.push(contact_id);   filter += ` AND c.id = $${params.length}`; }
     const { rows } = await pool.query(`
-      SELECT c.*, s.name AS stage_name, s.color AS stage_color,
-             u.name AS assigned_to_name, u.email AS assigned_to_email
+      SELECT c.*,
+             u.name AS assigned_to_name, u.email AS assigned_to_email,
+             (SELECT MAX(a.created_at) FROM activities a WHERE a.contact_id = c.id) AS last_activity_at
       FROM contacts c
-      LEFT JOIN stages s ON s.id = c.stage_id
       LEFT JOIN users  u ON u.id = c.assigned_to
       WHERE c.workspace_id = $1 ${filter}
       ORDER BY c.created_at DESC
@@ -73,8 +111,8 @@ router.post('/import', async (req, res, next) => {
 
           if (existing) {
             await client.query(
-              'UPDATE contacts SET name=$1, phone=$2, company=$3, stage_id=$4, assigned_to=$5, custom_data=$6, updated_at=NOW() WHERE id=$7 AND workspace_id=$8',
-              [row.name.trim(), row.phone||null, row.company||null, row.stage_id||null,
+              'UPDATE contacts SET name=$1, phone=$2, company=$3, assigned_to=$4, custom_data=$5, updated_at=NOW() WHERE id=$6 AND workspace_id=$7',
+              [row.name.trim(), row.phone||null, row.company||null,
                row.assigned_to||req.userId, JSON.stringify(row.custom_data||{}), existing.id, req.workspaceId]
             );
             contactId = existing.id;
@@ -83,9 +121,9 @@ router.post('/import', async (req, res, next) => {
           } else {
             const assignedTo = defaultAssigneeId || req.userId;
             const { rows: [newContact] } = await client.query(
-              'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+              'INSERT INTO contacts (workspace_id, name, email, phone, company, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
               [req.workspaceId, row.name.trim(), row.email.toLowerCase().trim(),
-               row.phone||null, row.company||null, row.stage_id||null, assignedTo, JSON.stringify(row.custom_data||{})]
+               row.phone||null, row.company||null, assignedTo, JSON.stringify(row.custom_data||{})]
             );
             contactId = newContact.id;
             isNew = true;
@@ -94,9 +132,9 @@ router.post('/import', async (req, res, next) => {
         } else {
           const assignedTo = defaultAssigneeId || req.userId;
           const { rows: [newContact] } = await client.query(
-            'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+            'INSERT INTO contacts (workspace_id, name, email, phone, company, assigned_to, custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
             [req.workspaceId, row.name.trim(), null,
-             row.phone||null, row.company||null, row.stage_id||null, assignedTo, JSON.stringify(row.custom_data||{})]
+             row.phone||null, row.company||null, assignedTo, JSON.stringify(row.custom_data||{})]
           );
           contactId = newContact.id;
           isNew = true;
@@ -127,10 +165,9 @@ router.post('/import', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const { rows: [contact] } = await pool.query(`
-      SELECT c.*, s.name AS stage_name, s.color AS stage_color,
+      SELECT c.*,
              u.name AS assigned_to_name, u.email AS assigned_to_email
       FROM contacts c
-      LEFT JOIN stages s ON s.id = c.stage_id
       LEFT JOIN users  u ON u.id = c.assigned_to
       WHERE c.id = $1 AND c.workspace_id = $2
     `, [req.params.id, req.workspaceId]);
@@ -140,9 +177,11 @@ router.get('/:id', async (req, res, next) => {
       SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
              a.completed,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
+             a.deal_id, db.title AS deal_title,
              u.name AS logged_by_name, u.email AS logged_by_email
       FROM activities a
       LEFT JOIN users u ON u.id = a.created_by
+      LEFT JOIN deals db ON db.id = a.deal_id
       WHERE a.contact_id = $1 AND a.workspace_id = $2
       ORDER BY a.created_at DESC
     `, [req.params.id, req.workspaceId]);
@@ -153,7 +192,7 @@ router.get('/:id', async (req, res, next) => {
 
 router.post('/', async (req, res, next) => {
   try {
-    const { name, email, phone, company, stage_id, assigned_to, custom_data, contact_type } = req.body;
+    const { name, email, phone, company, assigned_to, custom_data, contact_type } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
     const assignee = assigned_to ? Number(assigned_to) : req.userId;
     const type = contact_type || 'contact';
@@ -168,8 +207,8 @@ router.post('/', async (req, res, next) => {
     }
 
     const { rows: [row] } = await pool.query(
-      'INSERT INTO contacts (workspace_id, name, email, phone, company, stage_id, assigned_to, custom_data, contact_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
-      [req.workspaceId, name, email ? email.toLowerCase().trim() : null, phone||null, company||null, stage_id||null, assignee, JSON.stringify(custom_data||{}), type]
+      'INSERT INTO contacts (workspace_id, name, email, phone, company, assigned_to, custom_data, contact_type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+      [req.workspaceId, name, email ? email.toLowerCase().trim() : null, phone||null, company||null, assignee, JSON.stringify(custom_data||{}), type]
     );
     notify(req.workspaceId, req.userId, {
       type: 'contact_created', category: 'contacts',
@@ -183,22 +222,11 @@ router.post('/', async (req, res, next) => {
 
 router.put('/:id', async (req, res, next) => {
   try {
-    const { name, email, phone, company, stage_id, assigned_to, custom_data, contact_type } = req.body;
+    const { name, email, phone, company, assigned_to, custom_data, contact_type } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
     const result = await pool.query(
-      'UPDATE contacts SET name=$1, email=$2, phone=$3, company=$4, stage_id=$5, assigned_to=$6, custom_data=$7, contact_type=COALESCE($8,contact_type), updated_at=NOW() WHERE id=$9 AND workspace_id=$10',
-      [name, email||null, phone||null, company||null, stage_id||null, assigned_to||null, JSON.stringify(custom_data||{}), contact_type||null, req.params.id, req.workspaceId]
-    );
-    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
-    res.json({ success: true });
-  } catch (e) { next(e); }
-});
-
-router.patch('/:id/stage', async (req, res, next) => {
-  try {
-    const result = await pool.query(
-      'UPDATE contacts SET stage_id=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3',
-      [req.body.stage_id||null, req.params.id, req.workspaceId]
+      'UPDATE contacts SET name=$1, email=$2, phone=$3, company=$4, assigned_to=$5, custom_data=$6, contact_type=COALESCE($7,contact_type), updated_at=NOW() WHERE id=$8 AND workspace_id=$9',
+      [name, email||null, phone||null, company||null, assigned_to||null, JSON.stringify(custom_data||{}), contact_type||null, req.params.id, req.workspaceId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });

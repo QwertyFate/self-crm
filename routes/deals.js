@@ -1,8 +1,48 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/deals — the pipeline. Deals, their stage, and their linked listings.
+
+   A DEAL belongs to exactly one pipeline and (usually) one of that pipeline's
+   stages. stage_id is nullable and the FK is ON DELETE SET NULL, so deleting a
+   stage leaves its deals in place with no stage rather than destroying them.
+   contact_id and supplier_id both point at `contacts` — a supplier is just a
+   contact with contact_type='supplier'.
+
+   THE LIST AND DETAIL QUERIES FLATTEN everything the UI needs into each row
+   (contact name/email/phone/company, supplier name, stage name + colour,
+   assignee name) so the board can render without a second request.
+
+   MOVING A DEAL IS NOT JUST AN UPDATE. POST /, PUT /:id and
+   PATCH /:id/stage all:
+     1. read the row FIRST to learn the previous stage,
+     2. write,
+     3. notify the workspace,
+     4. and, only when the stage actually CHANGED to one of the workspace's
+        configured trigger stages, fire an outbound Engine event through
+        fireEngine() → utils/engine.js → dispatchContractSigned().
+   That dispatch is fire-and-forget: it never throws into the request, and the
+   route does not wait for the HTTP delivery. Everything it does is visible
+   afterwards in engine_deliveries (GET /api/engine/deliveries).
+
+   urgency is an integer 0-4, clamped by clampUrgency() — never trust the body.
+
+   ENDPOINTS
+     GET    /?pipeline_id=&contact_id=
+     GET    /:id                      + its linked listings
+     POST   / · PUT /:id · DELETE /:id
+     PATCH  /:id/stage                what drag and drop calls
+     PATCH  /:id/urgency
+     GET/POST /:id/objects · DELETE /:id/objects/:objectId   listing links
+
+   ⚠ The three /:id/objects handlers query deal_objects by the id in the URL
+     without an AND workspace_id — see §8 of readmedev.md.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
 const { notify }  = require('../notifications');
+const engine      = require('../utils/engine');
 
 router.use(requireAuth);
 
@@ -10,6 +50,15 @@ function clampUrgency(v) {
   const n = parseInt(v, 10);
   if (!Number.isInteger(n)) return 0;
   return Math.min(4, Math.max(0, n));
+}
+
+// Tell the Upgrads Engine when a deal lands in a trigger stage. Fire-and-forget:
+// the dispatcher checks the workspace settings itself and never throws into the route.
+function fireEngine(req, { dealId, contactId, title, stageId }) {
+  engine.dispatchContractSigned({
+    workspaceId: req.workspaceId, dealId: Number(dealId),
+    contactId: contactId ? Number(contactId) : null, title, stageId,
+  }).catch(() => {});
 }
 
 router.get('/', async (req, res, next) => {
@@ -22,7 +71,7 @@ router.get('/', async (req, res, next) => {
     if (contact_id)  { params.push(contact_id);  filter += ` AND d.contact_id  = $${params.length}`; }
     const { rows } = await pool.query(`
       SELECT d.*,
-             c.name  AS contact_name,  c.email AS contact_email, c.phone AS contact_phone,
+             c.name  AS contact_name,  c.email AS contact_email, c.phone AS contact_phone, c.company AS contact_company,
              s.name  AS supplier_name_val,
              ps.name AS stage_name,    ps.color AS stage_color,
              u.name  AS assigned_to_name
@@ -42,7 +91,7 @@ router.get('/:id', async (req, res, next) => {
   try {
     const { rows: [deal] } = await pool.query(`
       SELECT d.*,
-             c.name  AS contact_name,  c.email AS contact_email, c.phone AS contact_phone,
+             c.name  AS contact_name,  c.email AS contact_email, c.phone AS contact_phone, c.company AS contact_company,
              s.name  AS supplier_name_val,
              ps.name AS stage_name,    ps.color AS stage_color,
              u.name  AS assigned_to_name
@@ -78,6 +127,7 @@ router.post('/', async (req, res, next) => {
       body: value ? `Value: € ${Number(value).toLocaleString()}` : null,
       entityType: 'deal', entityId: row.id,
     });
+    if (engine.stageNum(stage_id)) fireEngine(req, { dealId: row.id, contactId: contact_id, title: title.trim(), stageId: engine.stageNum(stage_id) });
     res.status(201).json({ id: row.id });
   } catch (e) { next(e); }
 });
@@ -86,6 +136,11 @@ router.put('/:id', async (req, res, next) => {
   try {
     const { contact_id, supplier_id, pipeline_id, stage_id, title, value, assigned_to, custom_data, urgency } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
+    const { rows: [before] } = await pool.query(
+      'SELECT stage_id, contact_id, title FROM deals WHERE id=$1 AND workspace_id=$2',
+      [req.params.id, req.workspaceId]
+    );
+    if (!before) return res.status(404).json({ error: 'Not found' });
     const result = await pool.query(
       'UPDATE deals SET contact_id=$1,supplier_id=$2,pipeline_id=$3,stage_id=$4,title=$5,value=$6,assigned_to=$7,urgency=$8,custom_data=$9,updated_at=NOW() WHERE id=$10 AND workspace_id=$11',
       [contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assigned_to||null, clampUrgency(urgency), JSON.stringify(custom_data||{}), req.params.id, req.workspaceId]
@@ -96,23 +151,35 @@ router.put('/:id', async (req, res, next) => {
       title: `Deal updated: ${title.trim()}`,
       entityType: 'deal', entityId: Number(req.params.id),
     });
+    const newStage = engine.stageNum(stage_id);
+    if (newStage && newStage !== engine.stageNum(before.stage_id)) {
+      fireEngine(req, { dealId: req.params.id, contactId: contact_id, title: title.trim(), stageId: newStage });
+    }
     res.json({ success: true });
   } catch (e) { next(e); }
 });
 
 router.patch('/:id/stage', async (req, res, next) => {
   try {
+    const { rows: [before] } = await pool.query(
+      'SELECT stage_id, contact_id, title FROM deals WHERE id=$1 AND workspace_id=$2',
+      [req.params.id, req.workspaceId]
+    );
+    if (!before) return res.status(404).json({ error: 'Not found' });
     const result = await pool.query(
       'UPDATE deals SET stage_id=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3',
       [req.body.stage_id||null, req.params.id, req.workspaceId]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
-    const { rows: [deal] } = await pool.query('SELECT title FROM deals WHERE id=$1', [req.params.id]);
-    if (deal) notify(req.workspaceId, req.userId, {
+    notify(req.workspaceId, req.userId, {
       type: 'deal_stage_changed', category: 'deals',
-      title: `Deal stage changed: ${deal.title}`,
+      title: `Deal stage changed: ${before.title}`,
       entityType: 'deal', entityId: Number(req.params.id),
     });
+    const newStage = engine.stageNum(req.body.stage_id);
+    if (newStage && newStage !== engine.stageNum(before.stage_id)) {
+      fireEngine(req, { dealId: req.params.id, contactId: before.contact_id, title: before.title, stageId: newStage });
+    }
     res.json({ success: true });
   } catch (e) { next(e); }
 });

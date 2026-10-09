@@ -1,3 +1,37 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/pipelines — pipelines AND their stages (one router, two resources).
+
+   A workspace can have several pipelines; each has its own ordered stages, and
+   a deal belongs to one pipeline. GET / returns every pipeline with its stages
+   already nested via json_agg, ordered by position — one request is enough to
+   draw the whole board.
+
+   CREATING A PIPELINE also creates the six default stages (New → Lost) in the
+   same transaction, so a new pipeline is never unusable. A brand-new WORKSPACE
+   gets its pipelines from a different place: seedDefaultPipeline() in db.js,
+   which the platform admin can override.
+
+   ORDERING is a `position` integer. Reordering goes through
+   middleware/reorder.js, which rewrites every position in one transaction.
+
+   DELETING A STAGE does not delete its deals: the FK is ON DELETE SET NULL, so
+   they stay with stage_id = null and show up as unstaged.
+
+   ENDPOINTS
+     GET    /                          pipelines with nested stages
+     POST   / · PUT /:id · DELETE /:id
+     POST   /:id/stages
+     PUT    /:id/stages/:sid
+     PATCH  /:id/stages/reorder        { ids: [...] } in the new order
+     DELETE /:id/stages/:sid
+     PATCH  /deal-kanban-fields        workspaces.deal_kanban_fields
+   A duplicate name (pipeline or stage) surfaces as Postgres 23505 → 400.
+
+   NOTE  /deal-kanban-fields is a workspace setting that ended up on this
+   router, and nothing in public/ calls it today — the Deals board reads the
+   column but no UI writes it.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');

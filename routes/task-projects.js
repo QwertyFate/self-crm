@@ -1,3 +1,36 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   /api/task-projects — projects, the lists inside them, and their statuses.
+
+   THE HIERARCHY  project → list → task. GET / returns every project with its
+   lists AND its status columns already nested (two json_agg sub-selects), so
+   the Tasks page can draw its whole sidebar from one request.
+
+   STATUSES ARE PER PROJECT, not global. A project created here gets the four
+   defaults (Todo, In Progress, In Review, Done) plus a first list called
+   "Tasks", all in one transaction, so it is immediately usable. A project
+   whose statuses were all deleted falls back to DEFAULT_STATUSES in the
+   response rather than returning an empty board. The LAST status means "done"
+   by convention — the client relies on that.
+
+   PUT /:id/statuses REPLACES the whole set: it deletes every row for the
+   project and re-inserts the array in order. Positions are the array index,
+   so the client sends the list in the order it wants.
+
+   Names are unique per scope, case-insensitively (checked in JS with LOWER(),
+   not a database constraint).
+
+   ENDPOINTS
+     GET    /                      projects + lists + statuses
+     POST   / · PUT /:id · DELETE /:id
+     POST   /:id/lists
+     PUT    /lists/:listId · DELETE /lists/:listId
+     GET    /:id/statuses · PUT /:id/statuses
+
+   ⚠ The handlers keyed on :id or :listId query by that id alone. The two
+     list routes also filter on workspace_id; the statuses routes and the
+     "name already exists" lookups do not — see §8 of readmedev.md.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
