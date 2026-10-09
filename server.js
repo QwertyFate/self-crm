@@ -61,6 +61,14 @@ const PORT       = process.env.PORT || 3000;
 process.on('unhandledRejection', (reason) => {
   console.error('Unhandled promise rejection:', reason);
 });
+// The same for a synchronous exception that nothing caught. Node's default is to exit; this CRM
+// runs under `npm run dev` (nodemon), which does NOT restart a crashed process — it waits for a
+// file change — so one unexpected throw (an integration, a listener, a timer) would mean downtime
+// until someone notices. Log it, keep serving. Every request handler is already wrapped (express
+// error handlers, the Engine paths' fehler shaping), so this is the last net, not the first.
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception (kept running):', err);
+});
 
 app.set('trust proxy', 1);
 
@@ -124,6 +132,12 @@ const engineApiLimiter = rateLimit({
 // applies to every other route at the default, smaller limit).
 app.use('/api/contacts/import', express.json({ limit: '10mb' }));
 app.use(express.json());
+// Engine API paths: a malformed or oversized body is a body-parser error BEFORE the routers run.
+// Answer the Engine's { fehler } shape (400 / 413) instead of the browser's { error } — and never a crash.
+const engineGate = require('./middleware/engine-gate');
+const engineRequestLog = require('./middleware/engine-request-log');
+app.use('/api/kunden',    engineGate.engineBodyErrors);
+app.use('/api/dokumente', engineGate.engineBodyErrors);
 
 const sessionMiddleware = session({
   store: new pgSession({ pool, createTableIfMissing: true }),
@@ -153,6 +167,7 @@ app.use('/api/auth/reset-password',  passwordLimiter);
 app.use('/api/auth',          require('./routes/auth'));
 app.use('/api/admin',         require('./routes/admin'));
 app.use('/api/admin',         require('./routes/admin-provision'));
+app.use('/api/admin',         require('./routes/admin-engine'));       // Engine Monitor: switches, request log, deliveries (cross-tenant)
 app.use('/api/platform',      require('./routes/platform'));
 app.use('/api/contacts',      require('./routes/contacts'));
 app.use('/api/contacts',      require('./routes/contact-documents'));   // /:contactId/documents… — falls through contacts.js like task-attachments
@@ -178,9 +193,13 @@ app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations',  require('./routes/integrations'));
 app.use('/api/engine',        require('./routes/engine'));
 // Onboarding Engine API: API-key auth (no session), German error shape, rate-limited.
+app.use('/api/kunden',        engineRequestLog);                                 // every call is logged (admin Engine Monitor)
 app.use('/api/kunden',        engineApiLimiter);
+app.use('/api/kunden',        engineGate);                                       // 503 while the platform admin has the API switched off
 app.use('/api/kunden',        require('./routes/engine-api'));
+app.use('/api/dokumente',     engineRequestLog);
 app.use('/api/dokumente',     engineApiLimiter);
+app.use('/api/dokumente',     engineGate);
 app.use('/api/dokumente',     require('./routes/engine-dokumente'));   // GET /:id/download → signed link (API key)
 
 app.get('/adminconsole', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));

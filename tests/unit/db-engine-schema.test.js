@@ -142,6 +142,23 @@ describe('activities.source (Part 16: who wrote a note — a user or the Engine)
   });
 });
 
+describe('engine_api_requests (Part 20: the Engine Monitor\'s request log)', () => {
+  test('created after api_keys, workspace nullable (unauthenticated calls) with CASCADE, key SET NULL, no body column', () => {
+    const s = find(/CREATE TABLE IF NOT EXISTS engine_api_requests/);
+    assert.ok(s, 'table');
+    assert.match(s, /workspace_id INTEGER REFERENCES workspaces\(id\) ON DELETE CASCADE/);
+    assert.match(s, /api_key_id INTEGER REFERENCES api_keys\(id\) ON DELETE SET NULL/);
+    for (const c of ['method TEXT NOT NULL', 'path TEXT NOT NULL', 'status INTEGER NOT NULL', 'duration_ms INTEGER', 'fehler_code TEXT', 'ip TEXT', 'created_at TIMESTAMPTZ DEFAULT NOW()']) assert.ok(s.includes(c), c);
+    assert.doesNotMatch(s, /body|headers|key_hash/);
+    const iKeys = sqls.findIndex(x => /CREATE TABLE IF NOT EXISTS api_keys/.test(x)), iLog = sqls.findIndex(x => /CREATE TABLE IF NOT EXISTS engine_api_requests/.test(x));
+    assert.ok(iLog > iKeys);
+  });
+  test('the two indexes: by time, and by workspace and time', () => {
+    assert.ok(find(/CREATE INDEX IF NOT EXISTS engine_api_requests_created_idx ON engine_api_requests \(created_at DESC\)/));
+    assert.ok(find(/CREATE INDEX IF NOT EXISTS engine_api_requests_ws_idx ON engine_api_requests \(workspace_id, created_at DESC\)/));
+  });
+});
+
 describe('the two engine API tables', () => {
   test('each is created and belongs to a workspace with ON DELETE CASCADE', () => {
     for (const t of NEW_TABLES) {

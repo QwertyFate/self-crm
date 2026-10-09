@@ -29,6 +29,7 @@
 const crypto   = require('crypto');
 const { pool } = require('../db');
 const { COLUMNS: KUNDE_COLUMNS, stammdaten, dokumentView, documentUrl } = require('./kunde');
+const { readControls } = require('./engine-controls');   // the platform admin's webhooks_enabled switch
 
 const EVENT_CONTRACT_SIGNED = 'vertrag.unterschrieben';
 const EVENT_CONTACT_CREATED = 'kunde.angelegt';
@@ -40,6 +41,7 @@ const DEFAULT_TZ            = 'Europe/Berlin';
 const ISO_DATE              = /^\d{4}-\d{2}-\d{2}$/;
 const NO_CONTACT_ERROR      = 'Not sent: the deal has no contact, so kunde_id is missing. Link a contact and move the deal into the trigger stage again.';
 const INACTIVE_ERROR        = 'Retry postponed: the Engine integration is switched off or has no URL. It resumes once the card is active again.';
+const WEBHOOKS_DISABLED_ERROR = 'Queued: outgoing webhooks are switched off by the platform administrator. Delivery resumes when they are switched on again.';
 
 // Retry schedule (briefing §5.1: "at least five attempts with increasing intervals,
 // extending to approximately 24 hours"). Delay after failure n, in seconds:
@@ -173,6 +175,22 @@ async function markNotSent(deliveryId, error) {
   return { id: deliveryId, ok: false, status: null, error, attempts: 0, delivery_status: 'failed', next_attempt_at: null };
 }
 
+// The platform switch (utils/engine-controls.js). A failing read means "enabled":
+// the switch can pause deliveries, never break them.
+async function webhooksEnabled() {
+  try { return (await readControls()).webhooks_enabled !== false; } catch { return true; }
+}
+
+// Keep a row pending and look at it again later — used while the integration is off
+// in the workspace (INACTIVE_ERROR) or the platform switch is off (WEBHOOKS_DISABLED_ERROR).
+async function postponeDelivery(deliveryId, error, secs = POSTPONE_SEC) {
+  await pool.query(
+    `UPDATE engine_deliveries SET last_error=$1, next_attempt_at = NOW() + make_interval(secs => $2) WHERE id=$3`,
+    [error, secs, deliveryId]
+  );
+  return { id: deliveryId, ok: false, postponed: true, error, delivery_status: 'pending' };
+}
+
 // ── One attempt, and how its outcome is recorded ────────────────────────────
 function isRetryableStatus(status) {
   return status >= 500 || status === 408 || status === 429;
@@ -272,13 +290,8 @@ async function claimDue(limit = 20) {
 }
 
 async function processClaimed(row) {
-  if (!row.active || !row.url) {
-    await pool.query(
-      `UPDATE engine_deliveries SET last_error=$1, next_attempt_at = NOW() + make_interval(secs => $2) WHERE id=$3`,
-      [INACTIVE_ERROR, POSTPONE_SEC, row.id]
-    );
-    return { id: row.id, ok: false, postponed: true, attempts: Number(row.attempts) || 0, delivery_status: 'pending' };
-  }
+  if (!(await webhooksEnabled())) return { ...(await postponeDelivery(row.id, WEBHOOKS_DISABLED_ERROR)), attempts: Number(row.attempts) || 0 };
+  if (!row.active || !row.url)    return { ...(await postponeDelivery(row.id, INACTIVE_ERROR)), attempts: Number(row.attempts) || 0 };
   const outcome = await attemptOnce({ url: row.url, secret: row.secret, rawBody: row.raw_body, event: row.event });
   return recordAttempt(row.id, (Number(row.attempts) || 0) + 1, outcome);
 }
@@ -373,6 +386,7 @@ function dispatchContractSigned({ workspaceId, dealId, contactId, title, stageId
     // kunde_id is the key of the record the Engine works on (briefing §2 step 1).
     // Without a contact there is nothing to onboard: log it, do not send it.
     if (kundeId == null) return markNotSent(id, NO_CONTACT_ERROR);
+    if (!(await webhooksEnabled())) return postponeDelivery(id, WEBHOOKS_DISABLED_ERROR);
 
     return deliver(id, { url: settings.engine_url, secret: settings.webhook_secret, rawBody, event: EVENT_CONTRACT_SIGNED });
   })();
@@ -402,6 +416,7 @@ function dispatchContactEvent({ workspaceId, contactId, event, changed = [] }) {
     const zeitpunkt = new Date().toISOString();
     const rawBody   = JSON.stringify(buildContactPayload(event, c, { eventId, zeitpunkt, changed }));
     const deliveryId = await createDelivery({ workspaceId, event, eventId, dealId: null, contactId: id, url: settings.engine_url, rawBody });
+    if (!(await webhooksEnabled())) return postponeDelivery(deliveryId, WEBHOOKS_DISABLED_ERROR);
     return deliver(deliveryId, { url: settings.engine_url, secret: settings.webhook_secret, rawBody, event });
   })();
   return track(run);
@@ -437,6 +452,7 @@ function dispatchDocumentAdded({ workspaceId, documentId, baseUrl = null }) {
     const daten     = { ...dokumentView(d, baseUrl), vertrag_id: dealId };
     const rawBody   = JSON.stringify(buildEnvelope(EVENT_DOCUMENT_ADDED, { eventId, zeitpunkt, contactId, daten }));
     const deliveryId = await createDelivery({ workspaceId, event: EVENT_DOCUMENT_ADDED, eventId, dealId, contactId, url: settings.engine_url, rawBody });
+    if (!(await webhooksEnabled())) return postponeDelivery(deliveryId, WEBHOOKS_DISABLED_ERROR);
     return deliver(deliveryId, { url: settings.engine_url, secret: settings.webhook_secret, rawBody, event: EVENT_DOCUMENT_ADDED });
   })();
   return track(run);
@@ -451,14 +467,15 @@ async function sendTestEvent(workspaceId) {
   const zeitpunkt = new Date().toISOString();
   const rawBody   = JSON.stringify(buildTestPayload({ eventId, zeitpunkt, workspaceId }));
   const id = await createDelivery({ workspaceId, event: EVENT_TEST, eventId, dealId: null, contactId: null, url: settings.engine_url, rawBody });
+  if (!(await webhooksEnabled())) return markNotSent(id, WEBHOOKS_DISABLED_ERROR);   // a test ping is not worth queueing
   return deliver(id, { url: settings.engine_url, secret: settings.webhook_secret, rawBody, event: EVENT_TEST }, { retry: false });
 }
 
 module.exports = {
-  EVENT_CONTRACT_SIGNED, EVENT_CONTACT_CREATED, EVENT_CONTACT_UPDATED, EVENT_DOCUMENT_ADDED, EVENT_TEST, NO_CONTACT_ERROR, INACTIVE_ERROR, DEFAULT_TZ,
+  EVENT_CONTRACT_SIGNED, EVENT_CONTACT_CREATED, EVENT_CONTACT_UPDATED, EVENT_DOCUMENT_ADDED, EVENT_TEST, NO_CONTACT_ERROR, INACTIVE_ERROR, WEBHOOKS_DISABLED_ERROR, DEFAULT_TZ,
   RETRY_DELAYS_SEC, MAX_ATTEMPTS, LEASE_SEC, POSTPONE_SEC,
   sign, verify, dateInZone, contractDetails, buildEnvelope, buildContractSignedPayload, buildContactPayload, buildTestPayload, isTriggerStage, stageNum, retryDelaySec,
   getSettings, dispatchContractSigned, dispatchContactEvent, dispatchContactCreated, dispatchContactUpdated, dispatchDocumentAdded, sendTestEvent, deliver, recordAttempt,
-  claimDue, runDue, startRetryWorker, stopRetryWorker, retryDelivery,
+  claimDue, runDue, startRetryWorker, stopRetryWorker, retryDelivery, webhooksEnabled, postponeDelivery,
   configure, resetConfig, drain,
 };

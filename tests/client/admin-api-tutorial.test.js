@@ -14,7 +14,7 @@ describe('the tab', () => {
     assert.match(html, /id="tabbtn-provisioning"[^>]*>Provisioning<\/button>\s*<button class="admin-tab"\s+id="tabbtn-tutorial"\s+onclick="showAdminTab\('tutorial'\)">API Tutorial<\/button>/);
     assert.match(html, /<div id="tab-tutorial" class="hidden">/);
     assert.ok(panel.length > 2000, 'the panel has content');
-    assert.match(inline, /for \(const t of \['defaults', 'provisioning', 'tutorial', 'engine'\]\)/);   // the Engine API tab (Part 19) joins the list
+    assert.match(inline, /for \(const t of \['defaults', 'provisioning', 'tutorial', 'engine', 'monitor'\]\)/);   // the Engine API (Part 19) and Engine Monitor (Part 20) tabs join the list
     assert.match(inline, /if \(name === 'tutorial' \|\| name === 'engine'\) fillTutorialHost\(\);/);
   });
   test('the host placeholders are filled from the console\'s own origin, so every snippet is copy-and-run', () => {

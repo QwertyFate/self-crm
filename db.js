@@ -624,6 +624,28 @@ async function initDb() {
     if (e.code !== '42710') throw e;
   }
 
+  // Request log of the Engine API (middleware/engine-request-log.js): one row per call
+  // to /api/kunden and /api/dokumente — who (workspace, key), what (method, path), how
+  // it went (status, fehler code, duration). No bodies. Read by the admin console's
+  // Engine Monitor; rows older than 30 days are pruned when the monitor is opened.
+  // workspace_id / api_key_id are NULL for calls that never authenticated.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS engine_api_requests (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+      api_key_id   INTEGER REFERENCES api_keys(id) ON DELETE SET NULL,
+      method       TEXT NOT NULL,
+      path         TEXT NOT NULL,
+      status       INTEGER NOT NULL,
+      duration_ms  INTEGER,
+      fehler_code  TEXT,
+      ip           TEXT,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS engine_api_requests_created_idx ON engine_api_requests (created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS engine_api_requests_ws_idx ON engine_api_requests (workspace_id, created_at DESC)`);
+
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');
   if (wsCount === 0 && piCount === 0) {

@@ -244,6 +244,15 @@
     .tut-table th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
     .tut-list { margin: 8px 0 0 0; padding-left: 20px; font-size: 14px; color: #374151; line-height: 1.55; }
     .tut-list li { margin-bottom: 6px; }
+    /* ── Engine Monitor tab ── */
+    .mon-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+    .mon-tile { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+    .mon-num { font-size: 22px; font-weight: 600; color: #111827; }
+    .mon-tile.good .mon-num { color: #15803d; } .mon-tile.warn .mon-num { color: #b45309; } .mon-tile.bad .mon-num { color: #b91c1c; }
+    .mon-label { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+    .mon-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .mon-err { max-width: 340px; white-space: normal; margin-top: 2px; }
+    #tab-monitor select { padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; background: #fff; }
     #tab-tutorial code, #tab-engine code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
 
     /* ── Workspace table ── */
@@ -300,6 +309,7 @@
         <button class="admin-tab"        id="tabbtn-provisioning" onclick="showAdminTab('provisioning')">Provisioning</button>
         <button class="admin-tab"        id="tabbtn-tutorial"     onclick="showAdminTab('tutorial')">API Tutorial</button>
         <button class="admin-tab"        id="tabbtn-engine"       onclick="showAdminTab('engine')">Engine API</button>
+        <button class="admin-tab"        id="tabbtn-monitor"      onclick="showAdminTab('monitor')">Engine Monitor</button>
       </div>
 
       <div id="tab-defaults">
@@ -796,7 +806,9 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
               <tr><td><code>409</code></td><td><code>akte_version_konflikt</code> (stale precondition), <code>anfrage_in_bearbeitung</code> (same key still running)</td></tr>
               <tr><td><code>422</code></td><td><code>ungueltige_daten</code>, <code>ungueltiger_status</code>, <code>keine_daten</code>, <code>idempotency_key_konflikt</code></td></tr>
               <tr><td><code>429</code></td><td><code>zu_viele_anfragen</code> — 300 requests per minute per IP across <code>/api/kunden</code> and <code>/api/dokumente</code></td></tr>
+              <tr><td><code>413</code></td><td><code>anfrage_zu_gross</code> — the request body is over the limit</td></tr>
               <tr><td><code>500</code></td><td><code>serverfehler</code> — no internals are disclosed</td></tr>
+              <tr><td><code>503</code></td><td><code>api_deaktiviert</code> — the platform administrator switched the Engine API off (Engine Monitor tab); <code>Retry-After</code> is set, nothing is lost</td></tr>
             </tbody>
           </table>
           <ul class="tut-list">
@@ -807,6 +819,73 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
           </ul>
         </div>
       </div><!-- /#tab-engine -->
+
+      <div id="tab-monitor" class="hidden">
+        <div class="section">
+          <div class="feature-row">
+            <div style="max-width: 62ch;">
+              <h2 style="margin: 0 0 4px 0;">Engine switches</h2>
+              <p style="font-size: 14px; margin: 0;">
+                Platform-wide. <strong>API off</strong>: every call to <code>/api/kunden</code> and <code>/api/dokumente</code> answers
+                <code>503 api_deaktiviert</code> (with <code>Retry-After</code>); keys stay valid, nothing is deleted.
+                <strong>Webhooks off</strong>: events are still recorded but held back; they go out, in order and with the same
+                <code>event_id</code>, once switched on again. Each switch takes effect within 10 seconds on every instance.
+              </p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <span id="mon-api-status" class="feature-status off">Loading…</span>
+              <button class="btn btn-primary" id="mon-api-btn" onclick="toggleEngineControl('api_enabled')" disabled>…</button>
+              <span id="mon-webhooks-status" class="feature-status off">Loading…</span>
+              <button class="btn btn-primary" id="mon-webhooks-btn" onclick="toggleEngineControl('webhooks_enabled')" disabled>…</button>
+            </div>
+          </div>
+          <p class="feature-note">Both switches are read on every Engine request and every outgoing delivery. A workspace's own Active switch on its Integrations card still applies underneath.</p>
+        </div>
+
+        <div class="section">
+          <div class="feature-row">
+            <h2 style="margin: 0;">Last 24 hours</h2>
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <label class="prov-hint" style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" id="mon-auto" onchange="setMonitorAutoRefresh(this.checked)"> Auto-refresh (10 s)</label>
+              <select id="mon-workspace" onchange="monitorFilterChanged()"><option value="">All workspaces</option></select>
+              <button class="btn" onclick="loadEngineMonitor()">Refresh</button>
+            </div>
+          </div>
+          <div class="mon-tiles" id="mon-tiles"><div class="loading">Loading…</div></div>
+        </div>
+
+        <div class="section">
+          <div class="feature-row">
+            <h2 style="margin: 0;">Incoming requests <span class="prov-hint" style="font-weight: 400;">— the Engine calling the CRM (<code>/api/kunden</code>, <code>/api/dokumente</code>)</span></h2>
+            <select id="mon-req-status" onchange="monitorFilterChanged()">
+              <option value="all">All answers</option><option value="errors">Errors (4xx / 5xx)</option><option value="ok">OK only</option>
+            </select>
+          </div>
+          <p class="prov-hint">Every call is logged with the key, the status, the <code>fehler</code> code and the duration — never the body. Rows are kept for 30 days. A <code>401</code> without a workspace is a call with a missing, wrong or revoked key.</p>
+          <div class="prov-table-wrap">
+            <table class="prov-table">
+              <thead><tr><th>Time</th><th>Workspace</th><th>Key</th><th>Request</th><th>Status</th><th>Error code</th><th>ms</th><th>IP</th></tr></thead>
+              <tbody id="mon-req-body"><tr><td colspan="8" class="loading">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="feature-row">
+            <h2 style="margin: 0;">Outgoing webhooks <span class="prov-hint" style="font-weight: 400;">— the CRM posting to the Engine</span></h2>
+            <select id="mon-del-status" onchange="monitorFilterChanged()">
+              <option value="all">All</option><option value="pending">Pending</option><option value="failed">Failed</option><option value="success">Delivered</option>
+            </select>
+          </div>
+          <p class="prov-hint">A failed delivery never affects the CRM: it is recorded, retried on the schedule (7 attempts over ≈ 24 h) and can be retried by hand by the workspace's owner under Integrations → Deliveries. <em>Pending</em> with a "Queued" note means a switch above is off.</p>
+          <div class="prov-table-wrap">
+            <table class="prov-table">
+              <thead><tr><th>Time</th><th>Workspace</th><th>Event</th><th>About</th><th>Status</th><th>Attempts</th><th>Last answer</th><th>Next attempt</th><th></th></tr></thead>
+              <tbody id="mon-del-body"><tr><td colspan="9" class="loading">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div><!-- /#tab-monitor -->
 
       <div id="message" class="message" style="display: none;"></div>
     </div>
@@ -1209,12 +1288,13 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
        ══════════════════════════════════════════════════════════════════════ */
 
     function showAdminTab(name) {
-      for (const t of ['defaults', 'provisioning', 'tutorial', 'engine']) {
+      for (const t of ['defaults', 'provisioning', 'tutorial', 'engine', 'monitor']) {
         document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== name);
         document.getElementById(`tabbtn-${t}`).classList.toggle('active', t === name);
       }
       if (name === 'provisioning') loadProvisionList();
       if (name === 'tutorial' || name === 'engine') fillTutorialHost();
+      if (name === 'monitor') loadEngineMonitor();
     }
 
     // The tutorial's snippets name this console's own host, so they are copy-and-run.
@@ -1354,6 +1434,163 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
         <input type="text" readonly value="${esc(value || '')}" onclick="this.select()" />
         <button class="prov-copy-btn" onclick="copyProvText(${safe}, this)">Copy</button>
       </div>`;
+    }
+
+
+    /* ══════════════════════════════════════════════════════════════════════
+       ENGINE MONITOR TAB
+       The two platform switches (PATCH /api/admin/engine/controls), the 24-hour
+       tiles (GET …/summary), the Engine's incoming requests (GET …/requests) and
+       the CRM's outgoing webhooks (GET …/deliveries), all cross-tenant, with a
+       workspace filter (GET …/workspaces) and an optional 10-second refresh.
+       ══════════════════════════════════════════════════════════════════════ */
+
+    let monitorControls = null;
+    let monitorTimer = null;
+    let monitorWorkspacesLoaded = false;
+
+    async function monFetch(pathAndQuery) {
+      const res = await fetch(`${API_BASE}/engine/${pathAndQuery}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    }
+
+    async function loadEngineMonitor() {
+      const ws = document.getElementById('mon-workspace').value;
+      const rs = document.getElementById('mon-req-status').value;
+      const ds = document.getElementById('mon-del-status').value;
+      const q  = ws ? `workspace_id=${encodeURIComponent(ws)}&` : '';
+      try {
+        if (!monitorWorkspacesLoaded) {
+          const { workspaces } = await monFetch('workspaces');
+          renderMonitorWorkspaces(workspaces);
+          monitorWorkspacesLoaded = true;
+        }
+        const [summary, req, del] = await Promise.all([
+          monFetch('summary'),
+          monFetch(`requests?${q}status=${encodeURIComponent(rs)}&limit=200`),
+          monFetch(`deliveries?${q}status=${encodeURIComponent(ds)}&limit=200`),
+        ]);
+        monitorControls = summary.controls || monitorControls;
+        renderEngineControls();
+        renderMonitorTiles(summary);
+        document.getElementById('mon-req-body').innerHTML = renderMonitorRequests(req.requests);
+        document.getElementById('mon-del-body').innerHTML = renderMonitorDeliveries(del.deliveries);
+      } catch (e) {
+        showMessage(`Engine monitor: ${e.message}`, 'error');
+      }
+    }
+
+    function renderMonitorWorkspaces(list) {
+      const sel = document.getElementById('mon-workspace');
+      const current = sel.value;
+      sel.innerHTML = '<option value="">All workspaces</option>' + (list || []).map(w =>
+        `<option value="${w.id}">${esc(w.name)} #${w.id}${w.engine_active ? ' · Engine on' : ''}${w.live_keys ? ` · ${w.live_keys} key${w.live_keys === 1 ? '' : 's'}` : ''}</option>`).join('');
+      sel.value = current;
+    }
+
+    // The two switches: badge + button, coloured by state. Disabling is the dangerous direction.
+    function renderEngineControls() {
+      for (const [key, id, noun] of [['api_enabled', 'api', 'API'], ['webhooks_enabled', 'webhooks', 'webhooks']]) {
+        const on = !monitorControls || monitorControls[key] !== false;
+        const status = document.getElementById(`mon-${id}-status`), btn = document.getElementById(`mon-${id}-btn`);
+        if (!status || !btn) continue;
+        status.textContent = `${noun.charAt(0).toUpperCase() + noun.slice(1)} ${on ? 'on' : 'OFF'}`;
+        status.className = 'feature-status ' + (on ? 'on' : 'off');
+        btn.textContent = `${on ? 'Disable' : 'Enable'} ${noun}`;
+        btn.className = on ? 'btn btn-danger' : 'btn btn-primary';
+        btn.disabled = false;
+      }
+    }
+
+    async function toggleEngineControl(key) {
+      const next = !(!monitorControls || monitorControls[key] !== false);
+      if (!next) {
+        const warning = key === 'api_enabled'
+          ? 'Switch the Engine API off for every workspace? Every call answers 503 until it is switched on again. Keys stay valid.'
+          : 'Hold back every outgoing webhook? Events are still recorded and go out once switched on again.';
+        if (!confirm(warning)) return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/engine/controls`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ [key]: next }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not save the switch');
+        monitorControls = { api_enabled: data.api_enabled, webhooks_enabled: data.webhooks_enabled };
+        renderEngineControls();
+        showMessage(`${key === 'api_enabled' ? 'Engine API' : 'Outgoing webhooks'} ${next ? 'enabled' : 'disabled'}.`, 'success');
+      } catch (e) {
+        showMessage(`Error: ${e.message}`, 'error');
+      }
+    }
+
+    function renderMonitorTiles(s) {
+      const r = s.requests || {}, d = s.deliveries || {}, w = s.setup || {};
+      const tile = (n, label, cls = '') => `<div class="mon-tile ${cls}"><div class="mon-num">${Number(n) || 0}</div><div class="mon-label">${label}</div></div>`;
+      document.getElementById('mon-tiles').innerHTML =
+        tile(r.requests_24h, 'API requests') +
+        tile(r.requests_24h_4xx, '4xx answers', r.requests_24h_4xx ? 'warn' : '') +
+        tile(r.requests_24h_5xx, '5xx answers', r.requests_24h_5xx ? 'bad' : '') +
+        tile(r.avg_ms_24h, 'avg ms') +
+        tile(d.sent_24h, 'events created') +
+        tile(d.delivered_24h, 'delivered', 'good') +
+        tile(d.pending, 'pending (all time)', d.pending ? 'warn' : '') +
+        tile(d.failed_24h, 'failed', d.failed_24h ? 'bad' : '') +
+        tile(w.active_workspaces, 'workspaces with Engine on') +
+        tile(w.live_keys, 'live API keys');
+    }
+
+    function monStatusBadge(status) {
+      const n = Number(status);
+      const cls = n >= 500 ? 'off' : n >= 400 ? 'no' : 'yes';
+      return `<span class="prov-badge ${cls}">${n}</span>`;
+    }
+
+    function renderMonitorRequests(rows) {
+      if (!rows || !rows.length) return '<tr><td colspan="8" class="loading">No requests in this view.</td></tr>';
+      return rows.map(r => `
+        <tr>
+          <td>${fmtProvDate(r.created_at)}</td>
+          <td>${r.workspace_name ? esc(r.workspace_name) + ` <span class="prov-hint">#${Number(r.workspace_id)}</span>` : '<span class="prov-hint">—</span>'}</td>
+          <td>${r.key_name ? esc(r.key_name) + ` <span class="prov-hint">${esc(r.key_prefix || '')}…</span>` : '<span class="prov-hint">—</span>'}</td>
+          <td><code class="mon-code">${esc(r.method)} ${esc(r.path)}</code></td>
+          <td>${monStatusBadge(r.status)}</td>
+          <td>${r.fehler_code ? `<code class="mon-code">${esc(r.fehler_code)}</code>` : ''}</td>
+          <td>${r.duration_ms == null ? '' : Number(r.duration_ms)}</td>
+          <td class="prov-hint">${esc(r.ip || '')}</td>
+        </tr>`).join('');
+    }
+
+    function renderMonitorDeliveries(rows) {
+      if (!rows || !rows.length) return '<tr><td colspan="9" class="loading">No events in this view.</td></tr>';
+      return rows.map(d => {
+        const cls   = d.status === 'success' ? 'yes' : d.status === 'failed' ? 'off' : 'no';
+        const about = d.deal_title ? esc(d.deal_title) : d.contact_name ? esc(d.contact_name) : (d.payload && d.payload.kunde_id != null ? `kunde ${Number(d.payload.kunde_id)}` : '');
+        const payload = JSON.stringify(JSON.stringify(d.payload || {}, null, 2)).replace(/"/g, '&quot;');
+        return `
+        <tr>
+          <td>${fmtProvDate(d.created_at)}</td>
+          <td>${d.workspace_name ? esc(d.workspace_name) + ` <span class="prov-hint">#${Number(d.workspace_id)}</span>` : ''}</td>
+          <td><code class="mon-code">${esc(d.event)}</code></td>
+          <td>${about}</td>
+          <td><span class="prov-badge ${cls}">${esc(d.status)}</span></td>
+          <td>${Number(d.attempts) || 0}</td>
+          <td>${d.last_status_code ? `HTTP ${Number(d.last_status_code)}` : ''}${d.last_error ? `<div class="prov-hint mon-err">${esc(d.last_error)}</div>` : ''}</td>
+          <td>${d.status === 'pending' && d.next_attempt_at ? fmtProvDate(d.next_attempt_at) : ''}</td>
+          <td><button class="prov-copy-btn" onclick="copyProvText(${payload}, this)">Copy payload</button></td>
+        </tr>`;
+      }).join('');
+    }
+
+    function monitorFilterChanged() { loadEngineMonitor(); }
+
+    function setMonitorAutoRefresh(on) {
+      if (monitorTimer) { clearInterval(monitorTimer); monitorTimer = null; }
+      if (on) monitorTimer = setInterval(() => {
+        if (!document.getElementById('tab-monitor').classList.contains('hidden')) loadEngineMonitor();
+      }, 10000);
     }
 
     async function copyProvText(text, btn) {

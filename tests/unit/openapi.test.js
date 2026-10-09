@@ -58,7 +58,7 @@ describe('the document', () => {
   });
   test('every fehler code the code can emit is in the Fehler enum, and the enum has nothing the code never emits', () => {
     const codes = new Set();
-    for (const rel of ['routes/engine-api.js', 'routes/engine-dokumente.js', 'middleware/engine-auth.js', 'utils/idempotency.js', 'server.js']) {
+    for (const rel of ['routes/engine-api.js', 'routes/engine-dokumente.js', 'middleware/engine-auth.js', 'middleware/engine-gate.js', 'utils/idempotency.js', 'server.js']) {
       const s = src(rel);
       for (const m of s.matchAll(/fehler\(res, \d+, '([a-z_]+)'/g)) codes.add(m[1]);
       for (const m of s.matchAll(/err\('([a-z_]+)'/g)) codes.add(m[1]);

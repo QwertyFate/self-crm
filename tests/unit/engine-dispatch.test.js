@@ -15,6 +15,7 @@ const pool = {
     // The claim statement's RETURNING subselects also read workspace_engine, so it must be matched first.
     if (sql.includes('WITH due AS'))                   return { rows: state.claimed.splice(0, params[0]) };
     if (sql.includes('FROM workspace_engine'))         return { rows: state.settings ? [state.settings] : [] };
+    if (/^SELECT value FROM platform_settings WHERE key=\$1/.test(sql)) return { rows: state.controlsRow ? [{ value: state.controlsRow }] : [] };   // utils/engine-controls.js
     if (sql.includes('SELECT custom_data FROM deals')) return { rows: state.deal ? [state.deal] : [] };
     if (/^SELECT id, workspace_id, name, email, phone, company, contact_type,/.test(sql)) return { rows: state.contact ? [state.contact] : [] };   // utils/kunde.js COLUMNS
     if (/^SELECT id FROM contact_documents WHERE workspace_id=\$1 AND contact_id=\$2 AND typ='vertrag'/.test(sql)) return { rows: state.vertragDoc ? [state.vertragDoc] : [] };
@@ -53,7 +54,8 @@ const recorded = () => updates().filter(c => /SET attempts=\$1/.test(c.sql));   
 const verified = (c, secret = SECRET) => engine.verify(secret, c.init.body, c.init.headers['X-Upgrads-Signature']);
 const secondsFromNow = d => (d.getTime() - Date.now()) / 1000;
 
-beforeEach(() => { state.settings = { ...ACTIVE }; state.deal = { custom_data: {} }; state.vertragDoc = null; state.docRow = null; state.calls.length = 0; state.claimed = []; engine.configure({ timeoutMs: 50 }); });
+const engineControls = require(path.join(ROOT, 'utils', 'engine-controls.js'));
+beforeEach(() => { state.settings = { ...ACTIVE }; state.deal = { custom_data: {} }; state.vertragDoc = null; state.docRow = null; state.controlsRow = null; state.calls.length = 0; state.claimed = []; engineControls.resetCache(); engine.configure({ timeoutMs: 50 }); });
 afterEach(() => { engine.resetConfig(); engine.stopRetryWorker(); });
 
 const args = { workspaceId: 7, dealId: 17, contactId: 42, title: 'Maklersystem Landingpage', stageId: '5', timezone: 'Europe/Berlin' };
@@ -456,6 +458,49 @@ describe('dispatchDocumentAdded (dokument.hinzugefuegt)', () => {
     state.settings = { ...ACTIVE };
     assert.equal(await engine.dispatchDocumentAdded({ workspaceId: 7, documentId: 'x', baseUrl: 'x' }), null);
     assert.equal(f.calls.length, 0); assert.equal(inserts().length, 0);
+  });
+});
+
+describe('the platform switch webhooks_enabled (utils/engine-controls.js)', () => {
+  const postponed = () => updates().filter(c => /SET last_error=\$1, next_attempt_at = NOW\(\) \+ make_interval\(secs => \$2\)/.test(c.sql));
+  test('off: a contract event is recorded, then QUEUED (postponed an hour with the reason) — no HTTP, attempts untouched', async () => {
+    state.controlsRow = { webhooks_enabled: false };
+    const f = stubFetch([response(200)]); engine.configure({ fetch: f });
+    const r = await engine.dispatchContractSigned(args);
+    assert.equal(f.calls.length, 0);
+    assert.equal(inserts().length, 1, 'the event is kept');
+    assert.deepEqual(postponed()[0].params, [engine.WEBHOOKS_DISABLED_ERROR, engine.POSTPONE_SEC, 101]);
+    assert.equal(recorded().length, 0, 'no attempt consumed');
+    assert.deepEqual(r, { id: 101, ok: false, postponed: true, error: engine.WEBHOOKS_DISABLED_ERROR, delivery_status: 'pending' });
+    assert.match(engine.WEBHOOKS_DISABLED_ERROR, /platform administrator/);
+  });
+  test('off: contact and document events are queued the same way; the worker postpones claimed rows without a request', async () => {
+    state.controlsRow = { webhooks_enabled: false };
+    const f = stubFetch([response(200), response(200), response(200)]); engine.configure({ fetch: f });
+    state.contact = { id: 60, workspace_id: 7, name: 'E', contact_type: 'contact' };
+    await engine.dispatchContactCreated({ workspaceId: 7, contactId: 60 });
+    state.docRow = { id: 9, contact_id: 60, deal_id: null, typ: 'vertrag', file_name: 'a.pdf', file_type: 'application/pdf', file_size: 1, created_at: 'c', contact_type: 'contact' };
+    await engine.dispatchDocumentAdded({ workspaceId: 7, documentId: 9, baseUrl: 'https://x' });
+    state.claimed = [{ id: 501, workspace_id: 7, event: 'vertrag.unterschrieben', raw_body: '{}', attempts: 1, url: ACTIVE.engine_url, secret: SECRET, active: true }];
+    const results = await engine.runDue();
+    assert.equal(f.calls.length, 0);
+    assert.equal(postponed().length, 3);
+    assert.ok(results[0].postponed && results[0].delivery_status === 'pending');
+  });
+  test('off: a test ping is refused outright (failed with the reason), not queued', async () => {
+    state.controlsRow = { webhooks_enabled: false };
+    const f = stubFetch([response(200)]); engine.configure({ fetch: f });
+    const r = await engine.sendTestEvent(7);
+    assert.equal(f.calls.length, 0);
+    assert.equal(r.delivery_status, 'failed'); assert.equal(r.error, engine.WEBHOOKS_DISABLED_ERROR);
+    assert.match(updates()[0].sql, /status='failed'/);
+  });
+  test('on again (cache reset): the same event goes out; a failing switch read means enabled', async () => {
+    state.controlsRow = { webhooks_enabled: true };
+    let f = stubFetch([response(200)]); engine.configure({ fetch: f });
+    assert.equal((await engine.dispatchContractSigned(args)).delivery_status, 'success');
+    assert.equal(f.calls.length, 1);
+    assert.equal(await engine.webhooksEnabled(), true);
   });
 });
 

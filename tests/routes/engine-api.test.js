@@ -435,6 +435,15 @@ describe('server wiring', () => {
     assert.ok(iLimit > 0, 'limiter applied to /api/kunden');
     assert.ok(iMount > iLimit, 'router mounted after the limiter');
     assert.ok(iSpa < 0 || iMount < iSpa, 'mounted before the SPA catch-all');
+    // Part 20: every call is logged first, the platform switch is checked after the limiter, and body-parser
+    // errors on the Engine paths are shaped right after express.json() (before any router can see them).
+    const iLog  = src.indexOf("app.use('/api/kunden',        engineRequestLog)");
+    const iGate = src.indexOf("app.use('/api/kunden',        engineGate)");
+    assert.ok(iLog > 0 && iLog < iLimit && iLimit < iGate && iGate < iMount, 'log → limiter → gate → router');
+    const iJson = src.indexOf('app.use(express.json());'), iBody = src.indexOf("app.use('/api/kunden',    engineGate.engineBodyErrors)");
+    assert.ok(iJson > 0 && iBody > iJson && iBody < iLog, 'body errors shaped after express.json(), before the Engine mounts');
+    assert.ok(src.includes("app.use('/api/dokumente', engineGate.engineBodyErrors)") && src.includes("app.use('/api/dokumente',     engineRequestLog)") && src.includes("app.use('/api/dokumente',     engineGate)"), 'the same for /api/dokumente');
+    assert.ok(src.includes("app.use('/api/admin',         require('./routes/admin-engine'))"), 'the monitor routes are mounted');
   });
 });
 

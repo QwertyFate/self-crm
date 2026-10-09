@@ -21,7 +21,7 @@ describe('the tab', () => {
     assert.match(html, /id="tabbtn-tutorial"[^>]*>API Tutorial<\/button>\s*<button class="admin-tab"\s+id="tabbtn-engine"\s+onclick="showAdminTab\('engine'\)">Engine API<\/button>/);
     assert.match(html, /<div id="tab-engine" class="hidden">/);
     assert.ok(panel.length > 6000, 'the panel has content');
-    assert.match(inline, /for \(const t of \['defaults', 'provisioning', 'tutorial', 'engine'\]\)/);
+    assert.match(inline, /for \(const t of \['defaults', 'provisioning', 'tutorial', 'engine', 'monitor'\]\)/);
     assert.match(inline, /if \(name === 'tutorial' \|\| name === 'engine'\) fillTutorialHost\(\);/);
     assert.match(html, /#tab-tutorial code, #tab-engine code \{/, 'inline code styling covers the new tab');
   });
