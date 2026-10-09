@@ -20,9 +20,9 @@ const section = html.slice(html.indexOf('<div id="admin-screen"'), html.indexOf(
 describe('markup: admin screen uses sprite icons', () => {
   test('files parse', () => execFileSync('node', ['--check', path.join(ROOT, 'public/js/admin-import.js')]));
   test('Back to app, Generate, and Log out of admin all have sprite icons', () => {
-    assert.match(section, /onclick="location\.href='\/'"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"\/><\/svg><span>Back to app<\/span>/);
-    assert.match(section, /onclick="adminGenerateCode\(\)"><svg class="ic" aria-hidden="true"><use href="#i-plus"\/><\/svg><span>Generate<\/span>/);
-    assert.match(section, /onclick="adminLogout\(event\)"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-log-out"\/><\/svg><span>Log out of admin<\/span>/);
+    assert.match(section, /onclick="location\.href='\/'"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"\/><\/svg><span data-i18n="html_back_to_app">Back to app<\/span>/);
+    assert.match(section, /onclick="adminGenerateCode\(\)"><svg class="ic" aria-hidden="true"><use href="#i-plus"\/><\/svg><span data-i18n="generate_btn">Generate<\/span>/);
+    assert.match(section, /onclick="adminLogout\(event\)"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-log-out"\/><\/svg><span data-i18n="html_admin_logout">Log out of admin<\/span>/);
   });
   test('every sprite reference inside the admin screen resolves', () => {
     const defined = new Set([...html.matchAll(/<symbol id="(i-[\w-]+)"/g)].map(m => m[1]));

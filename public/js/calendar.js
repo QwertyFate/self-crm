@@ -45,8 +45,8 @@
 
    FUNCTION MAP
      dates      calPad, calIso, calAddDays, calWeekStart, calMins, calHHMM,
-                calToday, calFmtDay, calDateFromIso, calendarRange,
-                calendarLabel
+                calToday, calLocale, calDow, calFmtDay, calDateFromIso,
+                calendarRange, calendarLabel
      nav        setCalendarView, calViewFromStorage, calendarGoToday,
                 calendarStep, calendarPrevMonth, calendarNextMonth,
                 switchPageCalendar
@@ -56,19 +56,19 @@
                 renderCalendarToolbar
      filters    visibleCalEvents, calOnDay, calChip, openCalendarChip,
                 clearCalendarFilters
-     entries    calNormalize, calTypeOf, calTitleOf, calFindEvent, stripHtml,
+     entries    calNormalize, calTypeOf, calTypeLabel, calTitleOf, calFindEvent, stripHtml,
                 openCalendarEntry, openCalendarEvent, openCalendarEventDetail,
                 openDayModal, openCalMoreMenu, toggleCalendarDone,
                 toggleActivityComplete, calendarAddOn, calendarAddAtTime */
 
+// `key` is the dictionary key of the type's label — read it through calTypeLabel().
 const CAL_TYPES = [
-  { id: 'note',     label: 'Note',     color: 'var(--info)'       },
-  { id: 'call',     label: 'Call',     color: 'var(--success)'    },
-  { id: 'email',    label: 'Email',    color: 'var(--violet-500)' },
-  { id: 'whatsapp', label: 'WhatsApp', color: 'var(--warning)'    },
-  { id: 'task',     label: 'Task',     color: 'var(--brand)'      },
+  { id: 'note',     key: 'act_note',     color: 'var(--info)'       },
+  { id: 'call',     key: 'act_call',     color: 'var(--success)'    },
+  { id: 'email',    key: 'act_email',    color: 'var(--violet-500)' },
+  { id: 'whatsapp', key: 'act_whatsapp', color: 'var(--warning)'    },
+  { id: 'task',     key: 'new_task',     color: 'var(--brand)'      },
 ];
-const CAL_DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const CAL_H0 = 8, CAL_H1 = 19, CAL_HH = 48;   // the grid shows 08:00–20:00 unless events fall outside
 const CAL_SLOT_MIN = 30;                      // no duration column, so a timed entry is a 30-minute block
 
@@ -93,12 +93,16 @@ function calMins(t) { const [h, m] = String(t || '').split(':').map(Number); ret
 function calHHMM(m) { return `${calPad(Math.floor(m / 60) % 24)}:${calPad(m % 60)}`; }
 // Now, on the clock of the timezone the user picked — NOT the browser's. See the header.
 function calToday() { return nowInTimezone(currentTimezone()); }
-function calFmtDay(dateStr, opts) { return calDateFromIso(dateStr).toLocaleDateString('en-GB', opts); }
+function calLocale() { return currentLang === 'de' ? 'de-DE' : 'en-GB'; }
+// Mon…Sun / Mo…So from Intl (1 Jan 2024 was a Monday); a trailing dot is dropped so the header reads the same everywhere.
+function calDow() { return Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(calLocale(), { weekday: 'short' }).replace(/\.$/, '')); }
+function calFmtDay(dateStr, opts) { return calDateFromIso(dateStr).toLocaleDateString(calLocale(), opts); }
 function calDateFromIso(iso) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
   return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(NaN);
 }
-function calTypeOf(id) { return CAL_TYPES.find(t => t.id === id) || CAL_TYPES[0]; }
+function calTypeOf(id) { return CAL_TYPES.find(x => x.id === id) || CAL_TYPES[0]; }
+function calTypeLabel(id) { return t(calTypeOf(id).key); }
 // An entry is named by its own title: a task's title, an activity's note. Only a genuinely
 // empty one falls back to its kind — a day of tasks all reading "Task" tells you nothing.
 // Activity notes are stored with HTML in them, stripped here without needing the DOM.
@@ -109,7 +113,7 @@ function calTitleOf(e) {
     .replace(/&nbsp;/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return text || calTypeOf(e.type).label;
+  return text || calTypeLabel(e.type);
 }
 
 /* ---------- data ---------- */
@@ -133,10 +137,10 @@ function calendarRange() {
   return [calAddDays(first, -((first.getDay() + 6) % 7)), calAddDays(last, (7 - ((last.getDay() + 6) % 7) - 1) % 7)];
 }
 function calendarLabel() {
-  if (calView === 'month') return calViewDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  if (calView === 'month') return calViewDate.toLocaleDateString(calLocale(), { month: 'long', year: 'numeric' });
   const s = calWeekStart(calViewDate), e = calAddDays(s, 6);
-  const f = d => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  return `${f(s)} to ${f(e)} ${e.getFullYear()}`;
+  const f = d => d.toLocaleDateString(calLocale(), { day: 'numeric', month: 'short' });
+  return tf('cal_week_range', { from: f(s), to: f(e), year: e.getFullYear() });
 }
 
 /* ---------- navigation ---------- */
@@ -163,10 +167,10 @@ async function setCalendarView(view) {
 function calEvButton(e) {
   const title = calTitleOf(e);
   const who = e.kind === 'task' ? '' : (e.contact_name ? `${e.contact_name}: ` : '');
-  const when = e.event_time ? e.event_time : 'all day';
+  const when = e.event_time ? e.event_time : t('cal_all_day');
   return `<button class="cal-ev ${e.type}${e.completed ? ' done' : ''}" data-ev="${e.uid}" onclick="event.stopPropagation();openCalendarEntry('${e.uid}')"
-    title="${esc(calTypeOf(e.type).label)}: ${esc(who + title)}${e.event_time ? ', ' + esc(e.event_time) : ''}"
-    aria-label="${esc(calTypeOf(e.type).label)}: ${esc(who + title)}, ${esc(when)}, ${esc(calFmtDay(e.event_date, { weekday: 'long', day: 'numeric', month: 'long' }))}">${
+    title="${esc(calTypeLabel(e.type))}: ${esc(who + title)}${e.event_time ? ', ' + esc(e.event_time) : ''}"
+    aria-label="${esc(calTypeLabel(e.type))}: ${esc(who + title)}, ${esc(when)}, ${esc(calFmtDay(e.event_date, { weekday: 'long', day: 'numeric', month: 'long' }))}">${
     e.event_time ? `<b>${esc(e.event_time)}</b>` : ''}${esc(who + title)}</button>`;
 }
 
@@ -186,11 +190,11 @@ function calendarMonthView() {
     const more = evs.length - shown.length;
     cells += `<div class="cal-cell${out ? ' out' : ''}${iso === todayIso ? ' today' : ''}" data-cell="${iso}" onclick="calendarAddOn(event, '${iso}')">
       <div class="cal-top"><button class="cal-day" data-addday="${iso}" onclick="event.stopPropagation();openActivityModal({ date: '${iso}' })"
-        aria-label="Add on ${esc(calFmtDay(iso, { weekday: 'long', day: 'numeric', month: 'long' }))}"${iso === todayIso ? ' aria-current="date"' : ''}>${d.getDate()}</button>${
-        d.getDate() === 1 ? `<span class="cal-mon">${d.toLocaleDateString('en-GB', { month: 'short' })}</span>` : ''}</div>
-      ${shown.map(calEvButton).join('')}${more ? `<button class="cal-more" data-more="${iso}" aria-haspopup="menu" onclick="event.stopPropagation();openCalMoreMenu(this, '${iso}')">+${more} more</button>` : ''}</div>`;
+        aria-label="${esc(tf('cal_add_on_date', { date: calFmtDay(iso, { weekday: 'long', day: 'numeric', month: 'long' }) }))}"${iso === todayIso ? ' aria-current="date"' : ''}>${d.getDate()}</button>${
+        d.getDate() === 1 ? `<span class="cal-mon">${d.toLocaleDateString(calLocale(), { month: 'short' })}</span>` : ''}</div>
+      ${shown.map(calEvButton).join('')}${more ? `<button class="cal-more" data-more="${iso}" aria-haspopup="menu" onclick="event.stopPropagation();openCalMoreMenu(this, '${iso}')">${esc(tf('cal_n_more', { n: more }))}</button>` : ''}</div>`;
   }
-  return `<div class="cal-grid cal-month">${CAL_DOW.map(d => `<div class="cal-dow">${d}</div>`).join('')}${cells}</div>`;
+  return `<div class="cal-grid cal-month">${calDow().map(d => `<div class="cal-dow">${esc(d)}</div>`).join('')}${cells}</div>`;
 }
 
 /* ---------- week view ---------- */
@@ -230,7 +234,7 @@ function calWeekEvButton(x, h0) {
   return `<button class="cal-ev cal-wev ${e.type}${e.completed ? ' done' : ''}${hgt < 40 ? ' tight' : ''}" data-ev="${e.uid}"
     onclick="event.stopPropagation();openCalendarEntry('${e.uid}')"
     style="top:${top}px;height:${hgt}px;left:calc(${x.lane * w}% + 2px);width:calc(${w}% - 4px)"
-    title="${esc(title)}, ${esc(e.event_time)}" aria-label="${esc(calTypeOf(e.type).label)}: ${esc(title)}, ${esc(e.event_time)}"><span class="t"><b>${esc(e.event_time)}</b>${esc(title)}</span>${
+    title="${esc(title)}, ${esc(e.event_time)}" aria-label="${esc(calTypeLabel(e.type))}: ${esc(title)}, ${esc(e.event_time)}"><span class="t"><b>${esc(e.event_time)}</b>${esc(title)}</span>${
     hgt >= 40 && e.contact_name ? `<span class="m">${esc(e.contact_name)}</span>` : ''}</button>`;
 }
 
@@ -249,13 +253,14 @@ function calendarWeekView() {
   const hours = h1 - h0 + 1;
   const now = calToday(), nowMin = now.getHours() * 60 + now.getMinutes();
   const anyAllDay = cols.some(c => c.allDay.length);
+  const dow = calDow();
 
   const head = `<div class="cw-head"><div></div>${cols.map(c =>
     `<button class="cw-hd${c.iso === todayIso ? ' today' : ''}" data-addday="${c.iso}" onclick="openActivityModal({ date: '${c.iso}' })"
-      aria-label="Add on ${esc(calFmtDay(c.iso, { weekday: 'long', day: 'numeric', month: 'long' }))}"><span>${CAL_DOW[(c.d.getDay() + 6) % 7]}</span><b>${c.d.getDate()}</b></button>`).join('')}</div>`;
+      aria-label="${esc(tf('cal_add_on_date', { date: calFmtDay(c.iso, { weekday: 'long', day: 'numeric', month: 'long' }) }))}"><span>${esc(dow[(c.d.getDay() + 6) % 7])}</span><b>${c.d.getDate()}</b></button>`).join('')}</div>`;
 
   // An activity with a date but no time has no place on an hour grid, so it sits in its own strip.
-  const allDayRow = anyAllDay ? `<div class="cw-allday"><div class="cw-allday-lbl">All day</div>${cols.map(c =>
+  const allDayRow = anyAllDay ? `<div class="cw-allday"><div class="cw-allday-lbl">${esc(t('cal_all_day'))}</div>${cols.map(c =>
     `<div class="cw-allday-col">${c.allDay.map(calEvButton).join('')}</div>`).join('')}</div>` : '';
 
   const body = `<div class="cw-body"><div class="cw-grid" style="--hh:${CAL_HH}px;height:${hours * CAL_HH}px">
@@ -278,28 +283,28 @@ function calendarUpcoming() {
     const evs = calOnDay(iso, calUpcoming);
     if (!evs.length) continue;
     n += evs.length;
-    const head = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : calFmtDay(iso, { weekday: 'long', day: 'numeric', month: 'short' });
+    const head = i === 0 ? t('today') : i === 1 ? t('tk_due_tomorrow') : calFmtDay(iso, { weekday: 'long', day: 'numeric', month: 'short' });
     html += `<div class="cal-up-day">${esc(head)}</div>` + evs.map(e => `
       <button class="cal-up-item" data-ev="${e.uid}" onclick="openCalendarEntry('${e.uid}')">
         <span class="cal-bar ${e.type}"></span>
         <div class="grow" style="min-width:0"><div class="t truncate${e.completed ? ' done' : ''}">${esc(calTitleOf(e))}</div>
-        <div class="m truncate">${e.event_time ? esc(e.event_time) : 'All day'}${e.kind === 'task' ? ' · Task' : ''}${e.contact_name ? ', ' + esc(e.contact_name) : ''}</div></div>
+        <div class="m truncate">${e.event_time ? esc(e.event_time) : esc(t('cal_all_day'))}${e.kind === 'task' ? ' · ' + esc(t('new_task')) : ''}${e.contact_name ? ', ' + esc(e.contact_name) : ''}</div></div>
         ${e.created_by_name ? avatar(e.created_by_name, 'sm') : ''}</button>`).join('');
   }
   const filtered = calFilters.type || calFilters.person;
-  return `<aside class="card cal-up" aria-label="Upcoming">
-    <div class="card-header"><div><div class="card-title">Upcoming</div>
-      <div class="an-sub">Today and the next 7 days</div></div><span class="badge">${n}</span></div>
-    <div class="cal-up-body">${n ? html : `<div class="empty">${icon('calendar')}<b>Nothing scheduled</b>
-      <div>${filtered ? 'Nothing in the next 7 days matches the filters.' : 'Nothing scheduled in the next 7 days.'}</div>
-      <button class="btn btn-secondary btn-sm" onclick="openActivityModal({ date: '${todayIso}' })">${icon('plus')}Add event</button></div>`}</div></aside>`;
+  return `<aside class="card cal-up" aria-label="${esc(t('cal_upcoming'))}">
+    <div class="card-header"><div><div class="card-title">${esc(t('cal_upcoming'))}</div>
+      <div class="an-sub">${esc(t('cal_next_7_days'))}</div></div><span class="badge">${n}</span></div>
+    <div class="cal-up-body">${n ? html : `<div class="empty">${icon('calendar')}<b>${esc(t('cal_nothing_scheduled'))}</b>
+      <div>${esc(t(filtered ? 'cal_nothing_matches' : 'cal_nothing_next_7'))}</div>
+      <button class="btn btn-secondary btn-sm" onclick="openActivityModal({ date: '${todayIso}' })">${icon('plus')}${esc(t('cal_add_event'))}</button></div>`}</div></aside>`;
 }
 
 /* ---------- toolbar: nav, label, filter chips, legend ---------- */
 function calChip(key, label, text) {
   const on = calFilters[key] != null;
   return `<button class="chip${on ? ' on' : ''}" data-chip="${key}" aria-haspopup="menu" onclick="openCalendarChip('${key}', this)">${
-    label}${on ? ': ' + esc(text) : ''}${icon('chevron-down', 'ic-sm')}</button>`;
+    esc(label)}${on ? ': ' + esc(text) : ''}${icon('chevron-down', 'ic-sm')}</button>`;
 }
 function renderCalendarToolbar() {
   const bar = document.getElementById('calendar-toolbar');
@@ -308,24 +313,24 @@ function renderCalendarToolbar() {
   const active = calFilters.type || calFilters.person;
   bar.innerHTML = `
     <div class="cal-nav">
-      <button class="btn btn-secondary btn-sm btn-icon" onclick="calendarStep(-1)" aria-label="Previous ${calView}">${icon('chevron-left')}</button>
-      <button class="btn btn-secondary btn-sm btn-icon" onclick="calendarStep(1)" aria-label="Next ${calView}">${icon('chevron-right')}</button>
-      <button class="btn btn-secondary btn-sm" onclick="calendarGoToday()">Today</button>
+      <button class="btn btn-secondary btn-sm btn-icon" onclick="calendarStep(-1)" aria-label="${esc(t(calView === 'month' ? 'cal_prev_month' : 'cal_prev_week'))}">${icon('chevron-left')}</button>
+      <button class="btn btn-secondary btn-sm btn-icon" onclick="calendarStep(1)" aria-label="${esc(t(calView === 'month' ? 'cal_next_month' : 'cal_next_week'))}">${icon('chevron-right')}</button>
+      <button class="btn btn-secondary btn-sm" onclick="calendarGoToday()">${esc(t('today'))}</button>
     </div>
     <h2 class="cal-label" id="calendar-label" aria-live="polite">${esc(calendarLabel())}</h2>
     <span class="toolbar-sep"></span>
-    ${calChip('type', 'Type', calFilters.type ? calTypeOf(calFilters.type).label : '')}
-    ${calChip('person', 'Person', person?.name || '')}
-    ${active ? `<button class="btn btn-ghost btn-sm" onclick="clearCalendarFilters()">Clear filters</button>` : ''}
+    ${calChip('type', t('chip_type'), calFilters.type ? calTypeLabel(calFilters.type) : '')}
+    ${calChip('person', t('chip_person'), person?.name || '')}
+    ${active ? `<button class="btn btn-ghost btn-sm" onclick="clearCalendarFilters()">${esc(t('clear_filters'))}</button>` : ''}
     <span class="grow"></span>
-    <div class="cal-legend" aria-label="Legend">${CAL_TYPES.map(t =>
-      `<span><i style="background:${t.color}"></i>${t.label}</span>`).join('')}</div>`;
+    <div class="cal-legend" aria-label="${esc(t('cal_legend'))}">${CAL_TYPES.map(ty =>
+      `<span><i style="background:${ty.color}"></i>${esc(t(ty.key))}</span>`).join('')}</div>`;
 }
 function openCalendarChip(key, el) {
   const opts = key === 'type'
-    ? CAL_TYPES.map(t => ({ value: t.id, label: t.label }))
+    ? CAL_TYPES.map(ty => ({ value: ty.id, label: t(ty.key) }))
     : members.map(m => ({ value: String(m.id), label: m.name }));
-  ui.select(el, [{ value: null, label: 'All' }, ...opts], calFilters[key], v => {
+  ui.select(el, [{ value: null, label: t('filter_all') }, ...opts], calFilters[key], v => {
     calFilters[key] = v;
     renderCalendarToolbar();
     renderCalendarBody();
@@ -358,8 +363,8 @@ function openCalMoreMenu(el, dateStr) {
       onSelect: () => openCalendarEntry(e.uid),
     })),
     { sep: true },
-    { label: 'Show the whole day', icon: 'calendar', onSelect: () => openDayModal(dateStr) },
-    { label: 'Add on this day', icon: 'plus', onSelect: () => openActivityModal({ date: dateStr }) },
+    { label: t('cal_show_day'), icon: 'calendar', onSelect: () => openDayModal(dateStr) },
+    { label: t('cal_add_on_day'), icon: 'plus', onSelect: () => openActivityModal({ date: dateStr }) },
   ]);
 }
 
@@ -373,7 +378,8 @@ function renderCalendarBody() {
   if (sub) {
     const [a, b] = calendarRange().map(calIso);
     const n = visibleCalEvents().filter(e => e.event_date >= a && e.event_date <= b).length;
-    sub.textContent = `${n} ${n === 1 ? 'event' : 'events'} ${calView === 'month' ? 'in ' + calendarLabel() : 'this week'}`;
+    const key = calView === 'month' ? (n === 1 ? 'cal_events_in_one' : 'cal_events_in_many') : (n === 1 ? 'cal_events_week_one' : 'cal_events_week_many');
+    sub.textContent = tf(key, { n, label: calendarLabel() });
   }
 }
 
@@ -435,7 +441,7 @@ function calFindEvent(uid) {
 // One entry: a task belongs in the task drawer, an activity in the calendar's own detail.
 function openCalendarEntry(uid) {
   const e = calFindEvent(uid);
-  if (!e) { ui.toast('That entry is no longer here.'); return; }
+  if (!e) { ui.toast(t('cal_gone')); return; }
   if (e.kind === 'task') {
     if (dayModal) { const m = dayModal; dayModal = null; m.close(); }
     openTaskDrawer(e.id, { onChange: () => renderCalendar() });
@@ -459,46 +465,46 @@ async function toggleCalendarDone(uid, done) {
     renderCalendarBody();
   } catch (err) {
     console.error('Error updating that entry:', err);
-    ui.toast('That did not save. Try again.');
+    ui.toast(t('cal_err_save'));
   }
 }
 function openCalendarEventDetail(uid) {
   const e = calFindEvent(uid);
-  if (!e) { ui.toast('That entry is no longer here.'); return; }
-  const t = calTypeOf(e.type);
+  if (!e) { ui.toast(t('cal_gone')); return; }
+  const ty = calTypeOf(e.type);
   const todayIso = calIso(calToday());
-  const rel = e.event_date === todayIso ? 'Today'
-    : e.event_date === calIso(calAddDays(calToday(), 1)) ? 'Tomorrow'
-    : e.event_date < todayIso ? 'Past' : 'Upcoming';
+  const rel = e.event_date === todayIso ? t('today')
+    : e.event_date === calIso(calAddDays(calToday(), 1)) ? t('tk_due_tomorrow')
+    : e.event_date < todayIso ? t('cal_past') : t('cal_upcoming');
   if (calDetailModal) { const m = calDetailModal; calDetailModal = null; m.close(); }
   calDetailModal = ui.modal({
     title: calTitleOf(e).slice(0, 80), size: 'md',
     onClose: () => { calDetailModal = null; },
     body: `<div class="col" style="gap:14px">
       <div class="row" style="gap:8px">
-        <span class="badge"><i class="cal-dot ${e.type}"></i>${t.label}</span>
-        <span class="badge badge-outline">${rel}</span>
-        ${e.completed ? '<span class="badge badge-success">Done</span>' : ''}
+        <span class="badge"><i class="cal-dot ${e.type}"></i>${esc(t(ty.key))}</span>
+        <span class="badge badge-outline">${esc(rel)}</span>
+        ${e.completed ? `<span class="badge badge-success">${esc(t('tk_done'))}</span>` : ''}
       </div>
       <dl class="kv" style="grid-template-columns:100px minmax(0,1fr);align-items:start">
-        <dt>When</dt><dd>${esc(calFmtDay(e.event_date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}
-          <div class="muted" style="font-weight:400">${e.event_time ? esc(e.event_time) : 'All day'}${
-            e.event_time && e.event_tz && e.event_tz !== currentTimezone() ? ` <span class="muted">(entered as ${esc(e.stored_time)} ${esc(e.event_tz)})</span>` : ''}</div></dd>
-        <dt>Contact</dt><dd>${e.contact_id
-          ? `<a href="#" onclick="event.preventDefault();openContactDetail(${e.contact_id})">${esc(e.contact_name || 'Contact')}</a>`
-          : '<span class="muted">Not set</span>'}</dd>
-        <dt>Deal</dt><dd>${e.deal_id
-          ? `<a href="#" onclick="event.preventDefault();openDealDetail(${e.deal_id})">${esc(e.deal_title || 'Deal')}</a>`
-          : '<span class="muted">Not set</span>'}</dd>
-        <dt>Added by</dt><dd>${e.created_by_name
+        <dt>${esc(t('cal_when'))}</dt><dd>${esc(calFmtDay(e.event_date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}
+          <div class="muted" style="font-weight:400">${e.event_time ? esc(e.event_time) : esc(t('cal_all_day'))}${
+            e.event_time && e.event_tz && e.event_tz !== currentTimezone() ? ` <span class="muted">${esc(tf('cal_entered_as', { time: e.stored_time, tz: e.event_tz }))}</span>` : ''}</div></dd>
+        <dt>${esc(t('lbl_contact'))}</dt><dd>${e.contact_id
+          ? `<a href="#" onclick="event.preventDefault();openContactDetail(${e.contact_id})">${esc(e.contact_name || t('lbl_contact'))}</a>`
+          : `<span class="muted">${esc(t('not_set'))}</span>`}</dd>
+        <dt>${esc(t('lbl_deal'))}</dt><dd>${e.deal_id
+          ? `<a href="#" onclick="event.preventDefault();openDealDetail(${e.deal_id})">${esc(e.deal_title || t('lbl_deal'))}</a>`
+          : `<span class="muted">${esc(t('not_set'))}</span>`}</dd>
+        <dt>${esc(t('cal_added_by'))}</dt><dd>${e.created_by_name
           ? `<div class="row" style="gap:8px">${avatar(e.created_by_name, 'sm')}<span>${esc(e.created_by_name)}</span></div>`
-          : '<span class="muted">Unknown</span>'}</dd>
+          : `<span class="muted">${esc(t('cal_unknown'))}</span>`}</dd>
       </dl>
       <label class="check"><input type="checkbox" ${e.completed ? 'checked' : ''}
-        onchange="toggleCalendarDone('${e.uid}', this.checked)"><span>Mark as done</span></label>
-      <div class="cal-note">${esc(stripHtml(e.content || '')) || '<span class="muted">No details.</span>'}</div>
+        onchange="toggleCalendarDone('${e.uid}', this.checked)"><span>${esc(t('cal_mark_done'))}</span></label>
+      <div class="cal-note">${esc(stripHtml(e.content || '')) || `<span class="muted">${esc(t('cal_no_details'))}</span>`}</div>
     </div>`,
-    footer: `<button class="btn btn-secondary" data-close>Close</button>`,
+    footer: `<button class="btn btn-secondary" data-close>${esc(t('btn_close'))}</button>`,
   });
 }
 
@@ -520,17 +526,17 @@ async function openDayModal(dateStr) {
                  onchange="toggleCalendarDone('${e.uid}', this.checked)" />
           <div class="day-event-body">
             <div class="day-event-title">${e.event_time ? `<b>${esc(e.event_time)}</b> ` : ''}${esc(calTitleOf(e))}</div>
-            <div class="day-event-content">${e.kind === 'task' ? 'Task' : calTypeOf(e.type).label}${e.contact_name ? ' · ' + esc(e.contact_name) : ''}${e.deal_title ? ' — ' + esc(e.deal_title) : ''}</div>
-            <button class="btn btn-sm" onclick="openCalendarEntry('${e.uid}')">${icon('external')}Open</button>
+            <div class="day-event-content">${esc(e.kind === 'task' ? t('new_task') : calTypeLabel(e.type))}${e.contact_name ? ' · ' + esc(e.contact_name) : ''}${e.deal_title ? ' — ' + esc(e.deal_title) : ''}</div>
+            <button class="btn btn-sm" onclick="openCalendarEntry('${e.uid}')">${icon('external')}${esc(t('tk_open'))}</button>
           </div>
         </div>`).join('')
-    : `<p class="day-events-empty">Nothing scheduled for this day.</p>`;
+    : `<p class="day-events-empty">${esc(t('cal_nothing_this_day'))}</p>`;
 
   dayModal = ui.modal({ title: dateLabel, size: 'md',
     body: `<div class="day-events-list" style="display:flex;flex-direction:column;gap:8px">${items}</div>`,
-    footer: `<div class="legend grow"><span><i style="background:var(--success)"></i> Completed</span><span><i style="background:var(--danger)"></i> Not done yet</span></div>
-      <button class="btn btn-secondary" onclick="openActivityModal({ date: '${dateStr}' })">${icon('plus')}Add</button>
-      <button class="btn btn-secondary" data-close>Close</button>`,
+    footer: `<div class="legend grow"><span><i style="background:var(--success)"></i> ${esc(t('tk_kpi_done'))}</span><span><i style="background:var(--danger)"></i> ${esc(t('cal_not_done'))}</span></div>
+      <button class="btn btn-secondary" onclick="openActivityModal({ date: '${dateStr}' })">${icon('plus')}${esc(t('add_btn'))}</button>
+      <button class="btn btn-secondary" data-close>${esc(t('btn_close'))}</button>`,
     onClose: () => { dayModal = null; } });
 }
 

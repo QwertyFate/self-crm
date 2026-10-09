@@ -17,7 +17,7 @@ const feed = sliceFn(objects, 'renderActivitiesFeed', 'objects.js');
 describe('the Activities feed links to the contact and the deal', () => {
   test('the contact name is a link to openContactDetail, only when there is a contact_id', () => {
     // the reference row: an icon, then the name in a <span> so it can truncate
-    assert.match(feed, /a\.contact_id \? `[^`]*onclick="event\.preventDefault\(\);openActivityContact\(\$\{a\.contact_id\}\)">\$\{icon\('users'\)\}<span>\$\{esc\(a\.contact_name \|\| 'Contact'\)\}<\/span><\/a>/);
+    assert.match(feed, /a\.contact_id \? `[^`]*onclick="event\.preventDefault\(\);openActivityContact\(\$\{a\.contact_id\}\)">\$\{icon\('users'\)\}<span>\$\{esc\(a\.contact_name \|\| t\('lbl_contact'\)\)\}<\/span><\/a>/);
   });
   test('the deal title is a link to openDealDetail, only when there is a deal_id', () => {
     assert.match(feed, /a\.deal_id \? `[^`]*onclick="event\.preventDefault\(\);openActivityDeal\(\$\{a\.deal_id\}\)">\$\{icon\('deals'\)\}<span>\$\{esc\(a\.deal_title \|\| 'Deal'\)\}<\/span><\/a>/);

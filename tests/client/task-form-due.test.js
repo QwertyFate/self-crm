@@ -74,7 +74,7 @@ describe('the New task form', () => {
     assert.match(tf, /due_time: d\.due_on \? \(d\.due_time \|\| null\) : null/);
   });
   test('the rest of the form is as it was: modal, ≥4 field rows, posts the payload, custom fields', () => {
-    assert.match(tf, /ui\.modal\(\{ title: 'New task', size: 'md'/);
+    assert.match(tf, /ui\.modal\(\{ title: t\('dv_new_task'\), size: 'md'/);
     assert.ok((tf.match(/<div class="field-row"/g) || []).length >= 4);
     assert.match(tf, /api\.post\('\/api\/tasks', payload\)/);
     assert.match(tf, /taskFields\.map\(cf\)/);
@@ -116,8 +116,9 @@ describe('why the attribute failed, and the guard against it recurring', () => {
 });
 
 describe('the calendar DOES show a time on a task that has one (the "no time preview" report)', () => {
-  const C = () => loadFns('public/js/calendar.js', ['calEvButton', 'calTitleOf', 'calTypeOf', 'calFmtDay', 'calDateFromIso'],
-    { extra: `${ESC}\nconst CAL_TYPES = [{ id: 'note', label: 'Note' }, { id: 'task', label: 'Task' }];` });
+  // CAL_TYPES holds dictionary keys; t() is core.js, stubbed here to the English words
+  const C = () => loadFns('public/js/calendar.js', ['calEvButton', 'calTitleOf', 'calTypeOf', 'calTypeLabel', 'calFmtDay', 'calDateFromIso', 'calLocale'],
+    { extra: `${ESC}\nconst CAL_TYPES = [{ id: 'note', key: 'act_note' }, { id: 'task', key: 'new_task' }];\nconst currentLang = 'en'; const t = k => ({ act_note: 'Note', new_task: 'Task', cal_all_day: 'All day' })[k] || k;` });
   const task = time => ({ uid: 'task-1', kind: 'task', type: 'task', title: 'Call Anna', event_date: '2026-10-07', event_time: time, completed: false });
 
   test('a task with 09:00 renders <b>09:00</b> in the month chip body', () => {
@@ -150,7 +151,7 @@ describe('the task DRAWER: the same tick box — and it can REMOVE a due date', 
     assert.match(dr, /const dd = dvDefaultDue\(\); await save\(\{ due_date: dd\.date, due_time: dd\.time \}/);
   });
   test('unticking saves null for BOTH date and time — how a wrong due date is removed', () => {
-    assert.match(dr, /await save\(\{ due_date: null, due_time: null \}, 'Due date removed'\)/);
+    assert.match(dr, /await save\(\{ due_date: null, due_time: null \}, t\('dv_due_removed'\)\)/);
   });
   test('clearing the date input by hand also drops the time (a time without a date is useless)', () => {
     assert.match(dr, /if \(k === 'due_date' && !v\) patch\.due_time = null/);

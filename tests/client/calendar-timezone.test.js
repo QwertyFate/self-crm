@@ -34,7 +34,11 @@ const calendar = read('public/js/calendar.js');
 const tasks    = read('public/js/tasks.js');
 
 const CAL_TYPES_STUB = `const CAL_TYPES = [
-  { id: 'note', label: 'Note' }, { id: 'call', label: 'Call' }, { id: 'task', label: 'Task' }];`;
+  { id: 'note', key: 'act_note' }, { id: 'call', key: 'act_call' }, { id: 'task', key: 'new_task' }];`;
+// t()/tf() live in core.js; the sandbox maps the keys these renderers use back to English so the assertions stay readable.
+const T_STUB = `const t = k => ({ act_note: 'Note', act_call: 'Call', new_task: 'Task', today: 'Today', tk_due_tomorrow: 'Tomorrow', cal_all_day: 'All day', cal_upcoming: 'Upcoming' })[k] || k;
+  const tf = (k, v) => t(k).replace(/\\{(\\w+)\\}/g, (m, x) => (x in v ? String(v[x]) : m));
+  const currentLang = 'en';`;
 const ESC_STUB = `function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }`;
 
 describe('nowInTimezone(tz, at): the picked clock, as a Date with those local parts', () => {
@@ -95,7 +99,7 @@ describe('the Upcoming card: grouped by day on the picked clock, every entry wit
   // test thinks the date is, "Today" must be the 6th.
   const env = () => loadFns('public/js/calendar.js',
     ['calendarUpcoming', 'calOnDay', 'visibleCalEvents', 'calIso', 'calPad', 'calAddDays',
-     'calMins', 'calFmtDay', 'calDateFromIso', 'calTitleOf', 'calTypeOf'],
+     'calMins', 'calFmtDay', 'calDateFromIso', 'calLocale', 'calTitleOf', 'calTypeOf', 'calTypeLabel'],
     {
       state: {
         calEvents: [],
@@ -107,7 +111,7 @@ describe('the Upcoming card: grouped by day on the picked clock, every entry wit
           { uid: 'activity-4', kind: 'activity', type: 'note', title: 'Yesterday thing', event_date: '2026-10-05', event_time: null,   completed: false },
         ],
       },
-      extra: `${CAL_TYPES_STUB}\n${ESC_STUB}
+      extra: `${CAL_TYPES_STUB}\n${T_STUB}\n${ESC_STUB}
         function avatar() { return ''; } function icon() { return ''; }
         function calToday() { return new Date(2026, 9, 6, 23, 30); }`,
     });
@@ -138,8 +142,8 @@ describe('the Upcoming card: grouped by day on the picked clock, every entry wit
 });
 
 describe('the week-view block shows its time as visible text (the hgt >= 40 guard was dead)', () => {
-  const env = () => loadFns('public/js/calendar.js', ['calWeekEvButton', 'calTitleOf', 'calTypeOf'],
-    { extra: `const CAL_HH = 48;\n${CAL_TYPES_STUB}\n${ESC_STUB}` });
+  const env = () => loadFns('public/js/calendar.js', ['calWeekEvButton', 'calTitleOf', 'calTypeOf', 'calTypeLabel'],
+    { extra: `const CAL_HH = 48;\n${CAL_TYPES_STUB}\n${T_STUB}\n${ESC_STUB}` });
   const block = () => env().calWeekEvButton(
     { s: 9 * 60, en: 9 * 60 + 30, lane: 0, lanes: 1,
       ev: { uid: 'activity-1', type: 'call', title: 'Ring Anna', event_time: '09:00', contact_name: 'Anna', completed: false } },

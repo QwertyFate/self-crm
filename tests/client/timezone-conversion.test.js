@@ -143,13 +143,14 @@ describe('detail-views: dvDue and the task drawer', () => {
   test('dvDue converts first, then phrases relative to the viewer\'s today — "Due today at 01:30" for the Berlin task seen from Manila', () => {
     // `now` is a parameter (like taskIsOverdue) so the viewer's clock can be pinned
     // without disturbing the conversion helpers underneath.
-    const F = loadFns('public/js/detail-views.js', ['dvDue'], { extra: HELPERS('Asia/Manila') });
+    // t / tf stubbed to the key (plus `:values`): the phrasing itself lives in the dictionary now
+    const F = loadFns('public/js/detail-views.js', ['dvDue'], { extra: HELPERS('Asia/Manila') + "\nconst t = k => k; const tf = (k, v) => k + ':' + Object.values(v).join('/');" });
     const manilaNow = new Date(2026, 9, 7, 1, 0);
-    assert.equal(F.dvDue('2026-10-06', '19:30', 'Europe/Berlin', manilaNow), 'Due today at 01:30');
-    assert.equal(F.dvDue('2026-10-07', '12:00', 'Asia/Manila', manilaNow), 'Due today at 12:00');
-    assert.equal(F.dvDue('2026-10-08', null, 'Asia/Manila', manilaNow), 'Due tomorrow');
-    assert.equal(F.dvDue('2026-10-06', null, 'Asia/Manila', manilaNow), '1 day overdue');
-    assert.equal(F.dvDue(null, null, null, manilaNow), 'No due date');
+    assert.equal(F.dvDue('2026-10-06', '19:30', 'Europe/Berlin', manilaNow), 'dv_due_today_at:01:30');
+    assert.equal(F.dvDue('2026-10-07', '12:00', 'Asia/Manila', manilaNow), 'dv_due_today_at:12:00');
+    assert.equal(F.dvDue('2026-10-08', null, 'Asia/Manila', manilaNow), 'dv_due_tomorrow');
+    assert.equal(F.dvDue('2026-10-06', null, 'Asia/Manila', manilaNow), 'dv_overdue_one');
+    assert.equal(F.dvDue(null, null, null, manilaNow), 'tk_due_none');
   });
   test('dvDue builds its day from parts, never from new Date("YYYY-MM-DD")', () => {
     assert.doesNotMatch(sliceFn(dv, 'dvDue', 'detail-views.js'), /new Date\(x\)|new Date\(d\)/);

@@ -84,7 +84,7 @@ const ids = a => a.map(t => t.id);
 describe('markup: the page is rendered by the script into two hosts', () => {
   test('tasks.js parses', () => execFileSync('node', ['--check', path.join(ROOT, 'public/js/tasks.js')]));
   test('sidebar host + main host, nothing of the old static chrome', () => {
-    assert.match(section, /<aside class="tk-side" id="tasks-side" aria-label="Task projects"><\/aside>/);
+    assert.match(section, /<aside class="tk-side" id="tasks-side" aria-label="Task projects" data-i18n-aria="html_task_projects"><\/aside>/);
     assert.match(section, /<div class="tk-main" id="tasks-main"><\/div>/);
     for (const old of ['tasks-project-nav', 'task-filter-priority', 'task-filter-assignee', 'tasks-empty-state', 'tasks-list-view', 'tasks-kanban-view', 'tasks-breadcrumb', 'view-toggle-btn', 'task-search']) assert.ok(!section.includes(old), old + ' should be gone');
   });

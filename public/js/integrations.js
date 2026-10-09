@@ -29,7 +29,7 @@
 
    FUNCTION MAP
      shell     switchIntgTab, loadIntegrations
-     inbound   renderIntgPlatforms, showIntgGuide, buildGuideJson,
+     inbound   intgPlatformName, renderIntgPlatforms, showIntgGuide, buildGuideJson,
                refreshGuideJson, renderIntgFieldMap, renderFieldRow,
                intgToggleKeyEdit, intgKeyBlur, intgAddField, intgRemoveField,
                getIntgFieldMap, renderIntgStageOptions, loadIntgStages,
@@ -62,6 +62,11 @@ const INTG_BUILTIN_FIELDS = [
   { key: 'company', labelKey: 'lbl_company', placeholder: 'company'       },
 ];
 
+// steps / jsonNote / jsonLabel (and the optional nameKey) are dictionary keys (intg_*),
+// resolved with t() in showIntgGuide / intgPlatformName so a language switch re-renders
+// the open guide. The strings carry <strong>/<code> markup; literal names of Make /
+// Zapier / n8n options (e.g. "HTTP → Make a request", "No authentication") stay English
+// in both languages because the user has to find them in those products' UI.
 const INTG_PLATFORMS = [
   {
     id: 'make',
@@ -78,17 +83,9 @@ const INTG_PLATFORMS = [
       <rect x="14" y="4"  width="9" height="32" rx="4.5" transform="rotate(-15 18.5 20)" fill="url(#make-g)"/>
       <rect x="27" y="2"  width="9" height="36" rx="4.5" transform="rotate(-15 31.5 20)" fill="url(#make-g)"/>
     </svg>`,
-    steps: [
-      'Create a new Scenario in Make.com. Add a trigger — e.g. <strong>Facebook Lead Ads → Watch leads</strong> or <strong>New lead</strong>, or any other lead source.',
-      'Add module: <strong>HTTP → Make a request</strong>. Authentication: <strong>No authentication</strong>. Method: <code>POST</code>.',
-      'Paste your Webhook URL (copy from the field at the top).',
-      'Body type: <code>Raw</code> · Content-Type: <code>application/json</code>.',
-      'Paste the JSON body below into the Body field.',
-      'For each value shown as <code>{{1.field_name}}</code> — click that value in Make and select the matching field from your trigger module (module 1). The <code>1</code> is the module number; the part after the dot is the field name from your trigger output.',
-      'Save and activate.',
-    ],
-    jsonNote: `Each value like <code>{{1.full_name}}</code> is a <strong>Make variable</strong>. In the HTTP Body field, click where the value is and use Make's variable picker to select the matching output from your trigger module instead of typing it manually.`,
-    jsonLabel: 'JSON Body — paste into Make HTTP module',
+    steps: ['intg_make_step1', 'intg_make_step2', 'intg_step_paste_url', 'intg_make_step4', 'intg_make_step5', 'intg_make_step6', 'intg_make_step7'],
+    jsonNote:  'intg_make_note',
+    jsonLabel: 'intg_make_json_label',
   },
   {
     id: 'zapier',
@@ -104,15 +101,9 @@ const INTG_PLATFORMS = [
         <circle cx="0" cy="0" r="2.5" fill="white"/>
       </g>
     </svg>`,
-    steps: [
-      'Create a new Zap. Trigger: e.g. <strong>Facebook Lead Ads → New Lead</strong>, or any lead source.',
-      'Add Action: <strong>Webhooks by Zapier → POST</strong>. Authentication: <strong>No authentication</strong>.',
-      'Paste your Webhook URL (copy from the field at the top). Payload Type: <code>JSON</code>.',
-      'In the <strong>Data</strong> section, add one row per field. The key on the left is fixed (e.g. <code>full_name</code>). For the value on the right, click the field and use Zapier\'s field picker to select the matching data from your trigger step.',
-      'Test and publish.',
-    ],
-    jsonNote: `The keys on the left (e.g. <code>full_name</code>) must match exactly. For the values — <strong>do not type them manually</strong>. In Zapier's data section, click the value field and pick the corresponding output from your trigger step using the dropdown.`,
-    jsonLabel: 'Key/value pairs to add in Zapier',
+    steps: ['intg_zapier_step1', 'intg_zapier_step2', 'intg_zapier_step3', 'intg_zapier_step4', 'intg_zapier_step5'],
+    jsonNote:  'intg_zapier_note',
+    jsonLabel: 'intg_zapier_json_label',
   },
   {
     id: 'n8n',
@@ -136,36 +127,27 @@ const INTG_PLATFORMS = [
       <line x1="24" y1="11" x2="27" y2="9"  stroke="white" stroke-width="2.5" stroke-linecap="round"/>
       <line x1="24" y1="29" x2="27" y2="31" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
     </svg>`,
-    steps: [
-      'Add your trigger node (e.g. a lead source), then an <strong>HTTP Request</strong> node.',
-      'Method: <code>POST</code>. Authentication: <strong>No authentication</strong>.',
-      'Paste your Webhook URL (copy from the field at the top).',
-      'Body Content Type: <code>JSON</code>.',
-      'Paste the JSON below. Each value like <code>{{ $json.field_name }}</code> is an n8n expression — it reads the field named <code>field_name</code> from your trigger node\'s output.',
-      'To find the correct field name: run your trigger once, click the output of the trigger node, and check the JSON keys shown there. Use those exact key names inside <code>{{ $json.KEY_HERE }}</code>.',
-      'Activate the workflow.',
-    ],
-    jsonNote: `Each value like <code>{{ $json.full_name }}</code> pulls data from your trigger node. Replace <code>full_name</code> with the exact key name shown in your trigger node's output data. You can drag fields directly from the n8n data panel into the expression editor.`,
-    jsonLabel: 'JSON Body — paste into HTTP Request node',
+    steps: ['intg_n8n_step1', 'intg_n8n_step2', 'intg_step_paste_url', 'intg_n8n_step4', 'intg_n8n_step5', 'intg_n8n_step6', 'intg_n8n_step7'],
+    jsonNote:  'intg_n8n_note',
+    jsonLabel: 'intg_n8n_json_label',
   },
   {
     id: 'custom',
     name: 'Custom / API',
+    nameKey: 'intg_platform_custom',   // the only non-product name: shown through t()
     color: '#64748b',
     logo: `<svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
-    steps: [
-      'Send a <code>POST</code> request to your Webhook URL below (copy it from the field at the top).',
-      'Authentication: <strong>No authentication</strong> required.',
-      'Set <code>Content-Type: application/json</code>.',
-      'Send the JSON body below. The keys are fixed — replace the example values with real data from your source.',
-      'A successful response returns <code>{"success": true, "contact_id": 42}</code>.',
-    ],
-    jsonNote: `The JSON keys (left side, e.g. <code>"full_name"</code>) must match exactly as shown. Replace only the values (right side) with actual data from your source system.`,
-    jsonLabel: 'JSON Body',
+    steps: ['intg_custom_step1', 'intg_custom_step2', 'intg_custom_step3', 'intg_custom_step4', 'intg_custom_step5'],
+    jsonNote:  'intg_custom_note',
+    jsonLabel: 'intg_custom_json_label',
   },
 ];
 
 let activeGuideId = null;
+
+// Product names (Make.com, Zapier, n8n) are shown as they are; a platform with a
+// nameKey (the custom/API entry) is shown in the UI language.
+function intgPlatformName(p) { return p.nameKey ? t(p.nameKey) : p.name; }
 
 function renderIntgPlatforms() {
   const list = document.getElementById('intg-platform-list');
@@ -174,7 +156,7 @@ function renderIntgPlatforms() {
     <button class="intg-platform-card${activeGuideId === p.id ? ' active' : ''}"
       onclick="showIntgGuide('${p.id}')" data-platform="${p.id}">
       <div class="intg-platform-logo">${p.logo}</div>
-      <div class="intg-platform-name">${p.name}</div>
+      <div class="intg-platform-name">${esc(intgPlatformName(p))}</div>
     </button>`).join('');
 }
 
@@ -206,7 +188,7 @@ function buildGuideJson(platformId) {
     } else if (platformId === 'n8n') {
       val = `"{{ $json.${incomingKey} }}"`;
     } else {
-      const sample = INTG_SAMPLE_VALUES[incomingKey] || INTG_SAMPLE_VALUES[crmKey] || 'example value';
+      const sample = INTG_SAMPLE_VALUES[incomingKey] || INTG_SAMPLE_VALUES[crmKey] || t('intg_example_value');
       val = JSON.stringify(sample);
     }
     return `  "${incomingKey}": ${val}`;
@@ -225,9 +207,9 @@ function showIntgGuide(id) {
   );
 
   const json      = buildGuideJson(id);
-  const steps     = platform.steps.map(s => `<li>${s}</li>`).join('');
+  const steps     = platform.steps.map(k => `<li>${t(k)}</li>`).join('');   // dictionary strings with markup — inserted as-is
   const noteHtml  = platform.jsonNote
-    ? `<div class="intg-json-note">${platform.jsonNote}</div>`
+    ? `<div class="intg-json-note">${t(platform.jsonNote)}</div>`
     : '';
 
   const webhookUrl = document.getElementById('intg-url').value;
@@ -235,7 +217,7 @@ function showIntgGuide(id) {
     <div class="intg-guide-header">
       <div class="intg-guide-logo-sm">${platform.logo}</div>
       <div>
-        <div class="intg-guide-title-text">${esc(platform.name)}</div>
+        <div class="intg-guide-title-text">${esc(intgPlatformName(platform))}</div>
         <div class="intg-guide-subtitle">${esc(t('intg_setup_guide'))}</div>
       </div>
     </div>
@@ -250,7 +232,7 @@ function showIntgGuide(id) {
     ${noteHtml}
     <div class="intg-json-block">
       <div class="intg-json-header">
-        <span>${esc(platform.jsonLabel)}</span>
+        <span>${esc(t(platform.jsonLabel))}</span>
         <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)">${esc(t('btn_copy'))}</button>
       </div>
       <pre class="intg-code">${json}</pre>
@@ -530,7 +512,7 @@ async function loadIntgLogs() {
     return `<div class="intg-log-entry${l.status === 'error' ? ' error' : ''}">
       <div class="intg-log-entry-header">
         <span class="intg-log-badge ${l.status}">${esc(t('intg_log_' + l.status))}</span>
-        <span class="intg-log-time">${new Date(l.created_at).toLocaleString()}</span>
+        <span class="intg-log-time">${new Date(l.created_at).toLocaleString(currentLang === 'de' ? 'de-DE' : 'en-GB')}</span>
         <span class="intg-log-contact">${l.contact_name ? esc(l.contact_name) : (l.error ? esc(l.error) : '—')}</span>
       </div>
       ${l.status === 'success' ? `
@@ -698,7 +680,7 @@ function engineDeliveryHtml(d) {
   return `<div class="intg-log-entry${status === 'failed' ? ' error' : ''}">
     <div class="intg-log-entry-header">
       <span class="intg-log-badge ${status}">${esc(t('engine_status_' + status))}</span>
-      <span class="intg-log-time">${esc(new Date(d.created_at).toLocaleString())}</span>
+      <span class="intg-log-time">${esc(new Date(d.created_at).toLocaleString(currentLang === 'de' ? 'de-DE' : 'en-GB'))}</span>
       <span class="intg-log-contact">${esc(label)}</span>
       <span class="engine-delivery-meta">${meta}</span>
     </div>

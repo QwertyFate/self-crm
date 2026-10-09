@@ -30,90 +30,92 @@
 
 const GUIDE_KEY = 'crm_guide_seen_v1';
 
+// title / body are dictionary keys (gd_*), resolved with t() in showGuideStep so a
+// language switch takes effect on the next step; the bodies carry <strong>/<em> markup.
 const GUIDE_STEPS = [
   {
-    title: 'Welcome to your CRM!',
-    body:  'This quick tour walks you through the key features. Use the arrows to move between steps, or skip anytime. You can restart it with the <strong>?</strong> button in the sidebar.',
+    title: 'gd_welcome_title',
+    body:  'gd_welcome_body',
     target: null,
     pos: 'center',
   },
   {
-    title: 'Sidebar Navigation',
-    body:  'The sidebar is how you move around. <strong>Workspace</strong> contains your core data — Deals, Contacts, Suppliers, and Tasks. <strong>Tools</strong> has Activities, Listings, Board, and Analytics.',
+    title: 'gd_sidebar_title',
+    body:  'gd_sidebar_body',
     target: '.sidebar-main',
     pos: 'right',
   },
   {
-    title: 'Deals',
-    body:  'This is your pipeline. Deals move through stages as they progress. You can view them as a Kanban board or a table.',
+    title: 'gd_deals_title',
+    body:  'gd_deals_body',
     target: '#page-deals .page-header',
     pos: 'bottom',
     action: () => switchPage('deals'),
   },
   {
-    title: 'Creating a Deal',
-    body:  'Click <strong>+ Add Deal</strong> to create a new deal. Give it a title, assign it to a pipeline and stage, set a value, and assign it to a team member.',
+    title: 'gd_add_deal_title',
+    body:  'gd_add_deal_body',
     target: '#page-deals .page-header .btn-primary',
     pos: 'bottom',
     action: () => switchPage('deals'),
   },
   {
-    title: 'Contacts',
-    body:  'Contacts are the people and companies you work with. Each contact can be linked to deals and have activities logged against them.',
+    title: 'gd_contacts_title',
+    body:  'gd_contacts_body',
     target: '#page-contacts .page-header',
     pos: 'bottom',
     action: () => { currentContactType = 'contact'; switchPage('contacts'); },
   },
   {
-    title: 'Creating a Contact',
-    body:  'Click <strong>+ Add Contact</strong> to add a person or company. You can add custom fields like industry, notes, or any data that matters to your workflow.',
+    title: 'gd_add_contact_title',
+    body:  'gd_add_contact_body',
     target: '#page-contacts .page-header .btn-primary',
     pos: 'bottom',
     action: () => { currentContactType = 'contact'; switchPage('contacts'); },
   },
   {
-    title: 'Linking a Contact to a Deal',
-    body:  'When creating or editing a deal, use the <strong>Contact</strong> field to link a contact to it. Open any deal, click the contact search box, and pick from your contact list.',
+    title: 'gd_link_contact_title',
+    body:  'gd_link_contact_body',
     target: null,
     pos: 'center',
   },
   {
-    title: 'Listings',
-    body:  'Listings (also called Objects) are extra entities — properties, products, projects, or anything you want to track alongside deals and contacts.',
+    title: 'gd_listings_title',
+    body:  'gd_listings_body',
     target: '#page-objects .page-header',
     pos: 'bottom',
     action: () => switchPage('objects'),
   },
   {
-    title: 'Connecting a Listing to a Deal',
-    body:  'Inside any deal, the <strong>Listings</strong> section sits under the Contact panel. Pick a listing from the dropdown and press <strong>Add</strong> to link it; press <strong>×</strong> on a card to unlink it.',
+    title: 'gd_link_listing_title',
+    body:  'gd_link_listing_body',
     target: null,
     pos: 'center',
   },
   {
-    title: 'Settings',
-    body:  'Settings is where you customise the workspace — pipelines, custom fields, team members, and more. Open it from the gear icon at the bottom of the sidebar.',
+    title: 'gd_settings_title',
+    body:  'gd_settings_body',
     target: '#page-settings .settings-page-header',
     pos: 'bottom',
     action: () => switchPage('settings'),
   },
   {
-    title: 'Adding Contact Fields',
-    body:  'Go to the <strong>Contacts</strong> tab in Settings. Under <em>Custom Fields</em>, click <strong>+ Add</strong> to create a new field — text, number, date, dropdown, and more.',
+    title: 'gd_contact_fields_title',
+    body:  'gd_contact_fields_body',
     target: '.settings-tab[data-tab="contacts"]',
     pos: 'bottom',
     action: () => { switchPage('settings'); setTimeout(() => switchSettingsTab('contacts'), 300); },
   },
   {
-    title: 'Adding Deal Fields',
-    body:  'Go to the <strong>Deals</strong> tab in Settings. Under <em>Deal Fields</em>, click <strong>+ Add</strong> to attach extra properties to every deal — like deal type, priority, or close probability.',
+    title: 'gd_deal_fields_title',
+    body:  'gd_deal_fields_body',
     target: '.settings-tab[data-tab="deals"]',
     pos: 'bottom',
     action: () => { switchPage('settings'); setTimeout(() => switchSettingsTab('deals'), 300); },
   },
   {
-    title: "You're all set!",
-    body:  "That covers the essentials. Explore at your own pace — and remember, you can reopen this guide any time by clicking the <strong>?</strong> button in the sidebar. Good luck!",
+    title: 'gd_done_title',
+    body:  'gd_done_body',
     target: null,
     pos: 'center',
   },
@@ -185,9 +187,9 @@ async function showGuideStep(idx) {
     await new Promise(r => setTimeout(r, 380));
   }
 
-  document.getElementById('guide-title').innerHTML = step.title;
-  document.getElementById('guide-body').innerHTML  = step.body;
-  document.getElementById('guide-step-counter').textContent = `${idx + 1} of ${GUIDE_STEPS.length}`;
+  document.getElementById('guide-title').innerHTML = t(step.title);
+  document.getElementById('guide-body').innerHTML  = t(step.body);
+  document.getElementById('guide-step-counter').textContent = tf('tk_n_of_total', { n: idx + 1, total: GUIDE_STEPS.length });
 
   document.getElementById('guide-prev-btn').style.visibility = idx === 0 ? 'hidden' : '';
   // Sets the button's own label and icon without touching its siblings — a
@@ -196,8 +198,8 @@ async function showGuideStep(idx) {
   const isLast = idx === GUIDE_STEPS.length - 1;
   const nextBtn = document.getElementById('guide-next-btn');
   nextBtn.innerHTML = isLast
-    ? `<span>Finish</span>${icon('check', 'ic-sm')}`
-    : `<span>Next</span>${icon('chevron-right', 'ic-sm')}`;
+    ? `<span>${esc(t('gd_finish'))}</span>${icon('check', 'ic-sm')}`
+    : `<span>${esc(t('gd_next'))}</span>${icon('chevron-right', 'ic-sm')}`;
 
   document.getElementById('guide-dots').innerHTML = GUIDE_STEPS.map((_, i) =>
     `<span class="guide-dot${i === idx ? ' active' : ''}"></span>`

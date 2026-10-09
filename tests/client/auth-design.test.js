@@ -22,7 +22,7 @@ describe('markup: #auth-screen back links and the admin link use the sprite', ()
     assert.doesNotMatch(section, /path d="M19 12H5"/);
   });
   test('the Platform admin link uses the sprite settings icon', () => {
-    assert.match(section, /<a href="\/\?admin" class="admin-link"><svg class="ic" aria-hidden="true"><use href="#i-settings"\/><\/svg><span>Admin<\/span><\/a>/);
+    assert.match(section, /<a href="\/\?admin" class="admin-link"><svg class="ic" aria-hidden="true"><use href="#i-settings"\/><\/svg><span data-i18n="role_admin">Admin<\/span><\/a>/);
   });
   test('every sprite reference inside #auth-screen resolves', () => {
     const defined = new Set([...html.matchAll(/<symbol id="(i-[\w-]+)"/g)].map(m => m[1]));

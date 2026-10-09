@@ -46,7 +46,7 @@ describe('index.html: the static deal/task/detail modals are gone, detail-views.
   });
   test('the contact side panel keeps its iconbtn close and widens to fit the reference detail', () => {
     const panel = html.slice(html.indexOf('id="contact-side-panel"'), html.indexOf('<!-- ── Team Chat ── -->'));
-    assert.match(panel, /<button class="iconbtn" onclick="closeSidePanel\(\)" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"\/><\/svg><\/button>/);
+    assert.match(panel, /<button class="iconbtn" onclick="closeSidePanel\(\)" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"\/><\/svg><\/button>/);
     assert.match(css, /\.contact-side-panel \{[^}]*width: 46%; min-width: 520px/);
   });
 });
@@ -64,7 +64,7 @@ describe('index.html: every remaining static modal uses the reference chrome', (
       const block = html.slice(start, starts[i + 1] ?? html.length);
       const id = blocks[i];
       assert.match(block, /<div class="modal-head">\s*<h2 class="modal-title"/, id);
-      assert.match(block, /<button class="iconbtn" onclick="[^"]+" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"\/><\/svg><\/button>/, id);
+      assert.match(block, /<button class="iconbtn" onclick="[^"]+" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"\/><\/svg><\/button>/, id);
     });
   });
   test('form fields use .field/.label and the control classes; footers are .modal-foot with a secondary Cancel', () => {
@@ -90,10 +90,10 @@ describe('detail-views.js: the reference deal detail in a pop window', () => {
     assert.match(d, /class="card dd-head"/); assert.match(d, /class="split split-2-1"/); assert.match(d, /class="card dd-main"/); assert.match(d, /class="dd-side"/);
   });
   test('head card: clickable stage stepper and the five KPI cells', () => {
-    assert.match(d, /class="stepper dd-stepper" role="group" aria-label="Deal stage"/);
+    assert.match(d, /class="stepper dd-stepper" role="group" aria-label="\$\{esc\(t\('dv_deal_stage_aria'\)\)\}"/);
     assert.match(d, /class="step \$\{i === cur \? 'current' : i < cur \? 'done' : ''\}" data-act="stage"/);
     assert.match(d, /class="dd-kpis"/);
-    for (const k of ["'Deal value'", "'Stage'", "'Urgency'", "'Owner'", "'Last activity'"]) assert.match(d, new RegExp(`k\\(${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    for (const k of ["t('dv_deal_value')", "t('lbl_stage')", "t('chip_urgency')", "t('chip_owner')", "t('dv_last_activity')"]) assert.match(d, new RegExp(`k\\(esc\\(${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   });
   test('inline editing: title and value through dd-ie buttons, urgency/pipeline/owner/stage through ui.select', () => {
     assert.match(d, /class="dd-ie dd-ie-title" data-ie="title"/);
@@ -111,27 +111,27 @@ describe('detail-views.js: the reference deal detail in a pop window', () => {
     assert.match(d, /api\.post\(`\/api\/deals\/\$\{S\.d\.id\}\/objects`, \{ object_id: v \}\)/); assert.match(d, /api\.del\(`\/api\/deals\/\$\{S\.d\.id\}\/objects\/\$\{\+el\.dataset\.id\}`\)/);
   });
   test('tabs Overview / Activity / Tasks with the reference compose, filter chip, timeline and task list (no Files tab: no backend)', () => {
-    assert.match(d, /role="tablist" aria-label="Deal sections"/);
-    assert.match(d, /\['overview', 'Overview', null\], \['activity', 'Activity', S\.acts\.length\], \['tasks', 'Tasks', openTasks\]/);
+    assert.match(d, /role="tablist" aria-label="\$\{esc\(t\('dv_deal_sections'\)\)\}"/);
+    assert.match(d, /\['overview', t\('dv_tab_overview'\), null\], \['activity', t\('dv_tab_activity'\), S\.acts\.length\], \['tasks', t\('tab_tasks'\), openTasks\]/);
     assert.doesNotMatch(d, /'files'/);
-    assert.match(d, /class="dd-compose" id="dd-compose"/); assert.match(d, /class="seg" role="group" aria-label="Activity type"/);
+    assert.match(d, /class="dd-compose" id="dd-compose"/); assert.match(d, /class="seg" role="group" aria-label="\$\{esc\(t\('dv_activity_type'\)\)\}"/);
     assert.match(d, /class="chip \$\{S\.filter \? 'on' : ''\}" data-act="tlfilter"/);
     assert.match(d, /class="timeline">\$\{list\.map\(tlItem\)/); assert.match(d, /class="tl-item" data-aid/); assert.match(d, /class="tl-ic \$\{a\.type\}"/);
-    assert.match(d, /class="list dd-tasks" aria-label="Tasks linked to this deal"/); assert.match(d, /class="dd-task \$\{done \? 'done' : ''\}"/);
+    assert.match(d, /class="list dd-tasks" aria-label="\$\{esc\(t\('dv_tasks_linked_deal'\)\)\}"/); assert.match(d, /class="dd-task \$\{done \? 'done' : ''\}"/);
     assert.match(d, /class="dd-taskform" id="dd-taskform"/);
   });
   test('side column: Details kv card with Edit all, Contact and Supplier person cards, Listings card with Add / unlink', () => {
-    assert.match(d, /aria-label="Details"><div class="card-header"><h2 class="card-title">Details<\/h2><button class="btn btn-ghost btn-sm" data-act="edit-full">/);
+    assert.match(d, /aria-label="\$\{esc\(t\('dv_details'\)\)\}"><div class="card-header"><h2 class="card-title">\$\{esc\(t\('dv_details'\)\)\}<\/h2><button class="btn btn-ghost btn-sm" data-act="edit-full">/);
     assert.match(d, /<dl class="kv"/);
     assert.match(d, /class="dd-person">\$\{avatar\(c\.name, 'lg'\)\}/); assert.match(d, /class="dd-lines"/);
-    assert.match(d, /personCard\(\{ title: 'Contact'/); assert.match(d, /personCard\(\{ title: dvSupplierWord\(\)/);
+    assert.match(d, /personCard\(\{ title: t\('lbl_contact'\)/); assert.match(d, /personCard\(\{ title: dvSupplierWord\(\)/);
     assert.match(d, /data-act="object-add"/); assert.match(d, /data-act="object-rm"/); assert.match(d, /class="dd-lst"/);
   });
   test('top: editable title, meta pills, Call / Email / WhatsApp quick actions and a More menu with Edit / Duplicate / Delete', () => {
     assert.match(d, /class="page-title dd-h1"/); assert.match(d, /class="dd-meta"/); assert.match(d, /class="stage-pill"><i style="background:\$\{esc\(st\.color\)\}"/);
     for (const t of ['call', 'email', 'whatsapp']) assert.match(d, new RegExp(`data-act="qa" data-type="${t}"`));
-    assert.match(d, /\{ label: 'Edit deal', icon: 'pencil'/); assert.match(d, /\{ label: 'Duplicate', icon: 'copy'/); assert.match(d, /\{ label: 'Delete deal', icon: 'trash', danger: true/);
-    assert.match(d, /ui\.confirm\(\{ title: 'Delete this deal\?'/);
+    assert.match(d, /\{ label: t\('dv_edit_deal'\), icon: 'pencil'/); assert.match(d, /\{ label: t\('dv_duplicate'\), icon: 'copy'/); assert.match(d, /\{ label: t\('delete_deal'\), icon: 'trash', danger: true/);
+    assert.match(d, /ui\.confirm\(\{ title: t\('delete_deal_q'\)/);
   });
 });
 
@@ -139,14 +139,14 @@ describe('detail-views.js: the reference deal form (create / edit all)', () => {
   const f = sliceFn(dv, 'openDealForm', 'detail-views.js');
   test('ui.modal with the dd-form: Title, Contact + Supplier, Pipeline + Stage, Value (EUR affix) + Urgency, Owner, custom deal fields', () => {
     assert.match(f, /form\.className = 'dd-form'/);
-    assert.match(f, /ui\.modal\(\{ title: editing \? 'Edit deal' : 'New deal', size: 'md', body: form/);
+    assert.match(f, /ui\.modal\(\{ title: editing \? t\('dv_edit_deal'\) : t\('dv_new_deal'\), size: 'md', body: form/);
     assert.ok(count(f, '<div class="field-row">') >= 4);
     assert.match(f, /class="input-affix dd-affix">.*<span class="affix">EUR<\/span>/);
     assert.match(f, /dealFields\.map\(customField\)/);
     assert.match(f, /class="btn btn-secondary" type="button" data-close/);
   });
   test('validates title/value inline, saves through POST or PUT /api/deals and presets pipeline + stage from the board column', () => {
-    assert.match(f, /errs\[`\$\{fid\}-title`\] = 'Enter a deal title\.'/);
+    assert.match(f, /errs\[`\$\{fid\}-title`\] = t\('dv_err_deal_title'\)/);
     assert.match(f, /editing \? await api\.put\(`\/api\/deals\/\$\{editing\.id\}`, payload\) : await api\.post\('\/api\/deals', payload\)/);
     assert.match(f, /pipeline_id: opts\.pipelineId \|\| currentPipelineId/); assert.match(f, /stage_id: opts\.stageId \|\| null/);
   });
@@ -161,16 +161,16 @@ describe('detail-views.js: the reference contact detail in the side panel (or a 
   test('header: xl avatar, name, meta line, Call / Email / WhatsApp / Edit / More', () => {
     assert.match(c, /class="page-header ct-head"><div class="ct-id">\$\{avatar\(S\.c\.name, 'xl'\)\}/);
     assert.match(c, /class="ct-meta"/);
-    assert.match(c, /\$\{icon\('phone'\)\}Call/); assert.match(c, /\$\{icon\('mail'\)\}Email/); assert.match(c, /\$\{icon\('message-circle'\)\}WhatsApp/);
-    assert.match(c, /data-act="edit-all">\$\{icon\('pencil'\)\}Edit/); assert.match(c, /data-act="more" aria-label="More actions"/);
+    assert.match(c, /\$\{icon\('phone'\)\}\$\{esc\(t\('act_call'\)\)\}/); assert.match(c, /\$\{icon\('mail'\)\}\$\{esc\(t\('act_email'\)\)\}/); assert.match(c, /\$\{icon\('message-circle'\)\}WhatsApp/);
+    assert.match(c, /data-act="edit-all">\$\{icon\('pencil'\)\}\$\{esc\(t\('btn_edit'\)\)\}/); assert.match(c, /data-act="more" aria-label="\$\{esc\(t\('dv_more_actions'\)\)\}"/);
   });
   test('tabs Overview / Activity / Deals / Tasks on a card, with the side cards (Details kv, Deals total)', () => {
-    assert.match(c, /tabLbl = \{ overview: 'Overview', activity: 'Activity', deals: 'Deals', tasks: 'Tasks' \}/);
+    assert.match(c, /tabLbl = \{ overview: t\('dv_tab_overview'\), activity: t\('dv_tab_activity'\), deals: t\('tab_deals'\), tasks: t\('tab_tasks'\) \}/);
     assert.match(c, /class="split split-2-1 ct-split"/); assert.match(c, /class="ct-side"/);
     assert.match(c, /class="ct-big">\$\{fmtEUR\(sumVal\(ds\)\)\}/); assert.match(c, /class="ct-mini"/);
   });
   test('overview: inline-edit grid (ct-fgrid / ct-edit) for name, company, email, phone, custom fields and the owner menu (no stage — Part 19)', () => {
-    assert.match(c, /<dl class="ct-fgrid">\$\{editable\('name', 'Full name'\)\}\$\{editable\('company', 'Company'\)\}\$\{editable\('email', 'Email'\)\}\$\{editable\('phone', 'Phone'\)\}\$\{fields\.map/);
+    assert.match(c, /<dl class="ct-fgrid">\$\{editable\('name', t\('lbl_your_name'\)\)\}\$\{editable\('company', t\('lbl_company'\)\)\}\$\{editable\('email', t\('lbl_email'\)\)\}\$\{editable\('phone', t\('lbl_phone'\)\)\}\$\{fields\.map/);
     assert.match(c, /class="ct-edit" data-edit="\$\{esc\(key\)\}"/); assert.match(c, /data-edit="owner"/);
     assert.doesNotMatch(c, /data-edit="stage"/);
     assert.match(c, /api\.put\(`\/api\/contacts\/\$\{id\}`, payload\(patch\)\)/);
@@ -181,14 +181,14 @@ describe('detail-views.js: the reference contact detail in the side panel (or a 
     assert.match(c, /id="ct-afilter"/); assert.match(c, /class="timeline">\$\{list\.map\(actItem\)/);
   });
   test('deals and tasks tabs: table + Add deal (opens the deal form for this contact), list + Add task (opens the task form)', () => {
-    assert.match(c, /<table class="table"><thead><tr><th>Deal<\/th><th>Stage<\/th><th class="num-col">Value<\/th><th>Owner<\/th>/);
+    assert.match(c, /<table class="table"><thead><tr><th>\$\{esc\(t\('lbl_deal'\)\)\}<\/th><th>\$\{esc\(t\('lbl_stage'\)\)\}<\/th><th class="num-col">\$\{esc\(t\('lbl_deal_value'\)\)\}<\/th><th>\$\{esc\(t\('chip_owner'\)\)\}<\/th>/);
     assert.match(c, /'add-deal': \(\) => openDealForm\(\{ contactId: id/); assert.match(c, /'add-task': \(\) => openTaskForm\(\{ contactId: id, contactName: S\.c\.name/);
     assert.match(c, /class="check round"><input type="checkbox" data-task-toggle/);
   });
   test('renders into #side-panel-body on the Contacts/Suppliers page, else into an xl ui.modal; row highlight kept', () => {
     assert.match(c, /activePage === 'contacts' \|\| activePage === 'suppliers'/);
     assert.match(c, /document\.getElementById\('side-panel-body'\)/); assert.match(c, /classList\.add\('side-panel-active'\)/);
-    assert.match(c, /ui\.modal\(\{ title: sup \? dvSupplierWord\(\) : 'Contact', size: 'xl'/);
+    assert.match(c, /ui\.modal\(\{ title: noun, size: 'xl'/);
   });
   test('a deal is clickable across the whole row, in the Deals tab and in the side card (Part 20)', () => {
     assert.match(c, /<tr class="clickable" data-act="open-deal" data-id="\$\{d\.id\}">/, 'the Deals tab row');
@@ -227,8 +227,8 @@ describe('detail-views.js: the reference contact detail in the side panel (or a 
     for (const id of ['dd-act-edit', 'ct-aedit']) assert.match(dv, new RegExp(`class="textarea dv-grow" id="${id}"`), id);
   });
   test('More menu: copy email / phone, delete through ui.confirm', () => {
-    assert.match(c, /\{ label: 'Copy email', icon: 'copy'/); assert.match(c, /\{ label: 'Copy phone', icon: 'copy'/);
-    assert.match(c, /ui\.confirm\(\{ title: `Delete this \$\{one\}\?`/);
+    assert.match(c, /\{ label: t\('dv_copy_email'\), icon: 'copy'/); assert.match(c, /\{ label: t\('dv_copy_phone'\), icon: 'copy'/);
+    assert.match(c, /ui\.confirm\(\{ title: tf\('dv_delete_noun_q', \{ noun: one \}\)/);
   });
 });
 
@@ -236,17 +236,17 @@ describe('detail-views.js: the reference task drawer and task form', () => {
   const dr = sliceFn(dv, 'openTaskDrawer', 'detail-views.js');
   const tf = sliceFn(dv, 'openTaskForm', 'detail-views.js');
   test('drawer: ui.drawer 580 wide, big done toggle, auto-growing title, kv props that save on change, subtasks', () => {
-    assert.match(dr, /ui\.drawer\(\{ title: 'Task details', width: 580/);
+    assert.match(dr, /ui\.drawer\(\{ title: t\('dv_task_details'\), width: 580/);
     assert.match(dr, /class="tk-dr"/); assert.match(dr, /class="tk-done big \$\{fin\(\) \? 'on' : ''\}" data-dtoggle/);
     assert.match(dr, /<textarea class="tk-dr-title"/); assert.match(dr, /<dl class="kv tk-props">/);
     for (const f of ['status', 'priority', 'assigned_to', 'due_date', 'project_id', 'list_id', 'deal_id', 'contact_id', 'description']) assert.match(dr, new RegExp(`data-f="${f}"`), f);
     assert.match(dr, /api\.put\(`\/api\/tasks\/\$\{id\}`, payload\(\)\)/);
     assert.match(dr, /api\.patch\(`\/api\/tasks\/\$\{id\}\/status`, \{ status: next \}\)/);
-    assert.match(dr, /class="tk-secH"><b>Subtasks<\/b>/); assert.match(dr, /class="tk-si"/); assert.match(dr, /api\.post\('\/api\/tasks', \{ title: v, parent_id: id/);
-    assert.match(dr, /class="btn btn-danger-ghost" data-del/); assert.match(dr, /ui\.confirm\(\{ title: 'Delete this task\?'/);
+    assert.match(dr, /class="tk-secH"><b>\$\{esc\(t\('tk_col_subtasks'\)\)\}<\/b>/); assert.match(dr, /class="tk-si"/); assert.match(dr, /api\.post\('\/api\/tasks', \{ title: v, parent_id: id/);
+    assert.match(dr, /class="btn btn-danger-ghost" data-del/); assert.match(dr, /ui\.confirm\(\{ title: t\('tk_delete_task_q'\)/);
   });
   test('form: ui.modal with .field-row pairs for project/list, status/priority, due/assignee, deal/contact, plus custom task fields', () => {
-    assert.match(tf, /ui\.modal\(\{ title: 'New task', size: 'md'/);
+    assert.match(tf, /ui\.modal\(\{ title: t\('dv_new_task'\), size: 'md'/);
     assert.ok(count(tf, '<div class="field-row">') >= 4);
     assert.match(tf, /api\.post\('\/api\/tasks', payload\)/);
     assert.match(tf, /taskFields\.map\(cf\)/);
@@ -267,15 +267,16 @@ describe('detail-views.js: the reference task drawer and task form', () => {
 describe('detail-views.js: pure helpers in a sandbox', () => {
   // dvDue now converts through the zone helpers and takes "now" from the picked clock;
   // identity stubs keep this fixture on the browser's clock, which is what d(n) builds from.
+  // t / tf are stubbed to the key (plus `:values`), so the assertions name the dictionary keys.
   const F = loadFns('public/js/detail-views.js', ['dvDue', 'dvActText', 'dvDigits'], {
-    extra: "function toViewerClock(d, t) { return { date: String(d || '').slice(0, 10), time: t || null }; } function nowInTimezone() { return new Date(); } function currentTimezone() { return 'UTC'; }" });
+    extra: "const t = k => k; const tf = (k, v) => k + ':' + Object.values(v).join('/'); function toViewerClock(d, t) { return { date: String(d || '').slice(0, 10), time: t || null }; } function nowInTimezone() { return new Date(); } function currentTimezone() { return 'UTC'; }" });
   test('dvDue phrases a due date relative to today', () => {
     // Builds the date from local Y/M/D, like a real <input type="date"> due-date picker would — not
     // toISOString(), whose UTC calendar date can fall a day either side of "today" near local midnight.
     const d = n => { const x = new Date(); x.setDate(x.getDate() + n); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
-    assert.equal(F.dvDue(null), 'No due date');
-    assert.equal(F.dvDue(d(0)), 'Due today'); assert.equal(F.dvDue(d(1)), 'Due tomorrow'); assert.equal(F.dvDue(d(5)), 'In 5 days');
-    assert.equal(F.dvDue(d(-1)), '1 day overdue'); assert.equal(F.dvDue(d(-3)), '3 days overdue');
+    assert.equal(F.dvDue(null), 'tk_due_none');
+    assert.equal(F.dvDue(d(0)), 'dv_due_today'); assert.equal(F.dvDue(d(1)), 'dv_due_tomorrow'); assert.equal(F.dvDue(d(5)), 'dv_due_in_days:5');
+    assert.equal(F.dvDue(d(-1)), 'dv_overdue_one'); assert.equal(F.dvDue(d(-3)), 'dv_overdue_n:3');
   });
   test('dvActText turns a stored rich note into editable plain text; dvDigits keeps a dialable number', () => {
     assert.equal(F.dvActText('<p>Hello</p><br>world'), 'Hello\n\nworld');

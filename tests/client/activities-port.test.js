@@ -51,7 +51,7 @@ const STUBS = `
 const FNS = ['loadActivities', 'visibleActivities', 'activitiesAnyFilter', 'renderActivities', 'renderActivitiesToolbar', 'activitiesChip', 'openActivitiesChip', 'onActivitiesSearch', 'clearActivitiesFilters',
   'renderActivityCompose', 'setActivityComposeType', 'activityComposeClearError', 'onActivityComposeInput', 'onActivityComposeDeal', 'onActivityComposeContact', 'onActivityComposeKey', 'focusActivityCompose', 'submitActivityCompose',
   'renderActivitiesFeed', 'renderActivitiesRail', 'toggleActivitiesStat', 'openActivityKebab', 'deleteActivity', 'exportActivitiesCsv',
-  'actLocale', 'actStartOfDay', 'actDayDiff', 'actDayLabel', 'actAgo', 'actTime', 'actPlural', 'actContactOf', 'activityDetailOpts', 'openActivityDeal', 'openActivityContact', 'activityDealOptions'];
+  'actLocale', 'actStartOfDay', 'actDayDiff', 'actDayLabel', 'actAgo', 'actTime', 'actPlural', 'actContactOf', 'activityDetailOpts', 'openActivityDeal', 'openActivityContact', 'activityDealOptions', 'supplierWord'];
 function sandbox() {
   const F = loadFns('public/js/objects.js', FNS, {
     state: { activities: [], activitiesUI: { q: '', type: null, by: null, deal: null, period: 'all' }, activityDeals: [], activityDealList: [], activityCompose: { type: 'note', text: '', deal: '', contact: '', err: '' }, members: [], contacts: [], activityContactList: [], currentWorkspace: null, activitiesSearchTimer: null, activitiesLoadSeq: 0 },
@@ -392,7 +392,7 @@ describe('kebab, delete, export', () => {
     F.__set('activities', seed()); F.__set('activitiesUI', { q: '', type: null, by: null, deal: null, period: '7d' });
     F.exportActivitiesCsv();
     const text = F.__state().blobs.pop().text;
-    assert.ok(text.startsWith('\ufeff"Type","Person","Deal","Contact","Date","Text"\r\n'));
+    assert.ok(text.startsWith('\ufeff"lbl_type","chip_person","lbl_deal","lbl_contact","obj_csv_date","obj_csv_text"\r\n'), 'the header row is translated (t is the identity here)');
     const lines = text.split('\r\n');
     assert.equal(lines.length, 3);
     assert.match(lines[1], /^"act_note","Max","Haus Köln","Anna Berg","\d{4}-\d\d-\d\dT[\d:.]+Z","Called about financing"$/);
@@ -487,7 +487,7 @@ describe('Part 39: refresh after a pop-up, supplier label, company search', () =
     const dv = read('public/js/detail-views.js');
     assert.match(dv, /^async function openDealDetail\(id, opts = \{\}\) \{/m);
     assert.match(sliceFn(dv, 'openDealDetail', 'detail-views.js'), /onClose: \(\) => \{ if \(dvDeal === inst\) dvDeal = null; opts\.onClose && opts\.onClose\(\); \}/);
-    assert.match(sliceFn(dv, 'openContactDetail', 'detail-views.js'), /modal = ui\.modal\(\{ title: sup \? dvSupplierWord\(\) : 'Contact', size: 'xl', body: '<div><\/div>', onClose: opts\.onClose \}\)/);
+    assert.match(sliceFn(dv, 'openContactDetail', 'detail-views.js'), /modal = ui\.modal\(\{ title: noun, size: 'xl', body: '<div><\/div>', onClose: opts\.onClose \}\)/);
   });
   test('loadActivities fetches the full contact list for this page (both types), and the compose picker reads it', () => {
     const la = sliceFn(objects, 'loadActivities', 'objects.js');
@@ -509,7 +509,7 @@ describe('Part 39: refresh after a pop-up, supplier label, company search', () =
     assert.equal(F.__state().menus.pop()[1].label, 'open_contact');
     F.__set('currentWorkspace', null);
     F.openActivityKebab({}, 1);
-    assert.equal(F.__state().menus.pop()[1].label, 'open_supplier:supplier', 'default word when the workspace has no supplier name');
+    assert.equal(F.__state().menus.pop()[1].label, 'open_supplier:core_supplier', 'default word (the dictionary\'s singular fallback) when the workspace has no supplier name');
     assert.match(sliceFn(objects, 'openActivityKebab', 'objects.js'), /currentLang === 'de' \? word : word\.toLowerCase\(\)/);
   });
   test('the contact link carries the company as its title (reference row)', () => {

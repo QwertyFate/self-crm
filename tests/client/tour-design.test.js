@@ -22,8 +22,8 @@ const section = html.slice(html.indexOf('<div id="guide-overlay"'), html.indexOf
 describe('markup: the guide overlay uses sprite icons', () => {
   test('file parses', () => execFileSync('node', ['--check', path.join(ROOT, 'public/js/guide.js')]));
   test('Prev and Next use chevron-left/chevron-right from the sprite', () => {
-    assert.match(section, /id="guide-prev-btn"[^>]*onclick="guidePrev\(\)"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"\/><\/svg><span>Back<\/span>/);
-    assert.match(section, /id="guide-next-btn"[^>]*onclick="guideNext\(\)"><span>Next<\/span><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"\/><\/svg>/);
+    assert.match(section, /id="guide-prev-btn"[^>]*onclick="guidePrev\(\)"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"\/><\/svg><span data-i18n="btn_back">Back<\/span>/);
+    assert.match(section, /id="guide-next-btn"[^>]*onclick="guideNext\(\)"><span data-i18n="html_next">Next<\/span><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"\/><\/svg>/);
   });
   test('every sprite reference inside the overlay resolves', () => {
     const defined = new Set([...html.matchAll(/<symbol id="(i-[\w-]+)"/g)].map(m => m[1]));

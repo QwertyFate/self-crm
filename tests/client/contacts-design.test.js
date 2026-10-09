@@ -21,7 +21,7 @@ const count = (src, needle) => src.split(needle).length - 1;
 describe('markup: header, toolbar and table shell', () => {
   test('files parse', () => { for (const f of ['public/js/contacts.js', 'public/js/modals.js']) execFileSync('node', ['--check', path.join(ROOT, f)]); });
   test('the import/export buttons are a single more menu; Add keeps the sprite plus', () => {
-    assert.match(section, /<button class="btn btn-secondary btn-icon" onclick="openContactsMoreMenu\(this\)" type="button" aria-label="More actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"\/><\/svg><\/button>/);
+    assert.match(section, /<button class="btn btn-secondary btn-icon" onclick="openContactsMoreMenu\(this\)" type="button" aria-label="More actions" data-i18n-aria="html_more_actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"\/><\/svg><\/button>/);
     assert.match(section, /id="list-add-btn" onclick="openContactModal\(\)"><svg class="ic" aria-hidden="true"><use href="#i-plus"\/><\/svg><span data-i18n="add_contact">/);
     assert.doesNotMatch(section, /onclick="openImportModal\(\)"|onclick="exportContactsCSV\(\)"/, 'the two buttons are gone from the toolbar; the menu calls them instead');
   });
@@ -201,7 +201,7 @@ describe('contacts.js: filter chips, bulk bar, pagination, select mode', () => {
 describe('modals.js: the contact side panel is now the reference detail view (Part 16, see tests/client/detail-views.test.js)', () => {
   test('its own close button is an iconbtn with the sprite x icon', () => {
     const panel = html.slice(html.indexOf('id="contact-side-panel"'), html.indexOf('<!-- ── Team Chat ── -->'));
-    assert.match(panel, /<button class="iconbtn" onclick="closeSidePanel\(\)" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"\/><\/svg><\/button>/);
+    assert.match(panel, /<button class="iconbtn" onclick="closeSidePanel\(\)" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"\/><\/svg><\/button>/);
   });
   test('buildDetailHTML and the old per-field panel/note helpers are gone; openDetail now renders the reference contact detail', () => {
     for (const fn of ['buildDetailHTML', 'openDetail', 'renderContactDeals', 'updateContactStage', 'toggleContactNoteForm', 'editContactPanel'])

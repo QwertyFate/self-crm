@@ -42,7 +42,7 @@
      config       openAnalyticsConfig, closeAnalyticsConfig,
                   saveAnalyticsConfig, openFunnelPipelineMenu
      format       fmt, fmtCurrency, delta, formatTrendLabel,
-                  syncAnalyticsPeriodSwitch
+                  syncAnalyticsPeriodSwitch, anCount, anLocale
    ═══════════════════════════════════════════════════════════════════════════ */
 
 let analyticsData  = null;
@@ -77,7 +77,7 @@ function syncAnalyticsPeriodSwitch() {
 // reachable for anyone who cannot read the chart.
 function anTableBtn(id) {
   const on = analyticsTables.has(id);
-  const label = on ? 'Show chart' : 'Show data table';
+  const label = on ? t('an_show_chart') : t('an_show_table');
   return `<button class="btn btn-ghost btn-icon btn-sm" data-table="${id}" aria-pressed="${on}" aria-label="${label}" title="${label}" onclick="toggleAnalyticsTable('${id}')">${icon(on ? 'bar-chart' : 'table')}</button>`;
 }
 function toggleAnalyticsTable(id) {
@@ -112,14 +112,15 @@ let sectionOrder   = [];
 // and with its wording, followed by the two counts this app has and the reference does not.
 // Weighted forecast and Sales cycle are still missing on purpose: one needs a probability per
 // stage, the other needs a deal to record when it was won. See DESIGN_PRO_CHANGES.md Part 23.
+// `label` is a dictionary key, resolved with t() when a card is drawn, so a language switch re-renders it.
 const STAT_CARD_DEFS = {
-  open_pipeline:  { label: 'Open pipeline',  color: '#f59e0b', requiresValue: true },
-  won_value:      { label: 'Won value',      color: '#10b981', requiresValue: true },
-  win_rate:       { label: 'Win rate',       color: '#22c55e' },
-  new_deals:      { label: 'New deals',      color: '#6366f1' },
-  avg_deal_size:  { label: 'Avg deal size',  color: '#8b5cf6', requiresValue: true },
-  contacts:       { label: 'Total contacts', color: '#3b82f6' },
-  deals:          { label: 'Total deals',    color: '#0ea5e9' },
+  open_pipeline:  { label: 'an_kpi_open_pipeline',  color: '#f59e0b', requiresValue: true },
+  won_value:      { label: 'an_kpi_won_value',      color: '#10b981', requiresValue: true },
+  win_rate:       { label: 'an_win_rate',           color: '#22c55e' },
+  new_deals:      { label: 'an_kpi_new_deals',      color: '#6366f1' },
+  avg_deal_size:  { label: 'an_kpi_avg_deal_size',  color: '#8b5cf6', requiresValue: true },
+  contacts:       { label: 'an_kpi_total_contacts', color: '#3b82f6' },
+  deals:          { label: 'an_kpi_total_deals',    color: '#0ea5e9' },
 };
 const DEFAULT_STAT_ORDER    = ['open_pipeline', 'won_value', 'win_rate', 'new_deals', 'avg_deal_size', 'contacts', 'deals'];
 // A saved layout from before the rename still works: the old ids map onto the new ones.
@@ -131,17 +132,21 @@ const DEFAULT_SECTION_ORDER = ['stats','rate','funnel','winloss','owner','top','
 function periodLabel() {
   const n = analyticsPeriodMonths, to = new Date(), from = new Date();
   from.setMonth(from.getMonth() - n);
-  const m = d => d.toLocaleString('default', { month: 'short' });
-  return `Last ${n} months (${m(from)} to ${m(to)})`;
+  const m = d => d.toLocaleString(anLocale(), { month: 'short' });
+  return tf('an_period_label', { n, from: m(from), to: m(to) });
 }
+// Month and weekday names follow the UI language (the same shape as objects.js actLocale).
+function anLocale() { return currentLang === 'de' ? 'de-DE' : 'en-GB'; }
+// "1 deal" / "{n} deals": the singular key is a complete string, the plural one takes {n}.
+function anCount(n, one, many) { return n === 1 ? t(one) : tf(many, { n }); }
 // The reference's delta: a real comparison, or plain words when there is nothing to compare.
 // `good: -1` for metrics where a fall is the good news; `abs` for points and durations.
-function delta(cur, prev, { good = 1, unit = '%', abs = false, vs = 'previous period' } = {}) {
-  if (cur == null || prev == null || (!abs && !prev)) return `<span class="muted">No prior period</span>`;
+function delta(cur, prev, { good = 1, unit = '%', abs = false, vs = t('an_prev_period') } = {}) {
+  if (cur == null || prev == null || (!abs && !prev)) return `<span class="muted">${t('an_no_prior_period')}</span>`;
   const raw = abs ? cur - prev : (cur - prev) / prev * 100, r = Math.round(raw);
-  if (r === 0) return `<span class="muted">No change vs ${esc(vs)}</span>`;
+  if (r === 0) return `<span class="muted">${tf('an_no_change_vs', { vs: esc(vs) })}</span>`;
   const up = r > 0, ok = (up ? 1 : -1) * good > 0;
-  return `<span class="delta ${ok ? 'up' : 'down'}">${icon(up ? 'arrow-up' : 'arrow-down')}${up ? '+' : ''}${r}${unit === '%' ? ' %' : ' ' + unit}</span><span>vs ${esc(vs)}</span>`;
+  return `<span class="delta ${ok ? 'up' : 'down'}">${icon(up ? 'arrow-up' : 'arrow-down')}${up ? '+' : ''}${r}${unit === '%' ? ' %' : ' ' + unit}</span><span>${tf('an_vs', { vs: esc(vs) })}</span>`;
 }
 
 function fmt(n) {
@@ -218,17 +223,17 @@ function renderAllSections(d) {
 // snapshots of where deals sit right now — nothing records when a deal was won, so comparing them
 // to an earlier window would be a guess. Those say what they count instead of showing a delta.
 function getStatCardContent(id, d) {
-  const snapshot = '<span class="muted">Current snapshot</span>';
+  const snapshot = `<span class="muted">${t('an_snapshot')}</span>`;
   switch (id) {
-    case 'open_pipeline': return { value: fmtCurrency(d.pipeline_value), hint: `${d.open_deals} open deals`, foot: snapshot };
-    case 'won_value':     return { value: fmtCurrency(d.won_value), hint: 'Closed won', foot: snapshot };
+    case 'open_pipeline': return { value: fmtCurrency(d.pipeline_value), hint: anCount(d.open_deals, 'an_one_open_deal', 'an_n_open_deals'), foot: snapshot };
+    case 'won_value':     return { value: fmtCurrency(d.won_value), hint: t('an_closed_won'), foot: snapshot };
     case 'win_rate':      return { value: d.win_rate != null ? d.win_rate + ' %' : '—',
-                                   hint: d.win_rate != null ? `${d.won_deals} won, ${d.lost_deals} lost` : 'Set won and lost stages',
-                                   foot: d.win_rate != null ? snapshot : '<span class="muted">Not configured</span>' };
-    case 'new_deals':     return { value: fmt(d.new_deals), hint: 'Created', foot: delta(d.new_deals, d.prev_new_deals) };
-    case 'avg_deal_size': return { value: fmtCurrency(d.avg_deal_size), hint: `${d.cohort_deals || 0} deals`, foot: delta(d.avg_deal_size, d.prev_avg_deal_size) };
-    case 'contacts':      return { value: fmt(d.total_contacts), hint: 'In this workspace', foot: `<span class="muted">+${d.new_contacts} this month</span>` };
-    case 'deals':         return { value: fmt(d.total_deals), hint: 'All pipelines', foot: snapshot };
+                                   hint: d.win_rate != null ? tf('an_won_lost', { w: d.won_deals, l: d.lost_deals }) : t('an_set_won_lost'),
+                                   foot: d.win_rate != null ? snapshot : `<span class="muted">${t('an_not_configured')}</span>` };
+    case 'new_deals':     return { value: fmt(d.new_deals), hint: t('created_lbl'), foot: delta(d.new_deals, d.prev_new_deals) };
+    case 'avg_deal_size': return { value: fmtCurrency(d.avg_deal_size), hint: anCount(d.cohort_deals || 0, 'an_one_deal', 'n_deals'), foot: delta(d.avg_deal_size, d.prev_avg_deal_size) };
+    case 'contacts':      return { value: fmt(d.total_contacts), hint: t('an_in_workspace'), foot: `<span class="muted">${tf('an_new_this_month', { n: d.new_contacts })}</span>` };
+    case 'deals':         return { value: fmt(d.total_deals), hint: t('opt_all_pipelines'), foot: snapshot };
     default: return { value: '—', hint: '', foot: '' };
   }
 }
@@ -245,14 +250,14 @@ function renderAnalyticsCards(d) {
   const cells = visible.map(({ id }) => {
     const def = STAT_CARD_DEFS[id], c = getStatCardContent(id, d);
     return `<div class="an-kpi" data-stat-id="${id}">
-      <div class="kpi-label"><span>${esc(def.label)}</span><span class="hint">${c.hint || ''}</span></div>
+      <div class="kpi-label"><span>${esc(t(def.label))}</span><span class="hint">${c.hint || ''}</span></div>
       <div class="kpi-value">${c.value}</div>
       <div class="kpi-foot">${c.foot || ''}</div>
     </div>`;
   });
-  el.innerHTML = `<section class="card" aria-label="Key metrics">
+  el.innerHTML = `<section class="card" aria-label="${t('an_key_metrics_aria')}">
     <div class="an-kpis" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${cells.join('')}${
-      rest ? `<div class="an-kpi-fill" style="grid-column:span ${cols - rest}">Changes compare the last ${analyticsPeriodMonths} months with the ${analyticsPeriodMonths} months before.</div>` : ''
+      rest ? `<div class="an-kpi-fill" style="grid-column:span ${cols - rest}">${tf('an_kpi_fill', { n: analyticsPeriodMonths })}</div>` : ''
     }</div></section>`;
 }
 
@@ -283,19 +288,19 @@ function anRateChart(points) {
     g += `<path class="an-line" d="${d}"/>`;
   }
   points.forEach((p, i) => {
-    const label = p.rate == null ? 'nothing decided yet' : `win rate ${p.rate} %`;
+    const label = p.rate == null ? t('an_aria_nothing_decided') : tf('an_aria_win_rate', { rate: p.rate });
     g += `<g class="an-slot" role="img" aria-label="${esc(p.longLabel)}: ${label}">` +
       `<rect class="an-hit" x="${(m.l + slot * i).toFixed(1)}" y="${m.t}" width="${slot.toFixed(1)}" height="${ph + 20}"/>`;
     if (p.rate != null) g +=
       `<line class="an-cross" x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${m.t}" y2="${y(0).toFixed(1)}"/>` +
       `<circle class="an-dot spark-dot" cx="${x(i).toFixed(1)}" cy="${y(p.rate).toFixed(1)}" r="4.5"` +
-      ` data-label="${esc(p.longLabel)}" data-val="${p.rate} % won · ${p.won} of ${p.decided} decided · ${p.created} created"/>`;
+      ` data-label="${esc(p.longLabel)}" data-val="${tf('an_rate_tip', { rate: p.rate, won: p.won, decided: p.decided, created: p.created })}"/>`;
     g += `</g><text class="an-xlab" x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(p.label)}</text>`;
   });
   const last = live[live.length - 1];
   if (last) g += `<text class="an-t1" x="${Math.min(x(last.i), W - 2).toFixed(1)}" y="${(y(last.p.rate) - 12).toFixed(1)}"` +
     ` text-anchor="${x(last.i) + 14 > W ? 'end' : 'middle'}">${last.p.rate} %</text>`;
-  return `<svg class="an-svg" viewBox="0 0 ${W} ${H}" role="group" aria-label="Win rate per month, line chart">${g}</svg>`;
+  return `<svg class="an-svg" viewBox="0 0 ${W} ${H}" role="group" aria-label="${t('an_rate_chart_aria')}">${g}</svg>`;
 }
 
 function renderWinRateTrend(d) {
@@ -304,22 +309,22 @@ function renderWinRateTrend(d) {
   const points = (d.win_rate_trend || []).map(mo => {
     const dt = new Date(Number(mo.ym.slice(0, 4)), Number(mo.ym.slice(5, 7)) - 1, 1);
     return {
-      label: dt.toLocaleString('default', { month: 'short' }),
-      longLabel: dt.toLocaleString('default', { month: 'long', year: 'numeric' }),
+      label: dt.toLocaleString(anLocale(), { month: 'short' }),
+      longLabel: dt.toLocaleString(anLocale(), { month: 'long', year: 'numeric' }),
       rate: mo.rate, created: mo.created, decided: mo.decided, won: mo.won,
     };
   });
   const any = points.some(p => p.rate != null);
   const asTable = analyticsTables.has('rate');
   const body = !any
-    ? `<div class="empty">${icon('trending-up')}<b>Nothing decided yet</b><div>A month gets a win rate once its deals reach a won or lost stage. Pick which stages count as won or lost in Configure Metrics.</div></div>`
+    ? `<div class="empty">${icon('trending-up')}<b>${t('an_rate_empty_title')}</b><div>${t('an_rate_empty_sub')}</div></div>`
     : asTable
-      ? anDataTable(['Month', 'Win rate', 'Created', 'Decided'],
-          points.map(p => [esc(p.longLabel), p.rate == null ? 'Nothing decided' : p.rate + ' %', p.created, p.decided]))
+      ? anDataTable([t('an_col_month'), t('an_win_rate'), t('created_lbl'), t('an_col_decided')],
+          points.map(p => [esc(p.longLabel), p.rate == null ? t('an_nothing_decided') : p.rate + ' %', p.created, p.decided]))
       : `<div class="an-chart">${anRateChart(points)}</div>`;
   el.innerHTML = `<section class="card" aria-labelledby="an-rate-title">
-    <div class="card-header"><div><h2 class="card-title" id="an-rate-title">Win rate per month</h2>
-      <div class="an-sub">Deals grouped by the month they were created · the share of the decided ones that were won · last ${analyticsPeriodMonths} months</div></div>
+    <div class="card-header"><div><h2 class="card-title" id="an-rate-title">${t('an_rate_title')}</h2>
+      <div class="an-sub">${tf('an_rate_sub', { n: analyticsPeriodMonths })}</div></div>
       <div class="row">${anTableBtn('rate')}</div></div>
     <div class="card-body">${body}</div></section>`;
   el.querySelectorAll('.spark-dot').forEach(dot => {
@@ -343,35 +348,35 @@ function renderFunnel(d) {
     const color = x.color || 'var(--accent)';
     const next = rows[i + 1];
     const conv = next && x.reached ? Math.round(next.reached / x.reached * 100) : null;
-    const row = `<div class="an-fn-row" title="${esc(x.name)}: ${x.reached} reached, ${x.in_stage} in this stage now, ${fmtCurrency(x.value)} in stage">
+    const row = `<div class="an-fn-row" title="${tf('an_fn_row_title', { name: esc(x.name), reached: x.reached, now: x.in_stage, value: fmtCurrency(x.value) })}">
         <div class="an-fn-name"><span class="an-fn-dot" style="background:${esc(color)}"></span><span class="truncate">${esc(x.name)}</span></div>
         <div class="pipeline-bar-track"><div class="pipeline-bar-fill" style="width:${Math.round(x.reached / max * 100)}%;background:${esc(color)}"></div></div>
         <div class="an-fn-n tnum">${x.reached}</div>
         <div class="an-fn-val tnum">${fmtCurrency(x.value)}</div>
       </div>`;
     const caption = conv === null ? '' :
-      `<div class="an-fn-conv">${icon('chevron-down', 'ic-sm')}${conv} % move on to ${esc(next.name)}</div>`;
+      `<div class="an-fn-conv">${icon('chevron-down', 'ic-sm')}${tf('an_fn_conv', { pct: conv, next: esc(next.name) })}</div>`;
     return row + caption;
   }).join('');
   const lost = f.lost && f.lost.deals ? `<div class="an-fn-lost">
       <div class="an-fn-name"><span class="an-fn-dot" style="background:${esc(f.lost.color || 'var(--danger)')}"></span><span class="truncate">${esc(f.lost.name)}</span></div>
-      <div class="an-fn-lost-text">${f.lost.deals} lost · ${f.lost.base ? Math.round(f.lost.deals / f.lost.base * 100) : 0} % of all deals in this period</div>
+      <div class="an-fn-lost-text">${tf('an_fn_lost_text', { n: f.lost.deals, pct: f.lost.base ? Math.round(f.lost.deals / f.lost.base * 100) : 0 })}</div>
       <div class="an-fn-val tnum">${fmtCurrency(f.lost.value)}</div>
     </div>` : '';
   const asTable = analyticsTables.has('funnel');
-  const table = anDataTable(['Stage', 'Reached', 'Conversion', 'In stage now', 'Value in stage'], [
+  const table = anDataTable([t('col_stage'), t('an_col_reached'), t('an_col_conversion'), t('an_col_in_stage_now'), t('an_value_in_stage')], [
     ...rows.map((x, i) => [esc(x.name), x.reached,
       i && rows[i - 1].reached ? Math.round(x.reached / rows[i - 1].reached * 100) + ' %' : '—',
       x.in_stage, fmtCurrency(x.value)]),
     ...(f.lost && f.lost.deals ? [[esc(f.lost.name), f.lost.deals, '—', f.lost.deals, fmtCurrency(f.lost.value)]] : []),
   ]);
-  const pipeBtn = `<button class="btn btn-secondary btn-sm" aria-haspopup="menu" onclick="openFunnelPipelineMenu(this)">${icon('kanban')}<span>${f.pipeline_name ? esc(f.pipeline_name) : 'Pipeline'}</span>${icon('chevron-down', 'ic-sm')}</button>`;
+  const pipeBtn = `<button class="btn btn-secondary btn-sm" aria-haspopup="menu" onclick="openFunnelPipelineMenu(this)">${icon('kanban')}<span>${f.pipeline_name ? esc(f.pipeline_name) : t('lbl_pipeline')}</span>${icon('chevron-down', 'ic-sm')}</button>`;
   el.innerHTML = `<section class="card" aria-labelledby="an-funnel-title">
-    <div class="card-header"><div><h2 class="card-title" id="an-funnel-title">Pipeline funnel</h2>
-      <div class="an-sub">deals created in the last ${analyticsPeriodMonths} months, by stage reached</div></div>
-      <div class="row">${rows.length && !asTable ? '<div class="an-fn-head">Value in stage</div>' : ''}${pipeBtn}${anTableBtn('funnel')}</div></div>
+    <div class="card-header"><div><h2 class="card-title" id="an-funnel-title">${t('an_funnel_title')}</h2>
+      <div class="an-sub">${tf('an_funnel_sub', { n: analyticsPeriodMonths })}</div></div>
+      <div class="row">${rows.length && !asTable ? `<div class="an-fn-head">${t('an_value_in_stage')}</div>` : ''}${pipeBtn}${anTableBtn('funnel')}</div></div>
     <div class="card-body">${!rows.length
-      ? `<div class="empty">${icon('target')}<b>No pipeline to chart</b><div>Add a pipeline with stages and its funnel appears here.</div></div>`
+      ? `<div class="empty">${icon('target')}<b>${t('an_funnel_empty_title')}</b><div>${t('an_funnel_empty_sub')}</div></div>`
       : asTable ? table : `<div class="an-fn">${body}${lost}</div>`}</div></section>`;
 }
 
@@ -380,21 +385,21 @@ function renderDealsByOwner(d) {
   if (!el) return;
   const list = d.by_owner || [], max = Math.max(1, ...list.map(o => o.deals));
   const any = list.some(o => o.deals > 0);
-  const rows = list.map(o => `<div class="pipeline-bar-row an-owner-row" title="${esc(o.name)}: ${o.deals} deals, ${o.open} open, ${o.won} won, ${o.lost} lost">
+  const rows = list.map(o => `<div class="pipeline-bar-row an-owner-row" title="${tf('an_owner_row_title', { name: esc(o.name), deals: o.deals, open: o.open, won: o.won, lost: o.lost })}">
       <div class="pipeline-bar-label row" style="gap:8px">${avatar(o.name, 'sm')}<span class="truncate">${esc(o.name.split(' ')[0])}</span></div>
       <div class="pipeline-bar-track"><div class="pipeline-bar-fill" style="width:${Math.round(o.deals / max * 100)}%"></div></div>
-      <div class="pipeline-bar-stats">${o.deals} deal${o.deals === 1 ? '' : 's'}${o.value ? ' · ' + fmtCurrency(o.value) : ''}</div>
+      <div class="pipeline-bar-stats">${anCount(o.deals, 'an_one_deal', 'n_deals')}${o.value ? ' · ' + fmtCurrency(o.value) : ''}</div>
     </div>`).join('');
   const asTable = analyticsTables.has('owner');
   const body = !any
-    ? `<div class="empty">${icon('users')}<b>No deals in this period</b><div>Deals created in the last ${analyticsPeriodMonths} months are counted here, per owner.</div></div>`
+    ? `<div class="empty">${icon('users')}<b>${t('an_owner_empty_title')}</b><div>${tf('an_owner_empty_sub', { n: analyticsPeriodMonths })}</div></div>`
     : asTable
-      ? anDataTable(['Owner', 'Deals', 'Open', 'Won', 'Lost', 'Value'],
+      ? anDataTable([t('col_owner'), t('kpi_deals'), t('an_open'), t('an_won'), t('an_lost'), t('lbl_deal_value')],
           list.map(o => [esc(o.name), o.deals, o.open, o.won, o.lost, fmtCurrency(o.value)]))
       : `<div class="col" style="gap:10px">${rows}</div>`;
   el.innerHTML = `<section class="card" aria-labelledby="an-owner-title">
-    <div class="card-header"><div><h2 class="card-title" id="an-owner-title">Deals by owner</h2>
-      <div class="an-sub">Created in the last ${analyticsPeriodMonths} months</div></div>
+    <div class="card-header"><div><h2 class="card-title" id="an-owner-title">${t('an_owner_card_title')}</h2>
+      <div class="an-sub">${tf('an_owner_card_sub', { n: analyticsPeriodMonths })}</div></div>
       <div class="row">${anTableBtn('owner')}</div></div>
     <div class="card-body">${body}</div></section>`;
 }
@@ -406,21 +411,21 @@ function renderTopOpenDeals(d) {
   if (!el) return;
   const list = d.top_open_deals || [], total = d.open_deals || 0;
   const rows = list.map(d2 => {
-    const who = d2.contact_name ? [d2.contact_name, d2.contact_company].filter(Boolean).join(', ') : 'No contact';
-    return `<tr class="clickable" onclick="openDealDetail(${d2.id})" tabindex="0" role="link" aria-label="Open deal ${esc(d2.title)}">
+    const who = d2.contact_name ? [d2.contact_name, d2.contact_company].filter(Boolean).join(', ') : t('no_contact');
+    return `<tr class="clickable" onclick="openDealDetail(${d2.id})" tabindex="0" role="link" aria-label="${tf('an_open_deal_aria', { title: esc(d2.title) })}">
       <td style="max-width:340px"><div class="truncate" style="font-weight:620">${esc(d2.title)}</div><div class="muted truncate" style="font-size:var(--fs-sm)">${esc(who)}</div></td>
-      <td>${d2.stage_name ? `<span class="stage-pill"><i style="background:${esc(d2.stage_color || 'var(--border-strong)')}"></i>${esc(d2.stage_name)}</span>` : '<span class="muted">Not set</span>'}</td>
+      <td>${d2.stage_name ? `<span class="stage-pill"><i style="background:${esc(d2.stage_color || 'var(--border-strong)')}"></i>${esc(d2.stage_name)}</span>` : `<span class="muted">${t('not_set')}</span>`}</td>
       <td class="num-col tnum strong">${d2.value != null ? fmtCurrency(d2.value) : '<span class="muted">—</span>'}</td>
-      <td>${d2.assigned_to_name ? `<div class="row" style="gap:8px">${avatar(d2.assigned_to_name, 'sm')}<span>${esc(d2.assigned_to_name.split(' ')[0])}</span></div>` : '<span class="muted">Unassigned</span>'}</td></tr>`;
+      <td>${d2.assigned_to_name ? `<div class="row" style="gap:8px">${avatar(d2.assigned_to_name, 'sm')}<span>${esc(d2.assigned_to_name.split(' ')[0])}</span></div>` : `<span class="muted">${t('unassigned')}</span>`}</td></tr>`;
   }).join('');
   const body = list.length
-    ? `<div class="table-wrap" style="border:0;box-shadow:none;border-radius:0"><table class="table"><thead><tr><th>Deal</th><th>Stage</th><th class="num-col">Value</th><th>Owner</th></tr></thead><tbody>${rows}</tbody></table></div>`
-    : `<div class="empty">${icon('deals')}<b>No open deals</b><div>Deals still in play show up here, biggest first.</div></div>`;
+    ? `<div class="table-wrap" style="border:0;box-shadow:none;border-radius:0"><table class="table"><thead><tr><th>${t('col_title')}</th><th>${t('col_stage')}</th><th class="num-col">${t('lbl_deal_value')}</th><th>${t('col_owner')}</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : `<div class="empty">${icon('deals')}<b>${t('an_top_empty_title')}</b><div>${t('an_top_empty_sub')}</div></div>`;
   el.innerHTML = `<section class="card" aria-labelledby="an-top-title">
-    <div class="card-header"><div><h2 class="card-title" id="an-top-title">Top open deals</h2><div class="an-sub">Largest deals still in play</div></div>
-      <button class="btn btn-secondary btn-sm" type="button" onclick="switchPage('deals')">View all deals</button></div>
+    <div class="card-header"><div><h2 class="card-title" id="an-top-title">${t('an_top_title')}</h2><div class="an-sub">${t('an_top_sub')}</div></div>
+      <button class="btn btn-secondary btn-sm" type="button" onclick="switchPage('deals')">${t('an_view_all_deals')}</button></div>
     ${body}
-    ${total > list.length ? `<div class="table-foot"><span>Showing top ${list.length} of ${total} open deals</span><span class="tnum">Open value <b style="color:var(--ink)">${fmtCurrency(d.pipeline_value)}</b></span></div>` : ''}</section>`;
+    ${total > list.length ? `<div class="table-foot"><span>${tf('an_showing_top', { n: list.length, total })}</span><span class="tnum">${t('an_open_value')} <b style="color:var(--ink)">${fmtCurrency(d.pipeline_value)}</b></span></div>` : ''}</section>`;
 }
 
 let dragSectionId = null;
@@ -482,10 +487,11 @@ function saveLayoutConfig() {
 function wlSegments(d) {
   const won = d.won_deals || 0, open = d.open_deals || 0, lost = d.lost_deals || 0;
   const total = won + open + lost;
+  // key: the dictionary key of the outcome's label — plain data, so the shares stay testable without t().
   return [
-    { name: 'Won',  count: won,  color: 'var(--success)' },
-    { name: 'Open', count: open, color: 'var(--accent)'  },
-    { name: 'Lost', count: lost, color: 'var(--danger)'  },
+    { key: 'an_won',  count: won,  color: 'var(--success)' },
+    { key: 'an_open', count: open, color: 'var(--accent)'  },
+    { key: 'an_lost', count: lost, color: 'var(--danger)'  },
   ].map(seg => ({ ...seg, pct: total ? Math.round(seg.count / total * 100) : 0 }));
 }
 
@@ -494,22 +500,22 @@ function renderWinLoss(d) {
   if (!section) return;
   const segs = wlSegments(d);
   const total = segs.reduce((n, seg) => n + seg.count, 0);
-  const bar = `<div class="stack" role="img" aria-label="${segs.map(seg => `${seg.name} ${seg.count}`).join(', ')}">${
-    segs.filter(seg => seg.count).map(seg => `<span style="flex:${seg.count};background:${seg.color}" title="${seg.name}: ${seg.count} (${seg.pct} %)"></span>`).join('')}</div>`;
-  const rows = segs.map(seg => `<div class="an-wl-row"><i style="background:${seg.color}"></i><span>${seg.name}</span><span class="n">${seg.count}</span><span class="p">${seg.pct} %</span></div>`).join('');
+  const bar = `<div class="stack" role="img" aria-label="${segs.map(seg => `${t(seg.key)} ${seg.count}`).join(', ')}">${
+    segs.filter(seg => seg.count).map(seg => `<span style="flex:${seg.count};background:${seg.color}" title="${t(seg.key)}: ${seg.count} (${seg.pct} %)"></span>`).join('')}</div>`;
+  const rows = segs.map(seg => `<div class="an-wl-row"><i style="background:${seg.color}"></i><span>${t(seg.key)}</span><span class="n">${seg.count}</span><span class="p">${seg.pct} %</span></div>`).join('');
   const outcomes = total
     ? `<div class="an-wl">${bar}<div class="an-wl-rows">${rows}</div></div>`
-    : `<div class="empty">${icon('target')}<b>No deal outcomes yet</b><div>Pick which stages count as won and lost in Configure Metrics and this fills in.</div></div>`;
+    : `<div class="empty">${icon('target')}<b>${t('an_wl_empty_title')}</b><div>${t('an_wl_empty_sub')}</div></div>`;
   const asTable = analyticsTables.has('winloss');
   const pipes = d.by_pipeline || [];
   const body = asTable
-    ? anDataTable(['Outcome', 'Deals', 'Share'], segs.map(seg => [seg.name, seg.count, seg.pct + ' %']))
+    ? anDataTable([t('an_col_outcome'), t('kpi_deals'), t('an_col_share')], segs.map(seg => [t(seg.key), seg.count, seg.pct + ' %']))
       + `<div class="an-divider"></div>`
-      + anDataTable(['Pipeline', 'Deals', 'Value'], pipes.map(p => [esc(p.pipeline_name), parseInt(p.cnt) || 0, fmtCurrency(parseFloat(p.val) || 0)]))
-    : `${outcomes}<div class="an-divider"></div><div class="section-title">By pipeline</div><div class="an-pl" id="analytics-by-pipeline"></div>`;
+      + anDataTable([t('lbl_pipeline'), t('kpi_deals'), t('lbl_deal_value')], pipes.map(p => [esc(p.pipeline_name), parseInt(p.cnt) || 0, fmtCurrency(parseFloat(p.val) || 0)]))
+    : `${outcomes}<div class="an-divider"></div><div class="section-title">${t('an_by_pipeline')}</div><div class="an-pl" id="analytics-by-pipeline"></div>`;
   section.innerHTML = `<section class="card" aria-labelledby="an-wl-title">
-    <div class="card-header"><div><h2 class="card-title" id="an-wl-title">Win and loss</h2>
-      <div class="an-sub">Every deal by outcome, as things stand now</div></div>
+    <div class="card-header"><div><h2 class="card-title" id="an-wl-title">${t('an_wl_title')}</h2>
+      <div class="an-sub">${t('an_wl_sub')}</div></div>
       <div class="row">${anTableBtn('winloss')}</div></div>
     <div class="card-body">${body}</div></section>`;
   renderByPipeline(d);   // a no-op in table mode: its container only exists in the chart view
@@ -522,22 +528,23 @@ function renderByPipeline(d) {
   if (!el) return;
   const list = d.by_pipeline || [];
   const hasValue = d.config?.value_field != null;
-  if (!list.length) { el.innerHTML = `<div class="an-sub">No pipelines yet.</div>`; return; }
+  if (!list.length) { el.innerHTML = `<div class="an-sub">${t('no_pipelines_yet')}</div>`; return; }
   const maxCount = Math.max(1, ...list.map(p => parseInt(p.cnt) || 0));
   el.innerHTML = list.map(p => {
     const count = parseInt(p.cnt) || 0, val = parseFloat(p.val) || 0;
-    const plural = count === 1 ? '' : 's';
+    const deals = anCount(count, 'an_one_deal', 'n_deals');
     return `<div class="an-pl-row">
-      <div class="t"><b>${esc(p.pipeline_name)}</b><span>${count} deal${plural}${hasValue ? ' · ' + fmtCurrency(val) : ''}</span></div>
-      <div class="progress" role="img" aria-label="${count} deal${plural}"><i style="width:${Math.round(count / maxCount * 100)}%"></i></div>
+      <div class="t"><b>${esc(p.pipeline_name)}</b><span>${deals}${hasValue ? ' · ' + fmtCurrency(val) : ''}</span></div>
+      <div class="progress" role="img" aria-label="${deals}"><i style="width:${Math.round(count / maxCount * 100)}%"></i></div>
     </div>`;
   }).join('');
 }
 
+// `title` is a dictionary key, resolved with t() in renderTrendCards.
 const TREND_DEFS = {
-  contacts: { title: 'New Contacts', key: 'cnt', color: '#3b82f6', dataKey: 'contacts' },
-  deals:    { title: 'New Deals',    key: 'cnt', color: '#8b5cf6', dataKey: 'deals'    },
-  value:    { title: 'Deal Value',   key: 'val', color: '#10b981', dataKey: 'value_trend', currency: true },
+  contacts: { title: 'an_trend_contacts', key: 'cnt', color: '#3b82f6', dataKey: 'contacts' },
+  deals:    { title: 'an_trend_deals',    key: 'cnt', color: '#8b5cf6', dataKey: 'deals'    },
+  value:    { title: 'an_trend_value',    key: 'val', color: '#10b981', dataKey: 'value_trend', currency: true },
 };
 
 let currentTrendPeriod = 'week';
@@ -575,12 +582,12 @@ function renderTrendCards() {
     return `
     <div class="trend-card" draggable="true" data-card-id="${id}">
       <div class="trend-card-header">
-        <div class="trend-drag-handle" title="Drag to reorder">${icon('grip', 'ic-sm')}</div>
-        <div class="trend-card-title">${def.title}</div>
+        <div class="trend-drag-handle" title="${t('an_drag_reorder')}">${icon('grip', 'ic-sm')}</div>
+        <div class="trend-card-title">${t(def.title)}</div>
         <div class="trend-view-btns">
-          <button class="trend-view-btn${view==='line'   ? ' active':''}" onclick="setCardView('${id}','line')"   title="Line">╱</button>
-          <button class="trend-view-btn${view==='bar'    ? ' active':''}" onclick="setCardView('${id}','bar')"    title="Bar">▮</button>
-          <button class="trend-view-btn${view==='detail' ? ' active':''}" onclick="setCardView('${id}','detail')" title="Detail">≡</button>
+          <button class="trend-view-btn${view==='line'   ? ' active':''}" onclick="setCardView('${id}','line')"   title="${t('an_view_line')}">╱</button>
+          <button class="trend-view-btn${view==='bar'    ? ' active':''}" onclick="setCardView('${id}','bar')"    title="${t('an_view_bar')}">▮</button>
+          <button class="trend-view-btn${view==='detail' ? ' active':''}" onclick="setCardView('${id}','detail')" title="${t('an_view_detail')}">≡</button>
         </div>
       </div>
       <div class="trend-card-total">${def.currency ? fmtCurrency(total) : fmt(total)}</div>
@@ -656,9 +663,9 @@ function initTrendDragDrop() {
 
 function formatTrendLabel(dateStr, period) {
   const d = new Date(dateStr);
-  if (period === 'year')  return d.toLocaleString('default', { month: 'short' });
+  if (period === 'year')  return d.toLocaleString(anLocale(), { month: 'short' });
   if (period === 'month') return d.getDate().toString();
-  return d.toLocaleString('default', { weekday: 'short' });
+  return d.toLocaleString(anLocale(), { weekday: 'short' });
 }
 
 function renderSparkline(containerId, values, labels, color, isCurrency) {
@@ -819,8 +826,8 @@ function openAnalyticsConfig() {
 
   const numericFields = deal_fields.filter(f => f.type === 'number' || f.type === 'currency');
   const valueOptions  = [
-    { key: '',      label: 'None — hide value metrics' },
-    { key: 'value', label: 'Deal Value (built-in)' },
+    { key: '',      label: t('an_opt_none_value') },
+    { key: 'value', label: t('an_opt_deal_value_builtin') },
     ...numericFields.map(f => ({ key: f.field_key, label: f.name })),
   ];
   document.getElementById('analytics-value-field').innerHTML =
@@ -836,7 +843,7 @@ function openAnalyticsConfig() {
         return `<label class="analytics-stage-option">
           <input type="checkbox" data-card-vis="${id}" ${!hidden ? 'checked' : ''}>
           <span class="analytics-stage-dot" style="background:${def.color}"></span>
-          ${def.label}
+          ${t(def.label)}
         </label>`;
       }).join('');
 
@@ -856,7 +863,7 @@ async function saveAnalyticsConfig() {
   const msgEl  = document.getElementById('analytics-config-msg');
   const overlap = wonIds.filter(id => lostIds.includes(id));
   if (overlap.length) {
-    msgEl.textContent = 'A stage cannot be both Won and Lost.';
+    msgEl.textContent = t('an_err_stage_both');
     msgEl.className   = 'workspace-name-msg error';
     msgEl.classList.remove('hidden');
     return;

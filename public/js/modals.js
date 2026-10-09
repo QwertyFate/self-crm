@@ -28,14 +28,12 @@ async function openContactModal(id) {
   document.getElementById('contact-form').reset();
   document.getElementById('contact-id').value   = id || '';
   document.getElementById('cf-type').value       = currentContactType;
-  const typeName = currentContactType === 'supplier'
-    ? (currentWorkspace?.supplier_name || 'Supplier').replace(/s$/i, '')
-    : 'Contact';
-  document.getElementById('contact-modal-title').textContent = id ? `Edit ${typeName}` : `Add ${typeName}`;
+  const typeName = currentContactType === 'supplier' ? supplierWord(1) : t('lbl_contact');
+  document.getElementById('contact-modal-title').textContent = id ? tf('obj_edit_item', { name: typeName }) : tf('obj_add_item', { name: typeName });
 
   const assigneeEl = document.getElementById('cf-assignee');
-  assigneeEl.innerHTML = '<option value="">— Unassigned —</option>' +
-    members.map(m => `<option value="${m.id}">${esc(m.name)}${m.id === currentUser?.id ? ' (you)' : ''}</option>`).join('');
+  assigneeEl.innerHTML = `<option value="">${esc(t('opt_unassigned'))}</option>` +
+    members.map(m => `<option value="${m.id}">${esc(m.name)}${m.id === currentUser?.id ? ' ' + esc(t('you_marker')) : ''}</option>`).join('');
 
   document.getElementById('cf-custom-fields').innerHTML = fields.map(f =>
     `<div class="field"><label class="label" for="cfield-${f.field_key}">${esc(f.name)}</label>${renderFieldInput(f, '')}</div>`).join('');
@@ -59,7 +57,7 @@ async function openContactModal(id) {
 
 function renderFieldInput(f, value) {
   const id = `cfield-${f.field_key}`;
-  if (f.type === 'dropdown') return `<select id="${id}"><option value="">— Select —</option>
+  if (f.type === 'dropdown') return `<select id="${id}"><option value="">${esc(t('md_opt_select'))}</option>
     ${(f.options||[]).map(o => `<option value="${esc(o)}" ${value===o?'selected':''}>${esc(o)}</option>`).join('')}
   </select>`;
   const typeMap = { text:'text', email:'email', phone:'tel', number:'number', date:'date', url:'url' };
@@ -92,7 +90,7 @@ async function saveContact(e) {
 }
 
 async function deleteContact(id) {
-  const ok = await ui.confirm({ title: 'Delete this contact?', message: 'Their activities are deleted with them. This cannot be undone.', confirmLabel: 'Delete', danger: true });
+  const ok = await ui.confirm({ title: t('md_delete_contact_q'), message: t('md_delete_contact_msg'), confirmLabel: t('btn_delete'), danger: true });
   if (!ok) return;
   await api.del(`/api/contacts/${id}`);
   closeSidePanel();
@@ -109,7 +107,7 @@ function closeSidePanel() {
 // Shared by openObjectModal's custom-field loop (reused from the earlier deal-field work).
 function renderDealFieldInput(f, value = '') {
   const id = `dfield-${f.field_key}`;
-  if (f.type === 'dropdown') return `<select id="${id}"><option value="">— Select —</option>
+  if (f.type === 'dropdown') return `<select id="${id}"><option value="">${esc(t('md_opt_select'))}</option>
     ${(f.options||[]).map(o => `<option value="${esc(o)}"${value===o?' selected':''}>${esc(o)}</option>`).join('')}
   </select>`;
   const typeMap = { text:'text', email:'email', phone:'tel', number:'number', date:'date', url:'url' };
@@ -122,13 +120,13 @@ let activityModalDeals = [];   // the deals offered by the modal's Deal picker, 
 async function openActivityModal({ date = '', time = '' } = {}) {
   await ensureContacts();
   document.getElementById('activity-form').reset();
-  document.getElementById('act-contact').innerHTML = '<option value="">— None —</option>' +
+  document.getElementById('act-contact').innerHTML = '<option value="">' + esc(t('opt_none')) + '</option>' +
     contacts.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   // The deal the note is about. Choosing one binds the note to it (and fills an empty contact
   // from it); leaving it empty logs a contact-level note.
   const dealList = await api.get('/api/deals');
   activityModalDeals = Array.isArray(dealList) ? dealList : [];
-  document.getElementById('act-deal').innerHTML = '<option value="">— No deal —</option>' +
+  document.getElementById('act-deal').innerHTML = '<option value="">' + esc(t('md_opt_no_deal')) + '</option>' +
     activityModalDeals.map(d => `<option value="${d.id}">${esc(d.title)}${d.contact_name ? ' — ' + esc(d.contact_name) : ''}</option>`).join('');
   document.getElementById('act-date').value = date;
   document.getElementById('act-time').value = time;

@@ -56,7 +56,7 @@ describe('layout: the navy wall beside the white form half', () => {
   });
   test('the three sprite back links and the verbatim admin anchor survive (auth-design.test.js stays green)', () => {
     assert.equal([...section.matchAll(/<svg class="ic" aria-hidden="true"><use href="#i-arrow-left"\/><\/svg>/g)].length, 3);
-    assert.match(section, /<a href="\/\?admin" class="admin-link"><svg class="ic" aria-hidden="true"><use href="#i-settings"\/><\/svg><span>Admin<\/span><\/a>/);
+    assert.match(section, /<a href="\/\?admin" class="admin-link"><svg class="ic" aria-hidden="true"><use href="#i-settings"\/><\/svg><span data-i18n="role_admin">Admin<\/span><\/a>/);
     assert.doesNotMatch(section.match(/<aside class="au-brand"[\s\S]*?<\/aside>/)[0], /i-arrow-left/, 'no back link in the wall');
   });
 });

@@ -70,19 +70,17 @@ async function loadContacts() {
 
 function updateContactsPageHeader() {
   const isSupplier = currentContactType === 'supplier';
-  const name = isSupplier ? (currentWorkspace?.supplier_name || 'Suppliers') : 'Contacts';
-  const singular = name.replace(/s$/i, '');
+  const name = isSupplier ? supplierWord() : t('page_contacts');
+  const singular = isSupplier ? supplierWord(1) : t('lbl_contact');
   const h1  = document.querySelector('#page-contacts .page-header h1');
   const btnLabel = document.querySelector('#list-add-btn span');
   if (h1)  h1.textContent = name;
-  if (btnLabel) btnLabel.textContent = `Add ${singular}`;
+  if (btnLabel) btnLabel.textContent = tf('obj_add_item', { name: singular });
 }
-function contactsNoun() { return currentContactType === 'supplier' ? (currentWorkspace?.supplier_name || 'Suppliers').toLowerCase() : t('page_contacts').toLowerCase(); }
+function contactsNoun() { const w = currentContactType === 'supplier' ? supplierWord() : t('page_contacts'); return currentLang === 'de' ? w : w.toLowerCase(); }   // German nouns keep their capital
 
 // Toolbar's more menu: the same CSV import/export the old two buttons called.
 function openContactsMoreMenu(anchor) {
-  const isSupplier = currentContactType === 'supplier';
-  const noun = isSupplier ? (currentWorkspace?.supplier_name || 'Suppliers').toLowerCase() : 'contacts';
   ui.menu(anchor, [
     { label: t('import_csv'), icon: 'upload', onSelect: () => openImportModal() },
     { label: t('export_csv'), icon: 'download', onSelect: () => exportContactsCSV() },
@@ -397,7 +395,7 @@ function filterKind(key) {
 function filterOptionsFor(key) {
   const col = filterableColumns().find(c => c.key === key), type = col?.type;
   const unassigned = { value: '', label: t('detail_unassigned') };
-  if (type === 'assignee') return [unassigned, ...members.map(m => ({ value: m.id, label: m.name + (m.id === currentUser?.id ? ' (you)' : '') }))];
+  if (type === 'assignee') return [unassigned, ...members.map(m => ({ value: m.id, label: m.name + (m.id === currentUser?.id ? ' ' + t('you_marker') : '') }))];
   if (type === 'dropdown') {
     const f = fields.find(x => x.field_key === key);
     return (f?.options || []).map(o => ({ value: o, label: o }));
@@ -538,14 +536,14 @@ function renderPagination(total) {
   const pages = buildPageNumbers(currentPage, totalPages);
   el.innerHTML = `
     <div class="table-foot" style="margin-top:-1px;border:1px solid var(--border);border-top:0">
-      <span class="tnum">Showing ${start}–${end} of ${total}</span>
-      <nav class="ct-pg" aria-label="Pagination">
-        <button type="button" onclick="goToPage(${currentPage-1})" aria-label="Previous page" ${currentPage===1?'disabled':''}><span class="ct-flip">${icon('chevron-right')}</span></button>
+      <span class="tnum">${esc(tf('ct_showing_range', { s: start, e: end, n: total }))}</span>
+      <nav class="ct-pg" aria-label="${esc(t('ct_pagination_aria'))}">
+        <button type="button" onclick="goToPage(${currentPage-1})" aria-label="${esc(t('ct_prev_page'))}" ${currentPage===1?'disabled':''}><span class="ct-flip">${icon('chevron-right')}</span></button>
         ${pages.map(p => p === '…'
           ? '<span class="gap" aria-hidden="true">…</span>'
           : `<button type="button" onclick="goToPage(${p})" ${p===currentPage?'aria-current="page"':''}>${p}</button>`
         ).join('')}
-        <button type="button" onclick="goToPage(${currentPage+1})" aria-label="Next page" ${currentPage===totalPages?'disabled':''}>${icon('chevron-right')}</button>
+        <button type="button" onclick="goToPage(${currentPage+1})" aria-label="${esc(t('ct_next_page'))}" ${currentPage===totalPages?'disabled':''}>${icon('chevron-right')}</button>
       </nav>
     </div>`;
 }
@@ -590,7 +588,7 @@ function updateBulkDeleteButton() {
   const el = document.getElementById('contacts-bulkbar');
   if (!el) return;
   const n = selectedContactIds.size;
-  el.innerHTML = n ? `<div class="bulkbar" role="toolbar" aria-label="Bulk actions"><b>${n} selected</b><button class="btn btn-sm" type="button" onclick="openBulkDeleteModal()">${t('btn_delete')}</button><button class="btn btn-sm" type="button" style="margin-left:auto" onclick="clearContactSelection()">Clear selection</button></div>` : '';
+  el.innerHTML = n ? `<div class="bulkbar" role="toolbar" aria-label="${esc(t('tk_bulk_aria'))}"><b>${esc(tf('n_selected', { n }))}</b><button class="btn btn-sm" type="button" onclick="openBulkDeleteModal()">${t('btn_delete')}</button><button class="btn btn-sm" type="button" style="margin-left:auto" onclick="clearContactSelection()">${esc(t('clear_selection'))}</button></div>` : '';
 }
 
 function clearContactSelection() {
@@ -606,7 +604,7 @@ function openBulkDeleteModal() {
   const inputEl = document.getElementById('bulk-delete-confirm-input');
   const modalEl = document.getElementById('bulk-delete-modal');
   if (!msgEl || !inputEl || !modalEl) return;
-  msgEl.textContent = `You are about to delete ${selectedContactIds.size} contact${selectedContactIds.size === 1 ? '' : 's'}. This action cannot be undone.`;
+  msgEl.textContent = selectedContactIds.size === 1 ? t('ct_bulk_delete_one') : tf('ct_bulk_delete_n', { n: selectedContactIds.size });
   inputEl.value = '';
   modalEl.classList.remove('hidden');
 }
@@ -617,14 +615,14 @@ async function confirmBulkDelete() {
   const required = String(selectedContactIds.size);
 
   if (entered !== required) {
-    alert(`Please enter the correct number (${required}) to confirm deletion.`);
+    alert(tf('ct_bulk_confirm_number', { n: required }));
     return;
   }
 
   const contactIds = Array.from(selectedContactIds);
   const res = await api.post('/api/contacts/bulk/delete', { contactIds });
   if (res.error) {
-    alert('Error deleting contacts: ' + res.error);
+    alert(tf('ct_bulk_delete_error', { error: res.error }));
     return;
   }
 

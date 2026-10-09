@@ -48,6 +48,7 @@
                   openObjectFieldModal, autoObjectFieldKey,
                   toggleObjectFieldOptions, refreshObjectFieldViews,
                   saveObjectField, deleteObjectField
+     words        supplierWord, objectWord  (the workspace's nouns, dictionary fallbacks)
      suppliers    updateSuppliersNav, saveSupplierName
      board        updateBoardNavVisibility, loadBoard, getMiroBoardUrl,
                   reloadMiroIframe, saveMiroUrl
@@ -67,8 +68,15 @@
                   openActivityKebab, deleteActivity, exportActivitiesCsv
    ═══════════════════════════════════════════════════════════════════════════ */
 
+// The workspace's own words for its second contact list and for its listings, in both numbers
+// (n === 1 → singular). A configured name keeps the trailing-s heuristic the app has always used
+// for its singular; the English fallbacks come from the dictionary, so German shows
+// "Lieferanten"/"Lieferant" and "Objekte"/"Objekt" instead of a plural with its s stripped.
+function supplierWord(n) { const w = currentWorkspace?.supplier_name; if (w) return n === 1 ? w.replace(/s$/i, '') : w; return n === 1 ? t('core_supplier') : t('ct_suppliers_fallback'); }
+function objectWord(n) { const w = currentWorkspace?.object_name; if (w) return n === 1 ? w.replace(/s$/i, '') : w; return n === 1 ? t('obj_listing_fallback') : t('obj_listings_fallback'); }
+
 function updateSuppliersNav() {
-  const name  = currentWorkspace?.supplier_name || 'Suppliers';
+  const name  = supplierWord();
   const label = document.getElementById('nav-suppliers-label');
   if (label) label.textContent = name;
 }
@@ -81,13 +89,12 @@ async function saveSupplierName() {
   currentWorkspace.supplier_name = res.name;
   updateSuppliersNav();
   if (currentContactType === 'supplier') updateContactsPageHeader();
-  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = t('msg_saved'); msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
 function updateObjectsNav() {
-  const name  = currentWorkspace?.object_name || 'Listings';
-  const singular = name.replace(/s$/i, '');
+  const name  = objectWord(), singular = objectWord(1);
   const label = document.getElementById('nav-objects-label');
   const title = document.getElementById('objects-page-title');
   const btn   = document.getElementById('add-object-btn');
@@ -96,11 +103,11 @@ function updateObjectsNav() {
   if (label) label.textContent = name;
   if (title) title.textContent = name;
   // Keep the plus icon: only the label inside the button changes.
-  if (btn)   { const span = btn.querySelector('span'); if (span) span.textContent = `Add ${singular}`; }
+  if (btn)   { const span = btn.querySelector('span'); if (span) span.textContent = tf('obj_add_item', { name: singular }); }
   if (tab)   tab.textContent   = name;
   const paneTitle = document.getElementById('settings-objects-pane-title');   // heading of the settings section for this list
   if (paneTitle) paneTitle.textContent = name;
-  if (search) search.placeholder = `Search ${name.toLowerCase()}…`;
+  if (search) search.placeholder = tf('obj_search_ph', { name: currentLang === 'de' ? name : name.toLowerCase() });   // German nouns keep their capital
 }
 
 function effectiveObjectColumns() {
@@ -120,6 +127,7 @@ async function loadObjects() {
   objectFields   = await api.get('/api/object-fields');
   objectColumns  = currentWorkspace?.object_columns || [];
   objects        = await api.get('/api/objects');
+  updateObjectsNav();   // title, Add button and search placeholder follow the current language (setLanguage reloads this page)
   objCurrentPage = 1;
   renderObjectsCurrent();
 }
@@ -151,32 +159,33 @@ function renderObjectsCurrent() {
 
 function renderObjectsTable(list, q = '') {
   const visCols  = effectiveObjectColumns().filter(c => c.visible);
-  const typeName = currentWorkspace?.object_name || 'Listings';
-  const singular = typeName.replace(/s$/i, '');
+  const typeName = objectWord(), singular = objectWord(1);
   const dash     = '<span class="muted-dash">—</span>';
   const colspan  = visCols.length + 2;
 
   document.getElementById('objects-thead').innerHTML =
-    `<tr><th>${esc(singular)} name</th>${visCols.map(c => `<th>${esc(c.label())}</th>`).join('')}<th></th></tr>`;
+    `<tr><th>${esc(tf('obj_name_label', { name: singular }))}</th>${visCols.map(c => `<th>${esc(c.label())}</th>`).join('')}<th></th></tr>`;
 
   const total = list.length, totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   if (objCurrentPage > totalPages) objCurrentPage = totalPages;
   const page = list.slice((objCurrentPage - 1) * PAGE_SIZE, objCurrentPage * PAGE_SIZE);
   const tbody = document.getElementById('objects-tbody');
 
+  // Empty-state copy: English names the type in lower case (singular for "your first …"); German keeps
+  // the noun as typed and uses the plural, whose article fits every gender.
   if (!page.length) {
     tbody.innerHTML = `<tr class="table-empty-row"><td colspan="${colspan}">
       <div class="table-empty">
         <div class="empty-state-art"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg></div>
-        <h2>${q ? 'No matches found' : `No ${esc(typeName.toLowerCase())} yet`}</h2>
-        <p>${q
-          ? `Nothing matches “${esc(q)}”. Try a different search term.`
-          : `Add your first ${esc(singular.toLowerCase())} to keep everything in one place.`}</p>
+        <h2>${esc(q ? t('obj_no_matches') : tf('no_contacts_yet', { noun: currentLang === 'de' ? typeName : typeName.toLowerCase() }))}</h2>
+        <p>${esc(q
+          ? tf('obj_nothing_matches', { q })
+          : tf('obj_add_first', { name: currentLang === 'de' ? typeName : singular.toLowerCase() }))}</p>
         ${q
-          ? '<button class="btn btn-sm" onclick="clearObjectSearch()">Clear search</button>'
+          ? `<button class="btn btn-sm" onclick="clearObjectSearch()">${esc(t('obj_clear_search'))}</button>`
           : `<div class="hstack-tight">
-              <button class="btn btn-sm btn-primary" onclick="openObjectModal()">+ Add ${esc(singular)}</button>
-              ${objectFields.length ? '' : '<button class="btn btn-sm" onclick="openObjectFieldModal()">Add column</button>'}
+              <button class="btn btn-sm btn-primary" onclick="openObjectModal()">+ ${esc(tf('obj_add_item', { name: singular }))}</button>
+              ${objectFields.length ? '' : `<button class="btn btn-sm" onclick="openObjectFieldModal()">${esc(t('obj_add_column'))}</button>`}
             </div>`}
       </div>
     </td></tr>`;
@@ -191,7 +200,7 @@ function renderObjectsTable(list, q = '') {
       return `<tr>
         <td class="name-cell" title="${esc(o.name)}"><strong class="contact-name-link" onclick="openObjectDetail(${o.id})">${esc(o.name)}</strong></td>
         ${cells}
-        <td style="white-space:nowrap"><button class="iconbtn" style="width:28px;height:28px" onclick="openObjectKebab(this,${o.id})" aria-label="Actions for ${esc(o.name)}" aria-haspopup="menu">${icon('ellipsis')}</button></td>
+        <td style="white-space:nowrap"><button class="iconbtn" style="width:28px;height:28px" onclick="openObjectKebab(this,${o.id})" aria-label="${esc(tf('tk_actions_for', { name: o.name }))}" aria-haspopup="menu">${icon('ellipsis')}</button></td>
       </tr>`;
     }).join('');
   }
@@ -202,11 +211,11 @@ function renderObjectsTable(list, q = '') {
   if (!pagEl) return;
   if (!total) { pagEl.innerHTML = ''; return; }
   const s = (objCurrentPage - 1) * PAGE_SIZE + 1, e = Math.min(objCurrentPage * PAGE_SIZE, total);
-  pagEl.innerHTML = `<span class="tnum">Showing ${s}–${e} of ${total}</span>` + (totalPages > 1
-    ? `<nav class="ct-pg" aria-label="Pagination">
-        <button type="button" onclick="objGoToPage(${objCurrentPage-1})" aria-label="Previous page" ${objCurrentPage===1?'disabled':''}><span class="ct-flip">${icon('chevron-right')}</span></button>
+  pagEl.innerHTML = `<span class="tnum">${esc(tf('ct_showing_range', { s, e, n: total }))}</span>` + (totalPages > 1
+    ? `<nav class="ct-pg" aria-label="${esc(t('ct_pagination_aria'))}">
+        <button type="button" onclick="objGoToPage(${objCurrentPage-1})" aria-label="${esc(t('ct_prev_page'))}" ${objCurrentPage===1?'disabled':''}><span class="ct-flip">${icon('chevron-right')}</span></button>
         ${buildPageNumbers(objCurrentPage, totalPages).map(p => p==='…'?'<span class="gap" aria-hidden="true">…</span>':`<button type="button" onclick="objGoToPage(${p})" ${p===objCurrentPage?'aria-current="page"':''}>${p}</button>`).join('')}
-        <button type="button" onclick="objGoToPage(${objCurrentPage+1})" aria-label="Next page" ${objCurrentPage===totalPages?'disabled':''}>${icon('chevron-right')}</button>
+        <button type="button" onclick="objGoToPage(${objCurrentPage+1})" aria-label="${esc(t('ct_next_page'))}" ${objCurrentPage===totalPages?'disabled':''}>${icon('chevron-right')}</button>
       </nav>`
     : '');
 }
@@ -221,9 +230,9 @@ function openObjectKebab(anchor, id) {
 
 function exportObjectsCsv() {
   const visCols = effectiveObjectColumns().filter(c => c.visible);
-  const typeName = currentWorkspace?.object_name || 'Listings';
+  const typeName = objectWord();
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const head = [typeName.replace(/s$/i, '') + ' name', ...visCols.map(c => c.label()), 'Created'];
+  const head = [tf('obj_name_label', { name: objectWord(1) }), ...visCols.map(c => c.label()), t('created_lbl')];
   const rows = objects.map(o => [o.name, ...visCols.map(c => c.key === 'created_at' ? fmtDate(o.created_at) : (o.custom_data?.[c.key] ?? '')), fmtDate(o.created_at)].map(q).join(','));
   const csv = [head.map(q).join(','), ...rows].join('\n');
   const link = document.createElement('a');
@@ -240,8 +249,8 @@ function updateObjectCountTag(total, showing, q) {
   const tag = document.getElementById('object-count');
   if (tag) {
     if (!total)   tag.textContent = '';
-    else if (q)   tag.textContent = `${showing} of ${total} shown`;
-    else          tag.textContent = `${total} item${total === 1 ? '' : 's'}`;
+    else if (q)   tag.textContent = tf('obj_n_of_total_shown', { a: showing, b: total });
+    else          tag.textContent = total === 1 ? t('obj_one_item') : tf('obj_n_items', { n: total });
   }
   document.getElementById('object-search-clear')?.classList.toggle('hidden', !q);
 }
@@ -273,15 +282,15 @@ async function openObjectModal(id) {
   if (!objectFields.length) objectFields = await api.get('/api/object-fields');
   document.getElementById('object-form').reset();
   document.getElementById('object-id').value = id || '';
-  const typeName = (currentWorkspace?.object_name || 'Listing').replace(/s$/i,'');
-  document.getElementById('object-modal-title').textContent = id ? `Edit ${typeName}` : `Add ${typeName}`;
+  const typeName = objectWord(1);
+  document.getElementById('object-modal-title').textContent = id ? tf('obj_edit_item', { name: typeName }) : tf('obj_add_item', { name: typeName });
   const nameLabel = document.getElementById('obj-name-label');
-  if (nameLabel) nameLabel.innerHTML = `${esc(typeName)} name <span class="req">*</span>`;
+  if (nameLabel) nameLabel.innerHTML = `${esc(tf('obj_name_label', { name: typeName }))} <span class="req">*</span>`;
   document.getElementById('obj-custom-fields').innerHTML = objectFields.length
     ? objectFields.map(f =>
         `<div class="field"><label class="label" for="dfield-${f.field_key}">${esc(f.name)}</label>${renderDealFieldInput(f,'')}</div>`
       ).join('')
-    : '<p class="text-xs text-muted">No extra fields set up yet — the name is all that is needed.</p>';
+    : `<p class="text-xs text-muted">${esc(t('obj_no_extra_fields'))}</p>`;
   if (id) {
     const obj = objects.find(o => o.id === id) || await api.get(`/api/objects/${id}`);
     document.getElementById('obj-name').value = obj.name;
@@ -303,8 +312,8 @@ async function saveObject(e) {
 }
 
 async function deleteObject(id) {
-  const singular = (currentWorkspace?.object_name || 'Listing').replace(/s$/i,'');
-  const ok = await ui.confirm({ title: `Delete this ${singular.toLowerCase()}?`, message: 'Links to deals and contacts are removed with it. This cannot be undone.', confirmLabel: 'Delete', danger: true });
+  const singular = objectWord(1);
+  const ok = await ui.confirm({ title: tf('obj_delete_q', { name: currentLang === 'de' ? singular : singular.toLowerCase() }), message: t('obj_delete_msg'), confirmLabel: t('btn_delete'), danger: true });
   if (!ok) return;
   await api.del(`/api/objects/${id}`);
   objects = objects.filter(o => o.id !== id); renderObjectsCurrent();
@@ -321,59 +330,59 @@ async function openObjectDetail(id) {
   if (!pipelines.length) pipelines = await api.get('/api/pipelines');
 
   const S = { obj };
-  const supplierLabel = currentWorkspace?.supplier_name || 'Suppliers';
+  const supplierLabel = supplierWord();
   const stageOfDeal = d => (pipelines.find(p => p.id === d.pipeline_id)?.stages || []).find(s => s.id === d.stage_id);
 
   function detailsCard() {
     const rows = objectFields.map(f => { const v = S.obj.custom_data?.[f.field_key]; return v ? `<dt>${esc(f.name)}</dt><dd>${esc(v)}</dd>` : ''; }).join('');
-    return `<section class="card" aria-label="Details"><div class="card-header"><h2 class="card-title">Details</h2></div>
-      <div class="card-body">${rows ? `<dl class="kv" style="margin:0">${rows}</dl>` : '<p class="muted">No details recorded yet.</p>'}</div></section>`;
+    return `<section class="card" aria-label="${esc(t('obj_details'))}"><div class="card-header"><h2 class="card-title">${esc(t('obj_details'))}</h2></div>
+      <div class="card-body">${rows ? `<dl class="kv" style="margin:0">${rows}</dl>` : `<p class="muted">${esc(t('obj_no_details'))}</p>`}</div></section>`;
   }
   function peopleCard() {
     const linked = S.obj.contacts || [];
     const rows = linked.map(c => `<li class="list-item"><div class="person">${avatar(c.name)}<div style="min-width:0"><div class="p-name truncate">${esc(c.name)}${c.company ? ` <span class="muted">${esc(c.company)}</span>` : ''}</div>
-        <div class="p-sub">${c.contact_type === 'supplier' ? esc(supplierLabel.replace(/s$/i, '')) : 'Contact'}${c.email ? ` · ${esc(c.email)}` : ''}</div></div></div>
-      <button class="iconbtn" data-act="unlink-contact" data-id="${c.id}" aria-label="Unlink ${esc(c.name)}">${icon('x')}</button></li>`).join('');
-    return `<section class="card" aria-label="Contacts and ${esc(supplierLabel)}"><div class="card-header"><h2 class="card-title">Contacts &amp; ${esc(supplierLabel)}</h2>
-        <button class="btn btn-ghost btn-sm" data-act="link-contact">${icon('plus')}Link</button></div>
-      ${rows ? `<ul class="list">${rows}</ul>` : '<div class="card-body"><p class="muted">No contacts or suppliers linked.</p></div>'}</section>`;
+        <div class="p-sub">${esc(c.contact_type === 'supplier' ? supplierWord(1) : t('lbl_contact'))}${c.email ? ` · ${esc(c.email)}` : ''}</div></div></div>
+      <button class="iconbtn" data-act="unlink-contact" data-id="${c.id}" aria-label="${esc(tf('obj_unlink_aria', { name: c.name }))}">${icon('x')}</button></li>`).join('');
+    return `<section class="card" aria-label="${esc(tf('obj_contacts_and', { name: supplierLabel }))}"><div class="card-header"><h2 class="card-title">${esc(tf('obj_contacts_and', { name: supplierLabel }))}</h2>
+        <button class="btn btn-ghost btn-sm" data-act="link-contact">${icon('plus')}${esc(t('obj_link_btn'))}</button></div>
+      ${rows ? `<ul class="list">${rows}</ul>` : `<div class="card-body"><p class="muted">${esc(tf('obj_no_people_linked', { name: currentLang === 'de' ? supplierLabel : supplierLabel.toLowerCase() }))}</p></div>`}</section>`;
   }
   function dealsCard() {
     const linked = S.obj.deals || [];
     const rows = linked.map(d => { const st = stageOfDeal(d); return `<li class="list-item clickable" data-act="open-deal" data-id="${d.id}"><div class="grow" style="min-width:0"><div class="p-name truncate">${esc(d.title)}</div>
-        <div class="p-sub">${st ? `<span class="stage-pill"><i style="background:${esc(st.color)}"></i>${esc(st.name)}</span>` : 'No stage'}${d.value != null ? ` · ${fmtEUR(d.value)}` : ''}</div></div>
-      <button class="iconbtn" data-act="unlink-deal" data-id="${d.id}" aria-label="Unlink ${esc(d.title)}">${icon('x')}</button></li>`; }).join('');
-    return `<section class="card" aria-label="Deals"><div class="card-header"><h2 class="card-title">Deals</h2>
-        <button class="btn btn-ghost btn-sm" data-act="link-deal">${icon('plus')}Link</button></div>
-      ${rows ? `<ul class="list">${rows}</ul>` : '<div class="card-body"><p class="muted">No deals linked.</p></div>'}</section>`;
+        <div class="p-sub">${st ? `<span class="stage-pill"><i style="background:${esc(st.color)}"></i>${esc(st.name)}</span>` : esc(t('obj_no_stage'))}${d.value != null ? ` · ${fmtEUR(d.value)}` : ''}</div></div>
+      <button class="iconbtn" data-act="unlink-deal" data-id="${d.id}" aria-label="${esc(tf('obj_unlink_aria', { name: d.title }))}">${icon('x')}</button></li>`; }).join('');
+    return `<section class="card" aria-label="${esc(t('nav_deals'))}"><div class="card-header"><h2 class="card-title">${esc(t('nav_deals'))}</h2>
+        <button class="btn btn-ghost btn-sm" data-act="link-deal">${icon('plus')}${esc(t('obj_link_btn'))}</button></div>
+      ${rows ? `<ul class="list">${rows}</ul>` : `<div class="card-body"><p class="muted">${esc(t('obj_no_deals_linked'))}</p></div>`}</section>`;
   }
   function render() { m.body.innerHTML = `<div class="col" style="gap:16px">${detailsCard()}${peopleCard()}${dealsCard()}</div>`; }
 
   const m = ui.modal({ title: obj.name, size: 'lg', body: '<div></div>',
-    footer: `<button class="btn btn-danger-ghost" data-act="delete" style="margin-right:auto">${icon('trash')}Delete</button><button class="btn btn-secondary" data-act="edit">${icon('pencil')}Edit</button><button class="btn btn-secondary" data-close>Close</button>` });
+    footer: `<button class="btn btn-danger-ghost" data-act="delete" style="margin-right:auto">${icon('trash')}${esc(t('btn_delete'))}</button><button class="btn btn-secondary" data-act="edit">${icon('pencil')}${esc(t('btn_edit'))}</button><button class="btn btn-secondary" data-close>${esc(t('btn_close'))}</button>` });
 
   async function reload() { S.obj = await api.get(`/api/objects/${id}`); render(); }
   const A = {
     'link-contact': el => {
       const linkedIds = new Set((S.obj.contacts || []).map(c => c.id));
       const available = [...allContacts, ...allSuppliers].filter(c => !linkedIds.has(c.id));
-      if (!available.length) return ui.toast('Everyone is already linked.');
+      if (!available.length) return ui.toast(t('obj_all_people_linked'));
       ui.select(el, available.map(c => ({ value: c.id, label: c.company ? `${c.name}, ${c.company}` : c.name })), null, async v => {
         const res = await api.post(`/api/objects/${id}/contacts`, { contact_id: v }); if (res?.error) return ui.toast(res.error);
-        await reload(); ui.toast('Linked');
+        await reload(); ui.toast(t('obj_linked'));
       });
     },
-    'unlink-contact': async el => { const res = await api.del(`/api/objects/${id}/contacts/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); await reload(); ui.toast('Unlinked'); },
+    'unlink-contact': async el => { const res = await api.del(`/api/objects/${id}/contacts/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); await reload(); ui.toast(t('obj_unlinked')); },
     'link-deal': el => {
       const linkedIds = new Set((S.obj.deals || []).map(d => d.id));
       const available = deals.filter(d => !linkedIds.has(d.id));
-      if (!available.length) return ui.toast('Every deal is already linked.');
+      if (!available.length) return ui.toast(t('obj_all_deals_linked'));
       ui.select(el, available.map(d => ({ value: d.id, label: d.contact_name ? `${d.title} — ${d.contact_name}` : d.title })), null, async v => {
         const res = await api.post(`/api/objects/${id}/deals`, { deal_id: v }); if (res?.error) return ui.toast(res.error);
-        deals = await api.get('/api/deals'); await reload(); ui.toast('Linked');
+        deals = await api.get('/api/deals'); await reload(); ui.toast(t('obj_linked'));
       });
     },
-    'unlink-deal': async el => { const res = await api.del(`/api/objects/${id}/deals/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); deals = await api.get('/api/deals'); await reload(); ui.toast('Unlinked'); },
+    'unlink-deal': async el => { const res = await api.del(`/api/objects/${id}/deals/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); deals = await api.get('/api/deals'); await reload(); ui.toast(t('obj_unlinked')); },
     'open-deal': el => { m.close(); openDealDetail(+el.dataset.id); },
     delete: async () => { m.close(); await deleteObject(id); },
     edit: () => { m.close(); openObjectModal(id); },
@@ -403,10 +412,10 @@ function openObjectFieldModal(id) {
   document.getElementById('object-field-form').reset();
   document.getElementById('objf-id').value = id || '';
   document.getElementById('objf-options-group').classList.add('hidden');
-  const objName = currentWorkspace?.object_name || 'Listings';
-  document.getElementById('object-field-modal-title').textContent = id ? 'Edit Field' : 'Add Field';
+  const objName = objectWord();
+  document.getElementById('object-field-modal-title').textContent = id ? t('edit_field_title') : t('add_field_title');
   const hint = document.getElementById('objf-hint');
-  if (hint) hint.textContent = `Each field becomes a column in ${objName} and a property on every item.`;
+  if (hint) hint.textContent = tf('obj_field_hint', { name: objName });
   if (id) {
     const f = objectFields.find(f => f.id === id);
     document.getElementById('objf-name').value = f.name;
@@ -446,7 +455,7 @@ async function saveObjectField(e) {
   refreshObjectFieldViews();
 }
 async function deleteObjectField(id) {
-  if (!confirm('Delete this column? Values stored in it will no longer show on any item.')) return;
+  if (!confirm(t('obj_delete_column_confirm'))) return;
   await api.del(`/api/object-fields/${id}`);
   objectFields = objectFields.filter(f => f.id !== id);
   refreshObjectFieldViews();
@@ -479,7 +488,7 @@ async function saveObjectColumns(){
   if(btn){btn.disabled=false;btn.textContent=t('btn_save');}
   if(res.error){if(msgEl){msgEl.textContent=res.error;msgEl.className='workspace-name-msg error';msgEl.classList.remove('hidden');}return;}
   objectColumns=toSave; currentWorkspace.object_columns=toSave;
-  if(msgEl){msgEl.textContent='Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
+  if(msgEl){msgEl.textContent=t('msg_saved');msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
   setTimeout(()=>msgEl?.classList.add('hidden'),2500); renderObjectsCurrent();
 }
 async function saveObjectTypeName(){
@@ -488,7 +497,7 @@ async function saveObjectTypeName(){
   const res=await api.patch('/api/workspace/object-name',{name});
   if(res.error){if(msgEl){msgEl.textContent=res.error;msgEl.className='workspace-name-msg error';msgEl.classList.remove('hidden');}return;}
   currentWorkspace.object_name=res.name; updateObjectsNav();
-  if(msgEl){msgEl.textContent='Saved';msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
+  if(msgEl){msgEl.textContent=t('msg_saved');msgEl.className='workspace-name-msg success';msgEl.classList.remove('hidden');}
   setTimeout(()=>msgEl?.classList.add('hidden'),2500);
 }
 
@@ -502,13 +511,17 @@ function loadBoard() {
   if (!el) return;
   el.innerHTML = '';
   if (!url) {
+    // Step 1 names our own Settings path from its labels (the Miro URL lives in Settings → Integrations);
+    // step 2 keeps Miro's menu names literal. Both are inserted unescaped: the dictionary text carries no
+    // markup, only the already-escaped {path} / {menu} values bring the <strong>.
+    const settingsPath = `${t('nav_settings')} → ${t('tab_integrations')} → ${t('set_miro')}`;
     el.innerHTML = `<div class="board-empty bd-empty">
       <div class="hero">${icon('board')}</div>
-      <h2>No Miro board linked yet</h2>
+      <h2>${esc(t('obj_board_empty_title'))}</h2>
       <ol class="bd-steps">
-        <li>Open <strong>Settings → General → Miro Board</strong>.</li>
-        <li>In Miro, choose <strong>Share → Embed</strong> and copy the link.</li>
-        <li>Paste it there and save — this page will show it from then on.</li>
+        <li>${tf('obj_board_step1', { path: `<strong>${esc(settingsPath)}</strong>` })}</li>
+        <li>${tf('obj_board_step2', { menu: '<strong>Share → Embed</strong>' })}</li>
+        <li>${esc(t('obj_board_step3'))}</li>
       </ol>
     </div>`;
     return;
@@ -516,10 +529,10 @@ function loadBoard() {
   const boardUrl = getMiroBoardUrl(url);
   el.innerHTML = `
     <div class="board-topbar">
-      <span class="board-topbar-hint">${icon('alert', 'ic-sm')} Seeing a login page or 403? Google blocks login inside iframes. Open Miro in a new tab, log in, then click Reload.</span>
+      <span class="board-topbar-hint">${icon('alert', 'ic-sm')} ${esc(t('obj_board_login_hint'))}</span>
       <div style="display:flex;gap:8px;flex-shrink:0">
-        <button class="btn btn-sm" onclick="reloadMiroIframe()">${icon('refresh', 'ic-sm')}Reload</button>
-        <a class="btn btn-sm btn-primary" href="${esc(boardUrl)}" target="_blank" rel="noopener">${icon('arrow-up-right', 'ic-sm')}Open in Miro</a>
+        <button class="btn btn-sm" onclick="reloadMiroIframe()">${icon('refresh', 'ic-sm')}${esc(t('obj_board_reload'))}</button>
+        <a class="btn btn-sm btn-primary" href="${esc(boardUrl)}" target="_blank" rel="noopener">${icon('arrow-up-right', 'ic-sm')}${esc(t('obj_board_open_miro'))}</a>
       </div>
     </div>
     <iframe id="miro-iframe" src="${esc(url)}" class="miro-iframe" allow="fullscreen; clipboard-read; clipboard-write" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
@@ -530,7 +543,7 @@ async function saveMiroUrl() {
   const res = await api.patch('/api/workspace/miro-url', { url });
   if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
   currentWorkspace.miro_url = url; updateBoardNavVisibility();
-  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = t('msg_saved'); msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
@@ -747,11 +760,11 @@ function renderActivitiesFeed() {
     return `<div class="ac-row" data-aid="${a.id}"><span class="tl-ic ${a.type}" title="${esc(label)}">${icon(a.type)}</span>
       <div style="min-width:0"><div class="ac-head"><b>${esc(label)}</b>
         ${a.deal_id ? `<a href="#" class="ac-link" title="${esc(a.deal_title || '')}" onclick="event.preventDefault();openActivityDeal(${a.deal_id})">${icon('deals')}<span>${esc(a.deal_title || 'Deal')}</span></a>` : ''}
-        ${a.contact_id ? `<a href="#" class="ac-link" title="${esc(actContactOf(a)?.company || '')}" onclick="event.preventDefault();openActivityContact(${a.contact_id})">${icon('users')}<span>${esc(a.contact_name || 'Contact')}</span></a>` : ''}
+        ${a.contact_id ? `<a href="#" class="ac-link" title="${esc(actContactOf(a)?.company || '')}" onclick="event.preventDefault();openActivityContact(${a.contact_id})">${icon('users')}<span>${esc(a.contact_name || t('lbl_contact'))}</span></a>` : ''}
         <span class="ac-time" title="${esc(full)}">${esc(actAgo(a.created_at))}</span></div>
         <div class="tl-text ac-text">${dvActHtml(a.content)}</div>
         <div class="ac-meta">${a.logged_by_name ? avatar(a.logged_by_name, 'sm') + `<span>${esc(a.logged_by_name)}</span><span class="ac-dot"></span>` : ''}<span>${esc(actTime(a.created_at))}</span></div></div>
-      <button class="iconbtn kebab" type="button" onclick="openActivityKebab(this,${a.id})" aria-label="Actions" aria-haspopup="menu">${icon('ellipsis')}</button></div>`;
+      <button class="iconbtn kebab" type="button" onclick="openActivityKebab(this,${a.id})" aria-label="${esc(t('obj_actions_aria'))}" aria-haspopup="menu">${icon('ellipsis')}</button></div>`;
   };
   // the server returns newest first; consecutive rows of the same calendar day form one group
   const groups = [];
@@ -793,7 +806,7 @@ function openActivityKebab(anchor, id) {
   if (a.deal_id) items.push({ label: t('open_deal'), icon: 'deals', onSelect: () => openActivityDeal(a.deal_id) });
   if (a.contact_id) {
     // "Open supplier" (the workspace's own word, singular) for a supplier contact — the reference's linkBase rule
-    const word = (currentWorkspace?.supplier_name || 'Suppliers').replace(/s$/i, '');
+    const word = supplierWord(1);
     const label = actContactOf(a)?.contact_type === 'supplier' ? tf('open_supplier', { name: currentLang === 'de' ? word : word.toLowerCase() }) : t('open_contact');
     items.push({ label, icon: 'users', onSelect: () => openActivityContact(a.contact_id) });
   }
@@ -815,7 +828,7 @@ async function deleteActivity(id) {
 function exportActivitiesCsv() {
   const rows = visibleActivities();
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const head = ['Type', 'Person', 'Deal', 'Contact', 'Date', 'Text'];
+  const head = [t('lbl_type'), t('chip_person'), t('lbl_deal'), t('lbl_contact'), t('obj_csv_date'), t('obj_csv_text')];
   const lines = rows.map(a => [t('act_' + a.type), a.logged_by_name || '', a.deal_title || '', a.contact_name || '', a.created_at ? new Date(a.created_at).toISOString() : '', dvActText(a.content)].map(q).join(','));
   const csv = [head.map(q).join(','), ...lines].join('\r\n');
   const link = document.createElement('a');

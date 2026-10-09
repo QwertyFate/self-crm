@@ -30,8 +30,8 @@ describe('deal detail: composing', () => {
 });
 
 describe('deal detail: the timeline shows everything by default, "This deal only" on demand', () => {
-  test('the filter starts OFF — all together is the default', () => {
-    assert.match(dv, /tab: 'overview', actsOnly: false, type: 'note'/);
+  test('the filter starts OFF — all together is the default; the pop window opens on the Activities tab', () => {
+    assert.match(dv, /tab: 'activity', actsOnly: false, type: 'note'/);
   });
   test('loading: the whole contact history by default, this deal (plus contact-level notes) when the filter is on, and always ?deal_id= for a contact-less deal', () => {
     const la = dealDetail.match(/const loadActs = async \(\) => \{[\s\S]*?\n  \};/)[0];
@@ -40,14 +40,14 @@ describe('deal detail: the timeline shows everything by default, "This deal only
   });
   test('the chip reads "This deal only" when off and "Show all notes" when on — it names what clicking it does next', () => {
     const ah = sliceFn(dv, 'activityHtml', 'detail-views.js');
-    assert.match(ah, /<button class="chip \$\{S\.actsOnly \? 'on' : ''\}" data-act="tlonly" type="button" aria-pressed="\$\{S\.actsOnly\}" title="\$\{S\.actsOnly \? '[^']*' : 'Notes logged on this deal, plus notes on the contact not tied to any deal'\}">\$\{S\.actsOnly \? 'Show all notes' : 'This deal only'\}<\/button>/);
-    assert.match(ah, /title="\$\{S\.actsOnly \? 'Showing notes on this deal and untied contact notes\. Click to show every note on the contact\.'/);
+    assert.match(ah, /<button class="chip \$\{S\.actsOnly \? 'on' : ''\}" data-act="tlonly" type="button" aria-pressed="\$\{S\.actsOnly\}" title="\$\{esc\(S\.actsOnly \? t\('dv_tlonly_on_title'\) : t\('dv_tlonly_off_title'\)\)\}">\$\{esc\(S\.actsOnly \? t\('dv_show_all_notes'\) : t\('dv_this_deal_only'\)\)\}<\/button>/);
+    assert.match(ah, /title="\$\{esc\(S\.actsOnly \? t\('dv_tlonly_on_title'\)/);
   });
   test('toggling the chip flips the flag, reloads from the server, and re-renders', () => {
     assert.match(dealDetail, /on\(root, 'click', '\[data-act="tlonly"\]', async \(\) => \{ S\.actsOnly = !S\.actsOnly; await loadActs\(\); render\('head main'\); \}\)/);
   });
   test('in the "all together" view a note bound to ANOTHER deal of the contact is labelled with that deal', () => {
-    assert.match(dealDetail, /a\.bound_deal_id && a\.bound_deal_id !== S\.d\.id \? `<span class="badge badge-outline"[^`]*\$\{esc\(a\.deal_title \|\| 'Other deal'\)\}<\/span>` : ''/);
+    assert.match(dealDetail, /a\.bound_deal_id && a\.bound_deal_id !== S\.d\.id \? `<span class="badge badge-outline"[^`]*\$\{esc\(a\.deal_title \|\| t\('dv_other_deal'\)\)\}<\/span>` : ''/);
   });
 });
 

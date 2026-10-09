@@ -33,6 +33,8 @@
                    toggleAllDeals, bulkDeals
      drag & drop   dealDragStart, dealDragEnd, dealDragOver, dealDragLeave,
                    dealDrop   (drop = PATCH /api/deals/:id/stage)
+     autoscroll    dealEdgeScrollDelta, dealAutoScrollMove, dealAutoScrollStart,
+                   dealAutoScrollStop   (the board scrolls while a card is dragged near an edge)
      misc          deleteDeals, openDealsMoreMenu, exportDealsCsv
 
    NOTE  moving a deal into a trigger stage makes the SERVER fire an outbound
@@ -603,13 +605,60 @@ function exportDealsCsv() {
 }
 
 /* ---------- drag and drop between columns ---------- */
-function dealDragStart(e, id) { dragDealId = id; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => e.target.classList.add('dragging'), 0); }
-function dealDragEnd(e)   { e.target.classList.remove('dragging'); document.querySelectorAll('#deals-board .col-board.drop').forEach(c => c.classList.remove('drop')); }
+function dealDragStart(e, id) { dragDealId = id; e.dataTransfer.effectAllowed = 'move'; setTimeout(() => e.target.classList.add('dragging'), 0); dealAutoScrollStart(); }
+function dealDragEnd(e)   { dealAutoScrollStop(); e.target.classList.remove('dragging'); document.querySelectorAll('#deals-board .col-board.drop').forEach(c => c.classList.remove('drop')); }
 function dealDragOver(e)  { if (!dragDealId) return; e.preventDefault(); const col = e.currentTarget.closest('.col-board'); if (col) col.classList.add('drop'); }
 function dealDragLeave(e) { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove('drop'); }
 async function dealDrop(e, stageId) {
-  e.preventDefault(); e.currentTarget.classList.remove('drop');
+  e.preventDefault(); e.currentTarget.classList.remove('drop'); dealAutoScrollStop();
   if (!dragDealId) return;
   const id = dragDealId; dragDealId = null;
   await moveDealToStage(id, stageId);
+}
+
+/* ---------- edge autoscroll while a card is dragged ---------- */
+// The browser's own autoscroll during a native drag is unreliable for an overflow
+// container: Safari never scrolls one, Chrome only near the window's edge. So a stage
+// column off the right of the screen could not be reached by dragging. While a card is
+// dragged, a capturing dragover on the document records the pointer, and a frame loop
+// scrolls the board sideways (and the card list under the pointer up or down) as long
+// as the pointer sits within DEAL_AUTOSCROLL.edge px of an edge — faster the closer it
+// is, DEAL_AUTOSCROLL.max px per frame at the edge or beyond it. The loop ends with the
+// drag (dragend / drop), when dragDealId is cleared, or when no dragover has arrived for
+// a second (the pointer left the window, or the card was re-rendered before dragend).
+const DEAL_AUTOSCROLL = { edge: 72, max: 24 };
+let dealAutoScroll = null;   // { x, y, at, raf } while a drag is in progress
+// Signed px to scroll per frame for a pointer at `pos` against the span [start, end]:
+// 0 away from the edges, rising linearly to ±max at the edge and beyond. Pure.
+function dealEdgeScrollDelta(pos, start, end, { edge, max } = DEAL_AUTOSCROLL) {
+  if (!(end - start > edge * 2)) return 0;   // a span too narrow for two edge zones never scrolls
+  if (pos < start + edge) return -Math.ceil(Math.min(1, (start + edge - pos) / edge) * max);
+  if (pos > end - edge)   return  Math.ceil(Math.min(1, (pos - (end - edge)) / edge) * max);
+  return 0;
+}
+function dealAutoScrollMove(e) { if (dealAutoScroll) { dealAutoScroll.x = e.clientX; dealAutoScroll.y = e.clientY; dealAutoScroll.at = Date.now(); } }
+function dealAutoScrollStart() {
+  if (dealAutoScroll) return;
+  dealAutoScroll = { x: -1, y: -1, at: Date.now(), raf: 0 };
+  document.addEventListener('dragover', dealAutoScrollMove, true);
+  const step = () => {
+    const s = dealAutoScroll; if (!s) return;
+    if (!dragDealId || Date.now() - s.at > 1000) return dealAutoScrollStop();
+    const board = document.getElementById('deals-board');
+    if (board && s.x >= 0) {
+      const r = board.getBoundingClientRect();
+      const dx = dealEdgeScrollDelta(s.x, r.left, r.right);
+      if (dx) board.scrollLeft += dx;
+      const cards = document.elementFromPoint(s.x, s.y)?.closest('.col-board .col-cards');
+      if (cards) { const c = cards.getBoundingClientRect(); const dy = dealEdgeScrollDelta(s.y, c.top, c.bottom); if (dy) cards.scrollTop += dy; }
+    }
+    s.raf = requestAnimationFrame(step);
+  };
+  dealAutoScroll.raf = requestAnimationFrame(step);
+}
+function dealAutoScrollStop() {
+  if (!dealAutoScroll) return;
+  cancelAnimationFrame(dealAutoScroll.raf);
+  document.removeEventListener('dragover', dealAutoScrollMove, true);
+  dealAutoScroll = null;
 }

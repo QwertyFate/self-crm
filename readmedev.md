@@ -240,6 +240,11 @@ public/
       core.js          state globals, TRANSLATIONS + t()/tf(), api.*, loader, esc/icon/avatar,
                        the ui.* primitives (popover, menu, select, modal, drawer, confirm,
                        toast), shell helpers, command palette.  EVERYTHING depends on this.
+                       i18n rule (Part 45): NO hardcoded UI text anywhere in public/ —
+                       t('key') / tf('key', vars) in JS, data-i18n / -ph / -title / -aria /
+                       -alt in index.html, every key in BOTH en and de (German is the
+                       default). tests/client/i18n-sweep.test.js fails on a missing key or
+                       an untranslated index.html string.
       auth.js          init(), login/signup/reset, workspace picker + switching, switchPage()
       login-wall.js    the login page's canvas background (a vanilla port of upgrads.de's louvre wall); self-starting, idle while #auth-screen is hidden
                        (the "router"), resetClientState(), ensureX() caches

@@ -43,7 +43,7 @@ describe('runImport shows a real error instead of "Successfully imported undefin
   test('runImport checks res.error and bails out before building the success message', () => {
     const fn = sliceFn(imp, 'runImport', 'admin-import.js');
     const errIdx = fn.search(/if \(res\.error\)/);
-    const msgIdx = fn.indexOf('Successfully imported');
+    const msgIdx = fn.search(/imp_done_(one|many)/);   // the translated "Successfully imported {n} contact(s)." message
     assert.ok(errIdx !== -1, 'checks res.error');
     assert.ok(errIdx < msgIdx, 'the check happens before the success message is built');
     assert.match(fn, /if \(res\.error\) \{[\s\S]*?return;/);

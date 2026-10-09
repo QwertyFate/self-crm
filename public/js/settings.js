@@ -94,7 +94,7 @@ async function loadSettings() {
   renderTimezoneSetting();
   renderFieldsList(); renderContactColumnSettings();
   const waEl = document.getElementById('wa-template-input');
-  if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? 'Hi {{name}}, ';
+  if (waEl) waEl.value = currentWorkspace?.whatsapp_template ?? t('core_wa_default');
   const miroEl = document.getElementById('miro-url-input');
   if (miroEl) miroEl.value = currentWorkspace?.miro_url || '';
   objectFields  = objectFieldRows;
@@ -102,9 +102,9 @@ async function loadSettings() {
   renderObjectFieldsList(); renderObjectColumnSettings();
   if (currentUser?.role === 'owner') {
     const nameCard = document.getElementById('object-name-card');
-    if (nameCard) { nameCard.classList.remove('hidden'); document.getElementById('object-name-input').value = currentWorkspace?.object_name || 'Listings'; }
+    if (nameCard) { nameCard.classList.remove('hidden'); document.getElementById('object-name-input').value = objectWord(); }
     const supCard = document.getElementById('supplier-name-card');
-    if (supCard) { supCard.classList.remove('hidden'); document.getElementById('supplier-name-input').value = currentWorkspace?.supplier_name || 'Suppliers'; }
+    if (supCard) { supCard.classList.remove('hidden'); document.getElementById('supplier-name-input').value = supplierWord(); }
   }
   pipelines  = pipelineRows;
   dealFields = dealFieldRows;
@@ -148,7 +148,7 @@ async function saveWorkspaceName() {
   const res = await api.patch('/api/workspace/name', { name });
   if (res.error) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); return; }
   currentWorkspace.name = res.name; setSidebarWorkspace(res.name);
-  msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden');
+  msgEl.textContent = t('msg_saved'); msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden');
   setTimeout(() => msgEl.classList.add('hidden'), 2500);
 }
 
@@ -200,7 +200,7 @@ function openNewPipelineModal(id, name) {
   document.getElementById('new-pipeline-form').reset();
   document.getElementById('pipeline-edit-id').value = id || '';
   document.getElementById('pipeline-name-input').value = name || '';
-  document.getElementById('pipeline-modal-title').textContent = id ? 'Rename Pipeline' : 'New Pipeline';
+  document.getElementById('pipeline-modal-title').textContent = id ? t('stg_rename_pipeline') : t('stg_new_pipeline');
   document.getElementById('new-pipeline-modal').classList.remove('hidden');
 }
 function editPipeline(id, name) { openNewPipelineModal(id, name); }
@@ -216,7 +216,7 @@ async function saveNewPipeline(e) {
 }
 
 async function deletePipeline(id) {
-  if (!confirm('Delete this pipeline and all its deals?')) return;
+  if (!confirm(t('stg_delete_pipeline_confirm'))) return;
   await api.del(`/api/pipelines/${id}`);
   pipelines = pipelines.filter(p => p.id !== id);
   if (currentPipelineId === id) { currentPipelineId = pipelines[0]?.id || null; deals = []; }
@@ -224,7 +224,7 @@ async function deletePipeline(id) {
 }
 
 async function addPipelineStage(pipelineId) {
-  const name = prompt('Stage name:'); if (!name?.trim()) return;
+  const name = prompt(t('stg_stage_name_prompt')); if (!name?.trim()) return;
   const color = '#' + Math.floor(Math.random()*0xffffff).toString(16).padStart(6,'0');
   const res = await api.post(`/api/pipelines/${pipelineId}/stages`, { name: name.trim(), color });
   if (res.error) { alert(res.error); return; }
@@ -232,13 +232,13 @@ async function addPipelineStage(pipelineId) {
 }
 
 async function editPipelineStage(pipelineId, stageId, currentName, currentColor) {
-  const name = prompt('Stage name:', currentName); if (!name?.trim()) return;
+  const name = prompt(t('stg_stage_name_prompt'), currentName); if (!name?.trim()) return;
   await api.put(`/api/pipelines/${pipelineId}/stages/${stageId}`, { name: name.trim(), color: currentColor });
   pipelines = await api.get('/api/pipelines'); renderPipelinesSettings();
 }
 
 async function deletePipelineStage(pipelineId, stageId) {
-  if (!confirm('Delete this stage? Deals in it will become unsorted.')) return;
+  if (!confirm(t('stg_delete_stage_confirm'))) return;
   await api.del(`/api/pipelines/${pipelineId}/stages/${stageId}`);
   pipelines = await api.get('/api/pipelines'); renderPipelinesSettings();
 }
@@ -260,7 +260,7 @@ function openDealFieldModal(id) {
   document.getElementById('deal-field-form').reset();
   document.getElementById('deal-field-id').value = id || '';
   document.getElementById('dff-options-group').classList.add('hidden');
-  document.getElementById('deal-field-modal-title').textContent = id ? 'Edit Deal Field' : 'Add Deal Field';
+  document.getElementById('deal-field-modal-title').textContent = id ? t('stg_edit_deal_field') : t('stg_add_deal_field');
   if (id) {
     const f = dealFields.find(f => f.id === id);
     document.getElementById('dff-name').value = f.name; document.getElementById('dff-key').value = f.field_key;
@@ -286,7 +286,7 @@ async function saveDealField(e) {
   closeModal('deal-field-modal'); dealFields = await api.get('/api/deal-fields'); renderDealFieldsList();
 }
 async function deleteDealField(id) {
-  if (!confirm('Delete this field?')) return;
+  if (!confirm(t('stg_delete_field_confirm'))) return;
   await api.del(`/api/deal-fields/${id}`); dealFields = dealFields.filter(f => f.id !== id); renderDealFieldsList();
 }
 
@@ -304,7 +304,7 @@ async function saveWaTemplate() {
   if (btn) { btn.disabled = false; btn.textContent = t('btn_save'); }
   if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
   currentWorkspace.whatsapp_template = template;
-  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = t('msg_saved'); msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
@@ -315,7 +315,7 @@ function renderFieldsList() {
   el.innerHTML = fields.map(f => `
     <li class="settings-row">
       <span class="row-label">${esc(f.name)}</span>
-      <span class="row-sub">${esc(f.type)}${f.type === 'dropdown' ? ` (${(f.options || []).length} opts)` : ''}</span>
+      <span class="row-sub">${esc(f.type)}${f.type === 'dropdown' ? ` (${tf('stg_n_opts', { n: (f.options || []).length })})` : ''}</span>
       <div class="row-actions">
         <button class="btn btn-sm btn-ghost btn-icon" onclick="openFieldModal(${f.id})" title="${t('btn_edit')}" aria-label="${t('btn_edit')}">${UI_ICON.edit}</button>
         <button class="btn btn-sm btn-danger btn-icon" onclick="deleteField(${f.id})" title="${t('btn_delete')}" aria-label="${t('btn_delete')}">${UI_ICON.remove}</button>
@@ -351,7 +351,7 @@ async function saveField(e) {
   closeModal('field-modal'); invalidate(); await loadSettings();
 }
 async function deleteField(id) {
-  if (!confirm('Delete this field? Saved values will be lost.')) return;
+  if (!confirm(t('stg_delete_field_values_confirm'))) return;
   await api.del(`/api/fields/${id}`); invalidate(); await loadSettings();
 }
 
@@ -388,7 +388,7 @@ async function saveContactColumns() {
   if (btn) { btn.disabled = false; btn.textContent = t('btn_save'); }
   if (res.error) { if (msgEl) { msgEl.textContent = res.error; msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); } return; }
   contactColumns = toSave; currentWorkspace.contact_columns = toSave;
-  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = t('msg_saved'); msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500); filterContacts();
 }
 
@@ -405,7 +405,7 @@ function renderKanbanFields() {
 async function saveKanbanFields() {
   const checked = [...document.querySelectorAll('#kanban-fields-list input[type="checkbox"]:checked')].map(cb => cb.value);
   await api.patch('/api/workspace/kanban-fields', { fields: checked });
-  kanbanFields = checked; currentWorkspace.kanban_fields = checked; alert('Kanban fields saved.');
+  kanbanFields = checked; currentWorkspace.kanban_fields = checked; alert(t('stg_kanban_saved'));
 }
 
 async function loadInvites(prefetched) {
@@ -417,7 +417,7 @@ async function loadInvites(prefetched) {
         <span class="invite-code-val ${c.used ? 'invite-used' : ''}">${esc(c.code)}</span>
         <span class="member-role role-${esc(c.role)}">${roleLabel(c.role)}</span>
         ${c.used
-          ? `<span class="row-sub">${t('used_by')} ${esc(c.used_by_name||'someone')}</span>`
+          ? `<span class="row-sub">${t('used_by')} ${esc(c.used_by_name || t('stg_someone'))}</span>`
           : `<button class="btn btn-sm" onclick="copyCode('${esc(c.code)}')">${t('copy_btn')}</button>
              <button class="btn btn-sm btn-danger btn-icon" onclick="deleteInviteCode(${c.id})" title="${t('btn_delete')}" aria-label="${t('btn_delete')}">${UI_ICON.remove}</button>`}
       </li>`).join('')
@@ -431,7 +431,7 @@ async function generateInviteCode() {
   await loadInvites();
 }
 async function deleteInviteCode(id) { await api.del(`/api/invites/${id}`); await loadInvites(); }
-function copyCode(code) { navigator.clipboard.writeText(code).then(() => alert(`Copied: ${code}`)); }
+function copyCode(code) { navigator.clipboard.writeText(code).then(() => alert(tf('stg_copied_code', { code }))); }
 
 async function loadMembers(prefetched) {
   const list = prefetched ?? await api.get('/api/workspace/members');
@@ -458,15 +458,15 @@ async function changeMemberRole(id, role) {
   invalidate(); await loadMembers();
 }
 async function removeMember(id, name) {
-  if (!confirm(`Remove ${name} from this workspace? Their assigned contacts will become unassigned.`)) return;
+  if (!confirm(tf('stg_remove_member_confirm', { name }))) return;
   const res = await api.del(`/api/workspace/members/${id}`);
   if (res.error) { alert(res.error); return; }
   invalidate(); await loadSettings();
 }
 
 async function deleteWorkspace() {
-  if (!confirm('Are you sure you want to delete this workspace? This action cannot be undone. All data will be permanently deleted.')) return;
-  if (!confirm('This will delete all contacts, deals, tasks, and messages. Confirm deletion?')) return;
+  if (!confirm(t('stg_delete_ws_confirm1'))) return;
+  if (!confirm(t('stg_delete_ws_confirm2'))) return;
 
   const res = await api.del('/api/workspace');
   if (res.error) { alert(res.error); return; }
@@ -477,7 +477,7 @@ async function deleteWorkspace() {
 // Called with the rows loadSettings() already fetched, or bare (Tasks tab click, status save) to fetch its own.
 async function loadTaskSettings(prefetchedMe, prefetchedFields) {
   try {
-    const [me, tf] = prefetchedMe !== undefined
+    const [me, taskFieldRows] = prefetchedMe !== undefined
       ? [prefetchedMe, prefetchedFields]
       : await Promise.all([
           api.get('/api/auth/me'),
@@ -486,7 +486,7 @@ async function loadTaskSettings(prefetchedMe, prefetchedFields) {
     if (me?.workspace?.task_statuses) {
       currentWorkspace.task_statuses = me.workspace.task_statuses;
     }
-    taskFields = Array.isArray(tf) ? tf : [];
+    taskFields = Array.isArray(taskFieldRows) ? taskFieldRows : [];
   } catch (e) {
     taskFields = [];
   }
@@ -542,7 +542,7 @@ function openTaskStatusModal(key) {
   document.getElementById('task-status-form').reset();
   const statuses = getTaskStatuses();
   const s = key ? statuses.find(s => s.key === key) : null;
-  document.getElementById('task-status-modal-title').textContent = s ? 'Edit Status' : 'Add Status';
+  document.getElementById('task-status-modal-title').textContent = s ? t('stg_edit_status') : t('stg_add_status');
   document.getElementById('ts-key-hidden').value = key || '';
   document.getElementById('ts-label').value = s?.label || '';
   document.getElementById('ts-color').value = s?.color || '#94a3b8';
@@ -571,7 +571,7 @@ function saveTaskStatus(e) {
 }
 
 function deleteTaskStatus(key) {
-  if (!confirm('Delete this status? Tasks with this status will keep it but it won\'t appear in the kanban.')) return;
+  if (!confirm(t('stg_delete_status_confirm'))) return;
   const statuses = getTaskStatuses().filter(s => s.key !== key);
   if (currentWorkspace) currentWorkspace.task_statuses = statuses;
   renderTaskStatusesList();
@@ -587,7 +587,7 @@ async function saveTaskStatuses() {
     return;
   }
   if (currentWorkspace) currentWorkspace.task_statuses = res.statuses;
-  if (msgEl) { msgEl.textContent = 'Saved'; msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  if (msgEl) { msgEl.textContent = t('msg_saved'); msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
   setTimeout(() => msgEl?.classList.add('hidden'), 2500);
   if (document.getElementById('page-tasks')?.classList.contains('active')) renderTasksCurrent();
 }
@@ -611,7 +611,7 @@ function openTaskFieldModal(id) {
   document.getElementById('task-field-form').reset();
   document.getElementById('tff-id').value = id || '';
   document.getElementById('tff-options-group').classList.add('hidden');
-  document.getElementById('task-field-modal-title').textContent = id ? 'Edit Task Field' : 'Add Task Field';
+  document.getElementById('task-field-modal-title').textContent = id ? t('stg_edit_task_field') : t('stg_add_task_field');
   if (id) {
     const f = taskFields.find(f => f.id === id);
     document.getElementById('tff-name').value    = f.name;
@@ -654,7 +654,7 @@ async function saveTaskField(e) {
 }
 
 async function deleteTaskField(id) {
-  if (!confirm('Delete this field?')) return;
+  if (!confirm(t('stg_delete_field_confirm'))) return;
   await api.del(`/api/task-fields/${id}`);
   taskFields = taskFields.filter(f => f.id !== id);
   renderTaskFieldsList();

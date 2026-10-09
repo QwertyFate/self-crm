@@ -20,7 +20,7 @@ const section = html.slice(html.indexOf('<section id="page-chat"'), html.indexOf
 describe('markup: the composer send button uses the sprite', () => {
   test('file parses', () => execFileSync('node', ['--check', path.join(ROOT, 'public/js/chat.js')]));
   test('send button', () => {
-    assert.match(section, /<button class="chat-send-btn" onclick="sendChatMessageFromPage\(\)" title="Send" aria-label="Send message">\s*<svg class="ic" aria-hidden="true"><use href="#i-send"\/><\/svg>/);
+    assert.match(section, /<button class="chat-send-btn" onclick="sendChatMessageFromPage\(\)" title="Send" data-i18n-title="html_send" aria-label="Send message" data-i18n-aria="html_send_message">\s*<svg class="ic" aria-hidden="true"><use href="#i-send"\/><\/svg>/);
   });
   test('every sprite reference inside the Team Chat section resolves', () => {
     const defined = new Set([...html.matchAll(/<symbol id="(i-[\w-]+)"/g)].map(m => m[1]));

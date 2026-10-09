@@ -301,10 +301,10 @@ function wsGradient(id) {
 async function loadWorkspacesPage() {
   const grid = document.getElementById('workspaces-grid');
   if (!grid) return;
-  grid.innerHTML = '<p style="color:var(--muted);font-size:13px">Loading…</p>';
+  grid.innerHTML = `<p style="color:var(--muted);font-size:13px">${esc(t('ws_loading'))}</p>`;
 
   const data = await api.get('/api/auth/my-workspaces');
-  if (!data || data.error) { grid.innerHTML = '<p style="color:var(--muted)">Could not load workspaces.</p>'; return; }
+  if (!data || data.error) { grid.innerHTML = `<p style="color:var(--muted)">${esc(t('ws_load_error'))}</p>`; return; }
 
   const cards = data.workspaces.map(w => {
     const isActive = w.id === currentWorkspace?.id;
@@ -313,14 +313,14 @@ async function loadWorkspacesPage() {
     <div class="ws-page-card${isActive ? ' active' : ''}" onclick="switchWorkspace(${w.id})">
       <div class="ws-page-card-banner" style="background:${grad}">
         <div class="ws-page-avatar-lg">${(w.name||'?')[0].toUpperCase()}</div>
-        ${isActive ? '<div class="ws-page-active-badge">Active</div>' : ''}
+        ${isActive ? `<div class="ws-page-active-badge">${esc(t('ws_active'))}</div>` : ''}
       </div>
       <div class="ws-page-card-body">
         <div class="ws-page-name">${esc(w.name)}</div>
         <div class="ws-page-role">${roleLabel(w.role)}</div>
       </div>
       <div class="ws-page-card-footer">
-        <span class="ws-page-open-btn">${isActive ? 'Currently open' : `Switch ${icon('arrow-up-right', 'ic-sm')}`}</span>
+        <span class="ws-page-open-btn">${isActive ? esc(t('ws_current')) : `${esc(t('ws_switch'))} ${icon('arrow-up-right', 'ic-sm')}`}</span>
       </div>
     </div>`;
   }).join('');
@@ -331,11 +331,11 @@ async function loadWorkspacesPage() {
         <div class="ws-page-add-icon">${icon('plus')}</div>
       </div>
       <div class="ws-page-card-body">
-        <div class="ws-page-name">Add a Workspace</div>
-        <div class="ws-page-role">Join or create</div>
+        <div class="ws-page-name">${esc(t('ws_add_title'))}</div>
+        <div class="ws-page-role">${esc(t('ws_join_or_create'))}</div>
       </div>
       <div class="ws-page-card-footer">
-        <span class="ws-page-open-btn">Get started ${icon('arrow-up-right', 'ic-sm')}</span>
+        <span class="ws-page-open-btn">${esc(t('ws_get_started'))} ${icon('arrow-up-right', 'ic-sm')}</span>
       </div>
     </div>`;
 }

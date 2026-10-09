@@ -19,11 +19,11 @@ const section = html.slice(html.indexOf('<section id="page-calendar"'), html.ind
 describe('markup: header uses sprite icons', () => {
   test('file parses', () => execFileSync('node', ['--check', path.join(ROOT, 'public/js/calendar.js')]));
   test('the header is the reference page-header, and the nav icons come from the sprite', () => {
-    assert.match(section, /<h1 class="page-title">Calendar<\/h1>/);
+    assert.match(section, /<h1 class="page-title" data-i18n="nav_calendar">Calendar<\/h1>/);
     const t = sliceFn(calendar, 'renderCalendarToolbar', 'calendar.js');
     assert.match(t, /icon\('chevron-left'\)/);
     assert.match(t, /icon\('chevron-right'\)/);
-    assert.match(t, /aria-label="Previous \$\{calView\}"/);
+    assert.match(t, /aria-label="\$\{esc\(t\(calView === 'month' \? 'cal_prev_month' : 'cal_prev_week'\)\)\}"/, 'the nav label is a dictionary key per view (German adjectives inflect, so no "Previous {view}" template)');
   });
   test('every sprite reference inside the section resolves', () => {
     const defined = new Set([...html.matchAll(/<symbol id="(i-[\w-]+)"/g)].map(m => m[1]));
@@ -47,7 +47,7 @@ describe('calendar.js: the day-events pop window (Part 16: ui.modal, see tests/c
   });
   test('each row opens that one entry, with a sprite icon', () => {
     const d = sliceFn(calendar, 'openDayModal', 'calendar.js');
-    assert.match(d, /icon\('external'\)\}Open/);
+    assert.match(d, /icon\('external'\)\}\$\{esc\(t\('tk_open'\)\)\}/);
     assert.match(d, /openCalendarEntry\(/);
   });
 });
@@ -83,7 +83,7 @@ describe('the reference Calendar screen (Part 30)', () => {
   test('the page is a shell the renderer fills, with the reference header and toolbar', () => {
     assert.match(sec3, /<h1 class="page-title"[^>]*>Calendar<\/h1>/);
     assert.match(sec3, /id="calendar-page-sub"/);
-    assert.match(sec3, /<div class="seg" role="group" aria-label="View">/);
+    assert.match(sec3, /<div class="seg" role="group" aria-label="View" data-i18n-aria="tk_view">/);
     for (const v of ['month', 'week']) assert.match(sec3, new RegExp(`data-view="${v}"[^>]*aria-pressed=`), v);
     assert.match(sec3, /onclick="openActivityModal\(\)"/, 'Add event');
     assert.match(sec3, /id="calendar-toolbar"/);
@@ -206,8 +206,9 @@ describe('tasks on the calendar (Part 31)', () => {
 describe('entries show their own name, not a generic one (Part 32)', () => {
   const cal = read('public/js/calendar.js');
   test("calTitleOf reads the row's title — a task was falling through to the word 'Task'", () => {
-    const { calTitleOf } = loadFns('public/js/calendar.js', ['calTitleOf', 'calTypeOf'], {
-      extra: "const CAL_TYPES = [{ id: 'note', label: 'Note' }, { id: 'task', label: 'Task' }];" });
+    // CAL_TYPES holds dictionary keys now; the sandbox's t() maps them back to the English words
+    const { calTitleOf } = loadFns('public/js/calendar.js', ['calTitleOf', 'calTypeOf', 'calTypeLabel'], {
+      extra: "const CAL_TYPES = [{ id: 'note', key: 'act_note' }, { id: 'task', key: 'new_task' }]; const t = k => ({ act_note: 'Note', new_task: 'Task' })[k] || k;" });
     assert.equal(calTitleOf({ type: 'task', title: 'Send the quote to Bo' }), 'Send the quote to Bo');
     assert.equal(calTitleOf({ type: 'note', title: 'Rang<br>no answer' }), 'Rang no answer', 'activity notes hold HTML');
     assert.equal(calTitleOf({ type: 'note', title: '  ' }), 'Note', 'only a genuinely empty entry falls back to its kind');

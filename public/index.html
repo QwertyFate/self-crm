@@ -104,7 +104,7 @@
   <!-- Global loading overlay -->
   <div id="loading-overlay" class="hidden">
     <div class="loading-card">
-      <img src="/images/logo.png" alt="Loading…" class="loading-logo" />
+      <img src="/images/logo.png" alt="Loading…" data-i18n-alt="html_alt_loading" class="loading-logo" />
       <div class="loading-dots">
         <span></span><span></span><span></span>
       </div>
@@ -118,36 +118,36 @@
     <div class="auth-wrap">
       <div class="auth-card">
         <div class="auth-logo">
-          <img src="/images/logo.png" alt="CRM Logo" />
+          <img src="/images/logo.png" alt="CRM Logo" data-i18n-alt="html_alt_logo" />
         </div>
 
         <!-- ── Admin Login ── -->
         <div id="admin-view-login">
-          <p class="admin-panel-title">Platform Admin</p>
-          <p class="admin-panel-sub">Enter your admin secret to manage platform invite codes.</p>
+          <p class="admin-panel-title" data-i18n="html_admin_title">Platform Admin</p>
+          <p class="admin-panel-sub" data-i18n="html_admin_sub">Enter your admin secret to manage platform invite codes.</p>
           <form class="auth-form" onsubmit="handleAdminLogin(event)">
             <div class="auth-field">
-              <label>Admin Secret</label>
+              <label data-i18n="html_admin_secret">Admin Secret</label>
               <input type="password" id="admin-secret-input" required autocomplete="current-password" />
             </div>
             <div id="admin-login-error" class="auth-error hidden"></div>
-            <button type="submit" class="btn btn-primary auth-submit">Access panel</button>
+            <button type="submit" class="btn btn-primary auth-submit" data-i18n="html_admin_access">Access panel</button>
           </form>
           <div class="auth-link-row" style="margin-top:16px">
-            <a href="/" onclick="location.href='/'"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back to app</span></a>
+            <a href="/" onclick="location.href='/'"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span data-i18n="html_back_to_app">Back to app</span></a>
           </div>
         </div>
 
         <!-- ── Admin Dashboard ── -->
         <div id="admin-view-panel" class="hidden">
           <div class="admin-panel-header">
-            <p class="admin-panel-title" style="margin:0">Platform Invites</p>
-            <button class="btn btn-primary btn-sm" onclick="adminGenerateCode()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span>Generate</span></button>
+            <p class="admin-panel-title" style="margin:0" data-i18n="html_admin_invites">Platform Invites</p>
+            <button class="btn btn-primary btn-sm" onclick="adminGenerateCode()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="generate_btn">Generate</span></button>
           </div>
-          <p class="admin-panel-sub">One-time codes that allow someone to create a new workspace on signup.</p>
+          <p class="admin-panel-sub" data-i18n="html_admin_invites_hint">One-time codes that allow someone to create a new workspace on signup.</p>
           <div id="admin-invites-list" class="admin-invites-list"></div>
           <div class="auth-link-row" style="margin-top:18px">
-            <a href="#" onclick="adminLogout(event)"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-log-out"/></svg><span>Log out of admin</span></a>
+            <a href="#" onclick="adminLogout(event)"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-log-out"/></svg><span data-i18n="html_admin_logout">Log out of admin</span></a>
           </div>
         </div>
 
@@ -314,7 +314,7 @@
           </div>
 
           <div class="admin-link-row">
-            <a href="/?admin" class="admin-link"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg><span>Admin</span></a>
+            <a href="/?admin" class="admin-link"><svg class="ic" aria-hidden="true"><use href="#i-settings"/></svg><span data-i18n="role_admin">Admin</span></a>
           </div>
         </div>
       </section>
@@ -325,18 +325,18 @@
        MAIN APP
   ══════════════════════════════════════ -->
   <div id="app" class="hidden">
-    <nav class="sidebar" aria-label="Main">
+    <nav class="sidebar" aria-label="Main" data-i18n-aria="html_nav_main">
       <div class="sb-brand">
         <img src="/images/logo.png" alt="Upgrads" class="sb-full" />
-        <button class="iconbtn sb-toggle" type="button" onclick="toggleRail()" title="Collapse sidebar" aria-label="Collapse sidebar"><svg class="ic" aria-hidden="true"><use href="#i-panel-left"/></svg></button>
+        <button class="iconbtn sb-toggle" type="button" onclick="toggleRail()" title="Collapse sidebar" data-i18n-title="html_collapse_sidebar" aria-label="Collapse sidebar" data-i18n-aria="html_collapse_sidebar"><svg class="ic" aria-hidden="true"><use href="#i-panel-left"/></svg></button>
       </div>
 
       <!-- Workspace button: name + the user's timezone clock (per-user, editable in Settings → Preferences) -->
-      <button class="sb-ws" id="ws-switcher" onclick="switchPage('workspaces')" type="button" title="Workspaces">
+      <button class="sb-ws" id="ws-switcher" onclick="switchPage('workspaces')" type="button" title="Workspaces" data-i18n-title="nav_workspaces">
         <span class="sb-ws-badge" id="sidebar-workspace-badge"></span>
         <span class="grow">
           <span class="sb-ws-name" id="sidebar-workspace"></span>
-          <span class="sidebar-clock sb-ws-meta" id="sidebar-clock" title="Click to change timezone" onclick="event.stopPropagation(); switchSettingsTab('preferences'); switchPage('settings')"></span>
+          <span class="sidebar-clock sb-ws-meta" id="sidebar-clock" title="Click to change timezone" data-i18n-title="html_click_change_tz" onclick="event.stopPropagation(); switchSettingsTab('preferences'); switchPage('settings')"></span>
         </span>
         <span class="sb-chev"><svg class="ic" aria-hidden="true"><use href="#i-chevrons-up-down"/></svg></span>
       </button>
@@ -371,22 +371,22 @@
     <div class="main">
       <header class="topbar">
         <div class="crumbs" id="crumbs"></div>
-        <button class="search-trigger" onclick="openPalette()" type="button" aria-label="Search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><span class="grow" data-i18n="topbar_search">Go to a page…</span><span class="kbd-wrap"><span class="kbd">Ctrl K</span></span></button>
+        <button class="search-trigger" onclick="openPalette()" type="button" aria-label="Search" data-i18n-aria="html_search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><span class="grow" data-i18n="topbar_search">Go to a page…</span><span class="kbd-wrap"><span class="kbd">Ctrl K</span></span></button>
         <div class="topbar-actions">
           <button class="btn btn-primary" id="topbar-new-btn" onclick="openNewMenu(this)" type="button" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="topbar_new">New</span></button>
-          <button class="iconbtn" id="notif-bell-btn" onclick="toggleNotifPanel()" type="button" aria-label="Notifications" title="Notifications"><svg class="ic" aria-hidden="true"><use href="#i-bell"/></svg><span class="notif-badge hidden" id="notif-badge">0</span></button>
-          <button class="iconbtn" id="guide-help-btn" onclick="openHelpMenu(this)" type="button" aria-label="Help" title="Help" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg></button>
+          <button class="iconbtn" id="notif-bell-btn" onclick="toggleNotifPanel()" type="button" aria-label="Notifications" data-i18n-aria="set_notifications" title="Notifications" data-i18n-title="set_notifications"><svg class="ic" aria-hidden="true"><use href="#i-bell"/></svg><span class="notif-badge hidden" id="notif-badge">0</span></button>
+          <button class="iconbtn" id="guide-help-btn" onclick="openHelpMenu(this)" type="button" aria-label="Help" data-i18n-aria="html_help" title="Help" data-i18n-title="html_help" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-help"/></svg></button>
         </div>
       </header>
 
       <!-- Notification panel: a popover under the bell -->
       <div id="notif-panel" class="notif-panel hidden">
         <div class="notif-panel-header">
-          <span class="notif-panel-title">Notifications</span>
+          <span class="notif-panel-title" data-i18n="set_notifications">Notifications</span>
           <div style="display:flex;gap:6px;align-items:center">
-            <button class="btn btn-sm btn-ghost" onclick="markAllNotifRead()">Mark all read</button>
-            <button class="btn btn-sm btn-ghost" onclick="clearReadNotifs()">Clear</button>
-            <button class="iconbtn" onclick="toggleNotifPanel()" aria-label="Close" style="width:28px;height:28px"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+            <button class="btn btn-sm btn-ghost" onclick="markAllNotifRead()" data-i18n="html_mark_all_read">Mark all read</button>
+            <button class="btn btn-sm btn-ghost" onclick="clearReadNotifs()" data-i18n="html_clear">Clear</button>
+            <button class="iconbtn" onclick="toggleNotifPanel()" aria-label="Close" data-i18n-aria="btn_close" style="width:28px;height:28px"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
           </div>
         </div>
         <div id="notif-list" class="notif-list"></div>
@@ -403,16 +403,16 @@
           </div>
           <div class="page-actions">
             <select id="deals-pipeline-select" class="btn btn-secondary deals-pipeline-select" onchange="onPipelineChange()"></select>
-            <div class="seg" role="group" aria-label="View">
+            <div class="seg" role="group" aria-label="View" data-i18n-aria="tk_view">
               <button id="deal-view-kanban" aria-pressed="true" onclick="setDealView('kanban')" type="button"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-kanban"/></svg><span data-i18n="view_board">Board</span></button>
               <button id="deal-view-list" aria-pressed="false" onclick="setDealView('list')" type="button"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-list"/></svg><span data-i18n="view_list">List</span></button>
             </div>
-            <button class="btn btn-secondary btn-icon" onclick="openDealsMoreMenu(this)" type="button" aria-label="More actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
+            <button class="btn btn-secondary btn-icon" onclick="openDealsMoreMenu(this)" type="button" aria-label="More actions" data-i18n-aria="html_more_actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
             <button class="btn btn-primary" onclick="openDealModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="add_deal">Add deal</span></button>
           </div>
         </div>
         <!-- Summary (KPIs + value by stage), toolbar, then the board or the list. All filled by deals.js. -->
-        <section id="deals-summary" class="card summary hidden" aria-label="Pipeline summary"></section>
+        <section id="deals-summary" class="card summary hidden" aria-label="Pipeline summary" data-i18n-aria="html_pipeline_summary"></section>
         <div id="deals-toolbar" class="toolbar"></div>
         <div id="deals-board" class="board"></div>
         <div id="deals-list-view" class="deals-list hidden">
@@ -434,7 +434,7 @@
           <div class="page-header">
             <div><h1 data-i18n="page_contacts">Contacts</h1><p class="page-sub" id="contacts-page-sub"></p></div>
             <div class="page-actions">
-              <button class="btn btn-secondary btn-icon" onclick="openContactsMoreMenu(this)" type="button" aria-label="More actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
+              <button class="btn btn-secondary btn-icon" onclick="openContactsMoreMenu(this)" type="button" aria-label="More actions" data-i18n-aria="html_more_actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
               <button class="btn btn-primary" id="list-add-btn" onclick="openContactModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="add_contact">Add Contact</span></button>
             </div>
           </div>
@@ -453,7 +453,7 @@
         <div id="contact-side-panel" class="contact-side-panel hidden">
           <div class="side-panel-header">
             <span class="side-panel-name" id="side-panel-name"></span>
-            <button class="iconbtn" onclick="closeSidePanel()" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+            <button class="iconbtn" onclick="closeSidePanel()" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
           </div>
           <div id="side-panel-body" class="side-panel-body"></div>
         </div>
@@ -462,17 +462,17 @@
       <!-- ── Team Chat ── -->
       <section id="page-chat" class="page page-chat-layout">
         <div class="chat-page-header">
-          <h1>Team Chat</h1>
+          <h1 data-i18n="nav_chat">Team Chat</h1>
           <div class="page-actions">
-            <button class="btn btn-sm" onclick="renderChatRoom()"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3v6h-6"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg><span>Refresh</span></button>
+            <button class="btn btn-sm" onclick="renderChatRoom()"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3v6h-6"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg><span data-i18n="btn_refresh">Refresh</span></button>
           </div>
         </div>
         <div class="chat-page-online-bar" id="chat-page-online-bar"></div>
         <div class="chat-page-messages" id="chat-page-messages"></div>
         <div class="chat-composer">
-          <input type="text" class="chat-input" id="chat-page-input" placeholder="Message your team..." autocomplete="off"
+          <input type="text" class="chat-input" id="chat-page-input" placeholder="Message your team..." data-i18n-ph="html_chat_ph" autocomplete="off"
                  onkeydown="if(event.key==='Enter'){sendChatMessageFromPage();event.preventDefault()}" />
-          <button class="chat-send-btn" onclick="sendChatMessageFromPage()" title="Send" aria-label="Send message">
+          <button class="chat-send-btn" onclick="sendChatMessageFromPage()" title="Send" data-i18n-title="html_send" aria-label="Send message" data-i18n-aria="html_send_message">
             <svg class="ic" aria-hidden="true"><use href="#i-send"/></svg>
           </button>
         </div>
@@ -490,7 +490,7 @@
         <div id="activities-toolbar" class="toolbar"></div>
         <div class="split split-2-1 ac-split">
           <div class="ac-left"><div id="activities-compose"></div><div id="activities-list" class="ac-feed"></div></div>
-          <aside class="ac-rail" id="activities-rail" aria-label="Breakdown"></aside>
+          <aside class="ac-rail" id="activities-rail" aria-label="Breakdown" data-i18n-aria="rail_aria"></aside>
         </div>
       </section>
 
@@ -498,20 +498,20 @@
       <section id="page-calendar" class="page">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Calendar</h1>
+            <h1 class="page-title" data-i18n="nav_calendar">Calendar</h1>
             <p class="page-sub" id="calendar-page-sub"></p>
           </div>
           <div class="page-actions">
-            <div class="seg" role="group" aria-label="View">
-              <button data-view="month" aria-pressed="true"  onclick="setCalendarView('month')">Month</button>
-              <button data-view="week"  aria-pressed="false" onclick="setCalendarView('week')">Week</button>
+            <div class="seg" role="group" aria-label="View" data-i18n-aria="tk_view">
+              <button data-view="month" aria-pressed="true"  onclick="setCalendarView('month')" data-i18n="html_month">Month</button>
+              <button data-view="week"  aria-pressed="false" onclick="setCalendarView('week')" data-i18n="html_week">Week</button>
             </div>
-            <button class="btn btn-primary" onclick="openActivityModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span>Add event</span></button>
+            <button class="btn btn-primary" onclick="openActivityModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="html_add_event">Add event</span></button>
           </div>
         </div>
         <div class="toolbar" id="calendar-toolbar"></div>
         <div class="cal-layout">
-          <section class="card cal-card" aria-label="Calendar"><div id="calendar-grid"></div></section>
+          <section class="card cal-card" aria-label="Calendar" data-i18n-aria="nav_calendar"><div id="calendar-grid"></div></section>
           <div id="calendar-upcoming"></div>
         </div>
       </section>
@@ -521,19 +521,19 @@
         <div class="page-header">
           <h1 id="objects-page-title">Listings</h1>
           <div class="page-actions">
-            <button class="btn" id="add-object-column-btn" onclick="openObjectFieldModal()" title="Add a new property (column) to every listing">
-              <svg class="ic" aria-hidden="true"><use href="#i-columns"/></svg><span>Add column</span>
+            <button class="btn" id="add-object-column-btn" onclick="openObjectFieldModal()" title="Add a new property (column) to every listing" data-i18n-title="html_add_column_title">
+              <svg class="ic" aria-hidden="true"><use href="#i-columns"/></svg><span data-i18n="html_add_column">Add column</span>
             </button>
-            <button class="btn btn-secondary btn-icon" onclick="openObjectsMoreMenu(this)" type="button" aria-label="More actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
-            <button class="btn btn-primary" id="add-object-btn" onclick="openObjectModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span>Add</span></button>
+            <button class="btn btn-secondary btn-icon" onclick="openObjectsMoreMenu(this)" type="button" aria-label="More actions" data-i18n-aria="html_more_actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"/></svg></button>
+            <button class="btn btn-primary" id="add-object-btn" onclick="openObjectModal()"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="add_btn">Add</span></button>
           </div>
         </div>
         <div class="toolbar">
-          <input type="text" id="object-search" placeholder="Search…" autocomplete="off" oninput="onObjectSearch()" />
+          <input type="text" id="object-search" placeholder="Search…" data-i18n-ph="html_search_ph" autocomplete="off" oninput="onObjectSearch()" />
           <div class="toolbar-actions">
             <span id="object-count" class="text-xs text-muted"></span>
             <button class="btn btn-sm hidden" id="object-search-clear" onclick="clearObjectSearch()">
-              <svg class="ic" aria-hidden="true"><use href="#i-x"/></svg><span>Clear</span>
+              <svg class="ic" aria-hidden="true"><use href="#i-x"/></svg><span data-i18n="html_clear">Clear</span>
             </button>
           </div>
         </div>
@@ -548,7 +548,7 @@
 
       <!-- ── Tasks ── (reference screen: tasks.js — Views + projects sidebar, summary, chips, grouped table or board; both hosts are rendered by tasks.js) -->
       <section id="page-tasks" class="page page-tasks-layout">
-        <aside class="tk-side" id="tasks-side" aria-label="Task projects"></aside>
+        <aside class="tk-side" id="tasks-side" aria-label="Task projects" data-i18n-aria="html_task_projects"></aside>
         <div class="tk-main" id="tasks-main"></div>
       </section>
 
@@ -561,29 +561,29 @@
       <section id="page-analytics" class="page">
         <div class="page-header">
           <div>
-            <h1 class="page-title">Analytics</h1>
+            <h1 class="page-title" data-i18n="nav_analytics">Analytics</h1>
             <p class="page-sub" id="analytics-period"></p>
           </div>
           <div class="page-actions">
-            <div class="seg" role="group" aria-label="Time range">
+            <div class="seg" role="group" aria-label="Time range" data-i18n-aria="html_time_range">
               <button data-period="3"  aria-pressed="false" onclick="setAnalyticsPeriod(3)">3M</button>
               <button data-period="6"  aria-pressed="true"  onclick="setAnalyticsPeriod(6)">6M</button>
               <button data-period="12" aria-pressed="false" onclick="setAnalyticsPeriod(12)">12M</button>
             </div>
-            <button class="btn btn-secondary btn-sm" onclick="openAnalyticsConfig()"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-settings"/></svg><span>Configure Metrics</span></button>
+            <button class="btn btn-secondary btn-sm" onclick="openAnalyticsConfig()"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-settings"/></svg><span data-i18n="html_configure_metrics">Configure Metrics</span></button>
           </div>
         </div>
 
         <div id="analytics-main-sections" style="padding-left:24px;margin-left:-24px">
           <!-- Stat cards -->
           <div class="analytics-draggable-section" id="analytics-sec-stats" data-section-id="stats">
-            <div class="section-drag-handle" title="Drag to reorder section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
+            <div class="section-drag-handle" title="Drag to reorder section" data-i18n-title="html_drag_section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
             <div class="analytics-cards" id="analytics-cards"></div>
           </div>
 
           <!-- Win and loss, with the per-pipeline rows under it -->
           <div class="analytics-draggable-section" id="analytics-sec-winloss" data-section-id="winloss">
-            <div class="section-drag-handle" title="Drag to reorder section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
+            <div class="section-drag-handle" title="Drag to reorder section" data-i18n-title="html_drag_section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
             <div id="analytics-winloss"></div>
           </div>
 
@@ -591,36 +591,36 @@
           <!-- Deals by owner -->
           <!-- Win rate per month -->
           <div class="analytics-draggable-section" id="analytics-sec-rate" data-section-id="rate">
-            <div class="section-drag-handle" title="Drag to reorder section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
+            <div class="section-drag-handle" title="Drag to reorder section" data-i18n-title="html_drag_section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
             <div id="analytics-win-rate"></div>
           </div>
 
           <!-- Pipeline funnel -->
           <div class="analytics-draggable-section" id="analytics-sec-funnel" data-section-id="funnel">
-            <div class="section-drag-handle" title="Drag to reorder section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
+            <div class="section-drag-handle" title="Drag to reorder section" data-i18n-title="html_drag_section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
             <div id="analytics-funnel"></div>
           </div>
 
           <div class="analytics-draggable-section" id="analytics-sec-owner" data-section-id="owner">
-            <div class="section-drag-handle" title="Drag to reorder section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
+            <div class="section-drag-handle" title="Drag to reorder section" data-i18n-title="html_drag_section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
             <div id="analytics-by-owner"></div>
           </div>
 
           <!-- Top open deals -->
           <div class="analytics-draggable-section" id="analytics-sec-top" data-section-id="top">
-            <div class="section-drag-handle" title="Drag to reorder section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
+            <div class="section-drag-handle" title="Drag to reorder section" data-i18n-title="html_drag_section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
             <div id="analytics-top-deals"></div>
           </div>
 
           <div class="analytics-draggable-section" id="analytics-sec-trends" data-section-id="trends">
-            <div class="section-drag-handle" title="Drag to reorder section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
+            <div class="section-drag-handle" title="Drag to reorder section" data-i18n-title="html_drag_section"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-grip"/></svg></div>
             <div class="analytics-section">
               <div class="analytics-trend-header">
-                <div class="analytics-section-title" style="margin:0">Trends</div>
+                <div class="analytics-section-title" style="margin:0" data-i18n="html_trends">Trends</div>
                 <div class="analytics-period-switcher">
-                  <button class="period-btn active" data-period="week"  onclick="switchTrendPeriod('week')">Week</button>
-                  <button class="period-btn"        data-period="month" onclick="switchTrendPeriod('month')">Month</button>
-                  <button class="period-btn"        data-period="year"  onclick="switchTrendPeriod('year')">Year</button>
+                  <button class="period-btn active" data-period="week"  onclick="switchTrendPeriod('week')" data-i18n="html_week">Week</button>
+                  <button class="period-btn"        data-period="month" onclick="switchTrendPeriod('month')" data-i18n="html_month">Month</button>
+                  <button class="period-btn"        data-period="year"  onclick="switchTrendPeriod('year')" data-i18n="html_year">Year</button>
                 </div>
               </div>
               <div class="analytics-trend-grid" id="analytics-trend-grid"></div>
@@ -633,33 +633,33 @@
       <div id="analytics-config-modal" class="modal-overlay hidden">
         <div class="modal" style="max-width:720px">
           <div class="modal-head">
-            <h2 class="modal-title">Configure Metrics</h2>
-            <button class="iconbtn" onclick="closeAnalyticsConfig()" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+            <h2 class="modal-title" data-i18n="html_configure_metrics">Configure Metrics</h2>
+            <button class="iconbtn" onclick="closeAnalyticsConfig()" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
           </div>
           <div class="modal-body">
             <div class="analytics-config-group">
-              <div class="analytics-config-label">Visible Metric Cards</div>
-              <p class="text-xs text-muted">Toggle which cards appear in the overview row.</p>
+              <div class="analytics-config-label" data-i18n="html_visible_cards">Visible Metric Cards</div>
+              <p class="text-xs text-muted" data-i18n="html_visible_cards_hint">Toggle which cards appear in the overview row.</p>
               <div id="analytics-card-visibility" class="analytics-stage-chips"></div>
             </div>
             <div class="analytics-config-group" style="margin-top:20px">
-              <div class="analytics-config-label">Deal Value Field</div>
-              <p class="text-xs text-muted">Which field holds the deal price? Only numeric/currency fields appear here.</p>
+              <div class="analytics-config-label" data-i18n="html_deal_value_field">Deal Value Field</div>
+              <p class="text-xs text-muted" data-i18n="html_deal_value_field_hint">Which field holds the deal price? Only numeric/currency fields appear here.</p>
               <select id="analytics-value-field" class="form-control" style="width:100%"></select>
             </div>
             <div class="analytics-config-group" style="margin-top:20px">
-              <div class="analytics-config-label" style="color:#22c55e">Won Stages</div>
+              <div class="analytics-config-label" style="color:#22c55e" data-i18n="html_won_stages">Won Stages</div>
               <div id="analytics-won-stages"></div>
             </div>
             <div class="analytics-config-group" style="margin-top:16px">
-              <div class="analytics-config-label" style="color:#ef4444">Lost Stages</div>
+              <div class="analytics-config-label" style="color:#ef4444" data-i18n="html_lost_stages">Lost Stages</div>
               <div id="analytics-lost-stages"></div>
             </div>
             <div id="analytics-config-msg" class="workspace-name-msg hidden"></div>
           </div>
           <div class="modal-foot">
-            <button class="btn btn-secondary" onclick="closeAnalyticsConfig()">Cancel</button>
-            <button class="btn btn-primary" onclick="saveAnalyticsConfig()">Save</button>
+            <button class="btn btn-secondary" onclick="closeAnalyticsConfig()" data-i18n="btn_cancel">Cancel</button>
+            <button class="btn btn-primary" onclick="saveAnalyticsConfig()" data-i18n="btn_save">Save</button>
           </div>
         </div>
       </div>
@@ -715,7 +715,7 @@
                 <p class="settings-hint" data-i18n="hint_supplier_name">What the second contact list is called in the sidebar, for example Suppliers or Partners.</p>
                 <div class="settings-card-body">
                   <div class="workspace-name-row">
-                    <input type="text" id="supplier-name-input" class="workspace-name-input" placeholder="Suppliers" />
+                    <input type="text" id="supplier-name-input" class="workspace-name-input" placeholder="Suppliers" data-i18n-ph="html_ph_suppliers" />
                     <button class="btn btn-primary btn-sm" onclick="saveSupplierName()" data-i18n="btn_save">Save</button>
                     <span id="supplier-name-msg" class="workspace-name-msg hidden"></span>
                   </div>
@@ -727,7 +727,7 @@
                 <p class="settings-hint" data-i18n="hint_object_name">What the things you list are called throughout the app, for example Properties or Products.</p>
                 <div class="settings-card-body">
                   <div class="workspace-name-row">
-                    <input type="text" id="object-name-input" class="workspace-name-input" placeholder="Listings" />
+                    <input type="text" id="object-name-input" class="workspace-name-input" placeholder="Listings" data-i18n-ph="html_ph_listings" />
                     <button class="btn btn-primary btn-sm" onclick="saveObjectTypeName()" data-i18n="btn_save">Save</button>
                     <span id="object-name-msg" class="workspace-name-msg hidden"></span>
                   </div>
@@ -1008,9 +1008,9 @@
                 <div class="settings-card-header">
                   <h2 data-i18n="set_invites">Invite codes</h2>
                   <div class="invite-actions">
-                    <select id="invite-role-select" class="btn btn-sm hidden" title="Role" aria-label="Role for the new invite code">
-                      <option value="member">Member</option>
-                      <option value="admin">Admin</option>
+                    <select id="invite-role-select" class="btn btn-sm hidden" title="Role" data-i18n-title="lbl_invite_role" aria-label="Role for the new invite code" data-i18n-aria="html_invite_role_aria">
+                      <option value="member" data-i18n="role_member">Member</option>
+                      <option value="admin" data-i18n="role_admin">Admin</option>
                     </select>
                     <button class="btn btn-primary btn-sm" onclick="generateInviteCode()" data-i18n="generate_btn">Generate</button>
                   </div>
@@ -1264,10 +1264,10 @@
         <div class="page-header" style="flex-shrink:0">
           <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
             <div>
-              <h1>Workspaces</h1>
-              <p class="text-muted">Switch between your workspaces or create a new one.</p>
+              <h1 data-i18n="nav_workspaces">Workspaces</h1>
+              <p class="text-muted" data-i18n="html_ws_sub">Switch between your workspaces or create a new one.</p>
             </div>
-            <button class="btn btn-primary" onclick="openCreateWorkspaceModal()" style="flex-shrink: 0;"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span>New Workspace</span></button>
+            <button class="btn btn-primary" onclick="openCreateWorkspaceModal()" style="flex-shrink: 0;"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="html_new_workspace">New Workspace</span></button>
           </div>
         </div>
         <div id="workspaces-grid" class="ws-page-grid"></div>
@@ -1283,18 +1283,18 @@
   <div id="join-workspace-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title">Join a Workspace</h2>
-        <button class="iconbtn" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" data-i18n="html_join_ws_title">Join a Workspace</h2>
+        <button class="iconbtn" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form onsubmit="handleJoinWorkspace(event)">
         <div class="field">
-          <label class="label">Workspace Invite Code <span class="req">*</span></label>
-          <input type="text" id="join-ws-code" placeholder="Paste invite code here" autocomplete="off" required />
+          <label class="label"><span data-i18n="html_ws_invite_code">Workspace Invite Code</span> <span class="req">*</span></label>
+          <input type="text" id="join-ws-code" placeholder="Paste invite code here" data-i18n-ph="html_ph_invite_code" autocomplete="off" required />
         </div>
         <div id="join-ws-error" class="auth-error hidden" style="margin:0 22px 10px"></div>
         <div class="modal-foot">
-          <button type="button" class="btn btn-secondary" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')">Cancel</button>
-          <button type="submit" class="btn btn-primary">Join Workspace</button>
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="html_join_ws_btn">Join Workspace</button>
         </div>
       </form>
     </div>
@@ -1304,8 +1304,8 @@
   <div id="add-workspace-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title">Add a Workspace</h2>
-        <button class="iconbtn" onclick="document.getElementById('add-workspace-modal').classList.add('hidden')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" data-i18n="html_add_ws_title">Add a Workspace</h2>
+        <button class="iconbtn" onclick="document.getElementById('add-workspace-modal').classList.add('hidden')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <div class="modal-body">
         <div class="add-ws-choices">
@@ -1314,8 +1314,8 @@
               <svg class="ic" style="width:24px;height:24px" aria-hidden="true"><use href="#i-enter"/></svg>
             </div>
             <div>
-              <div class="add-ws-choice-title">Join a workspace</div>
-              <div class="add-ws-choice-sub">Enter an invite code from a workspace owner or admin</div>
+              <div class="add-ws-choice-title" data-i18n="au_title_join">Join a workspace</div>
+              <div class="add-ws-choice-sub" data-i18n="html_join_ws_sub">Enter an invite code from a workspace owner or admin</div>
             </div>
           </button>
           <button class="add-ws-choice" onclick="pickAddWorkspace('create')">
@@ -1323,8 +1323,8 @@
               <svg class="ic" style="width:24px;height:24px" aria-hidden="true"><use href="#i-plus"/></svg>
             </div>
             <div>
-              <div class="add-ws-choice-title">Create a workspace</div>
-              <div class="add-ws-choice-sub">Start fresh with a platform invite code</div>
+              <div class="add-ws-choice-title" data-i18n="html_create_ws">Create a workspace</div>
+              <div class="add-ws-choice-sub" data-i18n="html_create_ws_sub">Start fresh with a platform invite code</div>
             </div>
           </button>
         </div>
@@ -1336,23 +1336,23 @@
   <div id="create-workspace-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title">Create New Workspace</h2>
-        <button class="iconbtn" onclick="closeCreateWorkspaceModal()" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" data-i18n="html_create_ws_title">Create New Workspace</h2>
+        <button class="iconbtn" onclick="closeCreateWorkspaceModal()" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form onsubmit="handleCreateWorkspace(event)">
         <div class="field">
-          <label class="label">Workspace Name <span class="req">*</span></label>
-          <input type="text" id="cw-name" placeholder="e.g. Acme Sales" required />
+          <label class="label"><span data-i18n="html_ws_name">Workspace Name</span> <span class="req">*</span></label>
+          <input type="text" id="cw-name" placeholder="e.g. Acme Sales" data-i18n-ph="html_ph_ws_name" required />
         </div>
         <div class="field">
-          <label class="label">Platform Invite Code <span class="req">*</span></label>
-          <input type="text" id="cw-code" placeholder="Paste platform code here" autocomplete="off" />
-          <span class="text-xs text-muted">Get a code from the admin panel (yoursite.com/?admin)</span>
+          <label class="label"><span data-i18n="html_platform_code">Platform Invite Code</span> <span class="req">*</span></label>
+          <input type="text" id="cw-code" placeholder="Paste platform code here" data-i18n-ph="html_ph_platform_code" autocomplete="off" />
+          <span class="text-xs text-muted" data-i18n="html_platform_code_help">Get a code from the admin panel (yoursite.com/?admin)</span>
         </div>
         <div id="cw-error" class="auth-error hidden" style="margin:0 22px 10px"></div>
         <div class="modal-foot">
-          <button type="button" class="btn btn-secondary" onclick="closeCreateWorkspaceModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary">Create Workspace</button>
+          <button type="button" class="btn btn-secondary" onclick="closeCreateWorkspaceModal()" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="html_create_ws_btn">Create Workspace</button>
         </div>
       </form>
     </div>
@@ -1362,17 +1362,17 @@
   <div id="bulk-delete-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title">Confirm Delete</h2>
-        <button class="iconbtn" onclick="closeModal('bulk-delete-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" data-i18n="html_confirm_delete">Confirm Delete</h2>
+        <button class="iconbtn" onclick="closeModal('bulk-delete-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <div class="modal-body">
         <p id="bulk-delete-message"></p>
-        <p class="help">To confirm, type the number of contacts you want to delete:</p>
-        <input type="text" id="bulk-delete-confirm-input" placeholder="e.g., 5" />
+        <p class="help" data-i18n="html_confirm_delete_hint">To confirm, type the number of contacts you want to delete:</p>
+        <input type="text" id="bulk-delete-confirm-input" placeholder="e.g., 5" data-i18n-ph="html_ph_eg_5" />
       </div>
       <div class="modal-foot">
-        <button class="btn btn-secondary" onclick="closeModal('bulk-delete-modal')">Cancel</button>
-        <button class="btn btn-danger" onclick="confirmBulkDelete()">Delete</button>
+        <button class="btn btn-secondary" onclick="closeModal('bulk-delete-modal')" data-i18n="btn_cancel">Cancel</button>
+        <button class="btn btn-danger" onclick="confirmBulkDelete()" data-i18n="btn_delete">Delete</button>
       </div>
     </div>
   </div>
@@ -1381,8 +1381,8 @@
   <div id="contact-modal" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-head">
-        <h2 class="modal-title" id="contact-modal-title">Add Contact</h2>
-        <button class="iconbtn" onclick="closeModal('contact-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" id="contact-modal-title" data-i18n="add_contact_title">Add Contact</h2>
+        <button class="iconbtn" onclick="closeModal('contact-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="contact-form" onsubmit="saveContact(event)">
         <input type="hidden" id="contact-id" />
@@ -1408,8 +1408,8 @@
   <div id="activity-modal" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-head">
-        <h2 class="modal-title">Log Activity</h2>
-        <button class="iconbtn" onclick="closeModal('activity-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" data-i18n="log_activity_title">Log Activity</h2>
+        <button class="iconbtn" onclick="closeModal('activity-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="activity-form" onsubmit="saveActivity(event)">
         <div class="modal-body">
@@ -1427,7 +1427,7 @@
             <div class="field grow"><label class="label" for="act-date" data-i18n="lbl_date">Date</label><input type="date" id="act-date" /></div>
             <div class="field grow"><label class="label" for="act-time" data-i18n="lbl_time">Time</label><input type="time" id="act-time" /></div>
           </div>
-          <p class="hint" style="margin:-4px 0 12px">Leave the time empty for an all-day entry. A date puts it on the calendar.</p>
+          <p class="hint" style="margin:-4px 0 12px" data-i18n="html_act_time_hint">Leave the time empty for an all-day entry. A date puts it on the calendar.</p>
           <div class="field"><label class="label" for="act-content"><span data-i18n="lbl_content">Content</span> <span class="req">*</span></label><textarea id="act-content" rows="8" required></textarea></div>
         </div>
         <div class="modal-foot">
@@ -1442,8 +1442,8 @@
   <div id="field-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title" id="field-modal-title">Add Field</h2>
-        <button class="iconbtn" onclick="closeModal('field-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" id="field-modal-title" data-i18n="add_field_title">Add Field</h2>
+        <button class="iconbtn" onclick="closeModal('field-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="field-form" onsubmit="saveField(event)">
         <input type="hidden" id="field-id" />
@@ -1452,18 +1452,18 @@
           <div class="field"><label class="label" for="field-key" data-i18n="lbl_key">Key</label><input type="text" id="field-key" readonly style="opacity:.55" /></div>
           <div class="field"><label class="label" for="field-type" data-i18n="lbl_type">Type</label>
             <select id="field-type" onchange="toggleDropdownOptions()">
-              <option value="text">Text</option>
-              <option value="email">Email</option>
-              <option value="phone">Phone</option>
-              <option value="number">Number</option>
-              <option value="date">Date</option>
-              <option value="url">URL</option>
-              <option value="dropdown">Dropdown</option>
+              <option value="text" data-i18n="html_ft_text">Text</option>
+              <option value="email" data-i18n="html_ft_email">Email</option>
+              <option value="phone" data-i18n="html_ft_phone">Phone</option>
+              <option value="number" data-i18n="html_ft_number">Number</option>
+              <option value="date" data-i18n="html_ft_date">Date</option>
+              <option value="url" data-i18n="html_ft_url">URL</option>
+              <option value="dropdown" data-i18n="html_ft_dropdown">Dropdown</option>
             </select>
           </div>
           <div class="field hidden" id="field-options-group">
             <label class="label" for="field-options" data-i18n="lbl_options">Options (one per line)</label>
-            <textarea id="field-options" rows="4" placeholder="Option A&#10;Option B&#10;Option C"></textarea>
+            <textarea id="field-options" rows="4" placeholder="Option A&#10;Option B&#10;Option C" data-i18n-ph="html_ph_options"></textarea>
           </div>
         </div>
         <div class="modal-foot">
@@ -1478,14 +1478,14 @@
   <div id="object-modal" class="modal-overlay hidden">
     <div class="modal" style="max-width:560px">
       <div class="modal-head">
-        <h2 class="modal-title" id="object-modal-title">Add</h2>
-        <button class="iconbtn" onclick="closeModal('object-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" id="object-modal-title" data-i18n="add_btn">Add</h2>
+        <button class="iconbtn" onclick="closeModal('object-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="object-form" onsubmit="saveObject(event)">
         <input type="hidden" id="object-id" />
         <div class="modal-body" id="object-modal-body">
           <div class="field">
-            <label class="label" for="obj-name" id="obj-name-label">Name <span class="req">*</span></label>
+            <label class="label" for="obj-name" id="obj-name-label"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label>
             <input type="text" id="obj-name" autocomplete="off" required />
           </div>
           <div id="obj-custom-fields" class="field-row"></div>
@@ -1502,26 +1502,26 @@
   <div id="object-field-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title" id="object-field-modal-title">Add Field</h2>
-        <button class="iconbtn" onclick="closeModal('object-field-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" id="object-field-modal-title" data-i18n="add_field_title">Add Field</h2>
+        <button class="iconbtn" onclick="closeModal('object-field-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="object-field-form" onsubmit="saveObjectField(event)">
         <input type="hidden" id="objf-id" />
         <div class="modal-body">
-          <p class="text-xs text-muted" id="objf-hint">Each field becomes a column in the list and a property on every item.</p>
-          <div class="field"><label class="label" for="objf-name">Label <span class="req">*</span></label><input type="text" id="objf-name" required autocomplete="off" oninput="autoObjectFieldKey()" /></div>
+          <p class="text-xs text-muted" id="objf-hint" data-i18n="html_objf_hint">Each field becomes a column in the list and a property on every item.</p>
+          <div class="field"><label class="label" for="objf-name"><span data-i18n="lbl_field_label">Label</span> <span class="req">*</span></label><input type="text" id="objf-name" required autocomplete="off" oninput="autoObjectFieldKey()" /></div>
           <div class="field"><label class="label" for="objf-key" data-i18n="lbl_key">Key</label><input type="text" id="objf-key" readonly style="opacity:.55" /></div>
           <div class="field"><label class="label" for="objf-type" data-i18n="lbl_type">Type</label>
             <select id="objf-type" onchange="toggleObjectFieldOptions()">
-              <option value="text">Text</option><option value="number">Number</option>
-              <option value="dropdown">Dropdown</option><option value="date">Date</option>
-              <option value="url">URL</option><option value="email">Email</option>
-              <option value="phone">Phone</option>
+              <option value="text" data-i18n="html_ft_text">Text</option><option value="number" data-i18n="html_ft_number">Number</option>
+              <option value="dropdown" data-i18n="html_ft_dropdown">Dropdown</option><option value="date" data-i18n="html_ft_date">Date</option>
+              <option value="url" data-i18n="html_ft_url">URL</option><option value="email" data-i18n="html_ft_email">Email</option>
+              <option value="phone" data-i18n="html_ft_phone">Phone</option>
             </select>
           </div>
           <div class="field hidden" id="objf-options-group">
             <label class="label" for="objf-options" data-i18n="lbl_options">Options (one per line)</label>
-            <textarea id="objf-options" rows="4" placeholder="Option A&#10;Option B"></textarea>
+            <textarea id="objf-options" rows="4" placeholder="Option A&#10;Option B" data-i18n-ph="html_ph_options"></textarea>
           </div>
         </div>
         <div class="modal-foot">
@@ -1536,18 +1536,18 @@
   <div id="task-status-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title" id="task-status-modal-title">Add Status</h2>
-        <button class="iconbtn" onclick="closeModal('task-status-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" id="task-status-modal-title" data-i18n="html_add_status">Add Status</h2>
+        <button class="iconbtn" onclick="closeModal('task-status-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="task-status-form" onsubmit="saveTaskStatus(event)">
         <input type="hidden" id="ts-key-hidden" />
         <div class="modal-body">
-          <div class="field"><label class="label" for="ts-label">Label <span class="req">*</span></label><input type="text" id="ts-label" required autocomplete="off" /></div>
-          <div class="field"><label class="label" for="ts-color">Color</label><input type="color" id="ts-color" value="#94a3b8" /></div>
+          <div class="field"><label class="label" for="ts-label"><span data-i18n="lbl_field_label">Label</span> <span class="req">*</span></label><input type="text" id="ts-label" required autocomplete="off" /></div>
+          <div class="field"><label class="label" for="ts-color" data-i18n="lbl_color">Color</label><input type="color" id="ts-color" value="#94a3b8" /></div>
         </div>
         <div class="modal-foot">
-          <button type="button" class="btn btn-secondary" onclick="closeModal('task-status-modal')">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal('task-status-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
         </div>
       </form>
     </div>
@@ -1557,31 +1557,31 @@
   <div id="task-field-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title" id="task-field-modal-title">Add Task Field</h2>
-        <button class="iconbtn" onclick="closeModal('task-field-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" id="task-field-modal-title" data-i18n="html_add_task_field">Add Task Field</h2>
+        <button class="iconbtn" onclick="closeModal('task-field-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="task-field-form" onsubmit="saveTaskField(event)">
         <input type="hidden" id="tff-id" />
         <div class="modal-body">
-          <div class="field"><label class="label" for="tff-name">Label <span class="req">*</span></label><input type="text" id="tff-name" required autocomplete="off" oninput="autoTaskFieldKey()" /></div>
-          <div class="field"><label class="label" for="tff-key">Key</label><input type="text" id="tff-key" required /></div>
-          <div class="field"><label class="label" for="tff-type">Type</label>
+          <div class="field"><label class="label" for="tff-name"><span data-i18n="lbl_field_label">Label</span> <span class="req">*</span></label><input type="text" id="tff-name" required autocomplete="off" oninput="autoTaskFieldKey()" /></div>
+          <div class="field"><label class="label" for="tff-key" data-i18n="lbl_key">Key</label><input type="text" id="tff-key" required /></div>
+          <div class="field"><label class="label" for="tff-type" data-i18n="lbl_type">Type</label>
             <select id="tff-type" onchange="toggleTaskFieldOptions()">
-              <option value="text">Text</option>
-              <option value="number">Number</option>
-              <option value="date">Date</option>
-              <option value="dropdown">Dropdown</option>
-              <option value="url">URL</option>
+              <option value="text" data-i18n="html_ft_text">Text</option>
+              <option value="number" data-i18n="html_ft_number">Number</option>
+              <option value="date" data-i18n="html_ft_date">Date</option>
+              <option value="dropdown" data-i18n="html_ft_dropdown">Dropdown</option>
+              <option value="url" data-i18n="html_ft_url">URL</option>
             </select>
           </div>
           <div class="field hidden" id="tff-options-group">
-            <label class="label" for="tff-options">Options (one per line)</label>
+            <label class="label" for="tff-options" data-i18n="lbl_options">Options (one per line)</label>
             <textarea id="tff-options" rows="4"></textarea>
           </div>
         </div>
         <div class="modal-foot">
-          <button type="button" class="btn btn-secondary" onclick="closeModal('task-field-modal')">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal('task-field-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
         </div>
       </form>
     </div>
@@ -1591,17 +1591,17 @@
   <div id="project-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title" id="project-modal-title">New Project</h2>
-        <button class="iconbtn" onclick="closeModal('project-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" id="project-modal-title" data-i18n="html_new_project">New Project</h2>
+        <button class="iconbtn" onclick="closeModal('project-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <div class="modal-body">
-        <div class="field"><label class="label">Name <span class="req">*</span></label><input type="text" id="project-name-input" /></div>
-        <div class="field"><label class="label">Color</label><input type="color" id="project-color-input" value="#3b82f6" /></div>
+        <div class="field"><label class="label"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="project-name-input" /></div>
+        <div class="field"><label class="label" data-i18n="lbl_color">Color</label><input type="color" id="project-color-input" value="#3b82f6" /></div>
         <div id="project-error" class="error-text" style="display:none"></div>
       </div>
       <div class="modal-foot">
-        <button class="btn btn-secondary" onclick="closeModal('project-modal')">Cancel</button>
-        <button class="btn btn-primary" onclick="saveProject()">Save</button>
+        <button class="btn btn-secondary" onclick="closeModal('project-modal')" data-i18n="btn_cancel">Cancel</button>
+        <button class="btn btn-primary" onclick="saveProject()" data-i18n="btn_save">Save</button>
       </div>
     </div>
   </div>
@@ -1610,17 +1610,17 @@
   <div id="list-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title" id="list-modal-title">New List</h2>
-        <button class="iconbtn" onclick="closeModal('list-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" id="list-modal-title" data-i18n="html_new_list">New List</h2>
+        <button class="iconbtn" onclick="closeModal('list-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <div class="modal-body">
         <input type="hidden" id="list-project-id" />
         <input type="hidden" id="list-edit-id" />
-        <div class="field"><label class="label">Name <span class="req">*</span></label><input type="text" id="list-name-input" /></div>
+        <div class="field"><label class="label"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="list-name-input" /></div>
       </div>
       <div class="modal-foot">
-        <button class="btn btn-secondary" onclick="closeModal('list-modal')">Cancel</button>
-        <button class="btn btn-primary" onclick="saveList()">Save</button>
+        <button class="btn btn-secondary" onclick="closeModal('list-modal')" data-i18n="btn_cancel">Cancel</button>
+        <button class="btn btn-primary" onclick="saveList()" data-i18n="btn_save">Save</button>
       </div>
     </div>
   </div>
@@ -1629,13 +1629,13 @@
   <div id="new-pipeline-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title" id="pipeline-modal-title">New Pipeline</h2>
-        <button class="iconbtn" onclick="closeModal('new-pipeline-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" id="pipeline-modal-title" data-i18n="html_new_pipeline">New Pipeline</h2>
+        <button class="iconbtn" onclick="closeModal('new-pipeline-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="new-pipeline-form" onsubmit="saveNewPipeline(event)">
         <input type="hidden" id="pipeline-edit-id" />
         <div class="modal-body">
-          <div class="field"><label class="label" for="pipeline-name-input">Name <span class="req">*</span></label><input type="text" id="pipeline-name-input" required autocomplete="off" /></div>
+          <div class="field"><label class="label" for="pipeline-name-input"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="pipeline-name-input" required autocomplete="off" /></div>
         </div>
         <div class="modal-foot">
           <button type="button" class="btn btn-secondary" onclick="closeModal('new-pipeline-modal')" data-i18n="btn_cancel">Cancel</button>
@@ -1649,24 +1649,24 @@
   <div id="deal-field-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
-        <h2 class="modal-title" id="deal-field-modal-title">Add Deal Field</h2>
-        <button class="iconbtn" onclick="closeModal('deal-field-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" id="deal-field-modal-title" data-i18n="html_add_deal_field">Add Deal Field</h2>
+        <button class="iconbtn" onclick="closeModal('deal-field-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="deal-field-form" onsubmit="saveDealField(event)">
         <input type="hidden" id="deal-field-id" />
         <div class="modal-body">
-          <div class="field"><label class="label" for="dff-name">Label <span class="req">*</span></label><input type="text" id="dff-name" required autocomplete="off" oninput="autoDealFieldKey()" /></div>
+          <div class="field"><label class="label" for="dff-name"><span data-i18n="lbl_field_label">Label</span> <span class="req">*</span></label><input type="text" id="dff-name" required autocomplete="off" oninput="autoDealFieldKey()" /></div>
           <div class="field"><label class="label" for="dff-key" data-i18n="lbl_key">Key</label><input type="text" id="dff-key" readonly style="opacity:.55" /></div>
           <div class="field"><label class="label" for="dff-type" data-i18n="lbl_type">Type</label>
             <select id="dff-type" onchange="toggleDealFieldOptions()">
-              <option value="text">Text</option><option value="number">Number</option>
-              <option value="dropdown">Dropdown</option><option value="date">Date</option>
-              <option value="url">URL</option>
+              <option value="text" data-i18n="html_ft_text">Text</option><option value="number" data-i18n="html_ft_number">Number</option>
+              <option value="dropdown" data-i18n="html_ft_dropdown">Dropdown</option><option value="date" data-i18n="html_ft_date">Date</option>
+              <option value="url" data-i18n="html_ft_url">URL</option>
             </select>
           </div>
           <div class="field hidden" id="dff-options-group">
             <label class="label" for="dff-options" data-i18n="lbl_options">Options (one per line)</label>
-            <textarea id="dff-options" rows="4" placeholder="Option A&#10;Option B"></textarea>
+            <textarea id="dff-options" rows="4" placeholder="Option A&#10;Option B" data-i18n-ph="html_ph_options"></textarea>
           </div>
         </div>
         <div class="modal-foot">
@@ -1681,8 +1681,8 @@
   <div id="import-modal" class="modal-overlay hidden">
     <div class="modal lg">
       <div class="modal-head">
-        <h2 class="modal-title">Import Contacts from CSV</h2>
-        <button class="iconbtn" onclick="closeModal('import-modal')" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <h2 class="modal-title" data-i18n="html_import_title">Import Contacts from CSV</h2>
+        <button class="iconbtn" onclick="closeModal('import-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
 
       <!-- Step 1: Upload -->
@@ -1691,8 +1691,8 @@
           <div class="import-upload-area" onclick="document.getElementById('import-file-input').click()"
                ondragover="event.preventDefault()" ondrop="handleImportDrop(event)">
             <div class="import-upload-icon"><svg class="ic" aria-hidden="true"><use href="#i-upload"/></svg></div>
-            <p>Drag &amp; drop a CSV here, or <span class="import-browse-link">browse</span></p>
-            <p class="import-upload-hint">First row must be column headers</p>
+            <p><span data-i18n="html_import_drop">Drag &amp; drop a CSV here, or</span> <span class="import-browse-link" data-i18n="html_import_browse">browse</span></p>
+            <p class="import-upload-hint" data-i18n="html_import_hint">First row must be column headers</p>
             <input type="file" id="import-file-input" accept=".csv,text/csv" style="display:none" onchange="handleImportFile(event)" />
           </div>
         </div>
@@ -1706,36 +1706,36 @@
           <!-- Split name option -->
           <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:12px;display:flex;gap:8px;align-items:center">
             <input type="checkbox" id="import-split-name" onchange="updateImportNameOptions()" />
-            <label for="import-split-name" style="cursor:pointer;margin:0">Combine First Name + Last Name into Contact Name</label>
+            <label for="import-split-name" style="cursor:pointer;margin:0" data-i18n="html_import_split_name">Combine First Name + Last Name into Contact Name</label>
           </div>
 
           <!-- Auto deal creation option -->
           <div style="padding:12px;background:var(--input-bg);border-radius:6px;margin-bottom:16px">
             <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
               <input type="checkbox" id="import-create-deals" onchange="toggleImportDealOptions()" />
-              <label for="import-create-deals" style="cursor:pointer;margin:0">Create deals during import</label>
+              <label for="import-create-deals" style="cursor:pointer;margin:0" data-i18n="html_import_create_deals">Create deals during import</label>
             </div>
             <div id="import-deal-options" style="display:none;margin-top:8px;padding-left:24px">
               <div style="margin-bottom:12px;padding:8px;background:var(--card-bg);border-radius:4px">
                 <div style="display:flex;gap:8px;margin-bottom:8px">
                   <input type="checkbox" id="import-deals-new" checked />
-                  <label for="import-deals-new" style="cursor:pointer;margin:0;font-size:13px">For new contacts</label>
+                  <label for="import-deals-new" style="cursor:pointer;margin:0;font-size:13px" data-i18n="html_import_deals_new">For new contacts</label>
                 </div>
                 <div style="display:flex;gap:8px">
                   <input type="checkbox" id="import-deals-updated" />
-                  <label for="import-deals-updated" style="cursor:pointer;margin:0;font-size:13px">For updated contacts (optional)</label>
+                  <label for="import-deals-updated" style="cursor:pointer;margin:0;font-size:13px" data-i18n="html_import_deals_updated">For updated contacts (optional)</label>
                 </div>
               </div>
               <div style="margin-bottom:8px">
-                <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Pipeline</label>
+                <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px" data-i18n="lbl_pipeline">Pipeline</label>
                 <select id="import-pipeline" style="width:100%">
-                  <option value="">— Select a pipeline —</option>
+                  <option value="" data-i18n="html_opt_select_pipeline">— Select a pipeline —</option>
                 </select>
               </div>
               <div>
-                <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Starting Stage (optional)</label>
+                <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px" data-i18n="html_import_stage">Starting Stage (optional)</label>
                 <select id="import-stage" style="width:100%">
-                  <option value="">— Auto (first stage) —</option>
+                  <option value="" data-i18n="html_opt_auto_stage">— Auto (first stage) —</option>
                 </select>
               </div>
             </div>
@@ -1743,24 +1743,24 @@
 
           <!-- Assignee selection -->
           <div style="margin-bottom:16px">
-            <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Assignee (optional)</label>
+            <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px" data-i18n="html_import_assignee">Assignee (optional)</label>
             <select id="import-assignee" style="width:100%">
-              <option value="">— Use default or unassigned —</option>
+              <option value="" data-i18n="html_opt_default_assignee">— Use default or unassigned —</option>
             </select>
           </div>
 
           <div class="import-map-header-row">
-            <span>CSV column &amp; sample</span>
+            <span data-i18n="html_import_col_sample">CSV column &amp; sample</span>
             <span></span>
-            <span>Maps to CRM field</span>
+            <span data-i18n="html_import_maps_to">Maps to CRM field</span>
           </div>
           <div id="import-map-rows" class="import-map-rows"></div>
           <div id="import-run-error" class="error-text" style="display:none"></div>
         </div>
 
         <div class="modal-foot">
-          <button class="btn btn-secondary" onclick="importBack()"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Back</span></button>
-          <button class="btn btn-primary" id="import-run-btn" onclick="runImport()">Import contacts</button>
+          <button class="btn btn-secondary" onclick="importBack()"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span data-i18n="btn_back">Back</span></button>
+          <button class="btn btn-primary" id="import-run-btn" onclick="runImport()" data-i18n="html_import_run">Import contacts</button>
         </div>
       </div>
 
@@ -1773,7 +1773,7 @@
           </div>
         </div>
         <div class="modal-foot">
-          <button class="btn btn-primary" onclick="closeModal('import-modal');loadContacts()">Done</button>
+          <button class="btn btn-primary" onclick="closeModal('import-modal');loadContacts()" data-i18n="html_done_btn">Done</button>
         </div>
       </div>
     </div>
@@ -1796,15 +1796,15 @@
     <div id="guide-tooltip" class="guide-tooltip guide-tooltip-center" style="pointer-events:auto">
       <div class="guide-tooltip-header">
         <span class="guide-step-counter" id="guide-step-counter">1 of 13</span>
-        <button class="guide-skip-btn" onclick="endGuide()">Skip tour</button>
+        <button class="guide-skip-btn" onclick="endGuide()" data-i18n="html_skip_tour">Skip tour</button>
       </div>
       <h3 id="guide-title" class="guide-tooltip-title"></h3>
       <p  id="guide-body"  class="guide-tooltip-body"></p>
       <div class="guide-tooltip-footer">
         <div id="guide-dots" class="guide-dots"></div>
         <div class="guide-nav-btns">
-          <button id="guide-prev-btn" class="btn btn-sm" onclick="guidePrev()"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg><span>Back</span></button>
-          <button id="guide-next-btn" class="btn btn-sm btn-primary" onclick="guideNext()"><span>Next</span><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+          <button id="guide-prev-btn" class="btn btn-sm" onclick="guidePrev()"><svg class="ic" aria-hidden="true"><use href="#i-chevron-left"/></svg><span data-i18n="btn_back">Back</span></button>
+          <button id="guide-next-btn" class="btn btn-sm btn-primary" onclick="guideNext()"><span data-i18n="html_next">Next</span><svg class="ic" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
         </div>
       </div>
     </div>
