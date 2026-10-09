@@ -244,7 +244,7 @@
     .tut-table th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; }
     .tut-list { margin: 8px 0 0 0; padding-left: 20px; font-size: 14px; color: #374151; line-height: 1.55; }
     .tut-list li { margin-bottom: 6px; }
-    #tab-tutorial code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
+    #tab-tutorial code, #tab-engine code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
 
     /* ── Workspace table ── */
     .prov-table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -299,6 +299,7 @@
         <button class="admin-tab active" id="tabbtn-defaults"    onclick="showAdminTab('defaults')">Platform Defaults</button>
         <button class="admin-tab"        id="tabbtn-provisioning" onclick="showAdminTab('provisioning')">Provisioning</button>
         <button class="admin-tab"        id="tabbtn-tutorial"     onclick="showAdminTab('tutorial')">API Tutorial</button>
+        <button class="admin-tab"        id="tabbtn-engine"       onclick="showAdminTab('engine')">Engine API</button>
       </div>
 
       <div id="tab-defaults">
@@ -626,6 +627,186 @@
           </ul>
         </div>
       </div><!-- /#tab-tutorial -->
+
+      <div id="tab-engine" class="hidden">
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">The Upgrads Engine API</h2>
+          <p class="prov-hint">
+            The Onboarding Engine is a separate service. The CRM tells it what happened (signed <strong>webhooks</strong>:
+            a new customer, changed master data, a signed contract, an uploaded document) and the Engine reads and writes
+            the customer through a <strong>REST API</strong> under <code>/api/kunden/…</code>, authenticated with a per-workspace API key.
+            This page walks through both halves with runnable requests against this host. The full machine-readable
+            description is the OpenAPI 3.1 document: <code>GET /api/kunden/openapi.json</code> with a key, or the download
+            link on the workspace's API keys card.
+          </p>
+          <p class="prov-hint">
+            <strong>Keys are per workspace and are not created here.</strong> A workspace owner or admin creates them under
+            <strong>Integrations → Upgrads Engine → API keys</strong>; this console has no access to a workspace's data by design.
+          </p>
+
+          <h3 class="tut-h">1 · Set a workspace up for the Engine</h3>
+          <ol class="tut-list">
+            <li><strong>Integrations → Upgrads Engine:</strong> enter the Engine URL (public host; private addresses are refused), tick the <strong>trigger stages</strong> that mean "contract signed" (preselected from the Analytics won stages), copy the <strong>webhook secret</strong>, click <strong>Send test event</strong>, switch to <strong>Active</strong>.</li>
+            <li><strong>API keys card:</strong> create a key named after its user (e.g. "Engine production"). It is shown <strong>once</strong>; the CRM keeps only its hash. Revoking cuts the Engine off at once.</li>
+            <li>Download the <strong>OpenAPI document</strong> from the same card. Hand the Engine team the key, the webhook secret, the document and <code>ENGINE_INTEGRATION.md</code>.</li>
+            <li>The <strong>Onboarding</strong> page (sidebar, owners/admins, visible while the integration is active) lists every deal with the Engine's status, the Drive folder link, the last webhook result and a <strong>Start onboarding</strong> button that moves a deal into the trigger stage.</li>
+          </ol>
+          <p class="prov-hint">Server side, three settings matter: <code>BASE_URL</code> (the public origin that goes into <code>download_url</code> values), a <strong>private</strong> Supabase bucket <code>contact-documents</code> (or <code>SUPABASE_DOCS_BUCKET</code>) for contracts and recordings, and <code>ENGINE_RETRY_WORKER=0</code> on any second instance that must not re-drive webhooks.</p>
+
+          <h3 class="tut-h">2 · Authenticate and read a customer</h3>
+          <p class="prov-hint"><code>Authorization: Bearer &lt;key&gt;</code> (or <code>X-API-Key</code>) on every call. <code>kunde_id</code> is the CRM contact id — the same number the webhooks carry. A customer of another workspace answers <code>404</code>, never <code>403</code>; every authentication failure is the same <code>401</code>.</p>
+          <div class="tut-code"><pre class="prov-curl" id="eng-get">curl -H 'Authorization: Bearer upg_live_YOUR_KEY' \
+  <span class="tut-host">https://YOUR-HOST</span>/api/kunden/42</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('eng-get').textContent, this)">Copy</button></div>
+          <div class="tut-code"><pre class="prov-curl" id="eng-kunde">{
+  "kunde_id": 42,
+  "firma": "Muster Immobilien GmbH",
+  "ansprechpartner": "Erika Muster",
+  "email": "erika@muster-immobilien.de",
+  "telefon": "+49 30 1234567",
+  "kontakt_typ": "contact",
+  "adresse": { "strasse": "Musterstraße 1", "plz": "01067", "ort": "Dresden" },
+  "rechtsform": "GmbH",
+  "ust_id": "DE123456789",
+  "handelsregisternummer": "HRB 12345",
+  "webseite": null,
+  "quelle": "Webformular",
+  "onboarding_status": "kein_onboarding",     // the Engine's field — the CRM only displays it
+  "drive_ordner_id": null,
+  "akte_version": 0,                          // bumps on every accepted master-data write, from any side
+  "erstellt_am": "2026-09-01T08:00:00.000Z",
+  "aktualisiert_am": "2026-09-10T08:00:00.000Z"
+}</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('eng-kunde').textContent, this)">Copy</button></div>
+
+          <h3 class="tut-h">3 · Set the onboarding status (and the Drive linkage)</h3>
+          <p class="prov-hint">Every write needs an <code>Idempotency-Key</code>: the same key with the same body within 24 h replays the stored answer (<code>Idempotent-Replayed: true</code>); the same key with a different body is <code>422</code>. <code>drive_ordner_id</code> and <code>akte_version</code> are optional and touched only when present. A status change never triggers a webhook, so the two systems cannot loop.</p>
+          <div class="tut-code"><pre class="prov-curl" id="eng-status">curl -X PATCH <span class="tut-host">https://YOUR-HOST</span>/api/kunden/42/status \
+  -H 'Authorization: Bearer upg_live_YOUR_KEY' \
+  -H 'Idempotency-Key: 6b2f0c3e-status-1' \
+  -H 'Content-Type: application/json' \
+  -d '{ "onboarding_status": "termin_gebucht", "drive_ordner_id": "1AbC…", "akte_version": 3 }'</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('eng-status').textContent, this)">Copy</button></div>
+          <table class="tut-table">
+            <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td><code>kein_onboarding</code></td><td>Default; no contract yet</td></tr>
+              <tr><td><code>formular_versendet</code></td><td>Contract signed; form sent</td></tr>
+              <tr><td><code>formular_ausgefuellt</code></td><td>Client submitted the form</td></tr>
+              <tr><td><code>termin_gebucht</code></td><td>Onboarding appointment scheduled</td></tr>
+              <tr><td><code>call_erfolgt</code></td><td>Recording is available</td></tr>
+              <tr><td><code>briefing_fertig</code></td><td>briefing.md created; open questions sent</td></tr>
+              <tr><td><code>onboarding_abgeschlossen</code></td><td>All open questions resolved</td></tr>
+            </tbody>
+          </table>
+
+          <h3 class="tut-h">4 · Add master data — empty fields only</h3>
+          <p class="prov-hint"><code>PATCH /api/kunden/42</code> <strong>never overwrites</strong> a populated field. A populated field with a different value is reported in <code>konflikte</code> and written as a note on the customer (signed "Upgrads Engine") instead; equal values are ignored; <code>null</code> and <code>""</code> mean "nothing to add". Send <code>akte_version</code> as the version you last read and a stale one is <code>409</code> — re-read and decide again. Unknown keys are <code>422</code>.</p>
+          <div class="tut-code"><pre class="prov-curl" id="eng-patch">curl -X PATCH <span class="tut-host">https://YOUR-HOST</span>/api/kunden/42 \
+  -H 'Authorization: Bearer upg_live_YOUR_KEY' \
+  -H 'Idempotency-Key: 6b2f0c3e-stammdaten-1' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "rechtsform": "GmbH",
+    "handelsregisternummer": "HRB 12345",
+    "webseite": "https://muster-immobilien.de",
+    "adresse": { "strasse": "Musterstraße 1", "plz": "01067", "ort": "Dresden" },
+    "akte_version": 3
+  }'</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('eng-patch').textContent, this)">Copy</button></div>
+          <div class="tut-code"><pre class="prov-curl" id="eng-patch-response">{
+  …the customer as in step 2, with akte_version 4…,
+  "gesetzt":   ["webseite"],                                            // was empty → written
+  "konflikte": [ { "feld": "rechtsform", "crm": "GmbH & Co. KG", "engine": "GmbH" } ]   // kept the CRM's value, note written
+}</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('eng-patch-response').textContent, this)">Copy</button></div>
+
+          <h3 class="tut-h">5 · Documents: contracts and recordings</h3>
+          <p class="prov-hint">The team uploads files on the contact's <strong>Documents</strong> tab (types <code>vertrag</code>, <code>aufnahme</code>, <code>sonstiges</code>; 10 MB each). The Engine lists them and fetches the bytes through the CRM — the storage is private and every download is a <code>302</code> to a link that lives ten minutes.</p>
+          <div class="tut-code"><pre class="prov-curl" id="eng-docs">curl -H 'Authorization: Bearer upg_live_YOUR_KEY' \
+  <span class="tut-host">https://YOUR-HOST</span>/api/kunden/42/dokumente
+# → { "dokumente": [ { "id": 9, "typ": "vertrag", "dateiname": "Vertrag Muster.pdf", "mimetype": "application/pdf",
+#                      "groesse": 184233, "erstellt_am": "…", "download_url": "<span class="tut-host">https://YOUR-HOST</span>/api/dokumente/9/download" } ] }
+
+curl -L -o vertrag.pdf -H 'Authorization: Bearer upg_live_YOUR_KEY' \
+  <span class="tut-host">https://YOUR-HOST</span>/api/dokumente/9/download      # follows the 302 to the signed link</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('eng-docs').textContent, this)">Copy</button></div>
+
+          <h3 class="tut-h">6 · Notes and communication</h3>
+          <p class="prov-hint"><code>GET /api/kunden/42/notizen</code> returns the team's notes and call logs (<code>typ</code> <code>notiz</code>/<code>anruf</code>, plain-text <code>inhalt</code>, <code>quelle</code> <code>crm</code>/<code>engine</code>); filters <code>typ</code>, <code>seit</code>, <code>limit</code>. The Engine logs its own results with a <code>POST</code> — the note appears on the customer signed "Upgrads Engine". <code>GET /api/kunden/42/kommunikation</code> returns hand-logged e-mails and WhatsApp messages: the CRM has no mailbox, so <code>betreff</code>, <code>richtung</code> and <code>absender</code> are <code>null</code> and every answer says so in <code>hinweis</code>.</p>
+          <div class="tut-code"><pre class="prov-curl" id="eng-note">curl -X POST <span class="tut-host">https://YOUR-HOST</span>/api/kunden/42/notizen \
+  -H 'Authorization: Bearer upg_live_YOUR_KEY' \
+  -H 'Idempotency-Key: 6b2f0c3e-notiz-1' \
+  -H 'Content-Type: application/json' \
+  -d '{ "inhalt": "Onboarding-Call ausgewertet.\nOffene Fragen: 3 (siehe offene-fragen.md)", "vertrag_id": 17 }'
+# → 201 { "id": 901, "typ": "notiz", "inhalt": "…", "quelle": "engine", "autor": "Upgrads Engine", "vertrag_id": 17, … }</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('eng-note').textContent, this)">Copy</button></div>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">The webhooks the CRM sends</h2>
+          <p class="prov-hint">One <code>POST</code> per event to the workspace's Engine URL. Same envelope every time; <code>event_id</code> is unique and <strong>identical on every retry</strong> — the Engine deduplicates on it.</p>
+          <table class="tut-table">
+            <thead><tr><th>Event</th><th>When</th><th><code>daten</code></th></tr></thead>
+            <tbody>
+              <tr><td><code>kunde.angelegt</code></td><td>A customer contact is created (by a user or the inbound lead webhook); suppliers and the CSV import never fire</td><td>master data + <code>erstellt_am</code></td></tr>
+              <tr><td><code>kunde.aktualisiert</code></td><td>A master-data field changed (not assignee, custom fields, notes, deals, or the Engine's own writes)</td><td>master data + <code>geaendert</code> + <code>aktualisiert_am</code></td></tr>
+              <tr><td><code>vertrag.unterschrieben</code></td><td>A deal moves into a trigger stage (board, deal form, or the Onboarding page's button); a deal without a contact is logged as failed, not sent</td><td><code>vertrag_id, produkt, unterschrieben_am, laufzeit_monate, dokument_url</code></td></tr>
+              <tr><td><code>dokument.hinzugefuegt</code></td><td>A file is uploaded on a customer</td><td>the document + <code>vertrag_id</code></td></tr>
+              <tr><td><code>test.ping</code></td><td>"Send test event" on the Integrations page</td><td><code>workspace_id</code></td></tr>
+            </tbody>
+          </table>
+          <div class="tut-code"><pre class="prov-curl" id="eng-event">POST &lt;Engine URL&gt;
+Content-Type: application/json
+User-Agent: Upgrads-CRM/1.0
+X-Upgrads-Event: vertrag.unterschrieben
+X-Upgrads-Signature: 3f1a…9c   ← lower-case hex HMAC-SHA256(secret, raw body); no prefix, no timestamp
+
+{
+  "event": "vertrag.unterschrieben",
+  "event_id": "7d0f3c1e-4b6a-4f2e-9a1d-2c8e5f7b9a01",
+  "zeitpunkt": "2026-09-28T09:15:00.000Z",
+  "kunde_id": 42,
+  "daten": {
+    "vertrag_id": 17,
+    "produkt": "Maklersystem Landingpage",
+    "unterschrieben_am": "2026-09-28",
+    "laufzeit_monate": 12,
+    "dokument_url": "<span class="tut-host">https://YOUR-HOST</span>/api/dokumente/9/download"
+  }
+}</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('eng-event').textContent, this)">Copy</button></div>
+          <p class="prov-hint">Verifying on the Engine side (Node.js; keep the <strong>raw</strong> body — re-serialising the parsed JSON breaks the signature):</p>
+          <div class="tut-code"><pre class="prov-curl" id="eng-verify">const crypto = require('crypto');
+
+function verify(secret, req, rawBody) {          // rawBody: Buffer or string of the exact request body
+  const sig = String(req.headers['x-upgrads-signature'] || '').trim().toLowerCase();
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  const a = Buffer.from(expected), b = Buffer.from(sig);
+  return a.length === b.length &amp;&amp; crypto.timingSafeEqual(a, b);
+}</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('eng-verify').textContent, this)">Copy</button></div>
+          <ul class="tut-list">
+            <li><strong>Answer any 2xx quickly</strong> and do the work asynchronously. Any other 4xx (401, 404, 422, …) is treated as a configuration error and not retried; redirects are not followed.</li>
+            <li><strong>Retries</strong> on network errors, timeouts (10 s), 5xx, 408 and 429: 7 attempts — immediately, then +1 min, +5 min, +30 min, +2 h, +6 h, +16 h (≈ 24.6 h). They are stored in the database and driven by a worker, so they survive a CRM restart; the current secret and URL from the card apply to each retry.</li>
+            <li>The workspace's <strong>Integrations → Deliveries</strong> list shows every event with its attempts and the last response; owners can <strong>Retry</strong> a failed one by hand. Switching the integration off pauses pending retries; switching it on resumes them.</li>
+          </ul>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Errors, limits, ids</h2>
+          <p class="prov-hint">Every failure is <code>{ "fehler": { "code", "nachricht" } }</code> (German message) with a meaningful status — never HTTP 200 with an error body; unknown paths under <code>/api/kunden</code> and <code>/api/dokumente</code> are a JSON <code>404</code>, not the web app.</p>
+          <table class="tut-table">
+            <thead><tr><th>Status</th><th>Codes</th></tr></thead>
+            <tbody>
+              <tr><td><code>400</code></td><td><code>ungueltige_id</code>, <code>idempotency_key_fehlt</code>, <code>idempotency_key_ungueltig</code></td></tr>
+              <tr><td><code>401</code></td><td><code>nicht_authentifiziert</code> — missing, malformed, unknown, revoked or expired key (always the same answer)</td></tr>
+              <tr><td><code>404</code></td><td><code>nicht_gefunden</code> — not in this key's workspace, or an unknown path</td></tr>
+              <tr><td><code>409</code></td><td><code>akte_version_konflikt</code> (stale precondition), <code>anfrage_in_bearbeitung</code> (same key still running)</td></tr>
+              <tr><td><code>422</code></td><td><code>ungueltige_daten</code>, <code>ungueltiger_status</code>, <code>keine_daten</code>, <code>idempotency_key_konflikt</code></td></tr>
+              <tr><td><code>429</code></td><td><code>zu_viele_anfragen</code> — 300 requests per minute per IP across <code>/api/kunden</code> and <code>/api/dokumente</code></td></tr>
+              <tr><td><code>500</code></td><td><code>serverfehler</code> — no internals are disclosed</td></tr>
+            </tbody>
+          </table>
+          <ul class="tut-list">
+            <li><strong>Ids are integers</strong>: <code>kunde_id</code> = contact id, <code>vertrag_id</code> = deal id, document and note ids likewise. Timestamps are ISO 8601 in UTC.</li>
+            <li><strong>The Akte (the ~60-field record) lives in Google Drive</strong>, not in the CRM — the CRM keeps master data, the status, <code>drive_ordner_id</code> and <code>akte_version</code> only.</li>
+            <li>Keys expire only when revoked; scopes are stored but not enforced — every key may call every endpoint of its workspace.</li>
+            <li>Open with the Engine team: plain-hex signature vs. <code>sha256=</code> prefix, integer vs. string ids, the <code>akte_version</code> model. The contract document (<code>ENGINE_INTEGRATION.md</code>) states what is built.</li>
+          </ul>
+        </div>
+      </div><!-- /#tab-engine -->
 
       <div id="message" class="message" style="display: none;"></div>
     </div>
@@ -1028,12 +1209,12 @@
        ══════════════════════════════════════════════════════════════════════ */
 
     function showAdminTab(name) {
-      for (const t of ['defaults', 'provisioning', 'tutorial']) {
+      for (const t of ['defaults', 'provisioning', 'tutorial', 'engine']) {
         document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== name);
         document.getElementById(`tabbtn-${t}`).classList.toggle('active', t === name);
       }
       if (name === 'provisioning') loadProvisionList();
-      if (name === 'tutorial') fillTutorialHost();
+      if (name === 'tutorial' || name === 'engine') fillTutorialHost();
     }
 
     // The tutorial's snippets name this console's own host, so they are copy-and-run.

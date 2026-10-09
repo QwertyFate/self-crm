@@ -355,6 +355,8 @@
         <a href="#" class="sb-link" data-page="objects" id="nav-objects-link"><svg class="ic" aria-hidden="true"><use href="#i-building"/></svg><span class="sb-text" id="nav-objects-label">Listings</span></a>
         <a href="#" class="sb-link" data-page="board" id="nav-board-link"><svg class="ic" aria-hidden="true"><use href="#i-presentation"/></svg><span class="sb-text" data-i18n="nav_board">Board</span></a>
         <a href="#" class="sb-link" data-page="analytics"><svg class="ic" aria-hidden="true"><use href="#i-bar-chart"/></svg><span class="sb-text" data-i18n="nav_analytics">Analytics</span></a>
+        <!-- Onboarding monitor: shown by updateOnboardingNav() to owners/admins while the Upgrads Engine integration is active -->
+        <a href="#" class="sb-link hidden" data-page="onboarding" id="nav-onboarding-link"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="sb-text" data-i18n="nav_onboarding">Onboarding</span></a>
         <a href="#" class="sb-link" data-page="integrations"><svg class="ic" aria-hidden="true"><use href="#i-plug"/></svg><span class="sb-text" data-i18n="nav_integrations">Integrations</span></a>
       </div>
 
@@ -1050,6 +1052,36 @@
       </section>
 
       <!-- ── Integrations page ── -->
+      <!-- ── Onboarding monitor (Upgrads Engine) — public/js/onboarding.js ── -->
+      <section id="page-onboarding" class="page">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span data-i18n="nav_onboarding">Onboarding</span></h1>
+            <p class="page-sub" id="onboarding-page-sub"></p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-secondary btn-sm" type="button" onclick="loadOnboarding()"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-refresh"/></svg><span data-i18n="btn_refresh">Refresh</span></button>
+          </div>
+        </div>
+        <p class="onb-inactive hidden" id="onboarding-inactive" data-i18n="onb_inactive_hint">The Upgrads Engine integration is switched off. Deals are listed, but nothing is sent until it is activated on the Integrations page.</p>
+        <div class="toolbar" id="onboarding-toolbar"></div>
+        <div class="table-wrap">
+          <table class="table" id="onboarding-table">
+            <thead><tr>
+              <th data-i18n="onb_col_deal">Deal</th>
+              <th data-i18n="onb_col_customer">Customer</th>
+              <th data-i18n="onb_col_stage">Stage</th>
+              <th data-i18n="onb_col_status">Engine status</th>
+              <th data-i18n="onb_col_since">Since</th>
+              <th data-i18n="onb_col_delivery">Webhook</th>
+              <th data-i18n="onb_col_drive">Drive</th>
+              <th class="onb-actions" data-i18n="onb_col_actions">Action</th>
+            </tr></thead>
+            <tbody id="onboarding-body"></tbody>
+          </table>
+        </div>
+      </section>
+
       <section id="page-integrations" class="page page-rail">
         <div class="page-header">
           <div>
@@ -1226,6 +1258,44 @@
                 <button class="btn btn-primary btn-sm engine-manage" onclick="saveEngineSettings()" data-i18n="btn_save_changes">Save changes</button>
                 <button class="btn btn-sm engine-manage" onclick="sendEngineTestEvent(this)" data-i18n="engine_btn_test">Send test event</button>
                 <span id="engine-msg" class="workspace-name-msg hidden"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- API keys for the Engine's calls to /api/kunden (routes/engine.js /api-keys, middleware/engine-auth.js). Owners/admins only; hidden for members by setEngineReadOnly(). -->
+          <div class="settings-card" id="engine-keys-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="engine_keys_title">API keys</h2>
+            </div>
+            <p class="settings-hint" data-i18n="engine_keys_hint">The Engine reads and writes customer data through /api/kunden with one of these keys (Authorization: Bearer). A key is shown once, when it is created.</p>
+            <p class="engine-openapi"><a class="link" href="/api/engine/openapi.json" download="upgrads-crm-engine-api.openapi.json" data-i18n="engine_keys_openapi">Download the API description (OpenAPI 3.1) for the Engine team</a></p>
+            <div class="settings-card-body">
+              <div class="intg-section engine-manage" id="engine-keys-create">
+                <div class="intg-section-head">
+                  <h3 data-i18n="engine_keys_new_label">New key</h3>
+                  <p class="intg-section-hint" data-i18n="engine_keys_new_hint">Name it after the system that will use it, for example "Engine production".</p>
+                </div>
+                <div class="intg-url-box">
+                  <input type="text" id="engine-key-name" class="intg-url-input" maxlength="100" placeholder="Engine production" data-i18n-ph="engine_keys_name_ph" />
+                  <button class="btn btn-primary btn-sm" onclick="createEngineApiKey(this)" data-i18n="engine_keys_create">Create key</button>
+                </div>
+              </div>
+              <div class="intg-section hidden" id="engine-key-reveal">
+                <div class="intg-section-head">
+                  <h3 data-i18n="engine_keys_reveal_label">Your new key</h3>
+                  <p class="intg-section-hint" data-i18n="engine_keys_reveal_hint">Copy it now and give it to the Engine team. It will not be shown again.</p>
+                </div>
+                <div class="intg-url-box">
+                  <input type="text" id="engine-key-value" readonly class="intg-url-input" />
+                  <button class="btn btn-sm" onclick="copyEngineApiKey(this)" data-i18n="btn_copy">Copy</button>
+                  <button class="btn btn-sm" onclick="hideEngineApiKey()" data-i18n="engine_keys_hide">Done</button>
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="engine_keys_list_label">Issued keys</h3>
+                </div>
+                <div id="engine-keys" class="engine-keys"><p class="empty-inline" data-i18n="engine_keys_none">No keys yet.</p></div>
               </div>
             </div>
           </div>
@@ -1812,6 +1882,7 @@
 
   <script src="js/analytics.js"></script>
   <script src="js/integrations.js"></script>
+  <script src="js/onboarding.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/chat.js"></script>
   <script src="js/guide.js"></script>

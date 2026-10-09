@@ -115,6 +115,14 @@ function dvAutoGrow(el) {
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
 }
+// Documents on a contact (contracts, call recordings, other) — the types the server accepts.
+const DV_DOC_TYPES = ['vertrag', 'aufnahme', 'sonstiges'];
+function dvFileSize(n) {
+  const b = Number(n) || 0;
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(b < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+}
 function dvEmpty(ic, title, text = '', action = '') { return `<div class="empty">${icon(ic)}<b>${esc(title)}</b>${text ? `<div>${esc(text)}</div>` : ''}${action ? `<div style="margin-top:14px">${action}</div>` : ''}</div>`; }
 async function dvAllTasks() { const r = await api.get('/api/tasks'); return Array.isArray(r) ? r : []; }
 async function dvContacts(type) { const r = await api.get(`/api/contacts?contact_type=${type}`); return Array.isArray(r) ? r : []; }
@@ -577,11 +585,11 @@ async function openDealDetail(id, opts = {}) {
    ══════════════════════════════════════════════════════════════════════════ */
 async function openContactDetail(id, opts = {}) {
   await Promise.all([ensureFields(), ensureMembers()]);
-  const [c, contactDeals, allTasks] = await Promise.all([api.get(`/api/contacts/${id}`), api.get(`/api/deals?contact_id=${id}`), dvAllTasks()]);
+  const [c, contactDeals, allTasks, contactDocs] = await Promise.all([api.get(`/api/contacts/${id}`), api.get(`/api/deals?contact_id=${id}`), dvAllTasks(), api.get(`/api/contacts/${id}/documents`)]);
   if (!c || c.error) { ui.toast(t('dv_contact_gone')); return; }
   if (!pipelines.length) pipelines = await api.get('/api/pipelines');
   const sup = c.contact_type === 'supplier', noun = sup ? dvSupplierWord() : t('lbl_contact'), one = dvLower(noun);   // `one` sits inside sentences: lower case in English, capital in German
-  const S = { c, deals: Array.isArray(contactDeals) ? contactDeals : [], tasks: allTasks.filter(x => x.contact_id === id && !x.parent_id), tab: 'overview', draft: { type: 'note', text: '', err: false, filter: 'all' }, editAct: null, editText: '' };
+  const S = { c, deals: Array.isArray(contactDeals) ? contactDeals : [], tasks: allTasks.filter(x => x.contact_id === id && !x.parent_id), docs: Array.isArray(contactDocs) ? contactDocs : [], tab: 'overview', draft: { type: 'note', text: '', err: false, filter: 'all' }, editAct: null, editText: '' };
   const acts = () => S.c.activities || [];
   const stageOfDeal = d => (pipelines.find(p => p.id === d.pipeline_id)?.stages || []).find(s => s.id === d.stage_id);
   const sumVal = a => a.reduce((s, d) => s + (Number(d.value) || 0), 0);
@@ -647,6 +655,32 @@ async function openContactDetail(id, opts = {}) {
     return `<div class="row-between" style="padding:14px 18px;border-bottom:1px solid var(--divider)"><span class="muted">${esc(dvPlural(ts.length, 'one_task', 'n_tasks'))}, ${esc(tf('dv_n_open', { n: open }))}</span><button class="btn btn-secondary btn-sm" data-act="add-task">${icon('plus')}${esc(t('tk_add_task'))}</button></div>
       ${ts.length ? `<ul class="list">${ts.map(taskRow).join('')}</ul>` : dvEmpty('check-square', t('dv_no_tasks_yet'), tf('dv_tasks_linked_here', { noun: one }), `<button class="btn btn-secondary" data-act="add-task">${icon('plus')}${esc(t('tk_add_task'))}</button>`)}`;
   }
+  // Documents: contracts and call recordings the Upgrads Engine evaluates (uploaded here, fetched by the Engine through its API).
+  function documentsPanel() {
+    const ds = S.docs, typeIcon = { vertrag: 'file-text', aufnahme: 'message-circle', sonstiges: 'paperclip' };
+    const uploadBtn = cls => `<button class="btn btn-secondary ${cls}" data-act="doc-upload">${icon('upload')}${esc(t('dv_doc_upload'))}</button>`;
+    return `<div class="row-between" style="padding:14px 18px;border-bottom:1px solid var(--divider)"><span class="muted">${esc(dvPlural(ds.length, 'dv_one_doc', 'n_docs'))}</span>
+        <span class="row" style="gap:8px"><select class="select select-sm" id="ct-doctype" aria-label="${esc(t('dv_doc_type_aria'))}">${DV_DOC_TYPES.map(x => `<option value="${x}">${esc(t('dv_doc_type_' + x))}</option>`).join('')}</select>
+        <input type="file" id="ct-docfile" class="hidden" aria-label="${esc(t('dv_doc_upload'))}">${uploadBtn('btn-sm')}</span></div>
+      ${ds.length ? `<ul class="list">${ds.map(d => { const typ = DV_DOC_TYPES.includes(d.typ) ? d.typ : 'sonstiges';
+        return `<li class="list-item"><span class="tl-ic">${icon(typeIcon[typ])}</span>
+        <div class="grow"><a class="ct-name truncate" style="display:block" href="/api/contacts/${id}/documents/${Number(d.id)}/download" target="_blank" rel="noopener" title="${esc(t('dv_doc_download'))}">${esc(d.file_name)}</a>
+          <div class="muted truncate" style="font-size:var(--fs-sm)">${esc(dvFileSize(d.file_size))} · ${esc(fmtDate(d.created_at))}${d.uploaded_by_name ? ` · ${esc(d.uploaded_by_name)}` : ''}</div></div>
+        <span class="badge">${esc(t('dv_doc_type_' + typ))}</span>
+        <button class="iconbtn dd-ibtn" data-act="doc-del" data-id="${Number(d.id)}" aria-label="${esc(t('btn_delete'))}">${icon('trash')}</button></li>`; }).join('')}</ul>`
+      : dvEmpty('paperclip', t('dv_no_docs'), t('dv_docs_hint'), uploadBtn(''))}`;
+  }
+  async function uploadDocument(file) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) return ui.toast(t('dv_doc_too_large'));
+    const fd = new FormData(); fd.append('file', file); fd.append('typ', host.querySelector('#ct-doctype')?.value || 'sonstiges');
+    host.querySelectorAll('[data-act="doc-upload"]').forEach(b => { b.disabled = true; b.textContent = t('dv_doc_uploading'); });
+    let res = null, status = 0;
+    try { const r = await fetch(`/api/contacts/${id}/documents`, { method: 'POST', body: fd }); status = r.status; try { res = await r.json(); } catch {} }
+    catch { res = { error: t('core_network_error') }; }
+    if (!res || res.error || status >= 400) { render(); return ui.toast(res?.error || tf('core_server_error', { status })); }
+    const fresh = await api.get(`/api/contacts/${id}/documents`); S.docs = Array.isArray(fresh) ? fresh : S.docs; render(); ui.toast(t('dv_doc_uploaded'));
+  }
   function sideCards() {
     const ds = S.deals, last = acts()[0]?.created_at;
     return `<div class="ct-side">
@@ -659,8 +693,8 @@ async function openContactDetail(id, opts = {}) {
           ${ds.length > 3 ? `<div class="ct-mini"><button class="btn btn-ghost btn-sm" data-act="tab" data-tab="deals" style="margin-left:-10px">${esc(tf('dv_n_more', { n: ds.length - 3 }))}</button></div>` : ''}</div></section></div>`;
   }
   function detailHtml() {
-    const counts = { activity: acts().length, deals: S.deals.length, tasks: S.tasks.filter(x => x.status !== dvDoneKey()).length }, tabLbl = { overview: t('dv_tab_overview'), activity: t('dv_tab_activity'), deals: t('tab_deals'), tasks: t('tab_tasks') };
-    const panel = { overview: overviewPanel, activity: activityPanel, deals: dealsPanel, tasks: tasksPanel }[S.tab]();
+    const counts = { activity: acts().length, deals: S.deals.length, tasks: S.tasks.filter(x => x.status !== dvDoneKey()).length, documents: S.docs.length }, tabLbl = { overview: t('dv_tab_overview'), activity: t('dv_tab_activity'), deals: t('tab_deals'), tasks: t('tab_tasks'), documents: t('dv_tab_documents') };
+    const panel = { overview: overviewPanel, activity: activityPanel, deals: dealsPanel, tasks: tasksPanel, documents: documentsPanel }[S.tab]();
     const last = acts()[0]?.created_at, telHref = tel(), w = wa();   // not `t`: that is the global translator
     return `<div class="ct-detail">
       <div class="page-header ct-head"><div class="ct-id">${avatar(S.c.name, 'xl')}<div style="min-width:0"><h1 class="page-title">${esc(S.c.name)}</h1>
@@ -672,7 +706,7 @@ async function openContactDetail(id, opts = {}) {
           <button class="btn btn-secondary btn-icon" data-act="more" aria-label="${esc(t('dv_more_actions'))}" aria-haspopup="menu">${icon('ellipsis')}</button></div></div>
       <div class="split split-2-1 ct-split"><section class="card" style="align-self:start"><div class="tabs" role="tablist" aria-label="${esc(S.c.name)}" style="padding:0 8px">
           ${Object.keys(tabLbl).map(k => `<button class="tab" role="tab" data-act="tab" data-tab="${k}" aria-selected="${S.tab === k}" tabindex="${S.tab === k ? 0 : -1}">${esc(tabLbl[k])}${counts[k] ? `<span class="badge">${counts[k]}</span>` : ''}</button>`).join('')}</div>
-        <div role="tabpanel" class="${S.tab === 'deals' || S.tab === 'tasks' ? '' : 'ct-panel'}">${panel}</div></section>${sideCards()}</div></div>`;
+        <div role="tabpanel" class="${S.tab === 'deals' || S.tab === 'tasks' || S.tab === 'documents' ? '' : 'ct-panel'}">${panel}</div></section>${sideCards()}</div></div>`;
   }
 
   /* ----- host: side panel on the Contacts/Suppliers page, pop window elsewhere ----- */
@@ -742,8 +776,11 @@ async function openContactDetail(id, opts = {}) {
     'act-edit': el => startNoteEdit(+el.dataset.id),
     'act-cancel': () => { S.editAct = null; S.editText = ''; render(); },
     'act-save': () => saveNoteEdit(),
+    'doc-upload': () => host.querySelector('#ct-docfile')?.click(),
+    'doc-del': async el => { const ok = await ui.confirm({ title: t('dv_doc_delete_q'), message: t('dv_doc_delete_msg'), confirmLabel: t('btn_delete'), danger: true }); if (!ok) return; const res = await api.del(`/api/contacts/${id}/documents/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); S.docs = S.docs.filter(d => d.id !== +el.dataset.id); render(); ui.toast(t('dv_doc_deleted')); },
   };
   offs.push(on(host, 'click', '[data-act]', (e, el) => { const fn = A[el.dataset.act]; if (fn) { if (el.tagName === 'A') e.preventDefault(); e.stopPropagation(); fn(el); } }));
+  offs.push(on(host, 'change', '#ct-docfile', (e, el) => { const f = el.files && el.files[0]; el.value = ''; uploadDocument(f); }));
   offs.push(on(host, 'click', '[data-edit]', (e, el) => startEdit(el, el.dataset.edit)));
   offs.push(on(host, 'change', '[data-task-toggle]', async (e, el) => { const x = S.tasks.find(y => y.id === +el.dataset.taskToggle), prev = x.status, to = el.checked ? dvDoneKey() : dvFirstKey(); x.status = to; render(); const res = await api.patch(`/api/tasks/${x.id}/status`, { status: to }); if (res?.error) { x.status = prev; render(); return ui.toast(res.error); } const row = tasks.find(y => y.id === x.id); if (row) row.status = to; dvRefreshTasks(); ui.toast(el.checked ? t('tk_completed') : t('tk_reopened')); }));
   offs.push(on(host, 'click', '[data-atype]', (e, el) => { S.draft.type = el.dataset.atype; host.querySelectorAll('[data-atype]').forEach(b => b.setAttribute('aria-pressed', String(b === el))); const ta = host.querySelector('#ct-atext'), sb = host.querySelector('#ct-compose [type=submit]'); if (ta) { ta.placeholder = S.draft.type === 'note' ? tf('dv_ph_note_about', { name: S.c.name.split(' ')[0] }) : t('dv_ph_discussed'); ta.focus(); } if (sb) sb.textContent = t(dvTypeOf(S.draft.type).verb); }));

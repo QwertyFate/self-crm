@@ -1,0 +1,318 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Upgrads CRM – Engine API",
+    "version": "1.0.0",
+    "summary": "What the Upgrads Onboarding Engine reads and writes in the CRM, and the webhooks the CRM sends to the Engine.",
+    "description": "Implements §5.1–§5.4 and §8 of the *CRM Integration for the Onboarding Engine — Developer Briefing* (v01, September 2026).\n\n**Authentication.** One API key per CRM workspace, created on the CRM's Integrations → Upgrads Engine → *API keys* card and shown once. Send it as `Authorization: Bearer <key>` (or `X-API-Key: <key>`). Every failure is the same `401 nicht_authentifiziert`. A key sees only its workspace: a `kunde_id` of another workspace is `404`, never `403`.\n\n**Ids.** `kunde_id` is the CRM contact id (integer) — the same value the webhooks carry.\n\n**Errors.** Always `{ \"fehler\": { \"code\", \"nachricht\" } }` with a meaningful status; never HTTP 200 with an error body. Unknown paths under `/api/kunden` and `/api/dokumente` are JSON `404 nicht_gefunden`.\n\n**Idempotency.** Every write requires an `Idempotency-Key` header (≤ 255 chars). Same key + same body within 24 h replays the stored answer with `Idempotent-Replayed: true`; same key + different body → `422 idempotency_key_konflikt`; still running → `409 anfrage_in_bearbeitung`.\n\n**Rate limit.** 300 requests per minute per source IP across `/api/kunden` and `/api/dokumente` → `429 zu_viele_anfragen` with standard `RateLimit-*` headers.\n\n**Timestamps.** ISO 8601 in UTC.\n\n**akte_version.** A counter the CRM increments on every accepted master-data write from any side (Engine `PATCH`, a CRM user's edit, the lead webhook). Send the version you last read as a precondition on `PATCH /api/kunden/{kunde_id}`; a stale value is `409 akte_version_konflikt`.\n\n**Webhooks** (see the `webhooks` section): POST to the URL configured in the CRM, body = the envelope `{ event, event_id, zeitpunkt, kunde_id, daten }`, header `X-Upgrads-Signature` = lower-case hex HMAC-SHA256 of the raw body with the workspace's webhook secret (no prefix, no timestamp). Retries: 7 attempts (immediately, +1 min, +5 min, +30 min, +2 h, +6 h, +16 h ≈ 24.6 h) on network errors, timeouts, 5xx, 408, 429; identical bytes and `event_id` each time. Answer 2xx quickly.",
+    "contact": { "name": "Upgrads CRM" }
+  },
+  "servers": [
+    { "url": "https://{host}", "variables": { "host": { "default": "crm.upgrads.de", "description": "The CRM's public origin (BASE_URL of the deployment)." } } }
+  ],
+  "security": [{ "bearerKey": [] }, { "headerKey": [] }],
+  "tags": [
+    { "name": "Kunde", "description": "Master data and onboarding status of a customer (CRM contact)." },
+    { "name": "Dokumente", "description": "Contracts, call recordings and other files the team uploaded on a customer." },
+    { "name": "Notizen", "description": "Sales-call notes out, Engine result logs in." },
+    { "name": "Kommunikation", "description": "Hand-logged e-mails / WhatsApp messages (the CRM has no mailbox)." },
+    { "name": "Meta", "description": "This document." }
+  ],
+  "paths": {
+    "/api/kunden/openapi.json": {
+      "get": {
+        "tags": ["Meta"], "summary": "This OpenAPI document", "operationId": "getOpenApi",
+        "responses": { "200": { "description": "The document.", "content": { "application/json": { "schema": { "type": "object" } } } }, "401": { "$ref": "#/components/responses/Unauthorized" } }
+      }
+    },
+    "/api/kunden/{kunde_id}": {
+      "parameters": [{ "$ref": "#/components/parameters/KundeId" }],
+      "get": {
+        "tags": ["Kunde"], "summary": "Master data (§5.2 read)", "operationId": "getKunde",
+        "responses": {
+          "200": { "description": "The customer.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Kunde" } } } },
+          "400": { "$ref": "#/components/responses/BadId" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      },
+      "patch": {
+        "tags": ["Kunde"], "summary": "Add master data the Engine identified — fills EMPTY fields only (§5.2 write)", "operationId": "patchKunde",
+        "description": "Never overwrites a populated field. A populated field with a different value is reported in `konflikte` and written as a note on the customer; equal values (case for email, surrounding whitespace) are ignored. `null` / `\"\"` mean *nothing to add* (the Engine cannot clear a field). An empty `email` is filled only if no other contact of the workspace has it (`grund: email_vergeben` otherwise). Unknown keys → 422. When at least one field is written, `akte_version` increments by one.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StammdatenPatch" } } } },
+        "responses": {
+          "200": { "description": "The customer after the write, plus what was written and what conflicted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/KundePatchAntwort" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "`akte_version_konflikt` (stale precondition — re-read) or `anfrage_in_bearbeitung`.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Fehler" } } } },
+          "422": { "$ref": "#/components/responses/Unprocessable" }, "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/kunden/{kunde_id}/status": {
+      "parameters": [{ "$ref": "#/components/parameters/KundeId" }],
+      "patch": {
+        "tags": ["Kunde"], "summary": "Set the onboarding status (§5.3) and the linkage fields (§5.4)", "operationId": "patchKundeStatus",
+        "description": "The status is the Engine's field: the CRM only displays it. `drive_ordner_id` and `akte_version` are touched only when present; `drive_ordner_id: null` clears it. Never triggers an outgoing webhook.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/StatusPatch" } } } },
+        "responses": {
+          "200": { "description": "The customer after the update.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Kunde" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/InProgress" }, "422": { "$ref": "#/components/responses/Unprocessable" }, "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/kunden/{kunde_id}/dokumente": {
+      "parameters": [{ "$ref": "#/components/parameters/KundeId" }],
+      "get": {
+        "tags": ["Dokumente"], "summary": "The customer's documents (§5.2)", "operationId": "listDokumente",
+        "responses": {
+          "200": { "description": "Newest first.", "content": { "application/json": { "schema": { "type": "object", "required": ["dokumente"], "properties": { "dokumente": { "type": "array", "items": { "$ref": "#/components/schemas/Dokument" } } } } } } },
+          "400": { "$ref": "#/components/responses/BadId" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/dokumente/{dokument_id}/download": {
+      "parameters": [{ "name": "dokument_id", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 }, "description": "`id` from a document listing or a `dokument.hinzugefuegt` event." }],
+      "get": {
+        "tags": ["Dokumente"], "summary": "The file: 302 to a signed link valid 10 minutes (§5.2 \"a time-limited link is acceptable\")", "operationId": "downloadDokument",
+        "description": "Follow the redirect to receive the bytes. Do not store the signed URL — call this endpoint again when you need the file again.",
+        "responses": {
+          "302": { "description": "Redirect to the signed storage URL.", "headers": { "Location": { "schema": { "type": "string", "format": "uri" } }, "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } } },
+          "400": { "$ref": "#/components/responses/BadId" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "429": { "$ref": "#/components/responses/RateLimited" }, "500": { "$ref": "#/components/responses/ServerError" }
+        }
+      }
+    },
+    "/api/kunden/{kunde_id}/notizen": {
+      "parameters": [{ "$ref": "#/components/parameters/KundeId" }],
+      "get": {
+        "tags": ["Notizen"], "summary": "Notes and call logs of the customer (§5.2 \"sales call notes\")", "operationId": "listNotizen",
+        "parameters": [
+          { "name": "typ", "in": "query", "schema": { "type": "string", "enum": ["notiz", "anruf"] }, "description": "Only this kind; default both." },
+          { "$ref": "#/components/parameters/Seit" }, { "$ref": "#/components/parameters/Limit" }
+        ],
+        "responses": {
+          "200": { "description": "Newest first. `quelle: engine` marks your own notes.", "content": { "application/json": { "schema": { "type": "object", "required": ["notizen"], "properties": { "notizen": { "type": "array", "items": { "$ref": "#/components/schemas/Notiz" } } } } } } },
+          "400": { "$ref": "#/components/responses/BadId" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "422": { "$ref": "#/components/responses/Unprocessable" }, "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      },
+      "post": {
+        "tags": ["Notizen"], "summary": "Write an Engine result log as a note on the customer (§5.2)", "operationId": "createNotiz",
+        "description": "Appears on the customer in the CRM at once, signed \"Upgrads Engine\". Plain text with `\\n` line breaks. Never triggers an outgoing webhook.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/NotizNeu" } } } },
+        "responses": {
+          "201": { "description": "The stored note.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Notiz" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/InProgress" }, "422": { "$ref": "#/components/responses/Unprocessable" }, "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    },
+    "/api/kunden/{kunde_id}/kommunikation": {
+      "parameters": [{ "$ref": "#/components/parameters/KundeId" }],
+      "get": {
+        "tags": ["Kommunikation"], "summary": "Hand-logged e-mails and WhatsApp messages (§5.2) — with a limitation", "operationId": "listKommunikation",
+        "description": "The CRM has no mailbox. Entries are what a team member logged by hand: `inhalt` and `zeitpunkt` are real; `betreff`, `richtung`, `absender` are always `null`; `erfasst_von` names who logged it. Every answer carries a `hinweis` saying so.",
+        "parameters": [
+          { "name": "typ", "in": "query", "schema": { "type": "string", "enum": ["email", "whatsapp"] }, "description": "Only this kind; default both." },
+          { "$ref": "#/components/parameters/Seit" }, { "$ref": "#/components/parameters/Limit" }
+        ],
+        "responses": {
+          "200": { "description": "Newest first.", "content": { "application/json": { "schema": { "type": "object", "required": ["kommunikation", "hinweis"], "properties": { "kommunikation": { "type": "array", "items": { "$ref": "#/components/schemas/Kommunikation" } }, "hinweis": { "type": "string" } } } } } },
+          "400": { "$ref": "#/components/responses/BadId" }, "401": { "$ref": "#/components/responses/Unauthorized" }, "404": { "$ref": "#/components/responses/NotFound" }, "422": { "$ref": "#/components/responses/Unprocessable" }, "429": { "$ref": "#/components/responses/RateLimited" }
+        }
+      }
+    }
+  },
+  "webhooks": {
+    "vertrag.unterschrieben": {
+      "post": {
+        "summary": "A contract was signed — start onboarding (§5.1)",
+        "description": "Fires when a deal moves into one of the workspace's trigger stages (board drag, deal form, the Onboarding monitor's *Start onboarding* button). Not sent for a deal without a contact (logged as failed in the CRM instead). `daten.unterschrieben_am` comes from a deal field `unterschrieben_am` or the date of the move in the acting user's timezone; `laufzeit_monate` from a deal field or null; `dokument_url` is the newest `vertrag` document of the customer or null.",
+        "parameters": [{ "$ref": "#/components/parameters/XUpgradsEvent" }, { "$ref": "#/components/parameters/XUpgradsSignature" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EventVertragUnterschrieben" } } } },
+        "responses": { "2XX": { "description": "Accepted. Do the work asynchronously." } }
+      }
+    },
+    "kunde.angelegt": {
+      "post": {
+        "summary": "A new customer record exists (§5.1)",
+        "description": "A contact of type customer was created in the CRM (by a user or by the inbound lead webhook), or a supplier was re-typed as a customer. The bulk CSV import does not fire. `daten` = the master data as `GET /api/kunden/{id}` would answer it, plus `erstellt_am`.",
+        "parameters": [{ "$ref": "#/components/parameters/XUpgradsEvent" }, { "$ref": "#/components/parameters/XUpgradsSignature" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EventKundeAngelegt" } } } },
+        "responses": { "2XX": { "description": "Accepted." } }
+      }
+    },
+    "kunde.aktualisiert": {
+      "post": {
+        "summary": "Master data changed (§5.1)",
+        "description": "One of the master-data fields changed through a user edit or the lead webhook. Assignee, custom fields, notes, deals and the Engine's own writes never fire. `daten.geaendert` lists the changed fields by their `daten` names (`adresse` for any address part).",
+        "parameters": [{ "$ref": "#/components/parameters/XUpgradsEvent" }, { "$ref": "#/components/parameters/XUpgradsSignature" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EventKundeAktualisiert" } } } },
+        "responses": { "2XX": { "description": "Accepted." } }
+      }
+    },
+    "dokument.hinzugefuegt": {
+      "post": {
+        "summary": "A document was uploaded on a customer (§5.1)",
+        "description": "Fetch the bytes through `daten.download_url` (= `GET /api/dokumente/{id}/download`) with your API key. `vertrag_id` is the deal the team linked the file to, or null.",
+        "parameters": [{ "$ref": "#/components/parameters/XUpgradsEvent" }, { "$ref": "#/components/parameters/XUpgradsSignature" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EventDokumentHinzugefuegt" } } } },
+        "responses": { "2XX": { "description": "Accepted." } }
+      }
+    },
+    "test.ping": {
+      "post": {
+        "summary": "Connectivity test from the CRM's Integrations page",
+        "description": "Sent once when an owner clicks *Send test event*. Same envelope and signature; `kunde_id` is null and `daten` carries the workspace id. Answer 2xx.",
+        "parameters": [{ "$ref": "#/components/parameters/XUpgradsEvent" }, { "$ref": "#/components/parameters/XUpgradsSignature" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EventTestPing" } } } },
+        "responses": { "2XX": { "description": "Accepted." } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerKey": { "type": "http", "scheme": "bearer", "description": "`Authorization: Bearer <api key>` — the key from the CRM's API keys card." },
+      "headerKey": { "type": "apiKey", "in": "header", "name": "X-API-Key", "description": "Alternative to the Bearer header." }
+    },
+    "parameters": {
+      "KundeId": { "name": "kunde_id", "in": "path", "required": true, "schema": { "type": "integer", "minimum": 1 }, "description": "CRM contact id — the `kunde_id` of the webhooks." },
+      "IdempotencyKey": { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string", "maxLength": 255 }, "description": "Unique per intended request. Same key + same body within 24 h replays the stored answer (`Idempotent-Replayed: true`)." },
+      "Seit": { "name": "seit", "in": "query", "schema": { "type": "string", "format": "date-time" }, "description": "ISO 8601 date or instant; lower bound on when the entry was logged." },
+      "Limit": { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 500, "default": 200 } },
+      "XUpgradsEvent": { "name": "X-Upgrads-Event", "in": "header", "required": true, "schema": { "type": "string", "enum": ["vertrag.unterschrieben", "kunde.angelegt", "kunde.aktualisiert", "dokument.hinzugefuegt", "test.ping"] } },
+      "XUpgradsSignature": { "name": "X-Upgrads-Signature", "in": "header", "required": true, "schema": { "type": "string", "pattern": "^[0-9a-f]{64}$" }, "description": "Lower-case hex HMAC-SHA256 of the exact raw request body with the workspace's webhook secret. No prefix, no timestamp. Compare in constant time. Replay protection = your idempotency on `event_id`." }
+    },
+    "responses": {
+      "BadId": { "description": "`ungueltige_id` — the id in the path is not an integer.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Fehler" } } } },
+      "BadRequest": { "description": "`ungueltige_id`, `idempotency_key_fehlt` or `idempotency_key_ungueltig`.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Fehler" } } } },
+      "Unauthorized": { "description": "`nicht_authentifiziert` — key missing, malformed, unknown, revoked or expired (always the same answer).", "headers": { "WWW-Authenticate": { "schema": { "type": "string", "const": "Bearer" } } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Fehler" } } } },
+      "NotFound": { "description": "`nicht_gefunden` — not in this key's workspace, or an unknown path.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Fehler" } } } },
+      "InProgress": { "description": "`anfrage_in_bearbeitung` — the first request with this Idempotency-Key is still running.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Fehler" } } } },
+      "Unprocessable": { "description": "`ungueltige_daten`, `ungueltiger_status`, `keine_daten` or `idempotency_key_konflikt`; `nachricht` names the field.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Fehler" } } } },
+      "RateLimited": { "description": "`zu_viele_anfragen` — 300 requests per minute per IP.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Fehler" } } } },
+      "ServerError": { "description": "`serverfehler` — no internals are disclosed.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Fehler" } } } }
+    },
+    "schemas": {
+      "Fehler": {
+        "type": "object", "required": ["fehler"],
+        "properties": { "fehler": { "type": "object", "required": ["code", "nachricht"], "properties": {
+          "code": { "type": "string", "enum": ["nicht_authentifiziert", "ungueltige_id", "nicht_gefunden", "ungueltiger_status", "ungueltige_daten", "keine_daten", "akte_version_konflikt", "idempotency_key_fehlt", "idempotency_key_ungueltig", "idempotency_key_konflikt", "anfrage_in_bearbeitung", "zu_viele_anfragen", "serverfehler"] },
+          "nachricht": { "type": "string", "description": "German, human-readable." }
+        } } }
+      },
+      "OnboardingStatus": { "type": "string", "enum": ["kein_onboarding", "formular_versendet", "formular_ausgefuellt", "termin_gebucht", "call_erfolgt", "briefing_fertig", "onboarding_abgeschlossen"], "description": "§5.3 — maintained by the Engine; default kein_onboarding." },
+      "Adresse": { "type": "object", "properties": { "strasse": { "type": ["string", "null"] }, "plz": { "type": ["string", "null"] }, "ort": { "type": ["string", "null"] } } },
+      "Stammdaten": {
+        "type": "object",
+        "properties": {
+          "firma": { "type": ["string", "null"], "description": "Company name." }, "ansprechpartner": { "type": ["string", "null"], "description": "Contact person." },
+          "email": { "type": ["string", "null"] }, "telefon": { "type": ["string", "null"] }, "kontakt_typ": { "type": ["string", "null"], "enum": ["contact", "supplier", null] },
+          "adresse": { "$ref": "#/components/schemas/Adresse" }, "rechtsform": { "type": ["string", "null"] }, "ust_id": { "type": ["string", "null"], "description": "VAT id." },
+          "handelsregisternummer": { "type": ["string", "null"], "description": "Commercial register number." }, "webseite": { "type": ["string", "null"] }, "quelle": { "type": ["string", "null"], "description": "Lead source." }
+        }
+      },
+      "Kunde": {
+        "allOf": [
+          { "type": "object", "required": ["kunde_id"], "properties": { "kunde_id": { "type": "integer" } } },
+          { "$ref": "#/components/schemas/Stammdaten" },
+          { "type": "object", "properties": {
+            "onboarding_status": { "$ref": "#/components/schemas/OnboardingStatus" }, "drive_ordner_id": { "type": ["string", "null"], "description": "§5.4 Google Drive folder id." },
+            "akte_version": { "type": "integer", "minimum": 0, "description": "§5.4 counter, see the document description." },
+            "erstellt_am": { "type": ["string", "null"], "format": "date-time" }, "aktualisiert_am": { "type": ["string", "null"], "format": "date-time" }
+          } }
+        ]
+      },
+      "StammdatenPatch": {
+        "type": "object", "additionalProperties": false, "minProperties": 1,
+        "properties": {
+          "firma": { "type": ["string", "null"], "maxLength": 255 }, "ansprechpartner": { "type": ["string", "null"], "maxLength": 255 }, "email": { "type": ["string", "null"], "maxLength": 255 },
+          "telefon": { "type": ["string", "null"], "maxLength": 255 }, "rechtsform": { "type": ["string", "null"], "maxLength": 255 }, "ust_id": { "type": ["string", "null"], "maxLength": 255 },
+          "handelsregisternummer": { "type": ["string", "null"], "maxLength": 255 }, "webseite": { "type": ["string", "null"], "maxLength": 2048 }, "quelle": { "type": ["string", "null"], "maxLength": 255 },
+          "adresse": { "type": ["object", "null"], "additionalProperties": false, "properties": { "strasse": { "type": ["string", "null"], "maxLength": 255 }, "plz": { "type": ["string", "null"], "maxLength": 255 }, "ort": { "type": ["string", "null"], "maxLength": 255 } } },
+          "akte_version": { "type": "integer", "minimum": 0, "description": "Optional precondition: the version you last read." }
+        },
+        "examples": [{ "rechtsform": "GmbH", "handelsregisternummer": "HRB 12345", "ust_id": "DE123456789", "webseite": "https://muster-immobilien.de", "adresse": { "strasse": "Musterstraße 1", "plz": "01067", "ort": "Dresden" }, "akte_version": 3 }]
+      },
+      "Konflikt": { "type": "object", "required": ["feld", "crm", "engine"], "properties": { "feld": { "type": "string" }, "crm": { "type": ["string", "null"] }, "engine": { "type": "string" }, "grund": { "type": "string", "enum": ["email_vergeben"], "description": "Present when an empty email could not be filled because another contact has it." } } },
+      "KundePatchAntwort": {
+        "allOf": [
+          { "$ref": "#/components/schemas/Kunde" },
+          { "type": "object", "required": ["gesetzt", "konflikte"], "properties": { "gesetzt": { "type": "array", "items": { "type": "string" }, "description": "Keys that were written." }, "konflikte": { "type": "array", "items": { "$ref": "#/components/schemas/Konflikt" } } } }
+        ]
+      },
+      "StatusPatch": {
+        "type": "object", "required": ["onboarding_status"],
+        "properties": {
+          "onboarding_status": { "$ref": "#/components/schemas/OnboardingStatus" },
+          "drive_ordner_id": { "type": ["string", "null"], "maxLength": 255, "description": "Sets it; null clears it; absent leaves it." },
+          "akte_version": { "type": "integer", "minimum": 0, "description": "Sets the counter to this value (absent leaves it)." }
+        },
+        "examples": [{ "onboarding_status": "termin_gebucht", "drive_ordner_id": "1AbC…", "akte_version": 3 }]
+      },
+      "Dokument": {
+        "type": "object", "required": ["id", "typ", "dateiname", "mimetype", "groesse", "erstellt_am", "download_url"],
+        "properties": {
+          "id": { "type": "integer" }, "typ": { "type": "string", "enum": ["vertrag", "aufnahme", "sonstiges"] }, "dateiname": { "type": "string" },
+          "mimetype": { "type": ["string", "null"] }, "groesse": { "type": "integer", "description": "Bytes." }, "erstellt_am": { "type": "string", "format": "date-time" },
+          "download_url": { "type": ["string", "null"], "format": "uri", "description": "`GET /api/dokumente/{id}/download` on the CRM origin — call it with your API key." }
+        }
+      },
+      "Notiz": {
+        "type": "object", "required": ["id", "typ", "inhalt", "quelle", "autor", "vertrag_id", "datum", "uhrzeit", "erstellt_am"],
+        "properties": {
+          "id": { "type": "integer" }, "typ": { "type": "string", "enum": ["notiz", "anruf"] }, "inhalt": { "type": "string", "description": "Plain text, `\\n` line breaks." },
+          "quelle": { "type": "string", "enum": ["crm", "engine"], "description": "Who wrote it: a person in the CRM, or the Engine." }, "autor": { "type": ["string", "null"] },
+          "vertrag_id": { "type": ["integer", "null"], "description": "The deal the note was written on, if any." }, "datum": { "type": ["string", "null"], "format": "date" }, "uhrzeit": { "type": ["string", "null"] },
+          "erstellt_am": { "type": "string", "format": "date-time" }
+        }
+      },
+      "NotizNeu": {
+        "type": "object", "required": ["inhalt"], "additionalProperties": false,
+        "properties": { "inhalt": { "type": "string", "minLength": 1, "maxLength": 10000 }, "vertrag_id": { "type": "integer", "minimum": 1, "description": "Must be this customer's deal." } },
+        "examples": [{ "inhalt": "Onboarding-Call ausgewertet.\nOffene Fragen: 3 (siehe offene-fragen.md)", "vertrag_id": 17 }]
+      },
+      "Kommunikation": {
+        "type": "object", "required": ["id", "typ", "betreff", "inhalt", "richtung", "absender", "erfasst_von", "vertrag_id", "datum", "uhrzeit", "zeitpunkt"],
+        "properties": {
+          "id": { "type": "integer" }, "typ": { "type": "string", "enum": ["email", "whatsapp"] }, "betreff": { "type": "null", "description": "Not recorded by the CRM." },
+          "inhalt": { "type": "string" }, "richtung": { "type": "null", "description": "Not recorded by the CRM." }, "absender": { "type": "null", "description": "Not recorded by the CRM." },
+          "erfasst_von": { "type": ["string", "null"], "description": "The team member who logged the entry." }, "vertrag_id": { "type": ["integer", "null"] },
+          "datum": { "type": ["string", "null"], "format": "date" }, "uhrzeit": { "type": ["string", "null"] }, "zeitpunkt": { "type": "string", "format": "date-time", "description": "When it was logged." }
+        }
+      },
+      "Envelope": {
+        "type": "object", "required": ["event", "event_id", "zeitpunkt", "kunde_id", "daten"],
+        "properties": {
+          "event": { "type": "string" }, "event_id": { "type": "string", "description": "UUID, unique and stable per delivery — identical on every retry. Deduplicate on it." },
+          "zeitpunkt": { "type": "string", "format": "date-time" }, "kunde_id": { "type": ["integer", "null"], "description": "CRM contact id; null only on test.ping." }, "daten": { "type": "object" }
+        }
+      },
+      "EventVertragUnterschrieben": {
+        "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "event": { "const": "vertrag.unterschrieben" }, "kunde_id": { "type": "integer" },
+          "daten": { "type": "object", "required": ["vertrag_id", "produkt", "unterschrieben_am", "laufzeit_monate", "dokument_url"], "properties": {
+            "vertrag_id": { "type": "integer", "description": "CRM deal id." }, "produkt": { "type": "string", "description": "Deal title." }, "unterschrieben_am": { "type": "string", "format": "date" },
+            "laufzeit_monate": { "type": ["integer", "null"] }, "dokument_url": { "type": ["string", "null"], "format": "uri" } } } } }],
+        "examples": [{ "event": "vertrag.unterschrieben", "event_id": "7d0f3c1e-4b6a-4f2e-9a1d-2c8e5f7b9a01", "zeitpunkt": "2026-09-28T09:15:00.000Z", "kunde_id": 42, "daten": { "vertrag_id": 17, "produkt": "Maklersystem Landingpage", "unterschrieben_am": "2026-09-28", "laufzeit_monate": 12, "dokument_url": "https://crm.upgrads.de/api/dokumente/9/download" } }]
+      },
+      "EventKundeAngelegt": {
+        "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "event": { "const": "kunde.angelegt" }, "kunde_id": { "type": "integer" },
+          "daten": { "allOf": [{ "$ref": "#/components/schemas/Stammdaten" }, { "type": "object", "required": ["erstellt_am"], "properties": { "erstellt_am": { "type": "string", "format": "date-time" } } }] } } }]
+      },
+      "EventKundeAktualisiert": {
+        "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "event": { "const": "kunde.aktualisiert" }, "kunde_id": { "type": "integer" },
+          "daten": { "allOf": [{ "$ref": "#/components/schemas/Stammdaten" }, { "type": "object", "required": ["geaendert", "aktualisiert_am"], "properties": {
+            "geaendert": { "type": "array", "items": { "type": "string", "enum": ["firma", "ansprechpartner", "email", "telefon", "kontakt_typ", "adresse", "rechtsform", "ust_id", "handelsregisternummer", "webseite", "quelle"] } },
+            "aktualisiert_am": { "type": "string", "format": "date-time" } } }] } } }]
+      },
+      "EventDokumentHinzugefuegt": {
+        "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "event": { "const": "dokument.hinzugefuegt" }, "kunde_id": { "type": "integer" },
+          "daten": { "allOf": [{ "$ref": "#/components/schemas/Dokument" }, { "type": "object", "required": ["vertrag_id"], "properties": { "vertrag_id": { "type": ["integer", "null"] } } }] } } }]
+      },
+      "EventTestPing": {
+        "allOf": [{ "$ref": "#/components/schemas/Envelope" }, { "type": "object", "properties": { "event": { "const": "test.ping" }, "kunde_id": { "type": "null" },
+          "daten": { "type": "object", "required": ["workspace_id"], "properties": { "workspace_id": { "type": "integer" } } } } }]
+      }
+    }
+  }
+}

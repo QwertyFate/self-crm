@@ -164,8 +164,9 @@ describe('detail-views.js: the reference contact detail in the side panel (or a 
     assert.match(c, /\$\{icon\('phone'\)\}\$\{esc\(t\('act_call'\)\)\}/); assert.match(c, /\$\{icon\('mail'\)\}\$\{esc\(t\('act_email'\)\)\}/); assert.match(c, /\$\{icon\('message-circle'\)\}WhatsApp/);
     assert.match(c, /data-act="edit-all">\$\{icon\('pencil'\)\}\$\{esc\(t\('btn_edit'\)\)\}/); assert.match(c, /data-act="more" aria-label="\$\{esc\(t\('dv_more_actions'\)\)\}"/);
   });
-  test('tabs Overview / Activity / Deals / Tasks on a card, with the side cards (Details kv, Deals total)', () => {
-    assert.match(c, /tabLbl = \{ overview: t\('dv_tab_overview'\), activity: t\('dv_tab_activity'\), deals: t\('tab_deals'\), tasks: t\('tab_tasks'\) \}/);
+  test('tabs Overview / Activity / Deals / Tasks / Documents on a card, with the side cards (Details kv, Deals total)', () => {
+    // Documents (Part 15 of the Engine integration) is the fifth tab: contracts and recordings for the Upgrads Engine.
+    assert.match(c, /tabLbl = \{ overview: t\('dv_tab_overview'\), activity: t\('dv_tab_activity'\), deals: t\('tab_deals'\), tasks: t\('tab_tasks'\), documents: t\('dv_tab_documents'\) \}/);
     assert.match(c, /class="split split-2-1 ct-split"/); assert.match(c, /class="ct-side"/);
     assert.match(c, /class="ct-big">\$\{fmtEUR\(sumVal\(ds\)\)\}/); assert.match(c, /class="ct-mini"/);
   });

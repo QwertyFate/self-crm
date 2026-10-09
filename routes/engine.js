@@ -5,9 +5,11 @@ const express     = require('express');
 const router      = express.Router();
 const crypto      = require('crypto');
 const net         = require('net');
+const path        = require('path');
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
 const engine      = require('../utils/engine');
+const { hashKey } = require('../middleware/engine-auth');   // the same digest the Engine API's lookup uses
 
 router.use(requireAuth);
 
@@ -165,7 +167,7 @@ router.get('/deliveries', async (req, res, next) => {
   try {
     const { rows } = await pool.query(
       `SELECT d.id, d.event, d.event_id, d.status, d.attempts, d.last_status_code, d.last_error,
-              d.deal_id, d.contact_id, d.payload, d.created_at, d.delivered_at, d.next_attempt_at,
+              d.deal_id, d.contact_id, d.payload, d.created_at, d.delivered_at, d.next_attempt_at, d.last_attempt_at,
               dl.title AS deal_title, c.name AS contact_name
        FROM engine_deliveries d
        LEFT JOIN deals    dl ON dl.id = d.deal_id    AND dl.workspace_id = d.workspace_id
@@ -178,12 +180,174 @@ router.get('/deliveries', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Boot-time check for the sidebar: is the integration switched on, and may this
+// user open the Onboarding monitor? Never creates the settings row (unlike
+// GET /settings), so it is safe to call on every login.
+router.get('/status', async (req, res, next) => {
+  try {
+    const row = await loadRow(req.workspaceId);
+    res.json({ active: !!(row && row.active && row.engine_url), can_manage: canManage(req.userRole) });
+  } catch (err) { next(err); }
+});
+
+// Onboarding monitor (owners and admins): every deal of the workspace with its
+// customer's Engine status, whether the deal sits in a trigger stage, the trigger
+// stage the "Start onboarding" button would move it to (the first trigger stage
+// of the deal's own pipeline by position, or null when none is configured), and
+// the latest `vertrag.unterschrieben` delivery for the deal. Read-only: the
+// button itself goes through PATCH /api/deals/:id/stage, the existing trigger path.
+router.get('/onboarding', requireManage, async (req, res, next) => {
+  try {
+    const wid = req.workspaceId;
+    const row = await loadRow(wid);
+    const triggerIds = positiveInts(row?.trigger_stage_ids);
+
+    const firstTriggerByPipeline = new Map();   // pipeline_id → { id, name } of its first trigger stage
+    if (triggerIds.length) {
+      const { rows: stages } = await pool.query(
+        `SELECT id, pipeline_id, name FROM pipeline_stages WHERE workspace_id=$1 AND id = ANY($2::int[]) ORDER BY pipeline_id, position, id`,
+        [wid, triggerIds]
+      );
+      for (const s of stages) if (!firstTriggerByPipeline.has(Number(s.pipeline_id))) firstTriggerByPipeline.set(Number(s.pipeline_id), { id: Number(s.id), name: s.name });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT d.id AS deal_id, d.title AS deal_title, d.value AS deal_value, d.created_at AS deal_created_at,
+              d.pipeline_id, p.name AS pipeline_name,
+              d.stage_id, ps.name AS stage_name, ps.color AS stage_color,
+              c.id AS contact_id, c.name AS contact_name, c.company AS contact_company,
+              c.onboarding_status, c.drive_ordner_id, c.akte_version, c.updated_at AS status_since,
+              ed.id AS delivery_id, ed.status AS delivery_status, ed.attempts AS delivery_attempts,
+              ed.last_status_code AS delivery_status_code, ed.last_error AS delivery_error,
+              ed.created_at AS delivery_created_at, ed.delivered_at AS delivery_delivered_at
+       FROM deals d
+       JOIN pipelines p ON p.id = d.pipeline_id AND p.workspace_id = d.workspace_id
+       LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id AND ps.workspace_id = d.workspace_id
+       LEFT JOIN contacts c ON c.id = d.contact_id AND c.workspace_id = d.workspace_id
+       LEFT JOIN LATERAL (
+         SELECT e.id, e.status, e.attempts, e.last_status_code, e.last_error, e.created_at, e.delivered_at
+         FROM engine_deliveries e
+         WHERE e.deal_id = d.id AND e.workspace_id = d.workspace_id AND e.event = 'vertrag.unterschrieben'
+         ORDER BY e.created_at DESC LIMIT 1
+       ) ed ON true
+       WHERE d.workspace_id = $1
+       ORDER BY c.updated_at DESC NULLS LAST, d.created_at DESC`,
+      [wid]
+    );
+
+    const out = rows.map(r => ({
+      deal_id:           Number(r.deal_id),
+      deal_title:        r.deal_title,
+      deal_value:        r.deal_value,
+      deal_created_at:   r.deal_created_at,
+      pipeline_id:       Number(r.pipeline_id),
+      pipeline_name:     r.pipeline_name,
+      stage_id:          r.stage_id == null ? null : Number(r.stage_id),
+      stage_name:        r.stage_name,
+      stage_color:       r.stage_color,
+      contact_id:        r.contact_id == null ? null : Number(r.contact_id),
+      contact_name:      r.contact_name,
+      contact_company:   r.contact_company,
+      onboarding_status: r.contact_id == null ? null : (r.onboarding_status || 'kein_onboarding'),
+      drive_ordner_id:   r.drive_ordner_id || null,
+      akte_version:      r.contact_id == null ? null : Number(r.akte_version) || 0,
+      status_since:      r.status_since,
+      in_trigger:        r.stage_id != null && triggerIds.includes(Number(r.stage_id)),
+      trigger_stage_id:   firstTriggerByPipeline.get(Number(r.pipeline_id))?.id   ?? null,
+      trigger_stage_name: firstTriggerByPipeline.get(Number(r.pipeline_id))?.name ?? null,
+      delivery: r.delivery_id == null ? null : {
+        id: Number(r.delivery_id), status: r.delivery_status, attempts: Number(r.delivery_attempts) || 0,
+        last_status_code: r.delivery_status_code, last_error: r.delivery_error,
+        created_at: r.delivery_created_at, delivered_at: r.delivery_delivered_at,
+      },
+    }));
+
+    res.json({ active: !!(row && row.active && row.engine_url), trigger_stage_ids: triggerIds, rows: out });
+  } catch (err) { next(err); }
+});
+
+// GET /api/engine/openapi.json — the Engine API's OpenAPI document for download from
+// the API keys card (every member may read it; it holds no secrets). The Engine
+// itself fetches the same file at GET /api/kunden/openapi.json with its key.
+const OPENAPI_FILE = path.join(__dirname, '..', 'docs', 'openapi.json');
+router.get('/openapi.json', (req, res) => {
+  res.set('Content-Disposition', 'attachment; filename="upgrads-crm-engine-api.openapi.json"');
+  res.type('application/json').sendFile(OPENAPI_FILE);
+});
+
+// ── API keys for the Engine's calls to /api/kunden (middleware/engine-auth.js) ──
+// The plain key exists exactly once: in the 201 answer of POST. Only its SHA-256
+// hash is stored (api_keys.key_hash, UNIQUE); key_prefix is for telling keys apart
+// in the list. Revoking sets revoked_at — the lookup excludes those rows at once.
+const KEY_COLS       = 'id, name, key_prefix, created_at, last_used_at, expires_at, revoked_at';
+const KEY_PREFIX_LEN = 12;                       // "upg_live_" + 3 hex chars
+const newApiKey      = () => 'upg_live_' + crypto.randomBytes(16).toString('hex');
+
+router.get('/api-keys', requireManage, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(`SELECT ${KEY_COLS} FROM api_keys WHERE workspace_id=$1 ORDER BY created_at DESC, id DESC`, [req.workspaceId]);
+    res.json({ api_keys: rows });
+  } catch (err) { next(err); }
+});
+
+router.post('/api-keys', requireManage, async (req, res, next) => {
+  try {
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 100) : '';
+    if (!name) return res.status(400).json({ error: 'Give the key a name' });
+    const key = newApiKey();
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO api_keys (workspace_id, name, key_prefix, key_hash, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING ${KEY_COLS}`,
+      [req.workspaceId, name, key.slice(0, KEY_PREFIX_LEN), hashKey(key), req.userId]
+    );
+    res.status(201).json({ ...row, key });     // the plain key, shown once
+  } catch (err) { next(err); }
+});
+
+router.delete('/api-keys/:id', requireManage, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid key id' });
+    const { rowCount } = await pool.query(
+      'UPDATE api_keys SET revoked_at=NOW() WHERE id=$1 AND workspace_id=$2 AND revoked_at IS NULL', [id, req.workspaceId]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (err) { next(err); }
+});
+
 router.post('/test-event', requireManage, async (req, res, next) => {
   try {
     const row = await loadRow(req.workspaceId);
     if (!row || !row.engine_url) return res.status(400).json({ error: 'Set the Engine URL first' });
     const d = await engine.sendTestEvent(req.workspaceId);
-    res.json({ delivery: { id: d.id, status: d.ok ? 'success' : 'failed', attempts: d.attempts, last_status_code: d.status, last_error: d.error } });
+    res.json({ delivery: deliverySummary(d) });
+  } catch (err) { next(err); }
+});
+
+function deliverySummary(d) {
+  return { id: d.id, status: d.delivery_status, attempts: d.attempts, last_status_code: d.status, last_error: d.error, next_attempt_at: d.next_attempt_at ?? null };
+}
+
+// Manual retry of one delivery (Sent events → Retry). One counted attempt now; a
+// transient failure re-enters the automatic schedule while attempts remain. A
+// delivered row, a test ping handled elsewhere, or a contract event without a
+// kunde_id (nothing to send) cannot be retried.
+router.post('/deliveries/:id/retry', requireManage, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid delivery id' });
+    const { rows: [d] } = await pool.query(
+      'SELECT id, event, status, attempts, raw_body, payload FROM engine_deliveries WHERE id=$1 AND workspace_id=$2', [id, req.workspaceId]
+    );
+    if (!d) return res.status(404).json({ error: 'Not found' });
+    if (d.status === 'success') return res.status(409).json({ error: 'This event was already delivered' });
+    if (d.event === engine.EVENT_CONTRACT_SIGNED && (!d.payload || d.payload.kunde_id == null)) {
+      return res.status(409).json({ error: 'This event has no contact (kunde_id) and cannot be sent. Link a contact and move the deal into the trigger stage again.' });
+    }
+    const row = await loadRow(req.workspaceId);
+    if (!row || !row.engine_url) return res.status(400).json({ error: 'Set the Engine URL first' });
+    const r = await engine.retryDelivery(d, row);
+    res.json({ delivery: deliverySummary(r) });
   } catch (err) { next(err); }
 });
 

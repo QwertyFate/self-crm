@@ -499,6 +499,11 @@ async function initDb() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS engine_deliveries_ws_created_idx ON engine_deliveries (workspace_id, created_at DESC)`);
+  // Retry worker (utils/engine.js, briefing §5.1 "at least five attempts … ~24 hours"):
+  // when the last attempt ran, and a partial index over the rows the worker polls
+  // (pending, ordered by their due time). Additive; nothing is backfilled.
+  await pool.query(`ALTER TABLE engine_deliveries ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS engine_deliveries_due_idx ON engine_deliveries (next_attempt_at) WHERE status = 'pending'`);
 
   // Marks a workspace created by POST /api/admin/provision, so the admin console
   // can tell a provisioned tenant from a self-served signup. NULL for every row
@@ -519,6 +524,105 @@ async function initDb() {
   // contact; a bound note shows only on its deal. ON DELETE SET NULL: deleting the deal unbinds
   // the note, it never deletes it.
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS deal_id  INTEGER REFERENCES deals(id) ON DELETE SET NULL`);
+
+  // ---------------------------------------------------------------------------
+  // Onboarding Engine — client record fields and API tables (Developer Briefing
+  // §5.3 status values, §5.4 linkage fields, §5.2 master data, §8 idempotency).
+  // Everything here is additive (IF NOT EXISTS), so an existing database keeps
+  // every row and this block is safe to re-run. Contact master-data columns
+  // carry German names because they are the Engine's field names; the engine
+  // tables use English like the rest of the schema.
+  // ---------------------------------------------------------------------------
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS onboarding_status     TEXT NOT NULL DEFAULT 'kein_onboarding'`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS drive_ordner_id       TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS akte_version          INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS rechtsform            TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS ust_id                TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS handelsregisternummer TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS webseite              TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS quelle                TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS strasse               TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS plz                   TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS ort                   TEXT`);
+  // Re-declared the same way as activities_type_check so the list can grow.
+  // Existing rows already hold the default, so validation passes on a populated table.
+  try {
+    await pool.query(`ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_onboarding_status_check`);
+    await pool.query(`ALTER TABLE contacts ADD CONSTRAINT contacts_onboarding_status_check CHECK(onboarding_status IN (
+      'kein_onboarding','formular_versendet','formular_ausgefuellt','termin_gebucht',
+      'call_erfolgt','briefing_fertig','onboarding_abgeschlossen'))`);
+  } catch (e) {
+    if (e.code !== '42710') throw e;
+  }
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_contacts_onboarding_status ON contacts (workspace_id, onboarding_status)`);
+
+  // Engine API authentication (middleware/engine-auth.js). The plain key is shown
+  // once at creation and only its SHA-256 hash is stored; key_prefix (first
+  // characters) is for display in the Integrations card.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      key_prefix   TEXT NOT NULL,
+      key_hash     TEXT NOT NULL UNIQUE,
+      scopes       JSONB NOT NULL DEFAULT '[]',
+      created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      last_used_at TIMESTAMPTZ,
+      expires_at   TIMESTAMPTZ,
+      revoked_at   TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // Request idempotency for the Engine's write endpoints (utils/idempotency.js):
+  // the same (workspace, Idempotency-Key) replays the stored response for 24 h.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      id              SERIAL PRIMARY KEY,
+      workspace_id    INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      key             TEXT NOT NULL,
+      request_hash    TEXT NOT NULL,
+      response_status INTEGER,
+      response_body   JSONB,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      expires_at      TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '24 hours',
+      UNIQUE (workspace_id, key)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_idempotency_keys_expires ON idempotency_keys (expires_at)`);
+
+  // Documents on a CUSTOMER (briefing §5.2 "dokumente", §5.1 dokument.hinzugefuegt):
+  // contracts, call recordings, anything else — stored in a PRIVATE Supabase bucket
+  // (storage.js) and reached only through time-limited signed URLs. deal_id links a
+  // contract to the deal it belongs to (ON DELETE SET NULL keeps the file).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS contact_documents (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      contact_id   INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      deal_id      INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+      typ          TEXT NOT NULL DEFAULT 'sonstiges' CHECK(typ IN ('vertrag','aufnahme','sonstiges')),
+      file_name    TEXT NOT NULL,
+      file_size    INTEGER NOT NULL,
+      file_type    TEXT NOT NULL DEFAULT '',
+      storage_path TEXT NOT NULL,
+      uploaded_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS contact_documents_contact_idx ON contact_documents (workspace_id, contact_id, created_at DESC)`);
+
+  // Who wrote an activity: a user ('user', created_by set) or the Upgrads Engine
+  // ('engine', created_by NULL — POST /api/kunden/:id/notizen and the conflict
+  // notes of PATCH /api/kunden/:id). Rows from before this column are users'.
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'user'`);
+  try {
+    await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_source_check`);
+    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine'))`);
+  } catch (e) {
+    if (e.code !== '42710') throw e;
+  }
 
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');

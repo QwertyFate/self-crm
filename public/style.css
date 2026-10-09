@@ -1774,6 +1774,15 @@ input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
 .intg-log-badge.pending { background: var(--warning-subtle); color: var(--warning-ink); }
 .intg-log-badge.failed  { background: var(--danger-subtle);  color: var(--danger-ink); }
 .engine-delivery-meta { display: flex; gap: var(--sp-2); margin-left: auto; font-size: var(--fs-2xs); color: var(--ink-muted); }
+.intg-log-entry-header .engine-retry { height: 24px; padding: 0 var(--sp-2); font-size: var(--fs-2xs); }
+/* API keys card: the issued-keys table */
+.engine-keys-table { font-size: var(--fs-sm); }
+.engine-key-prefix { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-xs); color: var(--ink-secondary); }
+.engine-key-revoked td { color: var(--ink-muted); }
+.engine-key-actions { text-align: right; width: 1%; }
+/* The OpenAPI download line under the API-keys hint: hint typography, tucked up against it */
+.engine-openapi { font-size: var(--fs-sm); line-height: var(--lh-normal); padding: 0 var(--sp-4) var(--sp-4); margin-top: calc(var(--sp-3) * -1); }
+.engine-openapi a { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
 /* A custom mapping row ends with its tag and its remove button, in one grid cell */
 .intg-map-end { display: flex; align-items: center; gap: var(--sp-1); }
 /* Trigger stages as chips: the checkbox stays real and keyboard-focusable; the label shows the state */
@@ -2782,3 +2791,19 @@ body:has(#app.rail:not(.hidden)) #loading-overlay { left: var(--sb-width-rail); 
    reliable as the .hidden class. (Audit: index.html has no static hidden attributes; every
    `el.hidden = …` in public/js intends to hide.) */
 [hidden] { display: none !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ONBOARDING MONITOR (#page-onboarding, public/js/onboarding.js) — one table
+   over the §08 primitives (.table-wrap/.table/.seg/.badge/.stage-pill). Only
+   what the primitives lack is defined here.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.onb-sub { font-size: var(--fs-xs); margin-top: 2px; }
+/* The Engine's seven-step status: neutral at step 0, info while running, success when done */
+.onb-status { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 11px; font-size: var(--fs-xs); font-weight: 600; white-space: nowrap; background: var(--info-bg); color: var(--info); border: 1px solid var(--info-bd); }
+.onb-status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .75; flex: none; }
+.onb-status.step-0 { background: var(--neutral-bg); color: var(--neutral); border-color: var(--neutral-bd); }
+.onb-status.done { background: var(--success-bg); color: var(--success); border-color: var(--success-bd); }
+.onb-drive { display: inline-flex; align-items: center; color: var(--text-2); } .onb-drive:hover { color: var(--text); }
+.onb-actions { width: 1%; text-align: right; }
+.onb-inactive { flex: none; padding: 10px 14px; border: 1px solid var(--warning-bd); background: var(--warning-bg); color: var(--warning); border-radius: var(--r-md); font-size: var(--fs-sm); }
+#page-onboarding .table td a { color: inherit; text-decoration: none; } #page-onboarding .table td a:hover { text-decoration: underline; }

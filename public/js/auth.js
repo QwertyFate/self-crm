@@ -125,6 +125,7 @@ function showApp() {
   applyTranslations();
   loadColWidths();
   updateBoardNavVisibility();
+  updateOnboardingNav();
   updateObjectsNav();
   updateSuppliersNav();
   loadNotifPrefs();
@@ -535,6 +536,7 @@ async function switchPage(page) {
   if (page === 'tasks')      await loadTasks();
   if (page === 'board')        await loadBoard();
   if (page === 'analytics')    await loadAnalytics();
+  if (page === 'onboarding')   await loadOnboarding();
   if (page === 'integrations') await loadIntegrations();
   if (page === 'workspaces')   await loadWorkspacesPage();
   if (page === 'chat')         await loadChatPage();
@@ -559,7 +561,9 @@ function resetClientState() {
   objects = []; objectFields = []; objectColumns = []; objCurrentPage = 1;
   tasks = []; taskProjects = []; currentProjectId = null; currentListId = null; currentProject = null; taskFields = []; collapsedTasks = new Set(); resetTasksUI(); resetActivitiesUI();   // the Tasks and Activities pages clear their own scope, filters and drafts (tasks.js, objects.js)
   analyticsData = null; trendRawData = null; calEvents = [];
-  intgData = null; engineData = null; activeGuideId = null; activeCustomKeys = [];
+  intgData = null; engineData = null; engineApiKeys = []; activeGuideId = null; activeCustomKeys = [];
+  onboardingData = null; onboardingFilter = 'all';
+  document.getElementById('nav-onboarding-link')?.classList.add('hidden');
   currentSettingsTab = 'workspace'; currentIntgTab = 'webhook';
   currentContactType = 'contact'; filteredContacts = []; selectedContactIds = new Set(); selectionModeOn = false;
   currentPage = 1; sortKey = null; sortDir = 'asc'; activeFilters = {};

@@ -41,8 +41,21 @@ const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
 const { notify }  = require('../notifications');
+const engine      = require('../utils/engine');
+const { masterDataChanges } = require('../utils/kunde');
 
 router.use(requireAuth);
+
+// Tell the Upgrads Engine about a new client (kunde.angelegt) or changed master data
+// (kunde.aktualisiert). Fire-and-forget: the dispatcher checks the workspace's Engine
+// settings and the contact type itself and never throws into the request. The CSV
+// import deliberately does not fire (it re-imports existing customers in bulk).
+function fireContactCreated(req, contactId) {
+  engine.dispatchContactCreated({ workspaceId: req.workspaceId, contactId: Number(contactId) }).catch(() => {});
+}
+function fireContactUpdated(req, contactId, changed) {
+  engine.dispatchContactUpdated({ workspaceId: req.workspaceId, contactId: Number(contactId), changed }).catch(() => {});
+}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -175,10 +188,10 @@ router.get('/:id', async (req, res, next) => {
 
     const { rows: activities } = await pool.query(`
       SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
-             a.completed,
+             a.completed, a.source,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              a.deal_id, db.title AS deal_title,
-             u.name AS logged_by_name, u.email AS logged_by_email
+             COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' END) AS logged_by_name, u.email AS logged_by_email
       FROM activities a
       LEFT JOIN users u ON u.id = a.created_by
       LEFT JOIN deals db ON db.id = a.deal_id
@@ -216,6 +229,7 @@ router.post('/', async (req, res, next) => {
       body: company ? `Company: ${company}` : null,
       entityType: 'contact', entityId: row.id,
     });
+    fireContactCreated(req, row.id);
     res.status(201).json({ id: row.id });
   } catch (e) { next(e); }
 });
@@ -224,11 +238,23 @@ router.put('/:id', async (req, res, next) => {
   try {
     const { name, email, phone, company, assigned_to, custom_data, contact_type } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
+    // Pre-read (scoped) so the Engine can be told WHAT changed; also a clean 404 before any write.
+    const { rows: [before] } = await pool.query(
+      'SELECT name, email, phone, company, contact_type FROM contacts WHERE id=$1 AND workspace_id=$2', [req.params.id, req.workspaceId]
+    );
+    if (!before) return res.status(404).json({ error: 'Not found' });
+    // The master data as written (assigned_to and custom_data are not master data to the Engine).
+    const after   = { name, email: email||null, phone: phone||null, company: company||null, contact_type: contact_type || before.contact_type };
+    const changed = masterDataChanges(before, after);
+    // akte_version counts master-data changes from every side (briefing §5.4 "detect concurrent
+    // changes"): a CRM edit bumps it too, so the Engine's next precondition fails and it re-reads.
     const result = await pool.query(
-      'UPDATE contacts SET name=$1, email=$2, phone=$3, company=$4, assigned_to=$5, custom_data=$6, contact_type=COALESCE($7,contact_type), updated_at=NOW() WHERE id=$8 AND workspace_id=$9',
-      [name, email||null, phone||null, company||null, assigned_to||null, JSON.stringify(custom_data||{}), contact_type||null, req.params.id, req.workspaceId]
+      'UPDATE contacts SET name=$1, email=$2, phone=$3, company=$4, assigned_to=$5, custom_data=$6, contact_type=COALESCE($7,contact_type), akte_version=akte_version+$10::int, updated_at=NOW() WHERE id=$8 AND workspace_id=$9',
+      [name, email||null, phone||null, company||null, assigned_to||null, JSON.stringify(custom_data||{}), contact_type||null, req.params.id, req.workspaceId, changed.length ? 1 : 0]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    if (before.contact_type !== 'contact' && after.contact_type === 'contact') fireContactCreated(req, req.params.id);   // a supplier became a client: new to the Engine
+    else if (changed.length) fireContactUpdated(req, req.params.id, changed);
     res.json({ success: true });
   } catch (e) { next(e); }
 });

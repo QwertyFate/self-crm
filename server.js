@@ -49,6 +49,7 @@ const path       = require('path');
 const helmet     = require('helmet');
 const { rateLimit } = require('express-rate-limit');
 const { pool, initDb } = require('./db');
+const engine     = require('./utils/engine');   // outgoing Engine webhooks: the retry worker is started after initDb()
 
 const app        = express();
 const httpServer = http.createServer(app);
@@ -108,6 +109,14 @@ const webhookKeyLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
   keyGenerator: (req) => req.params.key || 'unknown',
 });
+// Onboarding Engine API (/api/kunden): 300 requests per minute per IP. The number is
+// published to the Engine team in ENGINE_INTEGRATION.md; the body is the Engine's error
+// shape, not the { error } the browser routes use.
+const engineApiLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 300,
+  message: { fehler: { code: 'zu_viele_anfragen', nachricht: 'Zu viele Anfragen. Bitte später erneut versuchen.' } },
+  standardHeaders: true, legacyHeaders: false,
+});
 
 // Express's json() default body limit is 100kb, too small for a CSV contact import
 // sent as a JSON array of rows; raise it just for that route (body-parser skips
@@ -146,6 +155,7 @@ app.use('/api/admin',         require('./routes/admin'));
 app.use('/api/admin',         require('./routes/admin-provision'));
 app.use('/api/platform',      require('./routes/platform'));
 app.use('/api/contacts',      require('./routes/contacts'));
+app.use('/api/contacts',      require('./routes/contact-documents'));   // /:contactId/documents… — falls through contacts.js like task-attachments
 app.use('/api/fields',        require('./routes/fields'));
 app.use('/api/activities',         require('./routes/activities'));
 app.use('/api/activity-comments',  require('./routes/activity-comments'));
@@ -167,6 +177,11 @@ app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations',  require('./routes/integrations'));
 app.use('/api/engine',        require('./routes/engine'));
+// Onboarding Engine API: API-key auth (no session), German error shape, rate-limited.
+app.use('/api/kunden',        engineApiLimiter);
+app.use('/api/kunden',        require('./routes/engine-api'));
+app.use('/api/dokumente',     engineApiLimiter);
+app.use('/api/dokumente',     require('./routes/engine-dokumente'));   // GET /:id/download → signed link (API key)
 
 app.get('/adminconsole', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 // The public landing page: a standalone document (landingpage.html + landing.css + js/landing.js), no session.
@@ -271,5 +286,11 @@ io.on('connection', async (socket) => {
 });
 
 initDb()
-  .then(() => httpServer.listen(PORT, () => console.log(`CRM running at http://localhost:${PORT}`)))
+  .then(() => {
+    httpServer.listen(PORT, () => console.log(`CRM running at http://localhost:${PORT}`));
+    // Re-drives pending Engine deliveries on the briefing's schedule (≥ 5 attempts over
+    // ~24 h) and so survives restarts. ENGINE_RETRY_WORKER=0 disables it, e.g. on a second
+    // instance that should not compete for the same rows.
+    if (process.env.ENGINE_RETRY_WORKER !== '0') engine.startRetryWorker();
+  })
   .catch(err => { console.error('Database init failed:', err); process.exit(1); });

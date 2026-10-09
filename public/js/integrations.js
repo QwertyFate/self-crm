@@ -570,6 +570,7 @@ async function loadEngineSettings() {
   const stagesEl = document.getElementById('engine-stages'); if (stagesEl) stagesEl.innerHTML = renderEngineStages(data.stages || [], e.trigger_stage_ids || []);
   setEngineReadOnly(!data.can_manage);
   loadEngineDeliveries();
+  loadEngineApiKeys();
 }
 
 // Only the last four characters are ever shown; the full value stays in engineData.
@@ -583,6 +584,86 @@ function setEngineReadOnly(readOnly) {
   card.querySelectorAll('.engine-manage-input, #engine-stages input').forEach(el => { el.disabled = readOnly; });
   card.querySelectorAll('.engine-manage').forEach(el => el.classList.toggle('hidden', readOnly));
   const hint = document.getElementById('engine-readonly-hint'); if (hint) hint.classList.toggle('hidden', !readOnly);
+  document.getElementById('engine-keys-card')?.classList.toggle('hidden', readOnly);   // API keys are a manager's concern only
+}
+
+// ── API keys (the Engine's credentials for /api/kunden) ───────────────────────
+let engineApiKeys = [];
+
+async function loadEngineApiKeys() {
+  const el = document.getElementById('engine-keys'); if (!el) return;
+  if (!engineData?.can_manage) return;                      // the card is hidden for members; never fetch the list for them
+  const data = await api.get('/api/engine/api-keys');
+  engineApiKeys = data && !data.error ? (data.api_keys || []) : [];
+  el.innerHTML = renderEngineApiKeys(engineApiKeys, true);
+}
+
+// One table row per key. Only the prefix is ever shown — the CRM does not have the key either.
+function renderEngineApiKeys(keys, canManage) {
+  if (!keys || !keys.length) return `<p class="empty-inline">${esc(t('engine_keys_none'))}</p>`;
+  const locale = currentLang === 'de' ? 'de-DE' : 'en-GB';
+  const when = v => (v ? new Date(v).toLocaleString(locale) : t('engine_keys_never'));
+  const head = ['engine_keys_col_name', 'engine_keys_col_key', 'engine_keys_col_created', 'engine_keys_col_last_used'].map(k => `<th>${esc(t(k))}</th>`).join('') + '<th></th>';
+  const rows = keys.map(k => {
+    const revoked = !!k.revoked_at;
+    const action  = canManage && !revoked
+      ? `<button type="button" class="btn btn-sm btn-danger" onclick="revokeEngineApiKey(${Number(k.id)})">${esc(t('engine_keys_revoke'))}</button>`
+      : '';
+    return `<tr${revoked ? ' class="engine-key-revoked"' : ''}>
+      <td class="strong">${esc(k.name)}</td>
+      <td><code class="engine-key-prefix">${esc(k.key_prefix)}…</code></td>
+      <td>${esc(when(k.created_at))}</td>
+      <td>${revoked ? `<span class="badge">${esc(t('engine_keys_revoked'))}</span>` : esc(when(k.last_used_at))}</td>
+      <td class="engine-key-actions">${action}</td>
+    </tr>`;
+  }).join('');
+  return `<table class="table compact engine-keys-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// POST creates the key; the plain value appears once in the reveal box and nowhere else.
+async function createEngineApiKey(btn) {
+  const input = document.getElementById('engine-key-name');
+  const name  = input ? input.value.trim() : '';
+  if (!name) { ui.toast(t('engine_keys_name_required')); input?.focus(); return; }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.post('/api/engine/api-keys', { name });
+    if (res.error) { ui.toast(res.error); return; }
+    if (input) input.value = '';
+    const val = document.getElementById('engine-key-value'); if (val) val.value = res.key || '';
+    document.getElementById('engine-key-reveal')?.classList.remove('hidden');
+    loadEngineApiKeys();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function copyEngineApiKey(btn) {
+  const key = document.getElementById('engine-key-value')?.value;
+  if (!key) return;
+  const done = () => { const o = btn.textContent; btn.textContent = t('copied'); setTimeout(() => btn.textContent = o, 1500); };
+  if (navigator.clipboard) navigator.clipboard.writeText(key).then(done).catch(() => fallbackCopy(key, done));
+  else fallbackCopy(key, done);
+}
+
+// "Done": the key leaves the page. It cannot be shown again.
+function hideEngineApiKey() {
+  const val = document.getElementById('engine-key-value'); if (val) val.value = '';
+  document.getElementById('engine-key-reveal')?.classList.add('hidden');
+}
+
+async function revokeEngineApiKey(id) {
+  const k = engineApiKeys.find(x => x.id === id);
+  const ok = await ui.confirm({
+    title: t('engine_keys_revoke'),
+    message: tf('engine_keys_confirm_revoke', { name: k?.name || '' }),
+    confirmLabel: t('engine_keys_revoke'), danger: true,
+  });
+  if (!ok) return;
+  const res = await api.del(`/api/engine/api-keys/${id}`);
+  if (res.error) { ui.toast(res.error); return; }
+  ui.toast(t('engine_keys_revoked_toast'));
+  loadEngineApiKeys();
 }
 
 // Same chip markup as the Analytics won/lost pickers, grouped by pipeline.
@@ -629,6 +710,7 @@ async function saveEngineSettings(silent = false) {
   }
   if (engineData) engineData.engine = { ...engineData.engine, ...res.engine, webhook_secret: engineData.engine.webhook_secret };
   if (!silent) showEngineMsg(t('engine_saved'), true);
+  updateOnboardingNav();   // the Onboarding monitor link follows the Active switch (onboarding.js)
 }
 
 function copyEngineSecret(btn) {
@@ -661,6 +743,20 @@ async function sendEngineTestEvent(btn) {
   }
 }
 
+// One counted attempt now (POST /api/engine/deliveries/:id/retry); the list reloads either way.
+async function retryEngineDelivery(id, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.post(`/api/engine/deliveries/${id}/retry`, {});
+    if (res.error) { ui.toast(res.error); return; }
+    const d = res.delivery || {};
+    ui.toast(d.status === 'success' ? t('engine_retry_ok') : tf('engine_retry_failed', { error: d.last_error || '' }));
+    loadEngineDeliveries();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function loadEngineDeliveries() {
   const el = document.getElementById('engine-deliveries'); if (!el) return;
   const data = await api.get('/api/engine/deliveries');
@@ -672,17 +768,25 @@ async function loadEngineDeliveries() {
 function engineDeliveryHtml(d) {
   const status = ['success', 'failed', 'pending'].includes(d.status) ? d.status : 'pending';
   const label  = d.deal_title || d.event || '';
+  const locale = currentLang === 'de' ? 'de-DE' : 'en-GB';
   const meta   = [
     `${Number(d.attempts) || 0} ${t(Number(d.attempts) === 1 ? 'engine_attempt_one' : 'engine_attempts')}`,
     d.last_status_code ? `HTTP ${Number(d.last_status_code)}` : '',
+    status === 'pending' && d.next_attempt_at ? tf('engine_next_attempt', { when: new Date(d.next_attempt_at).toLocaleString(locale) }) : '',
     d.contact_name || '',
   ].filter(Boolean).map(m => `<span>${esc(m)}</span>`).join('');
+  // Retry: managers only; never for a delivered row, a test ping, or a contract event
+  // without kunde_id (there is nothing the Engine could do with it).
+  const noContact = d.event === 'vertrag.unterschrieben' && (!d.payload || d.payload.kunde_id == null);
+  const retry = engineData?.can_manage && status !== 'success' && d.event !== 'test.ping' && !noContact
+    ? `<button type="button" class="btn btn-secondary btn-sm engine-retry" onclick="retryEngineDelivery(${Number(d.id)}, this)">${esc(t('engine_btn_retry'))}</button>`
+    : '';
   return `<div class="intg-log-entry${status === 'failed' ? ' error' : ''}">
     <div class="intg-log-entry-header">
       <span class="intg-log-badge ${status}">${esc(t('engine_status_' + status))}</span>
-      <span class="intg-log-time">${esc(new Date(d.created_at).toLocaleString(currentLang === 'de' ? 'de-DE' : 'en-GB'))}</span>
+      <span class="intg-log-time">${esc(new Date(d.created_at).toLocaleString(locale))}</span>
       <span class="intg-log-contact">${esc(label)}</span>
-      <span class="engine-delivery-meta">${meta}</span>
+      <span class="engine-delivery-meta">${meta}</span>${retry}
     </div>
     ${d.last_error ? `<div class="intg-log-skipped">${esc(d.last_error)}</div>` : ''}
     <div class="intg-log-raw-toggle" onclick="this.nextElementSibling.classList.toggle('hidden')">${esc(t('engine_view_payload'))}</div>

@@ -42,6 +42,8 @@ const router      = express.Router();
 const crypto      = require('crypto');
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const engine      = require('../utils/engine');            // "a lead comes in" → kunde.angelegt / kunde.aktualisiert
+const { masterDataChanges } = require('../utils/kunde');
 
 router.use('/settings', requireAuth);
 router.use('/logs',     requireAuth);
@@ -197,20 +199,26 @@ router.post('/receive/:key', async (req, res) => {
     let contact;
     const defaultAssigneeId = wh.default_assignee_id || null;
 
+    // The Upgrads Engine hears about every lead: a new contact → kunde.angelegt, a known
+    // email whose master data changed → kunde.aktualisiert (fire-and-forget, after the write).
+    const fireEngine = (fn, args) => engine[fn]({ workspaceId: wid, ...args }).catch(() => {});
+
     if (email) {
       const normalizedEmail = email.toLowerCase().trim();
       const { rows: [existing] } = await pool.query(
-        `SELECT id, name FROM contacts WHERE workspace_id=$1 AND email=$2`,
+        `SELECT id, name, email, phone, company, contact_type FROM contacts WHERE workspace_id=$1 AND email=$2`,
         [wid, normalizedEmail]
       );
 
       if (existing) {
+        const changed = masterDataChanges(existing, { name: name || existing.name, phone, company });
         const { rows: [updated] } = await pool.query(
-          `UPDATE contacts SET name=$1, phone=$2, company=$3, custom_data=$4, updated_at=NOW()
+          `UPDATE contacts SET name=$1, phone=$2, company=$3, custom_data=$4, akte_version=akte_version+$7::int, updated_at=NOW()
            WHERE id=$5 AND workspace_id=$6 RETURNING id, name`,
-          [name || existing.name, phone, company, JSON.stringify(customData), existing.id, wid]
+          [name || existing.name, phone, company, JSON.stringify(customData), existing.id, wid, changed.length ? 1 : 0]
         );
         contact = updated;
+        if (changed.length) fireEngine('dispatchContactUpdated', { contactId: existing.id, changed });
       } else {
         const { rows: [newContact] } = await pool.query(
           `INSERT INTO contacts (workspace_id, name, email, phone, company, contact_type, custom_data, assigned_to)
@@ -218,6 +226,7 @@ router.post('/receive/:key', async (req, res) => {
           [wid, name || email, normalizedEmail, phone, company, JSON.stringify(customData), defaultAssigneeId]
         );
         contact = newContact;
+        fireEngine('dispatchContactCreated', { contactId: newContact.id });
       }
     } else {
       const { rows: [newContact] } = await pool.query(
@@ -226,6 +235,7 @@ router.post('/receive/:key', async (req, res) => {
         [wid, name || email, null, phone, company, JSON.stringify(customData), defaultAssigneeId]
       );
       contact = newContact;
+      fireEngine('dispatchContactCreated', { contactId: newContact.id });
     }
 
     let dealId = null;
