@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node --env-file-if-exists=.env server.js",
     "dev": "nodemon --exec 'node --env-file-if-exists=.env' server.js",
+    "backup": "node --env-file-if-exists=.env scripts/backup.js",
+    "restore": "node --env-file-if-exists=.env scripts/restore.js",
     "test": "node --test \"tests/**/*.test.js\"",
     "test:client": "node --test \"tests/client/*.test.js\"",
     "test:routes": "node --test \"tests/routes/*.test.js\"",
@@ -15,6 +17,8 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
     "@supabase/supabase-js": "^2.106.0",
     "bcryptjs": "^3.0.3",
     "connect-pg-simple": "^10.0.0",
@@ -23,11 +27,11 @@
     "express-session": "^1.19.0",
     "helmet": "^8.2.0",
     "multer": "^2.1.1",
-    "nodemailer": "^8.0.5",
     "pg": "^8.20.0",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.0",
+    "socket.io-client": "^4.8.4"
   }
 }

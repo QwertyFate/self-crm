@@ -49,11 +49,15 @@ const path       = require('path');
 const helmet     = require('helmet');
 const { rateLimit } = require('express-rate-limit');
 const { pool, initDb } = require('./db');
+const embedded   = require('./embedded');       // no DATABASE_URL → Postgres in-process (PGlite) under data/, generated secrets; see embedded.js
+const { openSignup } = require('./utils/open-signup');   // codes or no codes at signup; on by default in embedded mode
+const backup     = require('./utils/backup');   // the daily archive + the console's Download / Save now (embedded database only)
+const publicUrl  = require('./utils/base-url');   // BASE_URL from .env, for the boot message
 const engine     = require('./utils/engine');   // outgoing Engine webhooks: the retry worker is started after initDb()
 
 const app        = express();
 const httpServer = http.createServer(app);
-const PORT       = process.env.PORT || 3000;
+const PORT       = process.env.PORT || 4001;
 
 // Node exits on an unhandled promise rejection. Socket.IO does not await or catch what an
 // async listener returns, so without this one bad payload in any listener would take the whole
@@ -101,9 +105,11 @@ const signupLimiter = rateLimit({
   message: { error: 'Too many accounts created from this IP. Please try again in an hour.' },
   standardHeaders: true, legacyHeaders: false,
 });
+// Password reset is a self-service page (no e-mail), so a typo plus a retry must not lock a
+// colleague out for an hour; the 64-hex token is not guessable at any rate this allows.
 const passwordLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, max: 3,
-  message: { error: 'Too many password reset attempts. Please try again in an hour.' },
+  windowMs: 15 * 60 * 1000, max: 10,
+  message: { error: 'Too many password reset attempts. Please try again in 15 minutes.' },
   standardHeaders: true, legacyHeaders: false,
 });
 const webhookIpLimiter = rateLimit({
@@ -139,9 +145,10 @@ const engineRequestLog = require('./middleware/engine-request-log');
 app.use('/api/kunden',    engineGate.engineBodyErrors);
 app.use('/api/dokumente', engineGate.engineBodyErrors);
 
+const sessionStore = new pgSession({ pool, createTableIfMissing: true });   // kept for stop(): it owns a prune timer
 const sessionMiddleware = session({
-  store: new pgSession({ pool, createTableIfMissing: true }),
-  secret: process.env.SESSION_SECRET || 'change-me-in-production',
+  store: sessionStore,
+  secret: embedded.sessionSecret(),   // SESSION_SECRET when set; otherwise generated once into data/secrets.json
   resave: false,
   saveUninitialized: false,
   cookie: { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 },
@@ -168,6 +175,7 @@ app.use('/api/auth',          require('./routes/auth'));
 app.use('/api/admin',         require('./routes/admin'));
 app.use('/api/admin',         require('./routes/admin-provision'));
 app.use('/api/admin',         require('./routes/admin-engine'));       // Engine Monitor: switches, request log, deliveries (cross-tenant)
+app.use('/api/admin',         require('./routes/admin-backup'));       // Backups card: download, list, save now (embedded database only)
 app.use('/api/platform',      require('./routes/platform'));
 app.use('/api/contacts',      require('./routes/contacts'));
 app.use('/api/contacts',      require('./routes/contact-documents'));   // /:contactId/documents… — falls through contacts.js like task-attachments
@@ -201,6 +209,8 @@ app.use('/api/dokumente',     engineRequestLog);
 app.use('/api/dokumente',     engineApiLimiter);
 app.use('/api/dokumente',     engineGate);
 app.use('/api/dokumente',     require('./routes/engine-dokumente'));   // GET /:id/download → signed link (API key)
+// Local file storage (storage.js without Supabase): signed document links and session-gated task attachments.
+app.use('/files',             require('./routes/files'));
 
 app.get('/adminconsole', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 // The public landing page: a standalone document (landingpage.html + landing.css + js/landing.js), no session.
@@ -304,12 +314,49 @@ io.on('connection', async (socket) => {
   });
 });
 
-initDb()
-  .then(() => {
-    httpServer.listen(PORT, () => console.log(`CRM running at http://localhost:${PORT}`));
-    // Re-drives pending Engine deliveries on the briefing's schedule (≥ 5 attempts over
-    // ~24 h) and so survives restarts. ENGINE_RETRY_WORKER=0 disables it, e.g. on a second
-    // instance that should not compete for the same rows.
-    if (process.env.ENGINE_RETRY_WORKER !== '0') engine.startRetryWorker();
-  })
-  .catch(err => { console.error('Database init failed:', err); process.exit(1); });
+// "CRM running at …": the public address from .env when there is one (BASE_URL, e.g. https://crm.upgrads.de),
+// else the local one — so the line in the terminal is the one to hand to colleagues.
+function bootMessage(port) {
+  const configured = publicUrl.configured();
+  return configured ? `CRM running at ${configured} (listening on port ${port})` : `CRM running at http://localhost:${port}`;
+}
+
+// BOOT. Embedded mode first: it boots PGlite and tells the pool its port, so initDb() has a
+// database. With DATABASE_URL set, embedded.start() resolves null at once and nothing changes.
+// start()/stop() exist so that tests/integration/app-smoke.test.js can boot THIS file — the real
+// routes, session store and socket.io — on a random port and tear it down again; `node server.js`
+// (npm start, nodemon) boots exactly as before through the require.main block below.
+async function start(port = PORT) {
+  const info = await embedded.start(pool);
+  if (info) console.log(`Embedded database ready: ${info.dataDir} (no DATABASE_URL — Postgres runs in this process; files in ${embedded.FILES_DIR})`);
+  await initDb();
+  if (openSignup()) console.log('Open signup: anyone who can reach this server can create a workspace or join one without a code (OPEN_SIGNUP=false to require codes).');
+  await new Promise((resolve, reject) => {
+    httpServer.once('error', reject);
+    httpServer.listen(port, () => { httpServer.off('error', reject); console.log(bootMessage(httpServer.address().port)); resolve(); });
+  });
+  // Re-drives pending Engine deliveries on the briefing's schedule (≥ 5 attempts over
+  // ~24 h) and so survives restarts. ENGINE_RETRY_WORKER=0 disables it, e.g. on a second
+  // instance that should not compete for the same rows.
+  if (process.env.ENGINE_RETRY_WORKER !== '0') engine.startRetryWorker();
+  // One backup archive per day while the app runs (utils/backup.js); BACKUPS=0 switches it off.
+  if (backup.schedulerEnabled()) backup.startScheduler({ getDb: embedded.getDb, pool });
+  return { port: httpServer.address().port };
+}
+
+// The reverse, in order: the retry worker, every socket and HTTP connection, the session store's
+// prune timer, then the embedded database (a no-op with DATABASE_URL set).
+async function stop() {
+  backup.stopScheduler();
+  engine.stopRetryWorker();
+  httpServer.closeAllConnections?.();
+  await new Promise(resolve => io.close(() => resolve()));   // closes httpServer too
+  if (typeof sessionStore.close === 'function') await sessionStore.close();
+  await embedded.stop(pool);
+}
+
+if (require.main === module) {
+  start().catch(err => { console.error('Database init failed:', err); process.exit(1); });
+}
+
+module.exports = { app, httpServer, io, start, stop };

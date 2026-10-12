@@ -6,15 +6,21 @@
  * and point either at a recording fake pool (unit test) or a real pool on a
  * throwaway database (integration test).
  *
- * db.js only requires 'pg' and 'crypto'; every other name falls through to the
- * real `require`.
+ * `pool` may also be a FUNCTION: it is then called with the config object
+ * db.js hands to `new Pool(...)` and must return the pool to use. That is how
+ * tests/unit/single-connection.test.js reads the embedded-mode config and how
+ * tests/unit/embedded-mode.test.js builds a REAL pg Pool from it.
+ *
+ * db.js requires 'pg', 'crypto' and its own './utils/open-signup'. A relative
+ * name is resolved against the app root (db.js's folder), everything else falls
+ * through to the real `require`.
  */
 const path = require('path');
 const ROOT = path.resolve(__dirname, '..', '..');
 
 function loadDb(source, pool) {
-  const fakePg = { Pool: function Pool() { return pool; } };
-  const req = name => (name === 'pg' ? fakePg : require(name));
+  const fakePg = { Pool: function Pool(config) { return typeof pool === 'function' ? pool(config) : pool; } };
+  const req = name => (name === 'pg' ? fakePg : name.startsWith('.') ? require(path.join(ROOT, name)) : require(name));
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', '__dirname', '__filename', source)(req, mod, mod.exports, ROOT, path.join(ROOT, 'db.js'));
   return mod.exports;   // { pool, initDb, seedDefaultPipeline }

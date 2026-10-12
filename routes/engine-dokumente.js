@@ -3,9 +3,10 @@
  * "Binary data; a time-limited link is acceptable").
  *
  * Mounted at /api/dokumente, API-key auth (middleware/engine-auth.js), German
- * error shape like routes/engine-api.js. Answers 302 to a signed Supabase URL
- * that lives for 10 minutes; the Engine's HTTP client follows it and receives
- * the bytes. The document must belong to the key's workspace (404 otherwise —
+ * error shape like routes/engine-api.js. Answers 302 to a signed URL that lives
+ * for 10 minutes — /files/documents/… on this CRM with the local storage backend,
+ * Supabase's own with that backend (storage.js); the Engine's HTTP client follows
+ * it and receives the bytes. The document must belong to the key's workspace (404 otherwise —
  * never 403, nothing is enumerable across workspaces).
  *
  * Like engine-api.js this file never requires utils/engine.js: a read must not

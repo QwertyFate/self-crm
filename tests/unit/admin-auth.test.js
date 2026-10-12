@@ -21,8 +21,8 @@ function run(req) {
 }
 const SECRET = 'correct-horse-battery-staple';
 let saved;
-beforeEach(() => { saved = process.env.ADMIN_SECRET; process.env.ADMIN_SECRET = SECRET; });
-afterEach(() => { if (saved === undefined) delete process.env.ADMIN_SECRET; else process.env.ADMIN_SECRET = saved; });
+beforeEach(() => { saved = process.env.ADMIN_SECRET; process.env.ADMIN_SECRET = SECRET; process.env.OPEN_ADMIN = 'false'; });   // the gate itself; open admin (utils/open-admin.js) has its own test
+afterEach(() => { if (saved === undefined) delete process.env.ADMIN_SECRET; else process.env.ADMIN_SECRET = saved; delete process.env.OPEN_ADMIN; });
 
 describe('requireAdmin', () => {
   test('the console session still passes, untouched', () => {

@@ -5,7 +5,10 @@
    no workspace, no role. POST /login compares a plaintext ADMIN_SECRET from
    the environment and sets req.session.isAdmin; requireAdmin (imported from
    middleware/admin-auth.js) gates everything else on that flag. With ADMIN_SECRET unset every login returns
-   503, which is the intended "feature off" state.
+   503, which is the intended "feature off" state — EXCEPT under open admin
+   (utils/open-admin.js: on by default in embedded mode, OPEN_ADMIN overrides),
+   where the console needs no secret at all: /me answers { isAdmin: true, open: true }
+   and the gate passes everything.
 
    Because it is cross-tenant by design, nothing here filters by workspace —
    that is correct for this file and wrong everywhere else.
@@ -39,12 +42,17 @@ const crypto   = require('crypto');
 const { pool } = require('../db');
 const { readFeatures, writeFeatures } = require('../utils/features');
 const requireAdmin = require('../middleware/admin-auth');
+const { openAdmin } = require('../utils/open-admin');   // embedded mode: the console needs no secret (see middleware/admin-auth.js)
 
+// `open` tells public/admin.html to skip its login screen and hide Logout: with open admin
+// (utils/open-admin.js) there is nothing to log in to or out of.
 router.get('/me', (req, res) => {
-  res.json({ isAdmin: !!req.session?.isAdmin });
+  const open = openAdmin();
+  res.json({ isAdmin: open || !!req.session?.isAdmin, open });
 });
 
 router.post('/login', (req, res) => {
+  if (openAdmin()) { if (req.session) req.session.isAdmin = true; return res.json({ success: true }); }
   const { secret } = req.body;
   const adminSecret = process.env.ADMIN_SECRET;
   if (!adminSecret) return res.status(503).json({ error: 'ADMIN_SECRET is not configured on this server.' });

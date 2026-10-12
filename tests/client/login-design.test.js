@@ -62,9 +62,9 @@ describe('layout: the navy wall beside the white form half', () => {
 });
 
 describe('contract: every id auth.js reads exists exactly once', () => {
-  const ids = ['login-form', 'signup-form', 'login-error', 'signup-error', 'forgot-error', 'forgot-success',
-    'forgot-link-box', 'forgot-btn', 'reset-error', 'reset-token', 'reset-password', 'reset-confirm', 'forgot-email',
-    'forgot-link-val', 'login-email', 'login-password', 'su-workspace-field', 'su-platform-code-field', 'su-code-field',
+  const ids = ['login-form', 'signup-form', 'login-error', 'signup-error', 'forgot-error',
+    'forgot-btn', 'reset-error', 'reset-token', 'reset-password', 'reset-confirm', 'forgot-email', 'reset-for',
+    'login-email', 'login-password', 'su-workspace-field', 'su-platform-code-field', 'su-code-field',
     'su-workspace', 'su-platform-code', 'su-code', 'su-name', 'su-email', 'su-password',
     'auth-view-main', 'auth-view-forgot', 'auth-view-reset', 'auth-view-workspace-picker', 'auth-view-join-workspace',
     'workspace-picker-list', 'workspace-picker-error', 'login-notice', 'join-ws-auth-code', 'join-ws-auth-error'];
@@ -179,11 +179,14 @@ describe('auth.js: translated, busy while logging in, no dialogs, the Join view 
     assert.match(sliceFn(auth, 'setAuthBusy', 'auth.js'), /aria-busy/);
   });
   test('no alert() dialogs on the door', () => {
-    for (const fn of ['copyResetLink', 'handleResetPassword', 'selectWorkspace', 'handleJoinWorkspace', 'showJoinWorkspace', 'showAuth', 'handleLogin']) {
+    for (const fn of ['handleForgotPassword', 'handleResetPassword', 'selectWorkspace', 'handleJoinWorkspace', 'showJoinWorkspace', 'showAuth', 'handleLogin']) {
       assert.doesNotMatch(sliceFn(auth, fn, 'auth.js'), /\balert\(/, fn);
     }
     assert.match(sliceFn(auth, 'handleResetPassword', 'auth.js'), /t\('auth_pw_updated'\)/);
-    assert.match(sliceFn(auth, 'copyResetLink', 'auth.js'), /t\('copied'\)/);
+    // no e-mail: forgot-password answers the token and the door moves straight to the new-password form
+    assert.match(sliceFn(auth, 'handleForgotPassword', 'auth.js'), /showResetForm\(data\.token, data\.email \|\| email\)/);
+    assert.doesNotMatch(auth, /copyResetLink|resetUrl|forgot-link|forgot-success|params\.get\('reset'\)/);
+    assert.match(sliceFn(auth, 'showResetForm', 'auth.js'), /tf\('reset_for_email', \{ email \}\)/);
   });
   test('handleJoinWorkspace reads the form that submitted (modal or auth view) and re-shows the app', () => {
     const s = sliceFn(auth, 'handleJoinWorkspace', 'auth.js');

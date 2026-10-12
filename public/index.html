@@ -223,6 +223,13 @@
                 <label class="label" for="su-code" data-i18n="auth_ws_code">Einladungscode des Arbeitsbereichs</label>
                 <input class="input" type="text" id="su-code" data-i18n-ph="ph_ws_code" placeholder="Code einfügen" autocomplete="off">
               </div>
+              <!-- open signup (auth.js toggleSignupMode): the workspace picker replaces the code for "join" -->
+              <div class="au-field field hidden" id="su-workspace-pick-field">
+                <label class="label" for="su-workspace-pick" data-i18n="auth_pick_workspace">Arbeitsbereich</label>
+                <select class="input" id="su-workspace-pick"></select>
+                <div class="help" data-i18n="auth_pick_workspace_help">Der Beitritt erfolgt als Mitglied; der Inhaber kann die Rolle später auf Admin ändern.</div>
+                <div class="help hidden" id="su-workspace-pick-empty" data-i18n="auth_no_workspaces_yet">Es gibt noch keinen Arbeitsbereich – oben den ersten anlegen.</div>
+              </div>
               <div class="au-field field">
                 <label class="label" for="su-name" data-i18n="lbl_your_name">Vollständiger Name</label>
                 <input class="input" type="text" id="su-name" required autocomplete="name">
@@ -244,18 +251,13 @@
           <!-- ── View: Forgot Password ── -->
           <div id="auth-view-forgot" class="hidden">
             <form class="au-form" onsubmit="handleForgotPassword(event)">
-              <div class="au-head"><h1 class="au-title" data-i18n="au_title_forgot">Passwort zurücksetzen</h1><p class="au-sub" data-i18n="au_sub_forgot">Der Link zum Zurücksetzen geht an die hinterlegte E-Mail-Adresse.</p></div>
+              <div class="au-head"><h1 class="au-title" data-i18n="au_title_forgot">Passwort zurücksetzen</h1><p class="au-sub" data-i18n="au_sub_forgot">Die E-Mail-Adresse des Kontos eingeben. Das neue Passwort wird im nächsten Schritt festgelegt – es wird keine E-Mail verschickt.</p></div>
               <div class="au-field field">
                 <label class="label" for="forgot-email" data-i18n="au_lbl_email">E-Mail-Adresse</label>
                 <div class="au-inp"><svg class="ic au-inp-ic" aria-hidden="true"><use href="#i-mail"/></svg><input class="input" type="email" id="forgot-email" required autocomplete="email"></div>
               </div>
               <div id="forgot-error" class="au-alert hidden" role="alert"></div>
-              <div id="forgot-success" class="au-notice hidden" role="status"></div>
-              <div id="forgot-link-box" class="au-field field hidden">
-                <label class="label" for="forgot-link-val" data-i18n="auth_copy_link">Link zum Zurücksetzen:</label>
-                <div class="au-linkrow"><input class="input" type="text" id="forgot-link-val" readonly><button type="button" class="btn btn-secondary" id="forgot-copy-btn" onclick="copyResetLink(this)"><svg class="ic" aria-hidden="true"><use href="#i-copy"/></svg><span data-i18n="btn_copy">Kopieren</span></button></div>
-              </div>
-              <button type="submit" class="btn btn-primary btn-lg au-submit" id="forgot-btn" data-i18n="btn_send_reset">Link senden</button>
+              <button type="submit" class="btn btn-primary btn-lg au-submit" id="forgot-btn" data-i18n="btn_reset_continue">Weiter</button>
             </form>
             <div class="au-aux">
               <a href="#" onclick="showMainAuth(event)"><svg class="ic" aria-hidden="true"><use href="#i-arrow-left"/></svg><span data-i18n="auth_back_login">Zurück zur Anmeldung</span></a>
@@ -266,6 +268,7 @@
           <div id="auth-view-reset" class="hidden">
             <form class="au-form" onsubmit="handleResetPassword(event)">
               <div class="au-head"><h1 class="au-title" data-i18n="au_title_reset">Neues Passwort festlegen</h1><p class="au-sub" data-i18n="au_sub_reset">Mindestens 6 Zeichen.</p></div>
+              <div id="reset-for" class="au-notice hidden" role="status"></div>
               <input type="hidden" id="reset-token">
               <div class="au-field field">
                 <label class="label" for="reset-password" data-i18n="auth_new_password">Neues Passwort</label>
@@ -294,9 +297,14 @@
           <div id="auth-view-join-workspace" class="hidden">
             <form class="au-form" onsubmit="handleJoinWorkspace(event)">
               <div class="au-head"><h1 class="au-title" data-i18n="au_title_join">Arbeitsbereich beitreten</h1><p class="au-sub" data-i18n="au_sub_join">Den Einladungscode vom Inhaber oder Admin des Arbeitsbereichs eingeben.</p></div>
-              <div class="au-field field">
+              <div class="au-field field" data-join="code">
                 <label class="label" for="join-ws-auth-code" data-i18n="auth_ws_code">Einladungscode des Arbeitsbereichs</label>
                 <input class="input" type="text" id="join-ws-auth-code" data-i18n-ph="ph_ws_code" placeholder="Code einfügen" autocomplete="off">
+              </div>
+              <div class="au-field field hidden" data-join="pick">
+                <label class="label" for="join-ws-auth-pick" data-i18n="auth_pick_workspace">Arbeitsbereich</label>
+                <select class="input" id="join-ws-auth-pick"></select>
+                <div class="help hidden" data-join="empty" data-i18n="auth_join_all_joined">Dieses Konto gehört bereits zu allen Arbeitsbereichen.</div>
               </div>
               <div id="join-ws-auth-error" class="au-alert hidden" role="alert"></div>
               <button type="submit" class="btn btn-primary btn-lg au-submit" data-i18n="btn_join_workspace">Beitreten</button>
@@ -1357,9 +1365,14 @@
         <button class="iconbtn" onclick="document.getElementById('join-workspace-modal').classList.add('hidden')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form onsubmit="handleJoinWorkspace(event)">
-        <div class="field">
+        <div class="field" data-join="code">
           <label class="label"><span data-i18n="html_ws_invite_code">Workspace Invite Code</span> <span class="req">*</span></label>
           <input type="text" id="join-ws-code" placeholder="Paste invite code here" data-i18n-ph="html_ph_invite_code" autocomplete="off" required />
+        </div>
+        <div class="field hidden" data-join="pick">
+          <label class="label"><span data-i18n="auth_pick_workspace">Workspace</span> <span class="req">*</span></label>
+          <select id="join-ws-pick"></select>
+          <span class="text-xs text-muted hidden" data-join="empty" data-i18n="auth_join_all_joined">You already belong to every workspace.</span>
         </div>
         <div id="join-ws-error" class="auth-error hidden" style="margin:0 22px 10px"></div>
         <div class="modal-foot">
@@ -1414,7 +1427,7 @@
           <label class="label"><span data-i18n="html_ws_name">Workspace Name</span> <span class="req">*</span></label>
           <input type="text" id="cw-name" placeholder="e.g. Acme Sales" data-i18n-ph="html_ph_ws_name" required />
         </div>
-        <div class="field">
+        <div class="field" id="cw-code-field">
           <label class="label"><span data-i18n="html_platform_code">Platform Invite Code</span> <span class="req">*</span></label>
           <input type="text" id="cw-code" placeholder="Paste platform code here" data-i18n-ph="html_ph_platform_code" autocomplete="off" />
           <span class="text-xs text-muted" data-i18n="html_platform_code_help">Get a code from the admin panel (yoursite.com/?admin)</span>

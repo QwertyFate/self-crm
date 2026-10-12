@@ -53,7 +53,7 @@ order by `<script>` tags, so **load order is dependency order** (see [§3](#3-di
 | Database | PostgreSQL (`pg` Pool) | Plain SQL. No ORM, no query builder, no migration tool |
 | Realtime | socket.io 4 | Team chat + presence only; shares the Express session |
 | Files | Supabase Storage | Task attachments only; optional |
-| Email | nodemailer (SMTP) | Password resets; optional — logs the link to stdout if unset |
+| Email | none | Nothing is sent; password reset is a self-service page on the login screen (2026-10-12) |
 | Frontend | Vanilla JS, one CSS file | No build step |
 | Tests | `node:test` + `node:assert/strict` | No database required; see [§6](#6-developer-workflows) |
 
@@ -118,7 +118,7 @@ writes both in one transaction — if you ever add another writer, keep them in 
 
 - **Node >= 22** (`node --version`) — the code uses `--env-file`, native `node --test`, and global `fetch`.
 - **PostgreSQL** you can reach. Local, Docker, or hosted.
-- Optional: a Supabase project (task attachments) and SMTP credentials (password-reset mail).
+- Optional: a Supabase project (file storage). There is no email to configure.
   Everything else works without them.
 
 ### Bootstrap, step by step
@@ -144,7 +144,7 @@ Fill in `.env`. There is no `.env.local` in this project — `.env` is the one f
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/crm
 DATABASE_SSL=false            # ONLY "false" disables TLS; any other value enables it
 SESSION_SECRET=<long random>  # changing this logs everyone out
-PORT=3000
+PORT=4001
 NODE_ENV=development          # CSP is disabled unless this is "production"
 ```
 
@@ -166,23 +166,23 @@ Every variable the code actually reads (grep `process.env`), grouped by what bre
 | `DATABASE_URL` | [db.js](db.js) | **yes** | `Database init failed:` and `process.exit(1)` |
 | `DATABASE_SSL` | [db.js](db.js) | no | SSL on (`rejectUnauthorized:false`); set exactly `false` for local |
 | `SESSION_SECRET` | [server.js](server.js) | **yes in prod** | Falls back to `change-me-in-production` |
-| `PORT` | [server.js](server.js) | no | 3000 |
+| `PORT` | [server.js](server.js) | no | 4001 |
 | `NODE_ENV` | [server.js](server.js) | no | CSP disabled unless `production` |
 | `ADMIN_SECRET` | [routes/admin.js](routes/admin.js) | for admin console | `POST /api/admin/login` → 503 (the intended "off") |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | [storage.js](storage.js) | for attachments | Upload throws a clear error; rest of app fine |
-| `SMTP_HOST/PORT/SECURE/USER/PASS/FROM` | [utils/mailer.js](utils/mailer.js) | for email | Reset link is `console.log`ged and returned in the JSON response |
+| (SMTP_*) | removed 2026-10-12 | — | No email is sent; `POST /forgot-password` answers the reset token directly |
 | `APP_URL` | [routes/integrations.js](routes/integrations.js) | no | Webhook URL shown in the UI has no base |
-| `BASE_URL` | [routes/auth.js](routes/auth.js) | no | Reset links fall back to `http://localhost:$PORT` |
+| `BASE_URL` | [routes/admin-provision.js](routes/admin-provision.js), [utils/base-url.js](utils/base-url.js) | no | Provisioning and Engine URLs fall back to the address the request came in on |
 | `ENGINE_ALLOW_PRIVATE_URLS` | [routes/engine.js](routes/engine.js) | dev only | `=1` lets the Engine URL point at localhost/private IPs (SSRF guard off) |
 | `TEST_APP_ROOT` | [tests/helpers/load-route.js](tests/helpers/load-route.js) | no | Points the tests at a mirror of the app, for baseline-first runs |
 
 ### Verify your setup
 
-1. `CRM running at http://localhost:3000` is the only line you should see on boot.
-2. `curl -i http://localhost:3000/api/auth/me` → `200` with `{"user":null}` (or your session).
+1. `CRM running at http://localhost:4001` is the only line you should see on boot.
+2. `curl -i http://localhost:4001/api/auth/me` → `200` with `{"user":null}` (or your session).
 3. `npm test` → **464 passing, 0 failing across 35 files** (as of 2026-10-05). This needs **no
    database**; a failure on a clean clone is a real break, not your environment.
-4. Open <http://localhost:3000> → the login/signup card.
+4. Open <http://localhost:4001> → the login/signup card.
 5. **Get an account.** Signup always needs a code. On a brand-new database `initDb()` prints a
    first-run **platform invite code** in a box on stdout — use it with *Create a workspace* and
    you become the owner with a seeded pipeline. Lost it? Set `ADMIN_SECRET`, restart, open
@@ -214,7 +214,7 @@ middleware/
 utils/
   engine.js          Outbound "Upgrads Engine": payload, HMAC signing, delivery + retry, drain()
   features.js        Platform feature flags, stored in platform_settings under key "features"
-  mailer.js          SMTP transport; no SMTP_HOST → logs the reset link instead of sending
+  backup.js, tar.js  backup archives (daily, admin console, npm run backup / restore)
 
 deploy/
   com.upgrads.crm.plist  launchd LaunchDaemon for the production Mac mini: KeepAlive (restart
@@ -362,7 +362,7 @@ No `requireAuth` here; each handler inspects `req.session` itself.
 | GET | `/my-workspaces` | session | — | `{workspaces, active_workspace_id}` |
 | POST | `/signup` | public, **5 / h / IP** | `{name,email,password,mode}` + (`workspace_name`,`platform_invite_code`) or `invite_code` | `mode:'create'` consumes a **platform** invite, creates workspace + seeded pipelines + owner. `mode:'join'` consumes a **workspace** invite, role from the code. Both in one transaction |
 | POST | `/logout` | public | — | Destroys the session |
-| POST | `/forgot-password` | public, **3 / h / IP** | `{email}` | Always 200 (no account enumeration). With SMTP → mail; without → the URL comes back in the JSON and is logged |
+| POST | `/forgot-password` | public, **10 / 15 min / IP** | `{email}` | `{ token, email }` for a known address, 404 otherwise; the login screen goes straight to the new-password form. No email is sent (by design, small team) |
 | POST | `/reset-password` | public, **3 / h / IP** | `{token, password}` | Single-use token, 1 h expiry |
 | PATCH | `/preferences` | session | `{column_widths?, deal_columns?, timezone?}` | Per-user UI prefs on `users`. Timezone validated via `Intl.DateTimeFormat` |
 | POST | `/create-workspace` | session | `{workspace_name, platform_invite_code}` | New workspace for an existing user: clones their name/email/**password hash** into a new `users` row, seeds a pipeline, switches the session to it |
@@ -467,7 +467,7 @@ out because one credential beats two.
 
 ⚠ The app still has **no change-password screen**, so `forgot-password` → `reset-password` remains
 the only way the owner can replace a password the admin has seen. That path is correct now, but it
-is a reset (it emails a link, or logs it when SMTP is unset), not a change.
+is a reset (a page on the login screen; no email is involved), not a change.
 
 **The response** is the tenant plus an `integration` block generated from the rows just written —
 `webhook_url` with the real key, `field_map`, `sample_payload` keyed by the incoming keys,
@@ -977,7 +977,7 @@ Short, lowercase, hyphenated — `fix/deals-summary-strip`, not `fix/JIRA-123-th
 ### Before you open the PR
 
 1. `npm test` is green (464/464 today — if your change adds tests, the number goes up, never down).
-2. The server boots clean: exactly `CRM running at http://localhost:3000`.
+2. The server boots clean: exactly `CRM running at http://localhost:4001`.
 3. You clicked through the page you touched, in both light and dark theme if it was UI.
 4. For a bug fix: **a test that fails before your change and passes after**. Say so in the PR,
    and paste the before/after output. This is non-negotiable for anything touching auth, roles,

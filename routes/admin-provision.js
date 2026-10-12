@@ -93,6 +93,7 @@ const crypto       = require('crypto');
 const bcrypt       = require('bcryptjs');
 const { pool }     = require('../db');
 const requireAdmin = require('../middleware/admin-auth');
+const publicUrl    = require('../utils/base-url');
 const { VALID_TYPES } = require('../middleware/field-crud');
 
 // Mirrors signup's mode="create" (routes/auth.js) and POST /api/workspace.
@@ -135,8 +136,11 @@ const PASSWORD_LENGTH   = 16;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function baseUrl() {
-  return process.env.APP_URL || process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+// The origin that goes into login_url, webhook_url and base_url: APP_URL, then BASE_URL; otherwise
+// the address THIS request came in on, so an owner provisioned from another machine gets a login
+// link that works there rather than the server's own localhost. Localhost is the last resort only.
+function baseUrl(req) {
+  return publicUrl.appUrl(req) || `http://localhost:${process.env.PORT || 4001}`;   // utils/base-url.js: APP_URL → BASE_URL → the request
 }
 
 // A password the admin can paste into an email and the owner can retype:
@@ -241,8 +245,8 @@ function shellSingleQuote(s) {
  * The `integration` block: everything the customer pastes into their form tool,
  * derived from the rows that were just written.
  */
-function buildIntegrationDoc({ webhookKey, fieldMap, contactFields, dealFields, createDeal, pipeline, stage, active }) {
-  const url = `${baseUrl()}/api/integrations/receive/${webhookKey}`;
+function buildIntegrationDoc({ origin, webhookKey, fieldMap, contactFields, dealFields, createDeal, pipeline, stage, active }) {
+  const url = `${origin}/api/integrations/receive/${webhookKey}`;
 
   const samplePayload = {};
   for (const [crmKey, incomingKey] of Object.entries(fieldMap)) {
@@ -507,11 +511,10 @@ router.post('/provision', requireAdmin, async (req, res, next) => {
             ? 'This email already had an account, so it keeps its existing password. No new credentials were issued — send them to the login page and they pick this workspace from the picker.'
             : 'Shown once only, and not recoverable: copy it before closing this response. The owner signs in with their email and this password.',
         },
-        login_url: baseUrl(),
+        login_url: baseUrl(req),
         pipelines: createdPipelines,
         custom_fields: { contact: createdContactFields, deal: createdDealFields },
-        integration: buildIntegrationDoc({
-          webhookKey,
+        integration: buildIntegrationDoc({ origin: baseUrl(req),           webhookKey,
           fieldMap,
           contactFields: createdContactFields,
           dealFields:    createdDealFields,
@@ -579,7 +582,7 @@ router.get('/provision/list', requireAdmin, async (req, res, next) => {
       ORDER BY w.created_at DESC
     `);
 
-    const base = baseUrl();
+    const base = baseUrl(req);
     res.json({
       base_url: base,
       workspaces: rows.map(r => ({
@@ -592,3 +595,4 @@ router.get('/provision/list', requireAdmin, async (req, res, next) => {
 });
 
 module.exports = router;
+module.exports.baseUrl = baseUrl;   // for tests

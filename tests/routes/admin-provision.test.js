@@ -18,6 +18,7 @@
 // with no ORDER BY.
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
+process.env.OPEN_ADMIN = 'false';   // these tests pin the SECRET-gated console; open admin (utils/open-admin.js, the embedded default) has its own test
 const { loadRoute, serve } = require('../helpers/load-route');
 
 const APP_URL = 'https://crm.example.test';

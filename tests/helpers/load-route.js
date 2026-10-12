@@ -39,8 +39,10 @@ function inject(relativeFile, exportsObject) {
 
 // `notifications`: pass a whole module object to use instead of the no-op stub
 // (e.g. the REAL notifications.js bound to the fake pool, to test notifySystem).
-function loadRoute(routeFile, { pool, user = { id: 1, workspaceId: 7, role: 'owner' }, notify = () => {}, notifications } = {}) {
-  inject('db.js', { pool });
+// `db`: pass a whole module object to stand in for db.js when the route needs more than `pool`
+// (routes/auth.js create-workspace calls seedDefaultPipeline). Default: { pool } only.
+function loadRoute(routeFile, { pool, user = { id: 1, workspaceId: 7, role: 'owner' }, notify = () => {}, notifications, db } = {}) {
+  inject('db.js', db || { pool });
   inject('notifications.js', notifications || { notify });
   inject('middleware/auth.js', (req, _res, next) => {
     // userTimezone mirrors the real middleware: users.timezone, undefined when the test

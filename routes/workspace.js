@@ -29,7 +29,7 @@
    reintroduce a per-row credential here.
 
    ENDPOINTS
-     POST   /                       new workspace (platform invite required)
+     POST   /                       new workspace (platform invite required unless open signup — utils/open-signup.js)
      GET    /members
      DELETE /members/:id            owner · not yourself · not the owner
      PATCH  /members/:id/role       owner · member <-> admin
@@ -45,6 +45,7 @@ const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
 const { seedDefaultPipeline } = require('../db');
+const { openSignup } = require('../utils/open-signup');
 
 router.use(requireAuth);
 
@@ -52,13 +53,17 @@ router.post('/', async (req, res, next) => {
   try {
     const { name, platform_invite_code } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Workspace name required' });
-    if (!platform_invite_code?.trim()) return res.status(400).json({ error: 'Platform invite code required' });
 
-    const { rows: [platformInvite] } = await pool.query(
-      'SELECT * FROM platform_invites WHERE code = $1 AND used = 0',
-      [platform_invite_code.trim()]
-    );
-    if (!platformInvite) return res.status(400).json({ error: 'Invalid or already used platform invite code' });
+    // Open signup (utils/open-signup.js): no platform code is asked for or consumed.
+    let platformInvite = null;
+    if (!openSignup()) {
+      if (!platform_invite_code?.trim()) return res.status(400).json({ error: 'Platform invite code required' });
+      ({ rows: [platformInvite] } = await pool.query(
+        'SELECT * FROM platform_invites WHERE code = $1 AND used = 0',
+        [platform_invite_code.trim()]
+      ));
+      if (!platformInvite) return res.status(400).json({ error: 'Invalid or already used platform invite code' });
+    }
 
     const client = await pool.connect();
     try {
@@ -140,7 +145,7 @@ router.post('/', async (req, res, next) => {
         [newUser.id, ws.id, 'owner']
       );
 
-      await client.query(
+      if (platformInvite) await client.query(
         'UPDATE platform_invites SET used=1, used_by_workspace_id=$1 WHERE id=$2',
         [ws.id, platformInvite.id]
       );

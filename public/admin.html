@@ -299,6 +299,8 @@
         <div class="admin-eyebrow">Platform Admin</div>
         <h1>Admin Console</h1>
         <p class="admin-subtitle">Manage platform-wide defaults, pipelines, and workspace setup experience.</p>
+        <!-- shown by checkAdminStatus() when /api/admin/me answers open: true (utils/open-admin.js) -->
+        <p id="admin-open-notice" class="admin-subtitle hidden">Local mode: the console is open without a secret because the database is embedded. To lock it, put <code>OPEN_ADMIN=false</code> and an <code>ADMIN_SECRET</code> in <code>.env</code>.</p>
       </div>
       <button id="admin-logout-btn" class="logout-btn" onclick="adminLogout()" style="display: none;">Logout</button>
     </div>
@@ -403,6 +405,30 @@
           </div>
         </div>
         <p class="feature-note">Changes apply the next time each user loads the app.</p>
+      </div>
+      <!-- Backups — embedded database only (routes/admin-backup.js, utils/backup.js) -->
+      <div class="section" id="backup-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap;">
+          <div>
+            <h2 style="margin: 0 0 4px 0;">Backups</h2>
+            <p style="color: #6b7280; font-size: 14px; margin: 0;">One file with the database, the uploaded files and the secrets. Treat it as sensitive, and keep a copy somewhere other than this disk.</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn" id="backup-save-btn" onclick="saveBackupNow()" disabled>Save a backup now</button>
+            <button class="btn btn-primary" id="backup-download-btn" onclick="downloadBackup()" disabled>Download backup</button>
+          </div>
+        </div>
+        <p id="backup-hosted-note" class="prov-hint hidden">Backups here are for the embedded database only. This server uses a Postgres server (<code>DATABASE_URL</code>) — use <code>pg_dump</code> there.</p>
+        <div id="backup-body">
+          <p class="prov-hint" id="backup-meta">Loading…</p>
+          <div class="prov-table-wrap">
+            <table class="prov-table">
+              <thead><tr><th>Archive</th><th>Size</th><th>Created</th></tr></thead>
+              <tbody id="backup-list-body"><tr><td colspan="3" class="loading">Loading…</td></tr></tbody>
+            </table>
+          </div>
+          <p class="feature-note">Restore: stop the CRM, run <code>npm run restore -- backups/&lt;archive&gt;.tar.gz</code>, start it again. The current database, files and secrets are moved aside with a timestamp, never deleted. From the terminal, <code>npm run backup</code> writes an archive while the CRM is stopped.</p>
+        </div>
       </div>
       </div><!-- /#tab-defaults -->
 
@@ -661,7 +687,7 @@
             <li>Download the <strong>OpenAPI document</strong> from the same card. Hand the Engine team the key, the webhook secret, the document and <code>ENGINE_INTEGRATION.md</code>.</li>
             <li>The <strong>Onboarding</strong> page (sidebar, owners/admins, visible while the integration is active) lists every deal with the Engine's status, the Drive folder link, the last webhook result and a <strong>Start onboarding</strong> button that moves a deal into the trigger stage.</li>
           </ol>
-          <p class="prov-hint">Server side, three settings matter: <code>BASE_URL</code> (the public origin that goes into <code>download_url</code> values), a <strong>private</strong> Supabase bucket <code>contact-documents</code> (or <code>SUPABASE_DOCS_BUCKET</code>) for contracts and recordings, and <code>ENGINE_RETRY_WORKER=0</code> on any second instance that must not re-drive webhooks.</p>
+          <p class="prov-hint">Server side, three settings matter: <code>BASE_URL</code> (the public origin that goes into <code>download_url</code> values); where contracts and recordings are kept — locally under <code>data/files</code> on this machine by default, or in a <strong>private</strong> Supabase bucket <code>contact-documents</code> (<code>SUPABASE_DOCS_BUCKET</code>) once <code>SUPABASE_URL</code> and <code>SUPABASE_SERVICE_KEY</code> are set; and <code>ENGINE_RETRY_WORKER=0</code> on any second instance that must not re-drive webhooks.</p>
 
           <h3 class="tut-h">2 · Authenticate and read a customer</h3>
           <p class="prov-hint"><code>Authorization: Bearer &lt;key&gt;</code> (or <code>X-API-Key</code>) on every call. <code>kunde_id</code> is the CRM contact id — the same number the webhooks carry. A customer of another workspace answers <code>404</code>, never <code>403</code>; every authentication failure is the same <code>401</code>.</p>
@@ -727,7 +753,7 @@
 }</pre><button class="prov-copy-btn" onclick="copyProvText(document.getElementById('eng-patch-response').textContent, this)">Copy</button></div>
 
           <h3 class="tut-h">5 · Documents: contracts and recordings</h3>
-          <p class="prov-hint">The team uploads files on the contact's <strong>Documents</strong> tab (types <code>vertrag</code>, <code>aufnahme</code>, <code>sonstiges</code>; 10 MB each). The Engine lists them and fetches the bytes through the CRM — the storage is private and every download is a <code>302</code> to a link that lives ten minutes.</p>
+          <p class="prov-hint">The team uploads files on the contact's <strong>Documents</strong> tab (types <code>vertrag</code>, <code>aufnahme</code>, <code>sonstiges</code>; 10 MB each). The Engine lists them and fetches the bytes through the CRM — the storage is private (the local <code>data/files</code> folder by default, Supabase when configured) and every download is a <code>302</code> to a signed link that lives ten minutes.</p>
           <div class="tut-code"><pre class="prov-curl" id="eng-docs">curl -H 'Authorization: Bearer upg_live_YOUR_KEY' \
   <span class="tut-host">https://YOUR-HOST</span>/api/kunden/42/dokumente
 # → { "dokumente": [ { "id": 9, "typ": "vertrag", "dateiname": "Vertrag Muster.pdf", "mimetype": "application/pdf",
@@ -908,13 +934,71 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
     let editMode = null;
     let currentFeatures = { tourEnabled: false };
 
+    // ── Backups card (routes/admin-backup.js) ──────────────────────────────────
+    function fmtBytes(n) {
+      if (!Number.isFinite(n)) return '—';
+      if (n < 1024) return `${n} B`;
+      if (n < 1048576) return `${(n / 1024).toFixed(0)} KB`;
+      return `${(n / 1048576).toFixed(1)} MB`;
+    }
+    function fmtBackupTime(v) { const d = new Date(v); return isNaN(d) ? '—' : d.toLocaleString(); }
+    function renderBackupRows(rows) {
+      if (!rows || !rows.length) return '<tr><td colspan="3" class="loading">No archives yet — the first one is written shortly after the next start, or press "Save a backup now".</td></tr>';
+      return rows.map(b => `<tr><td><code>${esc(b.name)}</code></td><td>${esc(fmtBytes(b.size))}</td><td>${esc(fmtBackupTime(b.createdAt))}</td></tr>`).join('');
+    }
+    async function loadBackups() {
+      const body = document.getElementById('backup-list-body'), meta = document.getElementById('backup-meta');
+      const saveBtn = document.getElementById('backup-save-btn'), dlBtn = document.getElementById('backup-download-btn');
+      try {
+        const res = await fetch(`${API_BASE}/backup/list`);
+        if (res.status === 503) {   // a Postgres server, not the embedded database: nothing to snapshot here
+          document.getElementById('backup-hosted-note').classList.remove('hidden');
+          document.getElementById('backup-body').classList.add('hidden');
+          saveBtn.disabled = true; dlBtn.disabled = true;
+          return;
+        }
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        document.getElementById('backup-hosted-note').classList.add('hidden');
+        document.getElementById('backup-body').classList.remove('hidden');
+        const lastError = data.scheduler && data.scheduler.lastError ? ` · last error: ${data.scheduler.lastError.message}` : '';
+        meta.textContent = `Folder: ${data.dir} · keeps the newest ${data.keep} · daily archive ${data.schedulerEnabled ? 'on — written once per day while the CRM runs' : 'off (BACKUPS=0)'}${lastError}`;
+        body.innerHTML = renderBackupRows(data.backups);
+        saveBtn.disabled = false; dlBtn.disabled = false;
+      } catch (e) {
+        body.innerHTML = `<tr><td colspan="3" class="message error">${esc(e.message)}</td></tr>`;
+      }
+    }
+    async function saveBackupNow() {
+      const btn = document.getElementById('backup-save-btn'); const label = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        const res = await fetch(`${API_BASE}/backup/now`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        showMessage(`Saved ${data.backup.name} (${fmtBytes(data.backup.size)})`, 'success');
+      } catch (e) {
+        showMessage(`Backup failed: ${e.message}`, 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = label;
+        loadBackups();
+      }
+    }
+    function downloadBackup() {
+      // a plain navigation would work too; an anchor with download keeps the console page in place
+      const a = document.createElement('a'); a.href = `${API_BASE}/backup`; a.download = '';
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+
     async function checkAdminStatus() {
       const res = await fetch(`${API_BASE}/me`);
       const data = await res.json();
       if (data.isAdmin) {
         document.getElementById('admin-login-screen').classList.add('hidden');
         document.getElementById('admin-app').classList.remove('hidden');
-        document.getElementById('admin-logout-btn').style.display = 'inline-flex';
+        // open admin: nothing to log out of, so no button — the notice says why
+        document.getElementById('admin-logout-btn').style.display = data.open ? 'none' : 'inline-flex';
+        document.getElementById('admin-open-notice').classList.toggle('hidden', !data.open);
         loadDashboard();
       }
     }
@@ -956,6 +1040,7 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
 
     async function loadDashboard() {
       try {
+        loadBackups();   // the Backups card, independently of the stats below
         const [statsRes, defaultsRes, featuresRes] = await Promise.all([
           fetch(`${API_BASE}/stats`),
           fetch(`${API_BASE}/defaults`),

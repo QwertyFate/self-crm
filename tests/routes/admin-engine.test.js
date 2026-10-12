@@ -3,6 +3,7 @@
 // request log and the deliveries, all behind requireAdmin (X-Admin-Secret here).
 const { test, describe, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
+process.env.OPEN_ADMIN = 'false';   // these tests pin the SECRET-gated console; open admin (utils/open-admin.js, the embedded default) has its own test
 const path   = require('path');
 const { createFakePool } = require('../helpers/fake-pool');
 const { loadRoute, serve, ROOT } = require('../helpers/load-route');

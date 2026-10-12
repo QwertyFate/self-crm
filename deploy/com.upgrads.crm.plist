@@ -26,11 +26,15 @@
   <string>CHANGE-ME</string>
 
   <!-- NODE_ENV=production switches on the Content-Security-Policy in server.js; with it unset
-       (as production had been running) the CSP is not applied. Everything else comes from .env. -->
+       (as production had been running) the CSP is not applied. PORT=3000 pins the port the mini
+       has always served on: the code default moved to 4001 (local builds, 2026-10-12) and a
+       .env PORT still overrides launchd. Everything else comes from .env. -->
   <key>EnvironmentVariables</key>
   <dict>
     <key>NODE_ENV</key>
     <string>production</string>
+    <key>PORT</key>
+    <string>3000</string>
   </dict>
 
   <!-- Start at boot with no login, restart whenever the process exits (crash or kill), and

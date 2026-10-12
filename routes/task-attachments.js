@@ -7,16 +7,17 @@
    added to tasks.js would shadow this file.
 
    THE UPLOAD PATH  multer keeps the file in MEMORY (no temp files) with a
-   10 MB cap, then storage.js pushes it to Supabase Storage under
-   <workspaceId>/<taskId>/<timestamp>-<name> and returns a PUBLIC url, which is
-   stored in task_attachments along with the storage_path. Deleting removes the
-   object from Supabase first, then the row.
+   10 MB cap, then storage.js stores it under <workspaceId>/<taskId>/<timestamp>-<name>
+   and returns a url, which is stored in task_attachments along with the
+   storage_path. Deleting removes the stored object first, then the row.
 
-   REQUIRES SUPABASE. Without SUPABASE_URL / SUPABASE_SERVICE_KEY the upload
-   throws a clear "not configured" error; everything else in the app is fine.
+   TWO BACKENDS (storage.js). Local, the default: the file sits in data/files and
+   the url is /files/task-attachments/… served by routes/files.js behind the
+   session, same workspace only. Supabase, when SUPABASE_URL / SUPABASE_SERVICE_KEY
+   are set: the url is a PUBLIC Supabase link — anyone with it can read the file
+   without a CRM session.
 
-   NOT CHECKED  file type. And the URL is public: anyone with the link can read
-   the file without a CRM session.
+   NOT CHECKED  file type.
 
    ENDPOINTS
      GET    /:taskId/attachments
@@ -34,6 +35,7 @@ const { uploadFile, deleteFile } = require('../storage');
 const upload = multer({
   storage: multer.memoryStorage(),
   limits:  { fileSize: 10 * 1024 * 1024 },
+  defParamCharset: 'utf8',   // UTF-8 file names (umlauts) survive — see routes/contact-documents.js
 });
 
 router.use(requireAuth);

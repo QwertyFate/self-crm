@@ -45,11 +45,26 @@
 
 const { Pool } = require('pg');
 const crypto   = require('crypto');
+const { openSignup } = require('./utils/open-signup');   // first-run invite box only when codes are required
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
-});
+// TWO WAYS TO REACH POSTGRES, one pool either way (every route imports this `pool`):
+//   DATABASE_URL set    hosted or local Postgres over the network, TLS unless DATABASE_SSL=false.
+//   DATABASE_URL unset  EMBEDDED: Postgres runs inside this process (PGlite) and is reached over
+//                       a loopback socket that embedded.js opens on a free port BEFORE initDb()
+//                       runs (server.js) — it writes that port into pool.options. Until then the
+//                       port is 0, so a query that somehow runs first fails loudly instead of
+//                       reaching the wrong database. max: 1 is NOT a tuning choice: PGlite is a
+//                       single-connection database and two pg connections through its socket
+//                       could interleave statements. It means a transaction's `client` is the
+//                       pool's only client — never call pool.query while holding one
+//                       (tests/unit/single-connection.test.js scans for exactly that).
+const EMBEDDED = !process.env.DATABASE_URL;
+const pool = EMBEDDED
+  ? new Pool({ host: '127.0.0.1', port: 0, user: 'postgres', database: 'postgres', ssl: false, max: 1 })
+  : new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
+    });
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS workspaces (
@@ -651,12 +666,17 @@ async function initDb() {
   if (wsCount === 0 && piCount === 0) {
     const code = crypto.randomBytes(16).toString('hex');
     await pool.query('INSERT INTO platform_invites (code) VALUES ($1)', [code]);
-    const bar = '─'.repeat(44);
-    console.log(`\n┌${bar}┐`);
-    console.log(`│  🚀  First-run platform invite code:         │`);
-    console.log(`│  ${code}  │`);
-    console.log(`│  Use this once to create the first workspace.│`);
-    console.log(`└${bar}┘\n`);
+    // With open signup (utils/open-signup.js) nobody needs this code, so the box would only
+    // confuse; the row is still written so the code exists should OPEN_SIGNUP be turned off
+    // later. server.js prints the open-signup notice in its place.
+    if (!openSignup()) {
+      const bar = '─'.repeat(44);
+      console.log(`\n┌${bar}┐`);
+      console.log(`│  🚀  First-run platform invite code:         │`);
+      console.log(`│  ${code}  │`);
+      console.log(`│  Use this once to create the first workspace.│`);
+      console.log(`└${bar}┘\n`);
+    }
   }
 }
 

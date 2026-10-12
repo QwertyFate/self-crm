@@ -41,7 +41,7 @@
                  resetClientState, invalidate, logout
      login       handleLogin, handleSignup, toggleSignupMode, togglePassword,
                  setAuthBusy, startLoginCooldown, showForgotPassword, handleForgotPassword,
-                 copyResetLink, showResetForm, handleResetPassword, showMainAuth
+                 showResetForm, handleResetPassword, showMainAuth
      workspaces  showWorkspacePicker, selectWorkspace, switchWorkspace,
                  loadWorkspacesPage, wsGradient, openAddWorkspaceChoice,
                  pickAddWorkspace, openCreateWorkspaceModal,
@@ -56,8 +56,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 async function init() {
-  const params     = new URLSearchParams(window.location.search);
-  const resetToken = params.get('reset');
+  const params = new URLSearchParams(window.location.search);
 
   if (params.has('admin')) {
     document.getElementById('admin-screen').classList.remove('hidden');
@@ -69,7 +68,7 @@ async function init() {
   }
 
   const data = await api.get('/api/auth/me');
-  if (data.user && !resetToken) {
+  if (data.user) {
     currentUser      = data.user;
     currentWorkspace = data.workspace;
     kanbanFields     = data.workspace.kanban_fields    || ['company', 'email'];
@@ -78,8 +77,8 @@ async function init() {
     objectColumns    = data.workspace.object_columns   || [];
     showApp();
   } else {
+    await loadSignupOptions();   // before the door paints, so the right fields show from the first frame
     showAuth();
-    if (resetToken) showResetForm(resetToken);
   }
 }
 
@@ -87,7 +86,7 @@ function showAuth() {
   document.getElementById('auth-screen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
   ['login-form', 'signup-form'].forEach(id => document.getElementById(id).reset());
-  ['login-error', 'signup-error', 'forgot-error', 'forgot-success', 'forgot-link-box', 'login-notice', 'login-hint'].forEach(id =>
+  ['login-error', 'signup-error', 'forgot-error', 'reset-for', 'login-notice', 'login-hint'].forEach(id =>
     document.getElementById(id).classList.add('hidden')
   );
   document.getElementById('forgot-btn').disabled = false;
@@ -107,6 +106,7 @@ function showAuth() {
   if (createRadio) { createRadio.checked = true; toggleSignupMode(); }
   applyTranslations();   // the door is the one screen showApp() never translates
   showAuthView('main');
+  loadSignupOptions().then(toggleSignupMode);   // codes or picker — refreshed on every entry to the door
 }
 
 function showApp() {
@@ -150,17 +150,18 @@ function showForgotPassword(e) {
   document.getElementById('login-notice').classList.add('hidden');
   document.getElementById('login-hint').classList.add('hidden');
   document.getElementById('forgot-error').classList.add('hidden');
-  document.getElementById('forgot-success').classList.add('hidden');
-  document.getElementById('forgot-link-box').classList.add('hidden');
   document.getElementById('forgot-btn').disabled = false;
   showAuthView('forgot');
 }
 
 function showMainAuth(e) { e?.preventDefault(); showAuthView('main'); }
 
-function showResetForm(token) {
+// The new-password form, with the account it is for shown above the fields.
+function showResetForm(token, email) {
   document.getElementById('reset-token').value = token;
   document.getElementById('reset-error').classList.add('hidden');
+  const forEl = document.getElementById('reset-for');
+  if (forEl) { forEl.textContent = email ? tf('reset_for_email', { email }) : ''; forEl.classList.toggle('hidden', !email); }
   showAuthView('reset');
 }
 
@@ -174,11 +175,59 @@ document.querySelectorAll('.auth-tab').forEach(tab => {
   });
 });
 
+// OPEN SIGNUP. GET /api/auth/signup-options (public) says whether codes are needed at all and,
+// when they are not, which workspaces exist to join. Refreshed every time a door or a workspace
+// modal opens, because the list changes as workspaces are created. Public information only.
+let signupOptions = { openSignup: false, workspaces: [] };
+
+async function loadSignupOptions() {
+  const data = await api.get('/api/auth/signup-options');
+  signupOptions = data && !data.error
+    ? { openSignup: !!data.openSignup, workspaces: Array.isArray(data.workspaces) ? data.workspaces : [] }
+    : { openSignup: false, workspaces: [] };
+  return signupOptions;
+}
+
+// Fills a workspace <select> from signupOptions; returns how many there are to choose from.
+function fillWorkspaceSelect(sel) {
+  if (!sel) return 0;
+  sel.innerHTML = signupOptions.workspaces.map(w => `<option value="${Number(w.id)}">${esc(w.name)}</option>`).join('');
+  return signupOptions.workspaces.length;
+}
+
+// One join form — the in-app modal or the auth-screen view. In open signup the code input gives
+// way to the workspace picker, and `required` moves with it so the browser never blocks a hidden
+// field. Both forms mark their two fields data-join="code" / "pick".
+function applyJoinMode(root) {
+  if (!root) return;
+  const open = signupOptions.openSignup;
+  const codeField = root.querySelector('[data-join="code"]'), pickField = root.querySelector('[data-join="pick"]');
+  if (!codeField || !pickField) return;
+  codeField.classList.toggle('hidden', open);
+  pickField.classList.toggle('hidden', !open);
+  const codeInput = codeField.querySelector('input');
+  if (codeInput) codeInput.required = !open;
+  const n = fillWorkspaceSelect(pickField.querySelector('select'));
+  pickField.querySelector('[data-join="empty"]')?.classList.toggle('hidden', n > 0);
+  const sub = root.querySelector('.au-sub');
+  if (sub) { sub.dataset.i18n = open ? 'au_sub_join_open' : 'au_sub_join'; sub.textContent = t(sub.dataset.i18n); }
+}
+
 function toggleSignupMode() {
   const mode = document.querySelector('input[name="signup-mode"]:checked').value;
+  const open = signupOptions.openSignup;
   document.getElementById('su-workspace-field').classList.toggle('hidden', mode !== 'create');
-  document.getElementById('su-platform-code-field').classList.toggle('hidden', mode !== 'create');
-  document.getElementById('su-code-field').classList.toggle('hidden', mode !== 'join');
+  // Codes are never shown in open signup; for 'join' the workspace picker takes the code's place.
+  document.getElementById('su-platform-code-field').classList.toggle('hidden', open || mode !== 'create');
+  document.getElementById('su-code-field').classList.toggle('hidden', open || mode !== 'join');
+  const pickField = document.getElementById('su-workspace-pick-field');
+  if (pickField) {
+    pickField.classList.toggle('hidden', !open || mode !== 'join');
+    const n = fillWorkspaceSelect(document.getElementById('su-workspace-pick'));
+    document.getElementById('su-workspace-pick-empty')?.classList.toggle('hidden', n > 0);
+  }
+  const sub = document.querySelector('#signup-form .au-sub');
+  if (sub) { sub.dataset.i18n = open ? 'au_sub_signup_open' : 'au_sub_signup'; sub.textContent = t(sub.dataset.i18n); }
 }
 
 // The Show/Hide button beside every password field; `btn.dataset.pw` names its input.
@@ -369,10 +418,12 @@ function pickAddWorkspace(type) {
   if (type === 'create') openCreateWorkspaceModal();
 }
 
-function openJoinWorkspaceModal() {
+async function openJoinWorkspaceModal() {
   document.getElementById('join-ws-code').value = '';
   document.getElementById('join-ws-error').classList.add('hidden');
   document.getElementById('join-workspace-modal').classList.remove('hidden');
+  await loadSignupOptions();
+  applyJoinMode(document.getElementById('join-workspace-modal'));
 }
 
 function openCreateWorkspaceModal(e) {
@@ -381,6 +432,8 @@ function openCreateWorkspaceModal(e) {
   document.getElementById('cw-code').value = '';
   document.getElementById('cw-error').classList.add('hidden');
   document.getElementById('create-workspace-modal').classList.remove('hidden');
+  // open signup: no platform code field at all
+  loadSignupOptions().then(() => document.getElementById('cw-code-field')?.classList.toggle('hidden', signupOptions.openSignup));
 }
 
 function closeCreateWorkspaceModal() {
@@ -409,6 +462,7 @@ function showJoinWorkspace(e) {
   showAuthView('join-workspace');
   document.getElementById('auth-screen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
+  loadSignupOptions().then(() => applyJoinMode(document.getElementById('auth-view-join-workspace')));
 }
 
 function closeJoinWorkspace(e) {
@@ -426,10 +480,13 @@ async function handleJoinWorkspace(e) {
   const form = e.target.closest('form');
   const errEl = form.querySelector('.au-alert, .auth-error');
   errEl.classList.add('hidden');
+  // Open signup: the picker's workspace_id; otherwise the invite code (applyJoinMode shows one of the two).
+  const open = signupOptions.openSignup;
   const code = (form.querySelector('input[type="text"]')?.value || '').trim();
-  if (!code) { errEl.textContent = t('auth_code_required'); errEl.classList.remove('hidden'); return; }
+  const wsId = Number(form.querySelector('select')?.value || 0);
+  if (open ? !wsId : !code) { errEl.textContent = t(open ? 'auth_pick_required' : 'auth_code_required'); errEl.classList.remove('hidden'); return; }
 
-  const data = await api.post('/api/auth/join-workspace', { invite_code: code });
+  const data = await api.post('/api/auth/join-workspace', open ? { workspace_id: wsId } : { invite_code: code });
   if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
 
   document.getElementById('join-workspace-modal').classList.add('hidden');
@@ -450,11 +507,17 @@ async function handleSignup(e) {
   const errEl = document.getElementById('signup-error');
   errEl.classList.add('hidden');
   const mode = document.querySelector('input[name="signup-mode"]:checked').value;
+  // Open signup + join: the picked workspace stands in for the invite code.
+  const pickedWs = Number(document.getElementById('su-workspace-pick')?.value || 0);
+  if (signupOptions.openSignup && mode === 'join' && !pickedWs) {
+    errEl.textContent = t(signupOptions.workspaces.length ? 'auth_pick_required' : 'auth_no_workspaces_yet'); errEl.classList.remove('hidden'); return;
+  }
   const data = await api.post('/api/auth/signup', {
     mode,
     workspace_name:       document.getElementById('su-workspace').value,
     platform_invite_code: document.getElementById('su-platform-code').value,
     invite_code:          document.getElementById('su-code').value,
+    workspace_id:         signupOptions.openSignup && mode === 'join' ? pickedWs : undefined,
     name:                 document.getElementById('su-name').value,
     email:                document.getElementById('su-email').value,
     password:             document.getElementById('su-password').value,
@@ -470,26 +533,20 @@ async function handleSignup(e) {
   showApp();
 }
 
+// No e-mail: the server answers the reset token and the door moves straight on to the
+// new-password form for that account.
 async function handleForgotPassword(e) {
   e.preventDefault();
-  const errEl  = document.getElementById('forgot-error');
-  const okEl   = document.getElementById('forgot-success');
-  const linkBox = document.getElementById('forgot-link-box');
-  const btn    = document.getElementById('forgot-btn');
-  errEl.classList.add('hidden'); okEl.classList.add('hidden'); linkBox.classList.add('hidden');
+  const errEl = document.getElementById('forgot-error');
+  const btn   = document.getElementById('forgot-btn');
+  errEl.classList.add('hidden');
   btn.disabled = true;
-  const data = await api.post('/api/auth/forgot-password', { email: document.getElementById('forgot-email').value });
-  if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); btn.disabled = false; return; }
-  okEl.textContent = data.message; okEl.classList.remove('hidden');
-  if (data.resetUrl) { document.getElementById('forgot-link-val').value = data.resetUrl; linkBox.classList.remove('hidden'); }
-}
-
-function copyResetLink(btn) {
-  navigator.clipboard.writeText(document.getElementById('forgot-link-val').value).then(() => {
-    const label = btn.querySelector('span'), use = btn.querySelector('use');
-    label.textContent = t('copied'); use.setAttribute('href', '#i-check');
-    setTimeout(() => { label.textContent = t('btn_copy'); use.setAttribute('href', '#i-copy'); }, 1500);
-  });
+  try {
+    const email = document.getElementById('forgot-email').value.trim();
+    const data  = await api.post('/api/auth/forgot-password', { email });
+    if (data.error) { errEl.textContent = data.error; errEl.classList.remove('hidden'); return; }
+    showResetForm(data.token, data.email || email);
+  } finally { btn.disabled = false; }
 }
 
 async function handleResetPassword(e) {
@@ -554,7 +611,7 @@ function resetClientState() {
   if (socket) { socket.disconnect(); socket = null; }
   onlineUsers = []; chatOldestId = null; chatNewestId = null; chatOpen = false; chatPageOpen = false; chatLoadingMore = false;
   updateChatBadge(0);
-  currentUser = null; currentWorkspace = null;
+  currentUser = null; currentWorkspace = null; signupOptions = { openSignup: false, workspaces: [] };
   contacts = []; fields = []; activities = []; members = [];
   pipelines = []; deals = []; dealFields = []; dealColumns = []; currentPipelineId = null; dragDealId = null;
   kanbanFields = ['company', 'email']; dealKanbanFields = ['contact', 'value']; contactColumns = []; colWidths = {};

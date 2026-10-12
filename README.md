@@ -13,6 +13,8 @@ three parts. Read the one you need and skip the rest:
 | A workspace owner or admin setting things up | [Part 2 — Running a workspace](#part-2--running-a-workspace) |
 | A developer or operator deploying and changing it | [Part 3 — For developers](#part-3--for-developers) |
 
+**New here?** [START.md](START.md) gets the CRM running in three commands.
+
 Deeper reference lives in [DATA_INFRASTRUCTURE.md](DATA_INFRASTRUCTURE.md) (how data is
 stored and moved) and [ENGINE_INTEGRATION.md](ENGINE_INTEGRATION.md) (the outbound Engine
 contract).
@@ -25,16 +27,25 @@ contract).
 
 Open the app URL and you will see **Log in / Sign up**.
 
-There are exactly two ways to get an account, and both need a code — you cannot self-register
-from nothing:
+How you get an account depends on how the server is run:
 
-- **Join an existing team.** Sign up with a **workspace invite code** from your owner or admin.
-  The code decides whether you land as an *admin* or a *member*, and each code works once.
-- **Create a new workspace.** Sign up with a **platform invite code** (issued by whoever runs
-  the platform) plus a workspace name. You become its **owner**.
+- **Open signup** — the default when the CRM runs its embedded database (an internal tool on one
+  machine). No codes. **Create a new workspace** with a name and you are its **owner**, or **Join an
+  existing workspace** by picking your team from the list — you arrive as a *member*, and the owner
+  can make you an admin in *Settings → Team*. Adding a workspace from inside the app works the same.
+- **Codes required** — hosted installs, or `OPEN_SIGNUP=false`. You cannot self-register from
+  nothing. **Join an existing team** with a **workspace invite code** from your owner or admin; the
+  code decides whether you land as an *admin* or a *member*, and each code works once. **Create a
+  new workspace** with a **platform invite code** (issued by whoever runs the platform) plus a
+  workspace name; you become its **owner**.
 
-Passwords must be at least 6 characters. Forgot it? **Forgot password** emails a single-use
-reset link — if no email arrives, SMTP may not be configured on your server; ask your admin.
+A workspace invite code still works under open signup — it is the way to hand someone an admin
+role directly.
+
+Passwords must be at least 6 characters. Forgot it? **Forgot password** on the login screen lets
+you set a new one right there: enter your email, choose a new password, log in. No email is
+involved. This CRM is built for a small team that knows each other, so anyone who can open the
+login screen and knows your email could do the same — that trade-off is deliberate.
 
 You can belong to **several workspaces** with a different role in each. The workspace name in
 the sidebar opens a switcher; your session is always "in" exactly one workspace at a time, and
@@ -112,6 +123,9 @@ Owner/admin territory. All of it lives under **Settings** and **Integrations**.
 Only the **owner** can mint an admin code; admins can invite members. Removing a member revokes
 their access on their next request.
 
+Under **open signup** (the embedded default) nobody needs a code to join: people pick the workspace
+when they sign up and arrive as members. Codes remain the way to bring someone in as an admin.
+
 ## Pipelines and stages
 
 A workspace can have several pipelines, each with its own ordered, colour-coded stages. New
@@ -154,9 +168,14 @@ Separate from workspaces: a platform-operator surface at **`/adminconsole`**, wh
 platform invite codes (the ones that create whole new workspaces), sets platform-wide defaults,
 toggles feature flags, and shows stats.
 
-It is gated by the `ADMIN_SECRET` environment variable. **If `ADMIN_SECRET` is unset, the admin
-API returns `503` — that is the intended "off" state**, so leave it unset on any deployment that
-should not have a console.
+With the embedded database (the local, no-`.env` build) the console is **open**: `/adminconsole`
+goes straight in, no secret, and a notice at the top says so. Anyone who can reach the server is
+the platform admin — right for an internal tool on one machine, never for a public URL.
+`OPEN_ADMIN=false` turns that off.
+
+Otherwise it is gated by the `ADMIN_SECRET` environment variable. **If `ADMIN_SECRET` is unset
+(and admin is not open), the admin API returns `503` — that is the intended "off" state**, so
+leave it unset on any deployment that should not have a console.
 
 ---
 
@@ -168,10 +187,10 @@ should not have a console.
 |---|---|
 | Runtime | Node **>= 22** (uses `node --env-file`, `node:test`) |
 | Server | Express 4, `express-session` with sessions stored **in Postgres** (`connect-pg-simple`) |
-| Database | PostgreSQL via `pg`, one pool. **No ORM, no query builder** — routes write SQL |
+| Database | PostgreSQL via `pg`, one pool. **No ORM, no query builder** — routes write SQL. **Embedded by default:** with no `DATABASE_URL`, Postgres itself (PGlite, WebAssembly) runs inside the Node process and keeps its data in `data/pgdata` — nothing to install. Set `DATABASE_URL` to use a Postgres server instead |
 | Realtime | socket.io, one room per workspace (`ws-<id>`) for chat and presence |
-| Files | Supabase Storage, bucket `task-attachments` (task attachments only) |
-| Email | nodemailer / SMTP — password resets and invites |
+| Files | Local disk under `data/files` by default, served by `routes/files.js` (documents through signed expiring links, task attachments behind the session). Supabase Storage when `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` are set |
+| Email | None. Nothing is sent; password reset is a page on the login screen |
 | Frontend | **Vanilla JS, no build step.** 17 classic `<script>` files sharing globals |
 | Tests | `node:test` — **no database, no server, no browser required** |
 
@@ -183,9 +202,10 @@ rather than introducing a build step.
 ## Prerequisites
 
 - **Node >= 22** (`node --version`)
-- **PostgreSQL** you can reach — local, Docker, or hosted
-- Optional, only for the features that use them: a Supabase project (task attachments) and SMTP
-  credentials (password-reset and invite emails)
+- Nothing else. With no `.env` the app runs an embedded Postgres and stores files under `data/`
+  (see [embedded.js](embedded.js)).
+- Optional, only if you want them: a PostgreSQL server (`DATABASE_URL`) or a Supabase project for
+  file storage. There is no email to configure.
 
 ## Quickstart
 
@@ -195,62 +215,82 @@ cd crm
 npm install
 ```
 
-Create your env file — the file **must** be named exactly `.env`, because both `npm start` and
-`npm run dev` pass `--env-file=.env`:
-
-```bash
-cp .env.example .env
-```
-
-Then fill in, at minimum:
-
-```bash
-DATABASE_URL=postgres://user:password@localhost:5432/crm
-DATABASE_SSL=false          # false only for a local Postgres without TLS
-SESSION_SECRET=<long random string>
-PORT=3000
-NODE_ENV=development
-```
-
-Need a local database? One line:
-
-```bash
-docker run --name crm-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=crm -p 5432:5432 -d postgres:16
-```
-
-**There is no migration step.** `initDb()` in [db.js](db.js) runs at every boot and is
-idempotent — it creates all 33 tables and applies every `ALTER TABLE … ADD COLUMN IF NOT
-EXISTS`. Just start the server:
+That is the whole setup — no `.env`, no database to install. Start it:
 
 ```bash
 npm run dev     # nodemon
 npm start       # plain node
 ```
 
+The first boot creates `data/` (the embedded database in `data/pgdata`, uploaded files in
+`data/files`, a generated session secret in `data/secrets.json`). Signup is **open** in this mode:
+create your workspace from the login screen, no code needed (`OPEN_SIGNUP=false` brings the codes
+back). Keep one process per `data/` folder — a second start is refused while the first runs.
+`data/` is gitignored.
+
+**Backups.** While the CRM runs it writes one archive per day into `backups/` (beside `data/`,
+newest 14 kept), and the admin console's *Backups* card offers **Download backup** and **Save a
+backup now**. From the terminal, with the CRM stopped, `npm run backup` writes an archive and
+`npm run restore -- backups/<file>.tar.gz` puts one back (the current data is moved aside with a
+timestamp, never deleted). One archive holds the database, the uploaded files and the secrets:
+treat it as sensitive, and keep a copy on another disk — a backup beside its data does not
+survive a lost one (`BACKUP_DIR` points the daily archive elsewhere).
+
+Want a Postgres server instead (shared, hosted, or Docker)? Create the env file — it **must** be
+named exactly `.env`, because both `npm start` and `npm run dev` pass `--env-file-if-exists=.env`:
+
+```bash
+cp .env.example .env
+```
+
+and set:
+
+```bash
+DATABASE_URL=postgres://user:password@localhost:5432/crm
+DATABASE_SSL=false          # false only for a local Postgres without TLS
+SESSION_SECRET=<long random string>
+```
+
+Need that local database? One line:
+
+```bash
+docker run --name crm-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=crm -p 5432:5432 -d postgres:16
+```
+
+**There is no migration step.** `initDb()` in [db.js](db.js) runs at every boot and is
+idempotent — it creates every table and applies every `ALTER TABLE … ADD COLUMN IF NOT
+EXISTS`, against the embedded database and a server alike.
+
 ### Verify your setup
 
 1. **The server booted and the schema applied.** You should see exactly:
    ```
-   CRM running at http://localhost:3000
+   CRM running at http://localhost:4001
    ```
-   A `Database init failed:` line followed by exit code 1 means `DATABASE_URL` is wrong or
-   Postgres is unreachable — nothing else will work until that line is clean.
+   Embedded mode prints `Embedded database ready: …/data/pgdata` just before it. A `Database init
+   failed:` line followed by exit code 1 means `DATABASE_URL` is wrong or Postgres is unreachable
+   — or, embedded, that another CRM process still holds `data/pgdata.lock` — nothing else will
+   work until that line is clean.
 2. **The API answers.** Unauthenticated, `/api/auth/me` is the cheapest probe:
    ```bash
-   curl -i http://localhost:3000/api/auth/me
+   curl -i http://localhost:4001/api/auth/me
    ```
    A `200` or `401` JSON response both prove the app is up; a connection refused does not.
 3. **The tests pass.**
    ```bash
    npm test
    ```
-   Expect `# pass 458  # fail 0` across 35 files (counts as of 2026-10-05). This needs no
-   database — if it fails on a clean clone, that is a real break, not your environment.
-4. **The UI loads.** Open <http://localhost:3000> — you should get the login/signup card.
-5. **Get an account.** Signup needs a code, so for a brand-new database: set `ADMIN_SECRET` in
-   `.env`, restart, open `/adminconsole`, log in with that secret, and issue yourself a
-   **platform invite code**. Then sign up with *Create a workspace* using that code — you become
-   the owner, with a seeded default pipeline.
+   Expect `# pass 1467  # fail 0` across 106 files (counts as of 2026-10-12). This needs no
+   database server — `tests/unit/embedded-mode.test.js` boots the embedded one in a temp folder,
+   and `tests/integration/app-smoke.test.js` boots the whole app on a random port the same way and
+   drives every save path, chat included — so if it fails on a clean clone, that is a real break,
+   not your environment.
+4. **The UI loads.** Open <http://localhost:4001> — you should get the login/signup card.
+5. **Get an account.** With the embedded database signup is open: pick *Create a workspace*, give
+   it a name, and you are the owner with a seeded default pipeline — no code. When codes are
+   required instead (`OPEN_SIGNUP=false`, or a `DATABASE_URL`), a brand-new database prints a
+   one-time **platform invite code** in a box at boot (just above `CRM running at …`); more come
+   from `/adminconsole` once `ADMIN_SECRET` is set.
 
 ## Project layout
 
@@ -269,7 +309,7 @@ middleware/
 utils/
   engine.js               outbound Engine deliveries and retries
   features.js             platform feature flags (platform_settings → "features")
-  mailer.js               SMTP
+  backup.js, tar.js       the backup archive (daily, console, npm run backup / restore)
 
 routes/                   24 files, one per API surface, mounted at /api/<name>
 public/
@@ -367,21 +407,25 @@ headless browser** — verify UI changes with these static client tests.
 
 ## Environment variables
 
-Every variable the code actually reads is documented in [.env.example](.env.example), grouped by
-what breaks without it. In short:
+[.env.example](.env.example) lists only the few settings this local build may need. Every variable the
+code reads, including the hosted-mode ones, is in this table:
 
 | Group | Variables | Without them |
 |---|---|---|
-| Database (required) | `DATABASE_URL`, `DATABASE_SSL` | Server exits at boot |
-| Server (required) | `SESSION_SECRET`, `PORT`, `NODE_ENV` | Sessions insecure; CSP only applies when `NODE_ENV=production` |
-| Admin console | `ADMIN_SECRET` | Admin routes return `503` — the intended "off" state |
-| Attachments | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Uploading throws a clear error; rest of app fine |
-| Email | `SMTP_*`, `APP_URL`, `BASE_URL` | Password-reset and invite emails are not sent |
+| Database | `DATABASE_URL`, `DATABASE_SSL` | **Embedded Postgres** inside the process, data in `data/pgdata` — no server needed |
+| Data folder | `DATA_DIR` | `./data` |
+| Signup | `OPEN_SIGNUP` | Open (no codes) with the embedded database; codes required with a `DATABASE_URL` |
+| Backups | `BACKUP_DIR`, `BACKUP_KEEP`, `BACKUPS` | Daily archive into `./backups`, newest 14 kept; `BACKUPS=0` turns the timer off (embedded database only) |
+| Server | `SESSION_SECRET`, `PORT`, `NODE_ENV` | Secret generated once into `data/secrets.json`; port 4001; CSP only applies when `NODE_ENV=production` |
+| Admin console | `ADMIN_SECRET`, `OPEN_ADMIN` | Open (no secret) with the embedded database; with a `DATABASE_URL` the routes return `503` until `ADMIN_SECRET` is set — the intended "off" state |
+| Files | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Files stored under `data/files`, served by `/files` (signed links for documents, session for attachments) |
+| Public address | `BASE_URL` (`APP_URL`, `APP_BASE_URL` as overrides) | The boot line, the webhook URL, provisioning links and the Engine's `download_url` use the address each request came in on |
 | Engine (dev only) | `ENGINE_ALLOW_PRIVATE_URLS` | Deliveries to private/localhost URLs are refused |
 | Tests | `TEST_APP_ROOT` | Normally unset |
 
-`SESSION_SECRET` signs session cookies — changing it logs everyone out. Never commit `.env`;
-`.gitignore` ignores `*.env`.
+Nothing is required: every row has a working default. `SESSION_SECRET` signs session cookies —
+changing it (or deleting `data/secrets.json`) logs everyone out. Never commit `.env` or `data/`;
+`.gitignore` ignores both.
 
 ## Where to start — good first tasks
 

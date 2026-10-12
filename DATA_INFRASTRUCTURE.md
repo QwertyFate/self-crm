@@ -9,11 +9,11 @@ every claim below is checkable in the file named beside it.
 
 | Layer | What it is | Where |
 |---|---|---|
-| Database | **PostgreSQL**, one `pg` connection pool | `db.js` |
+| Database | **PostgreSQL**, one `pg` connection pool. **Embedded by default**: with no `DATABASE_URL`, Postgres itself (PGlite, WebAssembly) runs inside the Node process and writes to `data/pgdata`, reached over a loopback socket with one connection; set `DATABASE_URL` for a Postgres server | `db.js`, `embedded.js` |
 | Server | Express + `express-session` (sessions stored **in Postgres** via `connect-pg-simple`) | `server.js` |
 | Realtime | **socket.io**, rooms per workspace (`ws-<id>`) for chat and presence | `server.js:146-201` |
-| File storage | **Supabase Storage**, bucket `task-attachments` (task attachments only) | `storage.js` |
-| Email | **nodemailer** (SMTP), password resets and invites | `utils/mailer.js` |
+| File storage | **Local disk** under `data/files` by default — contact documents through signed expiring links, task attachments behind the session; **Supabase Storage** when `SUPABASE_URL` + `SUPABASE_SERVICE_KEY` are set | `storage.js`, `routes/files.js` |
+| Email | **none** — nothing is sent; "Forgot password" answers a reset token and the login screen moves straight to the new-password form | `routes/auth.js` |
 | Outbound | HTTP deliveries to a per-workspace "engine" URL, with retries | `utils/engine.js`, `routes/engine.js` |
 | Client | Vanilla JS, no build step: 17 classic `<script>` files sharing globals | `public/js/*.js` |
 | Tests | `node:test`, no database needed — a fake pool is injected | `tests/` (34 files) |
@@ -259,7 +259,7 @@ middleware/field-crud.js  the one router behind all four custom-field tables
 middleware/reorder.js     shared position/reordering endpoint logic
 utils/engine.js           outbound engine deliveries and retries
 utils/features.js         feature flags
-utils/mailer.js           SMTP
+utils/backup.js, tar.js   backup archives (daily, admin console, npm run backup / restore)
 routes/*.js               24 route files, one per API surface
 public/js/*.js            17 client files; core.js holds the shared helpers and ui.* primitives
 tests/{routes,client,unit,helpers}

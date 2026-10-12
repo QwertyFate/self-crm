@@ -6,10 +6,11 @@
    declares one-segment /:id paths and the literal /bulk/delete, so these two-
    and three-segment paths fall through to here (same trick as task-attachments).
 
-   STORAGE  multer keeps the file in MEMORY (10 MB cap); storage.js puts it in the
-   PRIVATE "contact-documents" bucket under <workspaceId>/<contactId>/<ts>-<name>.
-   Nothing is public: the CRM download below and the Engine's
-   GET /api/dokumente/:id/download both answer a time-limited signed link.
+   STORAGE  multer keeps the file in MEMORY (10 MB cap); storage.js keeps it under
+   <workspaceId>/<contactId>/<ts>-<name> — in data/files/contact-documents by default,
+   or in the PRIVATE Supabase bucket when SUPABASE_* is set. Nothing is public: the
+   CRM download below and the Engine's GET /api/dokumente/:id/download both answer
+   a time-limited signed link (routes/files.js locally, Supabase's own otherwise).
 
    THE ENGINE  every upload fires dokument.hinzugefuegt (utils/engine.js), and a
    'vertrag' document makes vertrag.unterschrieben carry a real dokument_url.
@@ -32,7 +33,10 @@ const baseUrl     = require('../utils/base-url');
 const { DOCUMENT_TYPES } = require('../utils/kunde');
 
 const MAX_BYTES = 10 * 1024 * 1024;
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_BYTES } });
+// defParamCharset: browsers send the multipart filename as raw UTF-8 bytes; multer 2.x decodes it as
+// latin1 unless told otherwise, which turned "Vertrag Müller.pdf" into "Vertrag MÃ¼ller.pdf" in file_name
+// (found by tests/integration/app-smoke.test.js, 2026-10-12). The storage path is unaffected (safeName).
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_BYTES }, defParamCharset: 'utf8' });
 
 router.use(requireAuth);
 

@@ -1,63 +1,34 @@
+# ── dependencies, OS and editor files ────────────────────────────────────────
 node_modules
-.env
 .DS_Store
 .claude
-ADMIN_ROLE_CHANGES.md
-CHAT_MENTIONS_CHANGES.md
-ENGINE_INTEGRATION_CHANGES.md
-ENGINE_INTEGRATION.md
-DEAL_MODAL_CHANGES.md
-SETTINGS_UI_CHANGES.md
-AUTH_STATE_CHANGES.md
-reference
-DESIGN_PRO_CHANGES.md
+.vscode/
+.idea/
+*.log
+npm-debug.log*
 
-# stale SQLite database from before the Postgres migration — contains old user
-# rows and password hashes; exported to crm-sqlite-backup-2026-10-05.json outside
-# the repo, then removed from the working tree (2026-10-05)
+# ── environment: every env file except the example ───────────────────────────
+# (.notenv is the Supabase .env set aside while the embedded build runs)
+.env
+*.env
+.env.*
+!.env.example
+.notenv
+
+# ── what the embedded build writes at runtime ────────────────────────────────
+# the database, uploaded files and secrets (embedded.js); the daily archives (utils/backup.js);
+# the LaunchDaemon's stdout/stderr (deploy/)
+data/
+backups/
+logs/
+
+# ── working notes: change logs and hand-over docs stay local, they are not the product ──
+*_CHANGES.md
+ADMIN_PROVISIONING_GUIDE.md
+ENGINE_INTEGRATION.md
+reference/
+
+# ── stale SQLite database from before the Postgres migration (removed 2026-10-05) ──
 crm.db
 crm.db-shm
 crm.db-wal
-
-# any env file, not just .env
-*.env
-!.env.example
-
-# obsolete-code cleanup log (2026-10-05)
-OBSOLETE_CLEANUP_CHANGES.md
-
-# admin tenant-provisioning log (2026-10-05)
-ADMIN_PROVISION_CHANGES.md
-
-# admin-facing provisioning guide, handed to admins directly (2026-10-05)
-ADMIN_PROVISIONING_GUIDE.md
-
-# task due-date serialisation fix log (2026-10-06)
-TASK_DATE_CHANGES.md
-
-# deal board urgency-visibility fix log (2026-10-06)
-DEALS_BOARD_CHANGES.md
-
-# calendar / timezone fix log (2026-10-06)
-CALENDAR_TIMEZONE_CHANGES.md
-
-# activity notes rendering fix log (2026-10-06)
-ACTIVITY_NOTES_CHANGES.md
-
-# stylesheet syntax fix log (2026-10-06)
-STYLE_CSS_CHANGES.md
-
-# launchd writes the production app's stdout/stderr here (deploy/com.upgrads.crm.plist)
-logs/
-
-# production deployment log (2026-10-06)
-DEPLOY_CHANGES.md
-
-# login page redesign log (2026-10-06)
-LOGIN_DESIGN_CHANGES.md
-
-# landing page + login-split log, recovered from history (2026-10-07)
-LOGIN_LANDING_CHANGES.md
-
-# loading states + light-mode text log (2026-10-07)
-LOADING_UI_CHANGES.md

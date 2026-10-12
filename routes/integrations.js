@@ -42,6 +42,7 @@ const router      = express.Router();
 const crypto      = require('crypto');
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const baseUrl     = require('../utils/base-url');   // the webhook URL shown on the page: APP_URL → BASE_URL → the request's own address
 const engine      = require('../utils/engine');            // "a lead comes in" → kunde.angelegt / kunde.aktualisiert
 const { masterDataChanges } = require('../utils/kunde');
 
@@ -86,7 +87,7 @@ router.get('/settings', async (req, res, next) => {
        WHERE uw.workspace_id=$1 ORDER BY u.name`, [wid]
     );
 
-    res.json({ webhook: wh, pipelines, stages, contact_fields, members, base_url: process.env.APP_URL || null });
+    res.json({ webhook: wh, pipelines, stages, contact_fields, members, base_url: baseUrl.appUrl(req) });
   } catch (err) { next(err); }
 });
 

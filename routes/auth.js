@@ -12,7 +12,7 @@
      select-workspace and switch-workspace do, by re-resolving the row from
      (email, workspace_id).
 
-   TWO WAYS TO GET AN ACCOUNT, both need a code:
+   TWO WAYS TO GET AN ACCOUNT:
      mode 'create' + platform_invite_code → a new workspace, you are its owner,
        seeded with the platform's default contact columns and pipelines
        (platform_settings, set in the admin console).
@@ -20,7 +20,15 @@
        role you get (member or admin).
    Both run in one transaction, and both consume the code.
 
+   OPEN SIGNUP (utils/open-signup.js — on by default in embedded mode, OPEN_SIGNUP
+   overrides) drops the codes: 'create' asks for no platform code, and 'join' takes
+   a workspace_id picked from GET /signup-options and makes you a MEMBER. A
+   workspace invite code still works in open mode — it is how someone joins as
+   admin. The same two helpers (checkPlatformInvite, resolveJoinTarget) serve
+   create-workspace and join-workspace below; routes/workspace.js POST / follows.
+
    ENDPOINTS
+     GET  /signup-options     { openSignup, workspaces? } — public, for the signup form
      GET  /me                 current user + workspace + the list you belong to
      POST /login              one membership → in; several → workspace picker
      POST /select-workspace   finish a picker login
@@ -28,7 +36,7 @@
      GET  /my-workspaces      the switcher's list
      POST /signup             create or join (above)
      POST /logout
-     POST /forgot-password    always 200 (no account enumeration)
+     POST /forgot-password    { token, email } for a known email, 404 otherwise — no e-mail is sent
      POST /reset-password     single-use token, 1 hour
      PATCH /preferences       column widths, deal columns, timezone
      POST /create-workspace   another workspace for an existing user
@@ -42,8 +50,11 @@
        every row of an email is kept on the same hash by reset-password (below)
        and by POST /api/workspace, which copies the real one. Rows written with
        the old 'placeholder' literal are the exception until repaired — see §8.
-     - forgot-password returns the reset URL in the response body when SMTP is
-       not configured.
+     - forgot-password hands the reset token straight back to whoever asks for
+       it. BY DESIGN (2026-10-12): this CRM runs for a small team that knows
+       each other and sends no e-mail, so "Forgot password" is a page, not a
+       mail. The price, stated in the README: anyone who can open the login
+       screen and knows an email can set that account's password.
 
    RESET-PASSWORD IS EMAIL-WIDE ON PURPOSE. It re-hashes every `users` row that
    shares the email, not just reset.user_id, because the identity model is one
@@ -57,7 +68,36 @@ const router   = express.Router();
 const bcrypt   = require('bcryptjs');
 const crypto   = require('crypto');
 const { pool, seedDefaultPipeline } = require('../db');
-const { sendPasswordReset } = require('../utils/mailer');
+const { openSignup } = require('../utils/open-signup');
+
+// The platform invite a 'create' needs — or none, in open signup. Resolves { invite } (null =
+// nothing to consume) or { error } (the 400 message). The code is neither asked for nor consumed
+// when signup is open, so a pasted one is simply ignored.
+async function checkPlatformInvite(code) {
+  if (openSignup()) return { invite: null };
+  if (!code?.trim()) return { error: 'Platform invite code required' };
+  const { rows: [invite] } = await pool.query('SELECT * FROM platform_invites WHERE code = $1 AND used = 0', [code.trim()]);
+  if (!invite) return { error: 'Invalid or already used platform invite code' };
+  return { invite };
+}
+
+// Where a 'join' lands. An invite code works in every mode and decides the role; in open signup
+// a workspace_id (from GET /signup-options) is enough and always makes a MEMBER. Resolves
+// { workspaceId, role, invite } (invite null = no code to consume) or { error }.
+async function resolveJoinTarget({ invite_code, workspace_id } = {}) {
+  if (invite_code?.trim()) {
+    const { rows: [invite] } = await pool.query('SELECT * FROM invite_codes WHERE code = $1', [invite_code.trim()]);
+    if (!invite)     return { error: 'Invalid invite code' };
+    if (invite.used) return { error: 'Invite code already used' };
+    return { workspaceId: invite.workspace_id, role: invite.role === 'admin' ? 'admin' : 'member', invite };
+  }
+  if (!openSignup()) return { error: 'Invite code required' };
+  const id = Number(workspace_id);
+  if (!Number.isInteger(id) || id <= 0) return { error: 'Choose a workspace' };
+  const { rows: [ws] } = await pool.query('SELECT id FROM workspaces WHERE id = $1', [id]);
+  if (!ws) return { error: 'Workspace not found' };
+  return { workspaceId: ws.id, role: 'member', invite: null };
+}
 
 router.get('/me', async (req, res, next) => {
   try {
@@ -222,6 +262,24 @@ router.get('/my-workspaces', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// What the signup form needs before anyone is logged in: are codes required, and — in open
+// signup — which workspaces exist (id and name only). With a session, the caller's own
+// workspaces are left out: those are the ones they cannot join again.
+router.get('/signup-options', async (req, res, next) => {
+  try {
+    if (!openSignup()) return res.json({ openSignup: false });
+    const { rows } = req.session?.userId
+      ? await pool.query(
+          `SELECT id, name FROM workspaces
+            WHERE id NOT IN (SELECT workspace_id FROM users WHERE email = (SELECT email FROM users WHERE id = $1))
+            ORDER BY name`,
+          [req.session.userId]
+        )
+      : await pool.query('SELECT id, name FROM workspaces ORDER BY name');
+    res.json({ openSignup: true, workspaces: rows });
+  } catch (e) { next(e); }
+});
+
 router.post('/signup', async (req, res, next) => {
   try {
     const { name, email, password, mode, workspace_name, invite_code, platform_invite_code } = req.body;
@@ -237,13 +295,9 @@ router.post('/signup', async (req, res, next) => {
 
     if (mode === 'create') {
       if (!workspace_name?.trim()) return res.status(400).json({ error: 'Workspace name required' });
-      if (!platform_invite_code?.trim()) return res.status(400).json({ error: 'Platform invite code required' });
-
-      const { rows: [platformInvite] } = await pool.query(
-        'SELECT * FROM platform_invites WHERE code = $1 AND used = 0',
-        [platform_invite_code.trim()]
-      );
-      if (!platformInvite) return res.status(400).json({ error: 'Invalid or already used platform invite code' });
+      const pi = await checkPlatformInvite(platform_invite_code);   // { invite: null } in open signup
+      if (pi.error) return res.status(400).json({ error: pi.error });
+      const platformInvite = pi.invite;
 
       const client = await pool.connect();
       try {
@@ -311,7 +365,7 @@ router.post('/signup', async (req, res, next) => {
           'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
           [ws.id, name.trim(), normalizedEmail, password_hash, 'owner']
         );
-        await client.query(
+        if (platformInvite) await client.query(
           'UPDATE platform_invites SET used=1, used_by_workspace_id=$1 WHERE id=$2',
           [ws.id, platformInvite.id]
         );
@@ -333,34 +387,28 @@ router.post('/signup', async (req, res, next) => {
     }
 
     if (mode === 'join') {
-      if (!invite_code?.trim()) return res.status(400).json({ error: 'Invite code required' });
-
-      const { rows: [invite] } = await pool.query(
-        'SELECT * FROM invite_codes WHERE code = $1',
-        [invite_code.trim()]
-      );
-      if (!invite)      return res.status(400).json({ error: 'Invalid invite code' });
-      if (invite.used)  return res.status(400).json({ error: 'Invite code already used' });
-      const role = invite.role === 'admin' ? 'admin' : 'member';
+      const target = await resolveJoinTarget({ invite_code, workspace_id: req.body.workspace_id });
+      if (target.error) return res.status(400).json({ error: target.error });
+      const { workspaceId, role, invite } = target;
 
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
         const { rows: [u] } = await client.query(
           'INSERT INTO users (workspace_id, name, email, password_hash, role) VALUES ($1,$2,$3,$4,$5) RETURNING id',
-          [invite.workspace_id, name.trim(), normalizedEmail, password_hash, role]
+          [workspaceId, name.trim(), normalizedEmail, password_hash, role]
         );
-        await client.query(
+        if (invite) await client.query(
           'UPDATE invite_codes SET used=1, used_by=$1 WHERE id=$2',
           [u.id, invite.id]
         );
         await client.query(
           'INSERT INTO user_workspaces (user_id, workspace_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
-          [u.id, invite.workspace_id, role]
+          [u.id, workspaceId, role]
         );
         await client.query('COMMIT');
         req.session.userId      = u.id;
-        req.session.workspaceId = invite.workspace_id;
+        req.session.workspaceId = workspaceId;
         req.session.userRole    = role;
         return res.status(201).json({ success: true });
       } catch (e) {
@@ -379,6 +427,10 @@ router.post('/logout', (req, res) => {
   req.session.destroy(() => res.json({ success: true }));
 });
 
+// No e-mail in this CRM. "Forgot password" answers the reset token directly and the login screen
+// moves straight on to the new-password form (public/js/auth.js handleForgotPassword). The token
+// path is kept so that reset-password below stays single-use, time-limited and email-wide. An
+// unknown address is a 404 — the person needs to know; enumeration is accepted for a small team.
 router.post('/forgot-password', async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -388,7 +440,7 @@ router.post('/forgot-password', async (req, res, next) => {
       'SELECT id, email FROM users WHERE email = $1',
       [email.toLowerCase().trim()]
     );
-    if (!user) return res.json({ success: true, message: 'If that email exists, a reset link has been sent.' });
+    if (!user) return res.status(404).json({ error: 'No account with this email address' });
 
     await pool.query('DELETE FROM password_resets WHERE user_id = $1', [user.id]);
 
@@ -398,16 +450,7 @@ router.post('/forgot-password', async (req, res, next) => {
       'INSERT INTO password_resets (user_id, token, expires_at) VALUES ($1,$2,$3)',
       [user.id, token, expiresAt]
     );
-
-    const base     = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
-    const resetUrl = `${base}?reset=${token}`;
-    const result   = await sendPasswordReset(user.email, resetUrl);
-
-    if (result.sent) {
-      res.json({ success: true, message: 'Reset link sent — check your email.' });
-    } else {
-      res.json({ success: true, resetUrl, message: 'Email not configured. Copy the link below.' });
-    }
+    res.json({ success: true, token, email: user.email });
   } catch (e) { next(e); }
 });
 
@@ -475,13 +518,9 @@ router.post('/create-workspace', async (req, res, next) => {
     if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
     const { workspace_name, platform_invite_code } = req.body;
     if (!workspace_name?.trim())      return res.status(400).json({ error: 'Workspace name required' });
-    if (!platform_invite_code?.trim()) return res.status(400).json({ error: 'Platform invite code required' });
-
-    const { rows: [invite] } = await pool.query(
-      'SELECT * FROM platform_invites WHERE code=$1 AND used=0',
-      [platform_invite_code.trim()]
-    );
-    if (!invite) return res.status(400).json({ error: 'Invalid or already used platform invite code' });
+    const pi = await checkPlatformInvite(platform_invite_code);   // { invite: null } in open signup
+    if (pi.error) return res.status(400).json({ error: pi.error });
+    const invite = pi.invite;
 
     const client = await pool.connect();
     try {
@@ -506,7 +545,7 @@ router.post('/create-workspace', async (req, res, next) => {
         'INSERT INTO user_workspaces (user_id, workspace_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
         [newUser.id, ws.id, 'owner']
       );
-      await client.query(
+      if (invite) await client.query(
         'UPDATE platform_invites SET used=1, used_by_workspace_id=$1 WHERE id=$2',
         [ws.id, invite.id]
       );
@@ -516,7 +555,9 @@ router.post('/create-workspace', async (req, res, next) => {
       req.session.workspaceId = ws.id;
       req.session.userRole    = 'owner';
 
-      const { rows: [workspace] } = await pool.query(
+      // `client`, not pool: this runs before the finally releases the transaction's client, and
+      // in embedded mode (db.js, max: 1) a pool.query here would wait for that very client — forever.
+      const { rows: [workspace] } = await client.query(
         'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id=$1',
         [ws.id]
       );
@@ -535,15 +576,9 @@ router.post('/create-workspace', async (req, res, next) => {
 router.post('/join-workspace', async (req, res, next) => {
   try {
     if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
-    const { invite_code } = req.body;
-    if (!invite_code?.trim()) return res.status(400).json({ error: 'Invite code required' });
-
-    const { rows: [invite] } = await pool.query(
-      'SELECT * FROM invite_codes WHERE code=$1', [invite_code.trim()]
-    );
-    if (!invite)     return res.status(400).json({ error: 'Invalid invite code' });
-    if (invite.used) return res.status(400).json({ error: 'Invite code already used' });
-    const role = invite.role === 'admin' ? 'admin' : 'member';
+    const target = await resolveJoinTarget(req.body);   // an invite code, or a workspace_id in open signup
+    if (target.error) return res.status(400).json({ error: target.error });
+    const { workspaceId, role, invite } = target;
 
     const { rows: [currentUser] } = await pool.query(
       'SELECT email, name FROM users WHERE id=$1',
@@ -553,28 +588,28 @@ router.post('/join-workspace', async (req, res, next) => {
 
     const { rows: [existing] } = await pool.query(
       'SELECT 1 FROM users WHERE email=$1 AND workspace_id=$2',
-      [currentUser.email, invite.workspace_id]
+      [currentUser.email, workspaceId]
     );
     if (existing) return res.status(400).json({ error: 'You are already a member of this workspace' });
 
     const { rows: [newUser] } = await pool.query(
       'INSERT INTO users (workspace_id, email, name, password_hash, role) SELECT $1, $2, $3, password_hash, $4 FROM users WHERE id=$5 RETURNING id',
-      [invite.workspace_id, currentUser.email, currentUser.name, role, req.session.userId]
+      [workspaceId, currentUser.email, currentUser.name, role, req.session.userId]
     );
 
     await pool.query(
       'INSERT INTO user_workspaces (user_id, workspace_id, role) VALUES ($1,$2,$3)',
-      [newUser.id, invite.workspace_id, role]
+      [newUser.id, workspaceId, role]
     );
-    await pool.query('UPDATE invite_codes SET used=1, used_by=$1 WHERE id=$2', [req.session.userId, invite.id]);
+    if (invite) await pool.query('UPDATE invite_codes SET used=1, used_by=$1 WHERE id=$2', [req.session.userId, invite.id]);
 
-    req.session.workspaceId = invite.workspace_id;
+    req.session.workspaceId = workspaceId;
     req.session.userId      = newUser.id;
     req.session.userRole    = role;
 
     const { rows: [workspace] } = await pool.query(
       'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id=$1',
-      [invite.workspace_id]
+      [workspaceId]
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
     workspace.contact_columns = workspace.contact_columns || [];
