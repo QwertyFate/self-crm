@@ -154,6 +154,7 @@ function initChatSocket() {
   if (socket) return;
 
   socket = io();
+  socket.on('app:version', v => { if (typeof noteAppVersion === 'function') noteAppVersion(v); });   // core.js: a newer app on the server → the tab reloads itself
 
   socket.on('connect', () => {
     renderPageOnlineUsers();

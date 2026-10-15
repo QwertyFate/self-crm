@@ -1098,6 +1098,8 @@
           <div class="settings-tab-sep" aria-hidden="true"></div>
           <button class="settings-tab" data-tab="engine"     onclick="switchIntgTab('engine')"     data-i18n="intg_tab_engine">Upgrads Engine</button>
           <button class="settings-tab" data-tab="deliveries" onclick="switchIntgTab('deliveries')" data-i18n="intg_tab_deliveries">Deliveries</button>
+          <div class="settings-tab-sep" aria-hidden="true"></div>
+          <button class="settings-tab" data-tab="calcom"     onclick="switchIntgTab('calcom')"     data-i18n="intg_tab_calcom">Cal.com</button>
         </nav>
 
         <div class="settings-tab-body">
@@ -1319,6 +1321,71 @@
             <p class="settings-hint" data-i18n="engine_deliveries_hint">Attempts and the last response from the Engine for each event.</p>
             <div class="settings-card-body">
               <div id="engine-deliveries" class="engine-deliveries"><p class="empty-inline" data-i18n="engine_no_deliveries">No events sent yet.</p></div>
+            </div>
+          </div>
+
+            </div>
+          </div>
+
+          <!-- ── Cal.com: one account per workspace (routes/integrations.js /calcom, utils/calcom.js). Owners/admins connect; everyone sees the account. ── -->
+          <div id="intg-pane-calcom" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="intg_pane_calcom">Cal.com</h2>
+              <p class="settings-tab-hint" data-i18n="intg_pane_calcom_hint">One Cal.com account for the whole workspace: its bookings land on the calendar, and a meeting can be booked from a deal or a contact.</p>
+            </div>
+            <div class="intg-stack">
+
+          <div class="settings-card" id="cal-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="cal_title">Cal.com connection</h2>
+              <span id="cal-status" class="badge" data-i18n="cal_status_none">Not connected</span>
+            </div>
+            <p class="settings-hint" data-i18n="cal_hint">Connect the Cal.com account whose bookings this workspace should see. Everyone in the workspace sees the account and its bookings; only owners and admins can change the connection.</p>
+            <p class="settings-hint hidden" id="cal-readonly-hint" data-i18n="cal_readonly_hint">Only owners and admins can connect or disconnect Cal.com.</p>
+            <div class="settings-card-body">
+              <div class="intg-section hidden" id="cal-connect-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="cal_key_label">API key</h3>
+                  <p class="intg-section-hint" data-i18n="cal_key_hint">In Cal.com under Settings, Developer, API keys. The key is stored encrypted and never shown again.</p>
+                </div>
+                <div class="intg-url-box">
+                  <input type="password" id="cal-key" class="intg-url-input" autocomplete="off" spellcheck="false" placeholder="cal_live_…" data-i18n-ph="cal_key_ph" />
+                </div>
+              </div>
+              <div class="intg-section hidden" id="cal-guide-section">
+                <div class="intg-guide-panel" id="cal-guide-panel"></div>
+              </div>
+              <p class="empty-inline hidden" id="cal-none" data-i18n="cal_none">No Cal.com account is connected yet.</p>
+              <div class="intg-section hidden" id="cal-account-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="cal_account_label">Connected account</h3>
+                </div>
+                <div id="cal-facts"></div>
+              </div>
+              <div class="intg-section hidden" id="cal-type-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="cal_event_type_label">Event type for bookings</h3>
+                  <p class="intg-section-hint" data-i18n="cal_event_type_hint">The Cal.com event type a meeting booked from a deal or a contact uses.</p>
+                </div>
+                <div class="intg-field">
+                  <select id="cal-event-type" class="form-control" onchange="saveCalcomEventType()"></select>
+                  <input type="text" id="cal-type-readonly" class="form-control hidden" readonly />
+                </div>
+              </div>
+              <div class="intg-section hidden" id="cal-log-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="cal_log_title">Recent bookings</h3>
+                  <p class="intg-section-hint" data-i18n="cal_log_hint">Every booking Cal.com reported, and what became of it.</p>
+                </div>
+                <div id="cal-log" class="intg-logs"><p class="empty-inline" data-i18n="cal_log_none">No booking has arrived yet.</p></div>
+              </div>
+              <div class="settings-card-actions" id="cal-actions">
+                <button class="btn btn-primary btn-sm hidden" id="cal-connect-btn" onclick="connectCalcom(this)" data-i18n="cal_btn_connect">Connect</button>
+                <button class="btn btn-sm hidden" id="cal-refresh-btn" onclick="refreshCalcomEventTypes(this)" data-i18n="cal_btn_refresh">Refresh event types</button>
+                <button class="btn btn-sm hidden" id="cal-register-btn" onclick="registerCalcomWebhook(this)" data-i18n="cal_btn_register">Register webhook</button>
+                <button class="btn btn-sm btn-danger hidden" id="cal-disconnect-btn" onclick="disconnectCalcom()" data-i18n="cal_btn_disconnect">Disconnect</button>
+                <span id="cal-msg" class="workspace-name-msg hidden"></span>
+              </div>
             </div>
           </div>
 

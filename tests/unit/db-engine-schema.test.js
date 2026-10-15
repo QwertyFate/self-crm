@@ -132,10 +132,10 @@ describe('contact_documents (Part 15: contracts and recordings on a customer)', 
 });
 
 describe('activities.source (Part 16: who wrote a note — a user or the Engine)', () => {
-  test('added additively with default user; the CHECK is re-declared DROP-then-ADD and lists user, engine', () => {
+  test('added additively with default user; the CHECK is re-declared DROP-then-ADD and lists user, engine, calcom (Cal.com bookings, 2026-10-13)', () => {
     assert.ok(find(/^ALTER TABLE activities ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'user'$/));
     const iDrop = sqls.findIndex(s => /DROP CONSTRAINT IF EXISTS activities_source_check/.test(s));
-    const iAdd  = sqls.findIndex(s => /ADD CONSTRAINT activities_source_check CHECK\(source IN \('user','engine'\)\)/.test(s));
+    const iAdd  = sqls.findIndex(s => /ADD CONSTRAINT activities_source_check CHECK\(source IN \('user','engine','calcom'\)\)/.test(s));
     assert.ok(iDrop >= 0 && iAdd === iDrop + 1);
     const iCol = sqls.findIndex(s => /ADD COLUMN IF NOT EXISTS source /.test(s));
     assert.ok(iCol < iDrop, 'column exists before the constraint');

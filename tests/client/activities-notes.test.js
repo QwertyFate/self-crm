@@ -29,7 +29,15 @@ const modals = read('public/js/modals.js');
 const ESC = `function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }`;
 
 describe('dvActHtml: stored note → safe HTML, same picture for every stored shape', () => {
-  const F = () => loadFns('public/js/detail-views.js', ['dvActHtml', 'dvActText'], { extra: ESC });
+  const F = () => loadFns('public/js/detail-views.js', ['dvActHtml', 'dvActText', 'dvLinkify'], { extra: ESC });
+  test('a link in a note is clickable, in a new tab; closing punctuation stays outside it; a query string keeps its ampersands; stored markup is still text first (Cal.com Part 12)', () => {
+    assert.equal(F().dvActHtml('Call: https://meet.google.com/abc-defg-hij.'), 'Call: <a href="https://meet.google.com/abc-defg-hij" target="_blank" rel="noopener">https://meet.google.com/abc-defg-hij</a>.');
+    assert.equal(F().dvActHtml('T\nhttps://zoom.us/j/1?pwd=a&b=2'), 'T<br><a href="https://zoom.us/j/1?pwd=a&amp;b=2" target="_blank" rel="noopener">https://zoom.us/j/1?pwd=a&amp;b=2</a>');
+    assert.equal(F().dvActHtml('(see https://x.de/a)'), '(see <a href="https://x.de/a" target="_blank" rel="noopener">https://x.de/a</a>)');
+    assert.equal(F().dvActHtml('<a href="https://x.de">x</a>'), 'x', 'only an address the user typed becomes a link; stored markup is stripped first');
+    assert.equal(F().dvActHtml('<img src=https://evil.de/x onerror=alert(1)>'), '', 'a tag never reaches the DOM, link or not');
+    assert.equal(F().dvActHtml('no link here'), 'no link here');
+  });
 
   test('the escaped-with-<br> shape (the timeline editors) renders its line break, not a literal "<br>"', () => {
     const out = F().dvActHtml('Called &amp; agreed<br>Follow up Monday');

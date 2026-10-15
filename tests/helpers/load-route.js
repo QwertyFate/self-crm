@@ -4,7 +4,7 @@
  *   ../db               -> the fake pool you pass in
  *   ../middleware/auth  -> a stub that "logs in" the caller (user 1,
  *                          workspace 7 by default) without a real session
- *   ../notifications    -> a no-op `notify`
+ *   ../notifications    -> a no-op `notify` and `notifyUser`
  *
  * How the swap works: Node keeps every module it has `require`d in a cache
  * (`require.cache`), keyed by the file's absolute path. If we put our own
@@ -38,10 +38,11 @@ function inject(relativeFile, exportsObject) {
 }
 
 // `notifications`: pass a whole module object to use instead of the no-op stub
-// (e.g. the REAL notifications.js bound to the fake pool, to test notifySystem).
+// (e.g. the REAL notifications.js bound to the fake pool, to test notifySystem, or a
+// recording `notifyUser` to see who a route tells).
 function loadRoute(routeFile, { pool, user = { id: 1, workspaceId: 7, role: 'owner' }, notify = () => {}, notifications } = {}) {
   inject('db.js', { pool });
-  inject('notifications.js', notifications || { notify });
+  inject('notifications.js', notifications || { notify, notifyUser: async () => false });
   inject('middleware/auth.js', (req, _res, next) => {
     // userTimezone mirrors the real middleware: users.timezone, undefined when the test
     // does not set one (routes then fall back to the default zone, as for legacy rows).

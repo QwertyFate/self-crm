@@ -17,27 +17,29 @@ const section = html.slice(start, html.indexOf('</section>', start));
 const s21     = css.slice(css.indexOf('21 · INTEGRATIONS'), css.indexOf('22 · AUTH & ADMIN'));
 const count   = (src, needle) => src.split(needle).length - 1;
 const lastBefore = (needle, idx) => section.lastIndexOf(needle, idx);
-const INTG_TABS = ['webhook', 'platforms', 'activity', 'engine', 'deliveries'];
+const INTG_TABS = ['webhook', 'platforms', 'activity', 'engine', 'deliveries', 'calcom'];   // calcom: the Cal.com tab, its own group (2026-10-13)
 
 describe('page shell', () => {
   test('header: icon, translated title, one-line page-sub', () => {
     assert.match(section, /<h1><svg class="ic"[^>]*>[\s\S]*?<\/svg><span data-i18n="page_integrations">/);
     assert.match(section, /<p class="page-sub" data-i18n="hint_page_integrations">/);
   });
-  test('the Settings rail: five tabs in two groups, text-only buttons, the tab body owns the scroll', () => {
+  test('the Settings rail: six tabs in three groups, text-only buttons, the tab body owns the scroll', () => {
     assert.match(section, /^<section id="page-integrations" class="page page-rail">/);
     assert.match(section, /<div class="settings-layout">\s*<nav class="settings-tabs">/);
     const tabs = [...section.matchAll(/<button class="settings-tab"\s+data-tab="([a-z]+)"\s+onclick="switchIntgTab\('\1'\)"\s+data-i18n="intg_tab_\1">[^<]*<\/button>/g)].map(m => m[1]);
     assert.deepEqual(tabs, INTG_TABS, 'tab buttons: class, data-tab, scoped onclick, data-i18n on the button, no child nodes');
-    assert.equal(count(section, 'class="settings-tab-sep"'), 1, 'one separator between the two groups');
+    assert.equal(count(section, 'class="settings-tab-sep"'), 2, 'a separator between each of the three groups: leads, the Engine, Cal.com');
     const sep = section.indexOf('class="settings-tab-sep"');
     assert.ok(sep > section.indexOf('data-tab="activity"') && sep < section.indexOf('data-tab="engine"'));
+    const sep2 = section.indexOf('class="settings-tab-sep"', sep + 1);
+    assert.ok(sep2 > section.indexOf('data-tab="deliveries"') && sep2 < section.indexOf('data-tab="calcom"'));
     assert.match(section, /<\/nav>\s*<div class="settings-tab-body">/);
     assert.equal(section.includes('settings-grid'), false, 'the old flat grid is gone');
   });
   test('one pane per tab, each opening with the Settings pane heading and its own card column', () => {
-    assert.equal(count(section, 'class="settings-pane"'), 5);
-    assert.equal(count(section, 'class="settings-pane-head"'), 5);
+    assert.equal(count(section, 'class="settings-pane"'), 6);
+    assert.equal(count(section, 'class="settings-pane-head"'), 6);
     let last = -1;
     for (const t of INTG_TABS) {
       const i = section.indexOf(`<div id="intg-pane-${t}" class="settings-pane">`);
@@ -49,9 +51,9 @@ describe('page shell', () => {
       assert.match(head, /<div class="intg-stack">/, t);
     }
   });
-  test('cards in pane order: webhook, setup guides, received leads, the Engine, sent events', () => {
-    const order = ['intg_webhook_title', 'intg_platforms_title', 'intg_activity_title', 'id="engine-card"', 'engine_deliveries_title'].map(k => section.indexOf(k));
-    assert.ok(order.every(i => i > 0), 'all five present');
+  test('cards in pane order: webhook, setup guides, received leads, the Engine, sent events, Cal.com', () => {
+    const order = ['intg_webhook_title', 'intg_platforms_title', 'intg_activity_title', 'id="engine-card"', 'engine_deliveries_title', 'id="cal-card"'].map(k => section.indexOf(k));
+    assert.ok(order.every(i => i > 0), 'all six present');
     assert.deepEqual([...order].sort((a, b) => a - b), order);
     assert.ok(section.indexOf('id="intg-pane-engine"') < section.indexOf('id="engine-card"'), 'the Engine card is in the Engine pane');
     assert.ok(section.indexOf('id="intg-pane-deliveries"') < section.indexOf('id="engine-deliveries"'), 'the deliveries list is in its own pane');
@@ -72,7 +74,7 @@ describe('card anatomy', () => {
   });
   test('every message pill is beside its buttons in a settings-card-actions row', () => {
     const msgs = [...section.matchAll(/class="workspace-name-msg hidden"/g)];
-    assert.equal(msgs.length, 2);
+    assert.equal(msgs.length, 3, 'the webhook card, the Engine card and the Cal.com card');
     for (const m of msgs) {
       assert.ok(lastBefore('class="settings-card-actions"', m.index) > lastBefore('class="settings-card-header"', m.index));
     }

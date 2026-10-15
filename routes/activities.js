@@ -131,7 +131,7 @@ router.get('/', async (req, res, next) => {
     if (req.query.contact_id !== undefined && !Number.isInteger(contactFilter)) return res.status(400).json({ error: 'contact_id must be a number' });
     const { rows } = await pool.query(`
       SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
-             a.completed, a.source,
+             a.completed, a.source, a.cancelled_at, a.calcom_uid, a.calcom_event_type_id,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              c.name AS contact_name,
              a.deal_id AS bound_deal_id,
@@ -168,7 +168,7 @@ router.post('/', async (req, res, next) => {
       if (!d) return res.status(400).json({ error: 'Deal not found in this workspace' });
       if (!contactId) contactId = d.contact_id;
     }
-    if (!['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+    if (!['note','call','email','whatsapp','meeting'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
     const { rows: [row] } = await pool.query(
       'INSERT INTO activities (workspace_id, contact_id, type, content, created_by, event_date, event_time, event_tz, deal_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
@@ -186,7 +186,7 @@ router.get('/:id', async (req, res, next) => {
   try {
     const { rows: [row] } = await pool.query(`
       SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
-             a.completed, a.source,
+             a.completed, a.source, a.cancelled_at, a.calcom_uid, a.calcom_event_type_id,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' END) AS logged_by_name, u.email AS logged_by_email
       FROM activities a
@@ -205,7 +205,7 @@ router.patch('/:id', async (req, res, next) => {
     if (!content && completed === undefined && type === undefined && event_date === undefined && event_time === undefined) {
       return res.status(400).json({ error: 'Nothing to update' });
     }
-    if (type && !['note','call','email','whatsapp'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
+    if (type && !['note','call','email','whatsapp','meeting'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
     const result = await pool.query(
        `UPDATE activities SET

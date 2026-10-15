@@ -403,6 +403,42 @@ async function initDb() {
   await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS captured JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE workspace_webhook ADD COLUMN IF NOT EXISTS default_assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
 
+  // Cal.com (utils/calcom.js, routes/integrations.js /calcom): ONE connection per workspace, the
+  // sealed API key of a personal Cal.com account. receive_token names the public receiver for
+  // Cal.com's booking webhooks and webhook_secret signs them (both minted at connect, kept across
+  // reconnects); webhook_id is Cal.com's id for the webhook once it is registered. event_types is
+  // the account's list as last fetched; event_type_id the one bookings from a deal use.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_calcom (
+      id              SERIAL PRIMARY KEY,
+      workspace_id    INTEGER NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+      api_key_sealed  TEXT NOT NULL,
+      cal_user_id     INTEGER,
+      cal_username    TEXT,
+      cal_email       TEXT,
+      cal_name        TEXT,
+      cal_timezone    TEXT,
+      event_types     JSONB NOT NULL DEFAULT '[]',
+      event_type_id   INTEGER,
+      receive_token   TEXT NOT NULL UNIQUE,
+      webhook_secret  TEXT NOT NULL,
+      webhook_id      TEXT,
+      connected_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      connected_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ DEFAULT NOW(),
+      last_error      TEXT
+    )
+  `);
+  // A Cal.com booking is an activity of type 'meeting' with source 'calcom': calcom_uid is the
+  // booking's id (a reschedule or a cancellation finds its entry by it; one entry per booking per
+  // workspace), cancelled_at marks a cancelled booking that stays visible until someone deletes it.
+  // webhook_logs.source tells a Cal.com delivery from a lead.
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS calcom_uid   TEXT`);
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS calcom_event_type_id INTEGER`);   // the booking's event type: a reschedule asks for its slots
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_calcom_uid ON activities (workspace_id, calcom_uid) WHERE calcom_uid IS NOT NULL`);
+  await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'lead'`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_workspaces (
       user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
@@ -460,7 +496,7 @@ async function initDb() {
 
   try {
     await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);
-    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp'))`);
+    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp','meeting'))`);
   } catch (e) {
     if (e.code !== '42710') throw e;
   }
@@ -619,7 +655,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'user'`);
   try {
     await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_source_check`);
-    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine'))`);
+    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine','calcom'))`);
   } catch (e) {
     if (e.code !== '42710') throw e;
   }

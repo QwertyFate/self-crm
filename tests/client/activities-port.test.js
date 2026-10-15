@@ -40,6 +40,9 @@ const STUBS = `
   const icon = (n, c) => '<i ' + n + (c ? ' ' + c : '') + '>'; const avatar = (w, s) => '<av ' + (typeof w === 'string' ? w : w.name) + '>';
   const dvActHtml = s => s == null ? '' : String(s); const dvActText = s => s == null ? '' : String(s).replace(/<br>/g, '\\n');
   const fmtEURShort = v => v + '€'; let currentLang = 'en';
+  // Part 11 (Cal.com): a note is never a live meeting here, so the guarded delete runs the plain path
+  const dvIsLiveMeeting = () => false; const dvDeleteActivityGuarded = async (a, n, { plain }) => plain(); const openCalcomBooking = () => {}; const cancelCalcomMeeting = () => {};
+  const dvJoinRow = () => ''; const dvJoinButton = () => '';   // Part 12: a note has no meeting link, so no button
   let __defer = false; const __gets = []; function __deferGets(v) { __defer = v; } function __resolveGet(i, rows) { const g = __gets[i]; __gets[i] = null; g.res(rows); }
   const __calls = []; const api = { get: async u => { __calls.push(['get', u]); if (__defer) return new Promise(res => __gets.push({ u, res })); return []; }, post: async (u, b) => { __calls.push(['post', u, b]); return { id: 777 }; }, del: async u => { __calls.push(['del', u]); return { success: true }; } };
   const __toasts = []; let __confirm = true; const __menus = [];
@@ -114,14 +117,13 @@ describe('style.css: the split scrolls inside the clipped page; the old flat-fee
 });
 
 describe('types and periods', () => {
-  test('ACT_TYPES is exactly the database CHECK set and the route allow-list; meeting is not ported', () => {
+  test('ACT_TYPES is exactly the database CHECK set and the route allow-list; meeting joined on 2026-10-13 for Cal.com bookings (the generic port of it had been declined; the user chose the type over disguising a booking as a call)', () => {
     const types = new Function(sliceConst('public/js/objects.js', 'ACT_TYPES') + ' return ACT_TYPES;')();
     const dbSet = read('db.js').match(/activities_type_check CHECK\(type IN \(([^)]*)\)\)/)[1].match(/'(\w+)'/g).map(s => s.replace(/'/g, ''));
     assert.deepEqual(types, dbSet);
-    assert.ok(!types.includes('meeting'));
+    assert.deepEqual(types, ['note', 'call', 'email', 'whatsapp', 'meeting']);
     const route = read('routes/activities.js');
-    assert.match(route, /\['note','call','email','whatsapp'\]\.includes\(type\)/);
-    assert.doesNotMatch(route, /meeting/);
+    assert.equal((route.match(/\['note','call','email','whatsapp','meeting'\]\.includes\(type\)/g) || []).length, 2, 'POST and PATCH allow the five');
   });
   test('ACT_PERIODS mirrors the reference (all / today / 7d / 30d)', () => {
     assert.deepEqual(new Function(sliceConst('public/js/objects.js', 'ACT_PERIODS') + ' return ACT_PERIODS;')(), ['all', 'today', '7d', '30d']);
@@ -186,14 +188,14 @@ describe('toolbar: a Period chip next to Type / Person / Deal', () => {
     assert.equal(m.cur, 'all');
     F.openActivitiesChip({}, 'type');
     const ty = F.__state().menus.pop();
-    assert.deepEqual(ty.opts.map(o => o.value), [null, 'note', 'call', 'email', 'whatsapp']);
-    assert.deepEqual(ty.opts.slice(1).map(o => o.icon), ['note', 'call', 'email', 'whatsapp']);
+    assert.deepEqual(ty.opts.map(o => o.value), [null, 'note', 'call', 'email', 'whatsapp', 'meeting']);
+    assert.deepEqual(ty.opts.slice(1).map(o => o.icon), ['note', 'call', 'email', 'whatsapp', 'meeting']);
     ty.cb('call'); assert.equal(F.activitiesAnyFilter(), true);
   });
 });
 
 describe('the inline compose card', () => {
-  test('renders the type segment (four types), the textarea, Deal and Contact pickers sorted by name, the verb button and the error slot', () => {
+  test('renders the type segment (five types), the textarea, Deal and Contact pickers sorted by name, the verb button and the error slot', () => {
     const F = sandbox();
     F.__set('activityDealList', [{ id: 2, title: 'Zeta', contact_id: 11 }, { id: 1, title: 'Alpha <x>', contact_id: 10 }]);
     F.__set('activityContactList', [{ id: 11, name: 'Zoe', company: 'Z GmbH' }, { id: 10, name: 'Anna "A"', company: null }]);
@@ -201,7 +203,7 @@ describe('the inline compose card', () => {
     const h = F.__html('activities-compose');
     assert.match(h, /<form class="card ac-compose" id="ac-form" novalidate[^>]*onsubmit="submitActivityCompose\(event\)"/);
     const seg = [...h.matchAll(/data-ctype="(\w+)" aria-pressed="(true|false)"/g)].map(m => [m[1], m[2]]);
-    assert.deepEqual(seg, [['note', 'true'], ['call', 'false'], ['email', 'false'], ['whatsapp', 'false']]);
+    assert.deepEqual(seg, [['note', 'true'], ['call', 'false'], ['email', 'false'], ['whatsapp', 'false'], ['meeting', 'false']]);
     assert.match(h, /<textarea class="textarea" id="ac-text" rows="2" placeholder="act_ph_note"/);
     assert.match(h, /<select class="select" id="ac-deal" onchange="onActivityComposeDeal\(this\)"><option value="">opt_no_deal<\/option><option value="1" >Alpha &lt;x&gt;<\/option><option value="2" >Zeta<\/option>/);
     assert.match(h, /<select class="select" id="ac-contact" onchange="onActivityComposeContact\(this\)"><option value="">opt_no_contact<\/option><option value="10" >Anna &quot;A&quot;<\/option><option value="11" >Zoe, Z GmbH<\/option>/);
@@ -320,7 +322,7 @@ describe('the breakdown rail', () => {
     F.__set('activities', seed()); F.__set('activitiesUI', { q: '', type: 'call', by: null, deal: null, period: 'all' });
     const h = rail(F);
     const stats = [...h.matchAll(/<button class="ac-stat" type="button" data-stat-type="(\w+)" aria-pressed="(\w+)" onclick="toggleActivitiesStat\('type','\w+'\)"><span class="tl-ic \w+ ac-ic"><i \w+><\/span><span><span class="nm">act_\w+<\/span><span class="bar"><i style="width:(\d+)%"><\/i><\/span><\/span><span class="n">(\d+)<\/span><\/button>/g)].map(m => [m[1], m[2], m[3], m[4]]);
-    assert.deepEqual(stats, [['note', 'false', '100', '1'], ['call', 'true', '100', '1'], ['email', 'false', '100', '1'], ['whatsapp', 'false', '100', '1']]);
+    assert.deepEqual(stats, [['note', 'false', '100', '1'], ['call', 'true', '100', '1'], ['email', 'false', '100', '1'], ['whatsapp', 'false', '100', '1'], ['meeting', 'false', '0', '0']], 'the fifth type counts too, even at zero');
     assert.match(h, /<h2 class="card-title">rail_by_type<\/h2><span class="muted">one_activity<\/span>/, 'the header counts what is visible');
   });
   test('By person: every member, counted with the person filter skipped', () => {

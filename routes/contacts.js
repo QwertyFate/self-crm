@@ -188,7 +188,7 @@ router.get('/:id', async (req, res, next) => {
 
     const { rows: activities } = await pool.query(`
       SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
-             a.completed, a.source,
+             a.completed, a.source, a.cancelled_at, a.calcom_uid, a.calcom_event_type_id,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              a.deal_id, db.title AS deal_title,
              COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' END) AS logged_by_name, u.email AS logged_by_email

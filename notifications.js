@@ -7,6 +7,13 @@
      one multi-row INSERT. Called by the contacts, deals and tasks routes.
      entityType + entityId are what let the client jump to the record.
 
+   notifyUser(workspaceId, actorId, userId, {type, category, title, body, entityType, entityId})
+     ONE person, not the whole workspace: the assignee of a deal or a contact
+     when a meeting is booked, moved or cancelled (routes/integrations.js,
+     Cal.com Part 12). Skips the actor (they did it themselves) and honours
+     the same category preference. actorId may be null: a booking made on
+     Cal.com's own page has no CRM actor, so even the host is told.
+
    notifySystem(title, body, workspaceId?)
      A system announcement to everyone (one workspace, or all of them).
 
@@ -60,6 +67,24 @@ async function notify(workspaceId, actorId, { type, category, title, body, entit
   }
 }
 
+async function notifyUser(workspaceId, actorId, userId, { type, category, title, body, entityType, entityId }) {
+  try {
+    if (!userId || (actorId && userId === actorId)) return false;
+    const { rows: [user] } = await pool.query('SELECT id, notification_prefs FROM users WHERE id=$1 AND workspace_id=$2', [userId, workspaceId]);
+    if (!user) return false;
+    const prefs = user.notification_prefs || {};
+    if (category && prefs[category] === false) return false;
+    await pool.query(
+      'INSERT INTO notifications (workspace_id, user_id, actor_id, type, category, title, body, entity_type, entity_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+      [workspaceId, user.id, actorId || null, type, category, title, body || null, entityType || null, entityId || null]
+    );
+    return true;
+  } catch (e) {
+    console.error('Notification error:', e.message);
+    return false;
+  }
+}
+
 async function notifySystem(title, body, workspaceId = null) {
   try {
     const query = workspaceId
@@ -87,4 +112,4 @@ async function notifySystem(title, body, workspaceId = null) {
   }
 }
 
-module.exports = { notify, notifySystem };
+module.exports = { notify, notifyUser, notifySystem };

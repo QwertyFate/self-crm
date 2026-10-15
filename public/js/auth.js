@@ -56,6 +56,7 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 async function init() {
+  startAppVersionWatch();   // core.js: the tab reloads itself when the app changes on the server
   const params     = new URLSearchParams(window.location.search);
   const resetToken = params.get('reset');
 
@@ -131,7 +132,7 @@ function showApp() {
   loadNotifPrefs();
   startNotifPolling();
   startClock();
-  switchPage('deals');   // every entry lands on a freshly loaded Deals page, never on whatever page the previous user left active
+  switchPage(appRestorePage() || 'deals');   // after a self-reload (core.js) the same page again; every other entry lands on a freshly loaded Deals page, never on whatever page the previous user left active
   initChatSocket();
   refreshChatBadge();
   setTimeout(maybeStartGuide, 800);

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Upgrads CRM: eine Karte, fünf Phasen. Der Lead kommt von selbst an, jede Berührung steht am Deal, der Termin wird aus dem Deal gebucht, Aufgaben und Team-Chat hängen am selben Deal, und bei Gewonnen übernimmt die Upgrads Engine. Nur auf Einladung.">
+  <title>Upgrads CRM</title>
+  <link rel="icon" href="/images/logo.png" type="image/png">
+  <link rel="preload" href="/fonts/Syne.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/landing2.css">
+</head>
+<body>
+<svg class="bd-sprite" aria-hidden="true" focusable="false">
+  <symbol id="bd-i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="bd-i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+  <symbol id="bd-i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="bd-i-message" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-5A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="bd-i-note" viewBox="0 0 24 24"><path d="M5 4h11l4 4v12H5z"/><path d="M15 4v5h5"/></symbol>
+  <symbol id="bd-i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="bd-i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="bd-i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="bd-i-left" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M11 6l-6 6 6 6"/></symbol>
+  <symbol id="bd-i-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></symbol>
+  <symbol id="bd-i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+  <symbol id="bd-l-fb" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#1877F2"/><path fill="#FFFFFF" d="M13.5 20.5v-6.6h2.2l.4-2.6h-2.6V9.6c0-.7.3-1.3 1.4-1.3h1.3V6.1c-.2 0-1-.1-1.9-.1-1.9 0-3.2 1.2-3.2 3.3v2h-2.2v2.6h2.2v6.6z"/></symbol>
+  <symbol id="bd-l-ig" viewBox="0 0 24 24"><defs><linearGradient id="bd-ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#F9A23B"/><stop offset=".5" stop-color="#E1306C"/><stop offset="1" stop-color="#833AB4"/></linearGradient></defs><rect x="1" y="1" width="22" height="22" rx="6" fill="url(#bd-ig-g)"/><rect x="6" y="6" width="12" height="12" rx="3.5" fill="none" stroke="#FFFFFF" stroke-width="1.6"/><circle cx="12" cy="12" r="2.8" fill="none" stroke="#FFFFFF" stroke-width="1.6"/><circle cx="15.6" cy="8.4" r=".9" fill="#FFFFFF"/></symbol>
+  <symbol id="bd-l-tt" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#111111"/><path fill="#25F4EE" d="M12.6 7.2v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3v-4.3a5.1 5.1 0 0 0 3 1v-2.3a3 3 0 0 1-3-2.7z"/><path fill="#FE2C55" d="M13.4 6.4v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3v-4.3a5.1 5.1 0 0 0 3 1V9.1a3 3 0 0 1-3-2.7z"/><path fill="#FFFFFF" d="M13 6.8v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3v-4.3a5.1 5.1 0 0 0 3 1V9.5a3 3 0 0 1-3-2.7z"/></symbol>
+</svg>
+
+<!-- ══ The bar: the app's Deals header, turned to the page ═══════════════ -->
+<header class="bd-bar">
+  <div class="bd-wrap bd-bar-in">
+    <a class="bd-brand" href="#top"><img src="/images/logo.png" alt="Upgrads"></a>
+    <p class="bd-crumb"><span data-i18n="bd_deals">Deals</span><i aria-hidden="true">·</i><span>Verkauf</span></p>
+    <nav class="bd-bar-links">
+      <div class="bd-lang" role="group" data-i18n-aria="bd_lang" aria-label="Sprache">
+        <button type="button" class="bd-lang-btn" data-lang="de" aria-pressed="true">DE</button>
+        <button type="button" class="bd-lang-btn" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <a href="/" data-i18n="bd_login">Anmelden</a>
+      <a class="bd-btn bd-btn-primary bd-request" href="mailto:hello@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM"><svg class="bd-ic"><use href="#bd-i-plus"/></svg><span data-i18n="bd_request">Zugang anfragen</span></a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<!-- ══ The opening: four words, then the board ════════════════════════════ -->
+<section id="top" class="bd-open">
+  <div class="bd-wrap">
+    <h1 class="bd-h1" data-i18n="bd_hero_title">Eine Karte. Bis Gewonnen ziehen.</h1>
+    <p class="bd-lead" data-i18n="bd_hero_line">Jede Spalte zeigt, was das Produkt in dieser Phase tut. Nichts scrollen, ziehen.</p>
+  </div>
+</section>
+
+<!-- ══ The board is the page ═════════════════════════════════════════════ -->
+<section id="board" class="bd-board-wrap">
+  <div class="bd-wrap">
+    <div class="bd-board" id="bd-board" role="group" data-i18n-aria="bd_board_aria" aria-label="Das Board: eine Karte, fünf Phasen">
+
+      <section class="bd-col is-active" data-stage="new" data-i="0">
+        <header class="bd-col-head"><i class="bd-dot s-new"></i><span data-i18n="bd_st_new">Neu</span><b class="bd-count">1</b></header>
+        <p class="bd-col-sum">420.000 €</p>
+        <div class="bd-slot" id="bd-slot-0"></div>
+        <p class="bd-col-desc" data-i18n="bd_d1">Der Lead kommt an, bevor jemand ihn abtippt.</p>
+        <div class="bd-piece">
+          <div class="bd-sources">
+            <span class="bd-source"><svg class="bd-logo"><use href="#bd-l-fb"/></svg><span data-i18n="bd_src_fb">Facebook Ads</span></span>
+            <span class="bd-source"><svg class="bd-logo"><use href="#bd-l-ig"/></svg><span data-i18n="bd_src_ig">Instagram Ads</span></span>
+            <span class="bd-source"><svg class="bd-logo"><use href="#bd-l-tt"/></svg><span data-i18n="bd_src_tt">TikTok Ads</span></span>
+            <span class="bd-source"><svg class="bd-logo bd-logo-line"><use href="#bd-i-globe"/></svg><span data-i18n="bd_src_web">Website-Formular</span></span>
+          </div>
+          <p class="bd-via"><span data-i18n="bd_via">über</span><b>Make</b><b>Zapier</b><b>n8n</b></p>
+          <div class="bd-log"><span class="bd-badge bd-badge-ok" data-i18n="bd_lead_received">Lead empfangen</span><span data-i18n="bd_lead_result">Kontakt angelegt · Deal in Neu · Anna Weber</span></div>
+        </div>
+      </section>
+
+      <section class="bd-col" data-stage="contacted" data-i="1">
+        <header class="bd-col-head"><i class="bd-dot s-contacted"></i><span data-i18n="bd_st_contacted">Kontaktiert</span><b class="bd-count">0</b></header>
+        <p class="bd-col-sum">0 €</p>
+        <div class="bd-slot" id="bd-slot-1"></div>
+        <p class="bd-col-desc" data-i18n="bd_d2">Anruf, E-Mail, WhatsApp: jede Berührung steht am Deal.</p>
+        <div class="bd-piece">
+          <div class="bd-seg"><span data-i18n="bd_act_note">Notiz</span><span data-i18n="bd_act_call">Anruf</span><span data-i18n="bd_act_email">E-Mail</span><span aria-pressed="true" data-i18n="bd_act_whatsapp">WhatsApp</span></div>
+          <p class="bd-hint" data-i18n="bd_wa_hint">Lena Hoffmann, +49 151 2345678 · Vorlage: „Hallo Lena, “</p>
+          <div class="bd-entry"><span class="bd-entry-ic"><svg class="bd-ic"><use href="#bd-i-message"/></svg></span><div><b data-i18n="bd_act_whatsapp">WhatsApp</b><small data-i18n="bd_e2_when">Heute, 09:30 · Anna Weber</small><p data-i18n="bd_e2">Donnerstag 14 Uhr passt. Elbstraße?</p></div></div>
+          <div class="bd-entry"><span class="bd-entry-ic"><svg class="bd-ic"><use href="#bd-i-phone"/></svg></span><div><b data-i18n="bd_act_call">Anruf</b><small data-i18n="bd_e1_when">Gestern, 14:20 · Jonas Krüger</small><p data-i18n="bd_e1">Erstgespräch. Budget bis 450.000 €, Besichtigung gewünscht.</p></div></div>
+          <p class="bd-hint" data-i18n="bd_ctrl_enter">Strg+Enter speichert.</p>
+        </div>
+      </section>
+
+      <section class="bd-col" data-stage="offer" data-i="2">
+        <header class="bd-col-head"><i class="bd-dot s-offer"></i><span data-i18n="bd_st_offer">Angebot</span><b class="bd-count">0</b></header>
+        <p class="bd-col-sum">0 €</p>
+        <div class="bd-slot" id="bd-slot-2"></div>
+        <p class="bd-col-desc" data-i18n="bd_d3">Der Termin wird aus dem Deal gebucht.</p>
+        <div class="bd-piece">
+          <p class="bd-piece-title" data-i18n="bd_book_title">Termin mit Lena Hoffmann</p>
+          <dl class="bd-dl">
+            <dt data-i18n="bd_book_type">Terminart</dt><dd data-i18n="bd_book_type_v">Besichtigung (60 Min.)</dd>
+            <dt data-i18n="bd_book_where">Wo</dt><dd>Google Meet</dd>
+            <dt data-i18n="bd_book_when">Wann</dt><dd data-i18n="bd_book_when_v">Donnerstag, 14:00 bis 15:00</dd>
+            <dt data-i18n="bd_book_check">Teamkalender</dt><dd data-i18n="bd_book_check_v">geprüft, keine Überschneidung</dd>
+          </dl>
+          <div class="bd-log"><span class="bd-badge bd-badge-ok" data-i18n="bd_booked">Gebucht</span><span data-i18n="bd_booked_d">Cal.com schickt die Einladung an l.hoffmann@hoffmann-partner.de.</span></div>
+          <p class="bd-join"><svg class="bd-ic"><use href="#bd-i-external"/></svg><span data-i18n="bd_join">Google Meet beitreten</span><small data-i18n="bd_in_history">im Verlauf des Deals</small></p>
+        </div>
+      </section>
+
+      <section class="bd-col" data-stage="nego" data-i="3">
+        <header class="bd-col-head"><i class="bd-dot s-nego"></i><span data-i18n="bd_st_nego">Verhandlung</span><b class="bd-count">0</b></header>
+        <p class="bd-col-sum">0 €</p>
+        <div class="bd-slot" id="bd-slot-3"></div>
+        <p class="bd-col-desc" data-i18n="bd_d4">Aufgaben, Kalender, Team-Chat: alle am selben Deal.</p>
+        <div class="bd-piece">
+          <div class="bd-task is-done"><i class="bd-check"><svg class="bd-ic"><use href="#bd-i-check"/></svg></i><div><b data-i18n="bd_t1">Rückruf Lena Hoffmann</b><small data-i18n="bd_t1_d">Erledigt · heute, 11:30</small></div></div>
+          <div class="bd-task"><i class="bd-check"></i><div><b data-i18n="bd_t2">Notartermin vorbereiten</b><small data-i18n="bd_t2_d">Morgen fällig · Jonas Krüger</small></div></div>
+          <div class="bd-task"><i class="bd-check"></i><div><b data-i18n="bd_t3">Finanzierungsbestätigung einholen</b><small data-i18n="bd_t3_d">In 3 Tagen · Anna Weber</small></div></div>
+          <div class="bd-chat"><span class="bd-avatar">MS</span><div><b>Mira Schulz <small data-i18n="bd_chat_online">online</small></b><p data-i18n="bd_chat_msg">@Anna Weber die Unterlagen liegen im Deal.</p></div></div>
+        </div>
+      </section>
+
+      <section class="bd-col bd-col-won" data-stage="won" data-i="4">
+        <header class="bd-col-head"><i class="bd-dot s-won"></i><span data-i18n="bd_st_won">Gewonnen</span><b class="bd-count">0</b></header>
+        <p class="bd-col-sum">0 €</p>
+        <div class="bd-slot" id="bd-slot-4"></div>
+        <p class="bd-col-desc" data-i18n="bd_d5">Gewonnen ist ein Zug. Dann übernimmt die Upgrads Engine.</p>
+        <div class="bd-piece">
+          <div class="bd-log"><b data-i18n="bd_engine">Upgrads Engine</b><span class="bd-badge bd-badge-ok" data-i18n="bd_delivered">Zugestellt</span></div>
+          <ol class="bd-stations" data-i18n-aria="bd_stations_aria" aria-label="Die Stationen des Onboardings">
+            <li class="is-on"><i></i><span data-i18n="bd_s1">Formular versendet</span></li><li><i></i><span data-i18n="bd_s2">Formular ausgefüllt</span></li><li><i></i><span data-i18n="bd_s3">Termin gebucht</span></li><li><i></i><span data-i18n="bd_s4">Call erfolgt</span></li><li><i></i><span data-i18n="bd_s5">Briefing fertig</span></li><li><i></i><span data-i18n="bd_s6">Abgeschlossen</span></li>
+          </ol>
+          <p class="bd-hint" data-i18n="bd_engine_rule">Die Engine füllt nur leere Felder. Was das Team eingetragen hat, bleibt.</p>
+          <a class="bd-next" href="mailto:hello@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM"><b data-i18n="bd_next_t">Der nächste Deal wartet.</b><span data-i18n="bd_next_d">Nur auf Einladung. Zugang anfragen.</span></a>
+        </div>
+      </section>
+
+      <article class="bd-card" id="bd-card" tabindex="0" role="button" data-i18n-aria="bd_card_aria" aria-label="Elbstraße 12, Verkauf. Pfeiltasten verschieben die Karte.">
+        <b class="bd-card-title">Elbstraße 12, Verkauf</b>
+        <small>Lena Hoffmann, Hoffmann &amp; Partner</small>
+        <span class="bd-card-value">420.000 €</span>
+        <span class="bd-card-foot"><span class="bd-badge bd-badge-warn" data-i18n="bd_urg_high">Hoch</span><span class="bd-src"><svg class="bd-logo"><use href="#bd-l-fb"/></svg><span data-i18n="bd_from_fb">aus Facebook Ads</span></span><span class="bd-avatar">AW</span></span>
+        <span class="bd-card-steps"><button type="button" class="bd-step" data-dir="-1" data-i18n-aria="bd_back" aria-label="Eine Phase zurück"><svg class="bd-ic"><use href="#bd-i-left"/></svg></button><button type="button" class="bd-step" data-dir="1" data-i18n-aria="bd_forward" aria-label="Eine Phase weiter"><svg class="bd-ic"><use href="#bd-i-right"/></svg></button></span>
+      </article>
+
+    </div>
+    <p class="bd-foot-line" data-i18n="bd_board_foot">Ziehen, antippen oder Pfeiltasten. Jeder Zug lässt sich zurücknehmen.</p>
+  </div>
+</section>
+
+<!-- ══ The close ═════════════════════════════════════════════════════════ -->
+<section id="zugang" class="bd-close">
+  <div class="bd-wrap">
+    <h2 class="bd-h2" data-i18n="bd_close_title">Nur auf Einladung.</h2>
+    <p class="bd-lead" data-i18n="bd_close_line">Ein Code trägt die Rolle. Der erste Deal kann am selben Tag ankommen.</p>
+    <div class="bd-actions">
+      <a class="bd-btn bd-btn-primary bd-btn-lg bd-request" href="mailto:hello@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM"><span data-i18n="bd_request">Zugang anfragen</span></a>
+      <a class="bd-btn bd-btn-lg" href="/"><span data-i18n="bd_login">Anmelden</span></a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="bd-foot">
+  <div class="bd-wrap bd-foot-in">
+    <p class="bd-lockup"><img src="/images/logo.png" alt="Upgrads"><span data-i18n="bd_crm">CRM</span></p>
+    <p class="bd-foot-note" data-i18n="bd_foot_note">Alle Daten auf dieser Seite sind erfunden.</p>
+  </div>
+</footer>
+
+<div class="bd-toast hidden" id="bd-toast" role="status" aria-live="polite"><span id="bd-toast-text"></span><button type="button" class="bd-toast-undo hidden" id="bd-toast-undo" data-i18n="bd_undo">Rückgängig</button></div>
+<script src="/js/landing2.js"></script>
+</body>
+</html>

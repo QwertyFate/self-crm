@@ -21,7 +21,8 @@
                           visible on reload; other assets cache for an hour.
    6. routes              every /api/* mount, one line each. The ONLY place
                           that knows the full URL map.
-   7. /adminconsole       serves public/admin.html; /landingpage serves public/landingpage.html.
+   7. /adminconsole       serves public/admin.html; /landingpage serves public/landingpage.html;
+      /landingpagetwo serves public/landingpagetwo.html (the second landing design, kept for comparison).
    8. catch-all GET *     serves public/index.html, which is why the client can
                           have "pages" without any URL routing.
    9. error handler       entity.too.large → 413 with a readable message,
@@ -43,6 +44,7 @@
 const express    = require('express');
 const http       = require('http');
 const { Server } = require('socket.io');
+const { APP_VERSION } = require('./utils/app-version');   // the client files' fingerprint: open tabs reload themselves when it changes
 const session    = require('express-session');
 const pgSession  = require('connect-pg-simple')(session);
 const path       = require('path');
@@ -117,6 +119,13 @@ const webhookKeyLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
   keyGenerator: (req) => req.params.key || 'unknown',
 });
+// Cal.com's booking receiver: the same two limits, the second keyed by the receive token in the path.
+const calcomTokenLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 120,
+  message: { error: 'Webhook rate limit exceeded. Maximum 120 requests per minute per receiver.' },
+  standardHeaders: true, legacyHeaders: false,
+  keyGenerator: (req) => req.path || 'unknown',
+});
 // Onboarding Engine API (/api/kunden): 300 requests per minute per IP. The number is
 // published to the Engine team in ENGINE_INTEGRATION.md; the body is the Engine's error
 // shape, not the { error } the browser routes use.
@@ -131,6 +140,10 @@ const engineApiLimiter = rateLimit({
 // re-parsing a request whose body it already read, so the global json() below still
 // applies to every other route at the default, smaller limit).
 app.use('/api/contacts/import', express.json({ limit: '10mb' }));
+// Cal.com's booking webhooks are signed over the raw body (x-cal-signature-256), so this path
+// keeps the bytes for routes/integrations.js to verify; the global json() below skips a body
+// that was already read.
+app.use('/api/integrations/calcom/receive', express.raw({ type: '*/*', limit: '1mb' }));
 app.use(express.json());
 // Engine API paths: a malformed or oversized body is a body-parser error BEFORE the routers run.
 // Answer the Engine's { fehler } shape (400 / 413) instead of the browser's { error } — and never a crash.
@@ -190,6 +203,7 @@ app.use('/api/chat',          require('./routes/chat'));
 app.use('/api/analytics',     require('./routes/analytics'));
 app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
+app.use('/api/integrations/calcom/receive', webhookIpLimiter, calcomTokenLimiter);
 app.use('/api/integrations',  require('./routes/integrations'));
 app.use('/api/engine',        require('./routes/engine'));
 // Onboarding Engine API: API-key auth (no session), German error shape, rate-limited.
@@ -205,7 +219,12 @@ app.use('/api/dokumente',     require('./routes/engine-dokumente'));   // GET /:
 app.get('/adminconsole', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 // The public landing page: a standalone document (landingpage.html + landing.css + js/landing.js), no session.
 app.get('/landingpage', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landingpage.html')));
+// The second landing design (landingpagetwo.html + landing2.css + js/landing2.js), standalone like the first; one of the two will be removed once chosen.
+app.get('/landingpagetwo', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landingpagetwo.html')));
 
+// The client files' fingerprint. Every open tab asks for it (and hears it on each socket connect)
+// and reloads itself when it changes, so a deploy reaches people without a manual refresh.
+app.get('/api/version', (req, res) => { res.setHeader('Cache-Control', 'no-store'); res.json({ version: APP_VERSION }); });
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 app.use((err, req, res, next) => {
@@ -255,6 +274,8 @@ io.on('connection', async (socket) => {
     );
     if (!mem) { socket.disconnect(); return; }
   } catch { socket.disconnect(); return; }
+
+  socket.emit('app:version', APP_VERSION);   // the tab compares it with the version it was loaded with
 
   let userName = 'Unknown';
   try {

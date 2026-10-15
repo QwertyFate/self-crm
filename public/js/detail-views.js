@@ -58,6 +58,7 @@ const DV_ACT_TYPES = [
   { id: 'call', label: 'act_call', icon: 'phone', verb: 'act_verb_call', ph: 'act_ph_call' },
   { id: 'email', label: 'act_email', icon: 'mail', verb: 'act_verb_email', ph: 'act_ph_email' },
   { id: 'whatsapp', label: 'act_whatsapp', icon: 'message-circle', verb: 'act_verb_whatsapp', ph: 'act_ph_whatsapp' },
+  { id: 'meeting', label: 'act_meeting', icon: 'calendar', verb: 'act_verb_meeting', ph: 'act_ph_meeting' },   // a Cal.com booking, or a meeting logged by hand
 ];
 const dvTypeOf = id => DV_ACT_TYPES.find(x => x.id === id) || DV_ACT_TYPES[0];
 const dvPlural = (n, oneKey, manyKey) => n === 1 ? t(oneKey) : tf(manyKey, { n });   // dictionary keys: the singular carries its "1", the plural a {n}
@@ -77,7 +78,10 @@ const DV_PRIO = { urgent: ['prio_urgent', 'danger'], high: ['prio_high', 'warnin
 // tags stripped, entities decoded), THEN escape, THEN newline → <br>. Every legitimate note
 // looks exactly as before, and no stored markup can ever reach the DOM — the old version trusted
 // any string that contained a tag, which a raw "<img onerror=…>" would have satisfied.
-function dvActHtml(s) { return esc(dvActText(s)).replace(/\n/g, '<br>'); }
+// Activity text as HTML: escaped, every link clickable (a new tab), line breaks kept.
+function dvActHtml(s) { return dvLinkify(esc(dvActText(s))).replace(/\n/g, '<br>'); }
+// Every http(s) address in ALREADY ESCAPED text becomes a link; closing punctuation stays outside it.
+function dvLinkify(escaped) { return String(escaped || '').replace(/https?:\/\/[^\s<]*[^\s<.,;:!?)"']/g, m => `<a href="${m}" target="_blank" rel="noopener">${m}</a>`); }
 function dvActText(s) {
   const t = String(s || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li)>/gi, '\n').replace(/<[^>]*>/g, '')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ');
@@ -150,6 +154,240 @@ function dvInlineEdit(btn, { value, type = 'text', size = '', label = '', parse 
 /* ══════════════════════════════════════════════════════════════════════════
    DEAL FORM — reference Forms.deal (create, or "Edit all" on an existing deal)
    ══════════════════════════════════════════════════════════════════════════ */
+/* ── Cal.com: booking a meeting from a deal or a contact (Step 3, 2026-10-13) ──────────
+   The status (GET /api/integrations/calcom) is fetched at most once a minute; the button
+   shows only while Cal.com is connected and an event type is chosen. Everyone may book:
+   the host is always the connected account, the entry belongs to whoever booked. The
+   dialog offers the event type, a month calendar (the days with free times enabled, Monday
+   first, arrows by month) and then a time, in the viewer's zone; a picked time is checked against the
+   CRM's own calendar (the booker's and the host's timed entries, which Cal.com cannot
+   see) and a conflict is shown, with "Trotzdem buchen" still possible; "Buchen" posts it
+   (POST /api/integrations/calcom/book), the server writes the entry at once and Cal.com
+   sends the invitation. A contact without an email cannot be booked: the dialog says so
+   and offers the contact form. */
+let dvCalcomCache = { at: 0, data: null };
+// fresh: ask the server to re-read the event types from Cal.com first (the dialog does, in the background)
+async function dvCalcomStatus(fresh = false) {
+  if (!fresh && Date.now() - dvCalcomCache.at < 60000) return dvCalcomCache.data;
+  let data = null;
+  try { data = await api.get('/api/integrations/calcom' + (fresh ? '?fresh=1' : '')); } catch { data = null; }
+  dvCalcomCache = { at: Date.now(), data: data && !data.error ? data : null };
+  return dvCalcomCache.data;
+}
+function dvCalcomReady(status) { return !!(status && status.connected && status.calcom && status.calcom.event_type); }
+function dvBookButton(status, disabledTitle) {
+  if (!dvCalcomReady(status)) return '';
+  return `<button class="btn btn-secondary" data-act="book" ${disabledTitle ? `disabled title="${esc(disabledTitle)}"` : ''}>${icon('calendar')}${esc(t('cal_book_btn'))}</button>`;
+}
+function dvIsoDateIn(zone) { return new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+function dvAddDays(iso, n) { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+// An instant as the wall clock of a zone: { date: 'YYYY-MM-DD', time: 'HH:MM' }.
+function dvZonedParts(iso, zone) {
+  const p = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(iso));
+  const g = k => p.find(x => x.type === k)?.value;
+  return { date: `${g('year')}-${g('month')}-${g('day')}`, time: `${g('hour')}:${g('minute')}` };
+}
+
+// ── Cal.com: a booked meeting's own actions (Part 11) ─────────────────────────
+// A live meeting is an entry from Cal.com with a booking id that is not cancelled. It can be
+// moved (the booking dialog in reschedule mode) or cancelled (a confirmation with an optional
+// reason, which Cal.com shows the customer); both ask first. Deleting such an entry warns that the
+// booking stays in Cal.com and offers to cancel it instead; "delete here only" is the confirmation.
+const dvIsLiveMeeting = a => !!(a && a.source === 'calcom' && a.calcom_uid && !a.cancelled_at);
+
+async function cancelCalcomMeeting(activity, contactName, onDone) {
+  if (!dvIsLiveMeeting(activity)) return;
+  const m = ui.modal({ title: t('cal_cancel_q'), size: 'sm',
+    body: `<div class="cal-book"><p class="sub">${esc(tf('cal_cancel_msg', { name: contactName || t('lbl_contact') }))}</p><div class="field"><label class="label" for="cal-cancel-reason">${esc(t('cal_cancel_reason'))}</label><textarea class="textarea" id="cal-cancel-reason" rows="2"></textarea></div></div>`,
+    footer: `<button class="btn btn-secondary" data-close>${esc(t('btn_cancel'))}</button><button class="btn btn-danger" id="cal-cancel-go">${esc(t('cal_cancel_btn'))}</button>` });
+  const go = m.el.querySelector('#cal-cancel-go');
+  go.addEventListener('click', async () => {
+    go.disabled = true; go.textContent = t('cal_cancel_busy');
+    const reason = m.el.querySelector('#cal-cancel-reason')?.value || '';
+    const res = await api.post('/api/integrations/calcom/cancel', { activity_id: activity.id, reason });
+    if (!res || res.error) { go.disabled = false; go.textContent = t('cal_cancel_btn'); ui.toast(res?.error || t('cal_err_generic')); return; }
+    m.close();
+    ui.toast(t('cal_cancel_done'));
+    if (onDone) await onDone(res);
+  });
+}
+
+// Delete, guarded: a live meeting gets the warning with the two ways out; anything else runs `plain`
+// (the view's own confirmation and delete).
+async function dvDeleteActivityGuarded(activity, contactName, { plain, deleteOnly, afterCancel }) {
+  if (!dvIsLiveMeeting(activity)) return plain();
+  const m = ui.modal({ title: t('cal_del_q'), size: 'sm', body: `<p class="sub">${esc(t('cal_del_msg'))}</p>`,
+    footer: `<button class="btn btn-secondary" data-close>${esc(t('btn_cancel'))}</button><button class="btn btn-secondary" data-del-only>${esc(t('cal_del_only'))}</button><button class="btn btn-danger" data-cancel-meeting>${esc(t('cal_cancel_btn'))}</button>` });
+  on(m.el, 'click', '[data-del-only]', async () => { m.close(); await deleteOnly(); });
+  on(m.el, 'click', '[data-cancel-meeting]', () => { m.close(); cancelCalcomMeeting(activity, contactName, afterCancel); });
+}
+
+// The two icon buttons a live meeting gets in a timeline, before edit and delete.
+function dvMeetingButtons(a) {
+  if (!dvIsLiveMeeting(a)) return '';
+  return `<button class="iconbtn dd-ibtn" data-act="act-resched" data-id="${a.id}" aria-label="${esc(t('cal_resched_btn'))}" title="${esc(t('cal_resched_btn'))}">${icon('refresh')}</button><button class="iconbtn dd-ibtn" data-act="act-meeting-cancel" data-id="${a.id}" aria-label="${esc(t('cal_cancel_btn'))}" title="${esc(t('cal_cancel_btn'))}">${icon('x')}</button>`;
+}
+// ── the meeting link, one click away (Part 12) ─────────────────────────────
+// The link of a meeting: the first address in the entry's text (Cal.com's title, then the link on
+// its own line). Google Meet links arrive with the webhook a moment after the booking; until then
+// there is none and no button.
+const dvMeetingLink = a => { const m = /https?:\/\/[^\s<]+/.exec(String(a?.content || '')); return m ? m[0] : null; };
+// The app behind a link, by its host; null when nobody knows the host (the button then says "open the link").
+const DV_MEETING_APPS = [[/(^|\.)meet\.google\.com$/, 'Google Meet'], [/(^|\.)zoom\.(us|com)$/, 'Zoom'], [/teams\.(microsoft|live)\.com$/, 'Microsoft Teams'], [/(^|\.)cal\.com$/, 'Cal Video'], [/(^|\.)daily\.co$/, 'Cal Video'], [/(^|\.)whereby\.com$/, 'Whereby'], [/(^|\.)webex\.com$/, 'Webex'], [/jit\.si$|(^|\.)jitsi\./, 'Jitsi']];
+function dvMeetingApp(url) {
+  let host;
+  try { host = new URL(String(url)).hostname.toLowerCase(); } catch { return null; }
+  const hit = DV_MEETING_APPS.find(([re]) => re.test(host));
+  return hit ? hit[1] : null;
+}
+// The one-click way into a live meeting: a small button that opens the link in a new tab, named
+// after the app ("Google Meet beitreten"). Nothing for a cancelled meeting or one without a link.
+function dvJoinButton(a, cls = 'btn btn-secondary btn-sm') {
+  if (!dvIsLiveMeeting(a)) return '';
+  const url = dvMeetingLink(a);
+  if (!url) return '';
+  const app = dvMeetingApp(url);
+  return `<a class="${cls} dv-join" href="${esc(url)}" target="_blank" rel="noopener">${icon('external')}${esc(app ? tf('cal_join', { app }) : t('cal_join_link'))}</a>`;
+}
+// The button under an entry's text, in its own row; empty when there is no button.
+function dvJoinRow(a) { const b = dvJoinButton(a); return b ? `<div class="dv-join-row">${b}</div>` : ''; }
+
+// reschedule: the live meeting entry to move (its booking keeps the type, the place and the attendee)
+async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule = null } = {}) {
+  const status = await dvCalcomStatus();
+  if (!dvCalcomReady(status) || !contact) { ui.toast(t('cal_status_none')); return; }
+  if (!reschedule && !contact.email) {
+    const m = ui.modal({ title: t('cal_book_btn'), size: 'sm', body: `<p class="sub">${esc(t('cal_book_no_email'))}</p>`,
+      footer: `<button class="btn btn-secondary" data-close>${esc(t('btn_cancel'))}</button>${typeof openContactModal === 'function' ? `<button class="btn btn-primary" data-open-contact>${esc(t('cal_book_open_contact'))}</button>` : ''}` });
+    on(m.el, 'click', '[data-open-contact]', () => { m.close(); currentContactType = contact.contact_type || 'contact'; openContactModal(contact.id); });
+    return;
+  }
+  let cal = status.calcom;
+  let types = Array.isArray(cal.event_types) && cal.event_types.length ? cal.event_types : [cal.event_type];
+  const zone = currentTimezone(), locale = currentLang === 'de' ? 'de-DE' : 'en-GB', todayIso = dvIsoDateIn(zone);
+  // month: the month on the calendar ('YYYY-MM'); date: the chosen day; picked: the chosen slot's start (ISO);
+  // conflicts: CRM entries at that time; loc: the chosen place among the type's locations
+  const B = { month: todayIso.slice(0, 7), typeId: (reschedule && reschedule.calcom_event_type_id) || cal.event_type.id, slots: null, loading: true, date: '', picked: null, conflicts: [], checking: false, note: '', err: '', busy: false, loc: 0 };
+  const fmtTime = iso => new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: zone });
+  // the same instant on a 12-hour clock, "2:00 PM", so nobody has to convert; shown beside the 24-hour time
+  const fmtAmPm = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: zone });
+  const ampmOf  = hhmm => { const d = new Date(Date.UTC(2000, 0, 1, Number(hhmm.slice(0, 2)), Number(hhmm.slice(3, 5)))); return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'UTC' }); };
+  const fmtDay  = iso => new Date(iso + 'T12:00:00Z').toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short' });   // noon UTC: the same calendar day in every zone
+  const fmtWhen = iso => new Date(iso).toLocaleString(locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: zone });
+  // the month: its title, its days, where it starts in a Monday-first week, the weekday heads
+  const monthTitle = ym => new Date(ym + '-01T12:00:00Z').toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+  const daysInMonth = ym => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();
+  const addMonths = (ym, n) => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1 + n, 1)).toISOString().slice(0, 7);
+  const lead = ym => (new Date(ym + '-01T00:00:00Z').getUTCDay() + 6) % 7;   // blanks before the 1st, Monday first
+  const dows = Array.from({ length: 7 }, (_, i) => new Date(Date.UTC(2024, 0, 1 + i)).toLocaleDateString(locale, { weekday: 'short', timeZone: 'UTC' }));   // 2024-01-01 is a Monday
+  const typeOf  = () => types.find(x => x.id === B.typeId) || cal.event_type;
+  const slotEnd = s => s.end || new Date(new Date(s.start).getTime() + (typeOf().lengthInMinutes || 30) * 60000).toISOString();
+  const slotsOf = d => (B.slots && B.slots[d]) || [];
+  const monthDays = () => Array.from({ length: daysInMonth(B.month) }, (_, i) => `${B.month}-${String(i + 1).padStart(2, '0')}`);
+  const bookable = d => d >= todayIso && slotsOf(d).length > 0;
+  // where it can happen: the type's locations a booker can choose (a video app, the host's address, link or phone)
+  const placesOf = () => (Array.isArray(typeOf().locations) ? typeOf().locations : []).filter(l => l && (l.type === 'integration' ? !!l.integration : ['address', 'link', 'phone'].includes(l.type)));
+  const APPS = { 'cal-video': 'Cal Video', 'google-meet': 'Google Meet', zoom: 'Zoom', 'office365-video': 'Microsoft Teams', jitsi: 'Jitsi', 'webex-video': 'Webex', 'whereby-video': 'Whereby' };
+  const placeLabel = l => l.type === 'integration' ? (APPS[l.integration] || l.integration) : l.type === 'address' ? (l.address ? tf('cal_loc_address', { address: l.address }) : t('cal_loc_address_plain')) : l.type === 'link' ? t('cal_loc_link') : t('cal_loc_phone');
+  const placeOf = () => placesOf()[B.loc] || null;
+  const m = ui.modal({ title: tf(reschedule ? 'cal_resched_title' : 'cal_book_title', { name: contact.name }), size: 'md', body: '<div id="cal-book" class="cal-book"></div>',
+    footer: `<button class="btn btn-secondary" data-close>${esc(t('btn_cancel'))}</button><button class="btn btn-primary" id="cal-book-go" disabled>${esc(t(reschedule ? 'cal_resched_submit' : 'cal_book_submit'))}</button>` });
+  const host = m.el.querySelector('#cal-book'), go = m.el.querySelector('#cal-book-go');
+  function render() {
+    const places = placesOf(), place = placeOf();
+    const field = (id, labelKey, control) => `<div class="field"><label class="label" for="${id}">${esc(t(labelKey))}</label>${control}</div>`;
+    const typeSel = field('cal-book-type', 'cal_book_type', `<select class="select" id="cal-book-type">${types.map(x => `<option value="${Number(x.id)}"${x.id === B.typeId ? ' selected' : ''}>${esc(x.title)}${x.lengthInMinutes ? ` (${esc(tf('cal_minutes', { n: x.lengthInMinutes }))})` : ''}</option>`).join('')}</select>`);
+    const whereSel = places.length ? field('cal-book-where', 'cal_book_where', `<select class="select" id="cal-book-where">${places.map((l, i) => `<option value="${i}"${i === B.loc ? ' selected' : ''}>${esc(placeLabel(l))}</option>`).join('')}</select>`) : '';
+    // what: the event type and, when the type offers a choice, where; a meeting being moved keeps both, so it shows its type and its current time instead
+    const current = reschedule && reschedule.event_date ? toViewerClock(reschedule.event_date, reschedule.event_time || '00:00', reschedule.event_tz) : null;
+    const what = reschedule
+      ? `<div class="cal-book-sec"><div class="field-row">${field('cal-book-type', 'cal_book_type', `<input type="text" id="cal-book-type" class="input" readonly value="${esc(typeOf().title || '')}">`)}<div class="field"><span class="label">${esc(t('cal_resched_current'))}</span><input type="text" class="input" readonly value="${esc(current ? `${fmtDay(current.date)}, ${current.time} (${ampmOf(current.time)})` : '')}"></div></div></div>`
+      : `<div class="cal-book-sec"><div class="field-row">${typeSel}${whereSel}</div></div>`;
+    // when: the month with its arrows, the days (the free ones enabled), then the time, then where the clock is
+    const loading = B.loading || !B.slots;
+    const head = `<div class="cal-book-nav"><span class="cal-book-range">${esc(monthTitle(B.month))}</span><span class="cal-book-navbtns"><button type="button" class="btn btn-secondary btn-sm btn-icon" data-mnav="-1" aria-label="${esc(t('cal_book_month_prev'))}"${B.month <= todayIso.slice(0, 7) ? ' disabled' : ''}>${icon('chevron-left')}</button><button type="button" class="btn btn-secondary btn-sm btn-icon" data-mnav="1" aria-label="${esc(t('cal_book_month_next'))}">${icon('chevron-right')}</button></span></div>`;
+    const cells = Array.from({ length: lead(B.month) }, () => '<span class="cal-book-dayb is-blank" aria-hidden="true"></span>').concat(monthDays().map(d => {
+      const n = slotsOf(d).length, ok = bookable(d), on = d === B.date;
+      return `<button type="button" class="cal-book-dayb${ok ? ' is-free' : ''}${on ? ' is-on' : ''}${d === todayIso ? ' is-today' : ''}" data-day="${d}"${ok ? '' : ' disabled'} aria-pressed="${on}" aria-label="${esc(fmtDay(d))}${ok ? ', ' + esc(n === 1 ? t('cal_book_one_time') : tf('cal_book_n_times', { n })) : ''}">${Number(d.slice(8, 10))}</button>`;
+    })).join('');
+    const grid = loading ? `<p class="help">${esc(t('cal_book_loading'))}</p>`
+      : `<div class="cal-book-month" role="group" aria-label="${esc(t('cal_book_date'))}"><div class="cal-book-dows">${dows.map(w => `<span>${esc(w)}</span>`).join('')}</div><div class="cal-book-grid">${cells}</div>${monthDays().some(bookable) ? '' : `<p class="help">${esc(t('cal_book_none_month'))}</p>`}</div>`;
+    const timeSel = field('cal-book-time', 'cal_book_time', `<select class="select" id="cal-book-time"${B.date ? '' : ' disabled'}><option value="">${esc(t('cal_book_time_ph'))}</option>${slotsOf(B.date).map(s => `<option value="${esc(s.start)}"${B.picked === s.start ? ' selected' : ''}>${esc(tf('cal_book_slot', { from: fmtTime(s.start), to: fmtTime(slotEnd(s)), ampm: fmtAmPm(s.start) }))}</option>`).join('')}</select>`);
+    const when = `<div class="cal-book-sec">${head}${grid}${timeSel}<p class="help">${esc(tf('cal_book_zone', { zone, host: cal.cal_name || cal.cal_email || '' }))}</p></div>`;
+    // the check, the note, and the one accent: what will be booked
+    const conflict = !B.picked ? '' : B.checking ? `<p class="help">${esc(t('cal_book_checking'))}</p>`
+      : B.conflicts.length ? `<div class="cal-book-conflict" role="alert">${B.conflicts.map(c => `<p>${esc(tf('cal_book_conflict', { time: c.time, title: c.title, who: c.who }))}</p>`).join('')}<p>${esc(t('cal_book_conflict_hint'))}</p></div>` : '';
+    const note = `<div class="cal-book-sec">${field('cal-book-note', reschedule ? 'cal_resched_reason' : 'cal_book_note', `<textarea class="textarea" id="cal-book-note" rows="2" placeholder="${esc(t(reschedule ? 'cal_resched_reason_ph' : 'cal_book_note_ph'))}">${esc(B.note)}</textarea>`)}</div>`;
+    const slot = B.picked ? slotsOf(B.date).find(x => x.start === B.picked) || { start: B.picked } : null;
+    const summary = slot ? `<div class="cal-book-summary">${icon('calendar')}<div><b>${esc(fmtDay(B.date))}, ${esc(tf('cal_book_slot', { from: fmtTime(slot.start), to: fmtTime(slotEnd(slot)), ampm: fmtAmPm(slot.start) }))}</b><span>${esc([place ? placeLabel(place) : '', tf('cal_book_with', { name: contact.name })].filter(Boolean).join(', '))}</span></div></div>` : '';
+    host.innerHTML = `<p class="help">${esc(tf('cal_book_invite_to', { email: contact.email }))}</p>${what}${when}${conflict}${note}${summary}${B.err ? `<p class="cal-book-err" role="alert">${esc(B.err)}</p>` : ''}`;
+    go.disabled = !B.picked || B.busy || B.checking;
+    go.textContent = B.busy ? t(reschedule ? 'cal_resched_busy' : 'cal_book_booking') : B.conflicts.length ? t('cal_book_anyway') : t(reschedule ? 'cal_resched_submit' : 'cal_book_submit');
+  }
+  // the whole month's free slots in one read; the first bookable day is preselected
+  async function load() {
+    B.loading = true; B.date = ''; B.picked = null; B.conflicts = []; render();
+    const r = await api.get(`/api/integrations/calcom/slots?from=${B.month}-01&days=${daysInMonth(B.month)}&event_type_id=${B.typeId}${reschedule ? '&reschedule_uid=' + encodeURIComponent(reschedule.calcom_uid) : ''}`);
+    B.loading = false;
+    if (!r || r.error) { B.slots = {}; B.err = r?.error || t('cal_err_generic'); }
+    else { B.slots = r.slots || {}; B.err = ''; B.date = monthDays().find(bookable) || ''; }
+    render();
+  }
+  // The CRM's own calendar at that time, which Cal.com cannot see: timed entries of the booker and
+  // of the host (tasks, calls, meetings), compared on the viewer's clock; a CRM entry has no length,
+  // so it counts as 30 minutes, like the calendar draws it. Done and cancelled things do not collide.
+  async function checkConflicts() {
+    const start = B.picked; if (!start) { B.conflicts = []; return; }
+    B.checking = true; render();
+    const slot = slotsOf(B.date).find(x => x.start === start) || { start };
+    const sv = dvZonedParts(start, zone), ev = dvZonedParts(slotEnd(slot), zone);
+    const mins = hhmm => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+    const s0 = mins(sv.time), s1 = ev.date === sv.date ? mins(ev.time) : 24 * 60;
+    const people = new Set([currentUser?.id, cal.host_user_id].filter(Boolean));
+    const rows = await api.get(`/api/calendar?start=${dvAddDays(sv.date, -1)}&end=${dvAddDays(sv.date, 1)}`);
+    const found = [];
+    for (const e of Array.isArray(rows) ? rows : []) {
+      if (!e.event_time || e.cancelled_at || e.completed || e.status === 'done' || !people.has(e.created_by)) continue;
+      if (reschedule && e.kind !== 'task' && e.id === reschedule.id) continue;   // the meeting being moved is not its own conflict
+      const v = toViewerClock(e.event_date, e.event_time, e.event_tz);
+      if (v.date !== sv.date) continue;
+      const t0 = mins(v.time), t1 = t0 + 30;
+      if (t0 < s1 && t1 > s0) found.push({ time: `${v.time} (${ampmOf(v.time)})`, title: e.title || t('act_' + e.type), who: e.created_by_name || '' });
+    }
+    if (B.picked !== start) return;   // the pick changed while the calendar was read
+    B.conflicts = found; B.checking = false; render();
+  }
+  on(host, 'change', '#cal-book-type', (e, el) => { B.typeId = Number(el.value); B.loc = 0; load(); });
+  on(host, 'change', '#cal-book-where', (e, el) => { B.loc = Number(el.value) || 0; });
+  on(host, 'click', '[data-mnav]', (e, el) => { B.month = addMonths(B.month, Number(el.dataset.mnav)); if (B.month < todayIso.slice(0, 7)) B.month = todayIso.slice(0, 7); load(); });
+  on(host, 'click', '[data-day]', (e, el) => { if (!bookable(el.dataset.day)) return; B.date = el.dataset.day; B.picked = null; B.conflicts = []; B.err = ''; render(); host.querySelector('#cal-book-time')?.focus(); });
+  on(host, 'change', '#cal-book-time', (e, el) => { B.picked = el.value || null; B.conflicts = []; B.err = ''; if (B.picked) checkConflicts(); else render(); });
+  on(host, 'input', '#cal-book-note', (e, el) => { B.note = el.value; });
+  go.addEventListener('click', async () => {
+    if (!B.picked) { B.err = t('cal_book_pick_first'); render(); return; }
+    B.busy = true; B.err = ''; render();
+    const place = placeOf();
+    const res = reschedule
+      ? await api.post('/api/integrations/calcom/reschedule', { activity_id: reschedule.id, start: B.picked, reason: B.note })
+      : await api.post('/api/integrations/calcom/book', { deal_id: dealId, contact_id: contact.id, event_type_id: B.typeId, start: B.picked, note: B.note, language: currentLang, location: place ? (place.type === 'integration' ? { type: 'integration', integration: place.integration } : { type: place.type }) : null });
+    B.busy = false;
+    if (!res || res.error) { B.err = res?.error || t('cal_err_generic'); render(); return; }
+    const when = `${fmtWhen(B.picked)} (${fmtAmPm(B.picked)})`;
+    m.close();
+    ui.toast(reschedule ? tf('cal_resched_done', { when, name: contact.name }) : tf('cal_book_done', { when }));
+    if (onBooked) await onBooked(res);
+  });
+  render(); load();
+  // meanwhile the event types are re-read from Cal.com, so a location added there shows without a Refresh
+  dvCalcomStatus(true).then(fresh => {
+    if (!dvCalcomReady(fresh) || !host.isConnected) return;
+    cal = fresh.calcom; types = Array.isArray(cal.event_types) && cal.event_types.length ? cal.event_types : [cal.event_type];
+    if (!types.some(x => x.id === B.typeId)) { B.typeId = cal.event_type.id; B.loc = 0; load(); return; }
+    if (B.loc >= placesOf().length) B.loc = 0;
+    render();
+  });
+}
+
 async function openDealForm(opts = {}) {
   await Promise.all([ensureMembers(), pipelines.length ? null : api.get('/api/pipelines').then(r => { pipelines = r; }), dealFields.length ? null : api.get('/api/deal-fields').then(r => { dealFields = r; })]);
   const [allContacts, allSuppliers] = await Promise.all([dvContacts('contact'), dvContacts('supplier')]);
@@ -226,10 +464,10 @@ let dvDeal = null;   // the open deal detail instance (one at a time)
 async function openDealDetail(id, opts = {}) {
   if (dvDeal) dvDeal.close();
   await Promise.all([ensureMembers(), pipelines.length ? null : api.get('/api/pipelines').then(r => { pipelines = r; }), dealFields.length ? null : api.get('/api/deal-fields').then(r => { dealFields = r; })]);
-  const [d, allContacts, allSuppliers, allTasks, objs] = await Promise.all([api.get(`/api/deals/${id}`), dvContacts('contact'), dvContacts('supplier'), dvAllTasks(), api.get('/api/objects')]);
+  const [d, allContacts, allSuppliers, allTasks, objs, calStatus] = await Promise.all([api.get(`/api/deals/${id}`), dvContacts('contact'), dvContacts('supplier'), dvAllTasks(), api.get('/api/objects'), dvCalcomStatus()]);
   if (!d || d.error) { ui.toast(t('dv_deal_gone')); return; }
   objects = Array.isArray(objs) ? objs : objects;
-  const S = { d, contacts: allContacts, suppliers: allSuppliers, tasks: allTasks.filter(x => x.deal_id === d.id && !x.parent_id), acts: [], tab: 'activity', actsOnly: false, type: 'note', text: '', textErr: '', filter: null, editAct: null, editText: '', addTask: false, task: { title: '', due_on: false, due_date: '', due_time: '', priority: 'medium', assigned_to: currentUser?.id || '' }, taskErr: '', gone: false };
+  const S = { calcom: calStatus, d, contacts: allContacts, suppliers: allSuppliers, tasks: allTasks.filter(x => x.deal_id === d.id && !x.parent_id), acts: [], tab: 'activity', actsOnly: false, type: 'note', text: '', textErr: '', filter: null, editAct: null, editText: '', addTask: false, task: { title: '', due_on: false, due_date: '', due_time: '', priority: 'medium', assigned_to: currentUser?.id || '' }, taskErr: '', gone: false };
   const contactOf = () => S.contacts.find(c => c.id === S.d.contact_id) || null;
   const supplierOf = () => S.suppliers.find(c => c.id === S.d.supplier_id) || null;
   const pipe = () => pipelines.find(p => p.id === S.d.pipeline_id) || { name: '', stages: [] };
@@ -279,6 +517,7 @@ async function openDealDetail(id, opts = {}) {
         <button class="btn btn-secondary" data-act="qa" data-type="call" ${dis}>${icon('phone')}${esc(t('act_call'))}</button>
         <button class="btn btn-secondary" data-act="qa" data-type="email" ${dis}>${icon('mail')}${esc(t('act_email'))}</button>
         <button class="btn btn-secondary" data-act="qa" data-type="whatsapp" ${dis}>${icon('message-circle')}WhatsApp</button>
+        ${dvBookButton(S.calcom, c ? '' : t('dv_no_contact_deal'))}
         <button class="btn btn-secondary btn-icon" data-act="more" aria-label="${esc(t('dv_more_actions'))}" aria-haspopup="menu">${icon('ellipsis')}</button>
       </div></div>`;
   }
@@ -336,11 +575,11 @@ async function openDealDetail(id, opts = {}) {
   function tlItem(a) {
     const ty = dvTypeOf(a.type), editing = S.editAct === a.id;
     return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main">
-      <div class="tl-head"><b>${esc(t(ty.label))}</b>${a.bound_deal_id && a.bound_deal_id !== S.d.id ? `<span class="badge badge-outline" title="${esc(t('dv_logged_other_deal'))}" style="margin-right:6px">${esc(a.deal_title || t('dv_other_deal'))}</span>` : ''}${a.logged_by_name ? `<span class="muted">${esc(tf('dv_by_name', { name: a.logged_by_name }))}</span>` : ''}<span class="dd-tl-time muted" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
-        <span class="dd-tl-actions"><button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
+      <div class="tl-head"><b>${esc(t(ty.label))}</b>${a.cancelled_at ? `<span class="badge badge-danger" style="margin-right:6px">${esc(t('act_cancelled'))}</span>` : ''}${a.bound_deal_id && a.bound_deal_id !== S.d.id ? `<span class="badge badge-outline" title="${esc(t('dv_logged_other_deal'))}" style="margin-right:6px">${esc(a.deal_title || t('dv_other_deal'))}</span>` : ''}${a.logged_by_name ? `<span class="muted">${esc(tf('dv_by_name', { name: a.logged_by_name }))}</span>` : ''}<span class="dd-tl-time muted" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
+        <span class="dd-tl-actions">${dvMeetingButtons(a)}<button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
       ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="dd-act-edit" rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
           <div class="row" style="justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" data-act="act-save" data-id="${a.id}">${esc(t('btn_save'))}</button></div></div>`
-        : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActHtml(a.content)}</div>`}</div></div>`;
+        : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActHtml(a.content)}</div>${dvJoinRow(a)}`}</div></div>`;
   }
   function activityHtml() {
     const ty = dvTypeOf(S.type), all = S.acts, list = S.filter ? all.filter(a => a.type === S.filter) : all, c = contactOf();
@@ -485,10 +724,15 @@ async function openDealDetail(id, opts = {}) {
     ui.toast(tf('act_logged', { type: t(ty.label) })); const ta = R('#dd-compose-text'); ta && ta.focus();
   }
   async function delAct(aid) {
-    const ok = await ui.confirm({ title: t('dv_delete_entry_q'), message: t('dv_delete_entry_deal_msg'), confirmLabel: t('btn_delete'), danger: true }); if (!ok) return;
-    const res = await api.del(`/api/activities/${aid}`); if (res?.error) return ui.toast(res.error);
-    await loadActs(); render('head main'); ui.toast(t('dv_entry_deleted'));
+    const a = S.acts.find(x => x.id === aid), refresh = async () => { await loadActs(); render('head main'); };
+    const remove = async () => { const res = await api.del(`/api/activities/${aid}`); if (res?.error) return ui.toast(res.error); await refresh(); ui.toast(t('dv_entry_deleted')); };
+    await dvDeleteActivityGuarded(a, contactOf()?.name, {
+      plain: async () => { const ok = await ui.confirm({ title: t('dv_delete_entry_q'), message: t('dv_delete_entry_deal_msg'), confirmLabel: t('btn_delete'), danger: true }); if (ok) await remove(); },
+      deleteOnly: remove, afterCancel: refresh,
+    });
   }
+  function reschedAct(aid) { const a = S.acts.find(x => x.id === aid); if (!a) return; openCalcomBooking({ reschedule: a, contact: contactOf() || { id: a.contact_id, name: a.contact_name }, dealId: S.d.id, onBooked: async () => { await loadActs(); render('head main'); } }); }
+  function cancelAct(aid) { const a = S.acts.find(x => x.id === aid); if (!a) return; cancelCalcomMeeting(a, contactOf()?.name, async () => { await loadActs(); render('head main'); }); }
   async function del() {
     const ok = await ui.confirm({ title: t('delete_deal_q'), message: t('dv_delete_deal_msg'), confirmLabel: t('delete_deal'), danger: true }); if (!ok) return;
     const res = await api.del(`/api/deals/${S.d.id}`); if (res?.error) return ui.toast(res.error);
@@ -528,13 +772,14 @@ async function openDealDetail(id, opts = {}) {
     'stage-menu': el => ui.select(el, pipe().stages.map(s => ({ value: s.id, label: s.name })), S.d.stage_id, move),
     owner: el => ui.select(el, [{ value: null, label: t('unassigned') }, ...members.map(x => ({ value: x.id, label: x.name }))], S.d.assigned_to, v => { if (v === S.d.assigned_to) return; commit({ assigned_to: v }, t('dv_owner_updated'), { assigned_to_name: members.find(x => x.id === v)?.name || null }); }),
     qa: el => quick(el.dataset.type), more: el => moreMenu(el),
+    book: () => openCalcomBooking({ dealId: S.d.id, contact: contactOf(), onBooked: async () => { await loadActs(); render('head main'); } }),
     ctype: el => { S.type = el.dataset.type; S.textErr = ''; render('main'); R(`[data-act="ctype"][data-type="${S.type}"]`)?.focus(); },
     tlfilter: el => ui.select(el, [{ value: null, label: t('dv_all_types') }, ...DV_ACT_TYPES.map(x => ({ value: x.id, label: t(x.label), icon: x.icon }))], S.filter, v => { S.filter = v; render('main'); }),
     tlclear: () => { S.filter = null; render('main'); },
     'act-edit': el => { const a = S.acts.find(x => x.id === +el.dataset.id); if (!a) return; S.editAct = a.id; S.editText = dvActText(a.content); render('main'); const ta = R('#dd-act-edit'); if (ta) { dvAutoGrow(ta); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } },
     'act-cancel': () => { S.editAct = null; render('main'); },
     'act-save': async el => { const ta = R('#dd-act-edit'), v = ta.value.trim(); if (!v) { ta.setAttribute('aria-invalid', 'true'); ta.focus(); return; } const res = await api.patch(`/api/activities/${+el.dataset.id}`, { content: esc(v).replace(/\n/g, '<br>') }); if (res?.error) return ui.toast(res.error); S.editAct = null; await loadActs(); render('main'); ui.toast(t('entry_updated')); },
-    'act-del': el => delAct(+el.dataset.id),
+    'act-del': el => delAct(+el.dataset.id), 'act-resched': el => reschedAct(+el.dataset.id), 'act-meeting-cancel': el => cancelAct(+el.dataset.id),
     'task-add': () => { S.addTask = true; S.taskErr = ''; render('main'); R('#dd-task-title')?.focus(); },
     'task-cancel': () => { S.addTask = false; S.taskErr = ''; render('main'); },
     'open-task': el => openTaskDrawer(+el.dataset.id, { onChange: async () => { S.tasks = (await dvAllTasks()).filter(t2 => t2.deal_id === S.d.id && !t2.parent_id); render('main'); } }),
@@ -559,8 +804,8 @@ async function openDealDetail(id, opts = {}) {
   // Same gestures as the contact panel: a click opens the editor, a double-click too; a click
   // that merely ends a text selection is ignored so the selection is not thrown away.
   const noteEdit = el => A['act-edit']({ dataset: { id: el.dataset.note } });
-  on(root, 'click', '[data-note]', (e, el) => { if (!String(window.getSelection() || '')) noteEdit(el); });
-  on(root, 'dblclick', '[data-note]', (e, el) => noteEdit(el));
+  on(root, 'click', '[data-note]', (e, el) => { if (e.target.closest('a')) return; if (!String(window.getSelection() || '')) noteEdit(el); });   // a link in a note is followed, not edited
+  on(root, 'dblclick', '[data-note]', (e, el) => { if (!e.target.closest('a')) noteEdit(el); });
   on(root, 'keydown', '#dd-act-edit', e => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.editAct = null; render('main'); }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const b = R('[data-act="act-save"]'); b && A['act-save'](b); }
@@ -585,11 +830,11 @@ async function openDealDetail(id, opts = {}) {
    ══════════════════════════════════════════════════════════════════════════ */
 async function openContactDetail(id, opts = {}) {
   await Promise.all([ensureFields(), ensureMembers()]);
-  const [c, contactDeals, allTasks, contactDocs] = await Promise.all([api.get(`/api/contacts/${id}`), api.get(`/api/deals?contact_id=${id}`), dvAllTasks(), api.get(`/api/contacts/${id}/documents`)]);
+  const [c, contactDeals, allTasks, calStatus, contactDocs] = await Promise.all([api.get(`/api/contacts/${id}`), api.get(`/api/deals?contact_id=${id}`), dvAllTasks(), dvCalcomStatus(), api.get(`/api/contacts/${id}/documents`)]);
   if (!c || c.error) { ui.toast(t('dv_contact_gone')); return; }
   if (!pipelines.length) pipelines = await api.get('/api/pipelines');
   const sup = c.contact_type === 'supplier', noun = sup ? dvSupplierWord() : t('lbl_contact'), one = dvLower(noun);   // `one` sits inside sentences: lower case in English, capital in German
-  const S = { c, deals: Array.isArray(contactDeals) ? contactDeals : [], tasks: allTasks.filter(x => x.contact_id === id && !x.parent_id), docs: Array.isArray(contactDocs) ? contactDocs : [], tab: 'overview', draft: { type: 'note', text: '', err: false, filter: 'all' }, editAct: null, editText: '' };
+  const S = { calcom: calStatus, c, deals: Array.isArray(contactDeals) ? contactDeals : [], tasks: allTasks.filter(x => x.contact_id === id && !x.parent_id), docs: Array.isArray(contactDocs) ? contactDocs : [], tab: 'overview', draft: { type: 'note', text: '', err: false, filter: 'all' }, editAct: null, editText: '' };
   const acts = () => S.c.activities || [];
   const stageOfDeal = d => (pipelines.find(p => p.id === d.pipeline_id)?.stages || []).find(s => s.id === d.stage_id);
   const sumVal = a => a.reduce((s, d) => s + (Number(d.value) || 0), 0);
@@ -612,11 +857,11 @@ async function openContactDetail(id, opts = {}) {
   };
   const actItem = a => {
     const ty = dvTypeOf(a.type), editing = S.editAct === a.id;
-    return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main"><div class="tl-head"><b>${esc(t(ty.label))}</b>${a.deal_title ? `<span class="badge badge-outline" title="${esc(t('dv_logged_on_deal'))}" style="margin-left:6px">${esc(a.deal_title)}</span>` : ''}<span class="muted" style="font-size:var(--fs-sm)">${a.logged_by_name ? esc(tf('dv_by_name', { name: a.logged_by_name })) : ''}</span><span class="muted" style="margin-left:auto;font-size:var(--fs-sm)" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
-      <span class="dd-tl-actions"><button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
+    return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main"><div class="tl-head"><b>${esc(t(ty.label))}</b>${a.cancelled_at ? `<span class="badge badge-danger" style="margin-left:6px">${esc(t('act_cancelled'))}</span>` : ''}${a.deal_title ? `<span class="badge badge-outline" title="${esc(t('dv_logged_on_deal'))}" style="margin-left:6px">${esc(a.deal_title)}</span>` : ''}<span class="muted" style="font-size:var(--fs-sm)">${a.logged_by_name ? esc(tf('dv_by_name', { name: a.logged_by_name })) : ''}</span><span class="muted" style="margin-left:auto;font-size:var(--fs-sm)" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
+      <span class="dd-tl-actions">${dvMeetingButtons(a)}<button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
       ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="ct-aedit" rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
           <div class="row-between"><span class="help">${esc(t('enter_saves_esc_cancels'))}</span><span class="row"><button class="btn btn-secondary btn-sm" type="button" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" type="button" data-act="act-save">${esc(t('btn_save'))}</button></span></div></div>`
-        : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActHtml(a.content)}</div>`}</div></div>`;
+        : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActHtml(a.content)}</div>${dvJoinRow(a)}`}</div></div>`;
   };
   const taskRow = x => { const done = x.status === dvDoneKey(), pr = DV_PRIO[x.priority] || DV_PRIO.medium, late = taskIsOverdue(x, done);
     return `<li class="list-item"><label class="check round"><input type="checkbox" data-task-toggle="${x.id}" aria-label="${esc(done ? tf('dv_mark_not_done', { title: x.title }) : tf('dv_mark_done', { title: x.title }))}" ${done ? 'checked' : ''}></label>
@@ -702,6 +947,7 @@ async function openContactDetail(id, opts = {}) {
         <div class="page-actions">${telHref ? `<a class="btn btn-secondary" href="${esc(telHref)}">${icon('phone')}${esc(t('act_call'))}</a>` : `<button class="btn btn-secondary" disabled title="${esc(t('dv_no_phone'))}">${icon('phone')}${esc(t('act_call'))}</button>`}
           ${S.c.email ? `<a class="btn btn-secondary" href="mailto:${esc(S.c.email)}">${icon('mail')}${esc(t('act_email'))}</a>` : `<button class="btn btn-secondary" disabled title="${esc(t('dv_no_email'))}">${icon('mail')}${esc(t('act_email'))}</button>`}
           ${w ? `<a class="btn btn-secondary" href="${esc(w)}" target="_blank" rel="noopener">${icon('message-circle')}WhatsApp</a>` : `<button class="btn btn-secondary" disabled title="${esc(t('dv_no_phone'))}">${icon('message-circle')}WhatsApp</button>`}
+          ${dvBookButton(S.calcom, S.c.email ? '' : t('dv_no_email'))}
           <button class="btn btn-secondary" data-act="edit-all">${icon('pencil')}${esc(t('btn_edit'))}</button>
           <button class="btn btn-secondary btn-icon" data-act="more" aria-label="${esc(t('dv_more_actions'))}" aria-haspopup="menu">${icon('ellipsis')}</button></div></div>
       <div class="split split-2-1 ct-split"><section class="card" style="align-self:start"><div class="tabs" role="tablist" aria-label="${esc(S.c.name)}" style="padding:0 8px">
@@ -769,10 +1015,15 @@ async function openContactDetail(id, opts = {}) {
       { label: t('dv_copy_phone'), icon: 'copy', onSelect: () => S.c.phone ? navigator.clipboard.writeText(S.c.phone).then(() => ui.toast(t('dv_phone_copied'))) : ui.toast(t('dv_no_phone')) }, { sep: true },
       { label: tf('dv_delete_noun', { noun: one }), icon: 'trash', danger: true, onSelect: async () => { const ok = await ui.confirm({ title: tf('dv_delete_noun_q', { noun: one }), message: t('dv_delete_contact_msg'), confirmLabel: t('btn_delete'), danger: true }); if (!ok) return; const res = await api.del(`/api/contacts/${id}`); if (res?.error) return ui.toast(res.error); close(); invalidate(); if (typeof loadContacts === 'function' && document.getElementById('page-contacts')?.classList.contains('active')) loadContacts(); ui.toast(tf('dv_noun_deleted', { noun })); } }], { align: 'right' }),
     'add-deal': () => openDealForm({ contactId: id, onSave: async () => { S.deals = await api.get(`/api/deals?contact_id=${id}`) || []; render(); } }),
+    book: () => openCalcomBooking({ contact: S.c, onBooked: async () => { const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); } }),
     'add-task': () => openTaskForm({ contactId: id, contactName: S.c.name, onSave: async () => { S.tasks = (await dvAllTasks()).filter(x => x.contact_id === id && !x.parent_id); render(); } }),
     'open-deal': el => { close(); openDealDetail(+el.dataset.id); },
     'open-task': el => openTaskDrawer(+el.dataset.id, { onChange: async () => { S.tasks = (await dvAllTasks()).filter(x => x.contact_id === id && !x.parent_id); render(); } }),
-    'act-del': async el => { const ok = await ui.confirm({ title: t('dv_delete_entry_q'), message: t('dv_delete_entry_msg'), confirmLabel: t('btn_delete'), danger: true }); if (!ok) return; const res = await api.del(`/api/activities/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); ui.toast(t('dv_entry_deleted')); },
+    'act-del': async el => { const aid = +el.dataset.id, a = acts().find(x => x.id === aid); const refresh = async () => { const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); };
+      const remove = async () => { const res = await api.del(`/api/activities/${aid}`); if (res?.error) return ui.toast(res.error); const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); ui.toast(t('dv_entry_deleted'));  };
+      await dvDeleteActivityGuarded(a, S.c.name, { plain: async () => { const ok = await ui.confirm({ title: t('dv_delete_entry_q'), message: t('dv_delete_entry_msg'), confirmLabel: t('btn_delete'), danger: true }); if (ok) await remove(); }, deleteOnly: remove, afterCancel: refresh }); },
+    'act-resched': el => { const a = acts().find(x => x.id === +el.dataset.id); if (!a) return; openCalcomBooking({ reschedule: a, contact: S.c, dealId: a.deal_id || null, onBooked: async () => { const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); } }); },
+    'act-meeting-cancel': el => { const a = acts().find(x => x.id === +el.dataset.id); if (!a) return; cancelCalcomMeeting(a, S.c.name, async () => { const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); }); },
     'act-edit': el => startNoteEdit(+el.dataset.id),
     'act-cancel': () => { S.editAct = null; S.editText = ''; render(); },
     'act-save': () => saveNoteEdit(),
@@ -806,8 +1057,8 @@ async function openContactDetail(id, opts = {}) {
     render(); ui.toast(t('entry_updated'));
   }
   // A click that ends a text selection should not swallow the selection by re-rendering.
-  offs.push(on(host, 'click', '[data-note]', (e, el) => { if (!String(window.getSelection() || '')) startNoteEdit(+el.dataset.note); }));
-  offs.push(on(host, 'dblclick', '[data-note]', (e, el) => startNoteEdit(+el.dataset.note)));
+  offs.push(on(host, 'click', '[data-note]', (e, el) => { if (e.target.closest('a')) return; if (!String(window.getSelection() || '')) startNoteEdit(+el.dataset.note); }));   // a link in a note is followed, not edited
+  offs.push(on(host, 'dblclick', '[data-note]', (e, el) => { if (!e.target.closest('a')) startNoteEdit(+el.dataset.note); }));
   offs.push(on(host, 'input', '#ct-aedit', (e, el) => { S.editText = el.value; el.removeAttribute('aria-invalid'); dvAutoGrow(el); }));
   offs.push(on(host, 'keydown', '#ct-aedit', e => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.editAct = null; S.editText = ''; render(); }

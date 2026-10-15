@@ -67,6 +67,7 @@ const CAL_TYPES = [
   { id: 'call',     key: 'act_call',     color: 'var(--success)'    },
   { id: 'email',    key: 'act_email',    color: 'var(--violet-500)' },
   { id: 'whatsapp', key: 'act_whatsapp', color: 'var(--warning)'    },
+  { id: 'meeting',  key: 'act_meeting',  color: 'var(--violet)'     },   // a Cal.com booking, or a meeting logged by hand
   { id: 'task',     key: 'new_task',     color: 'var(--brand)'      },
 ];
 const CAL_H0 = 8, CAL_H1 = 19, CAL_HH = 48;   // the grid shows 08:00–20:00 unless events fall outside
@@ -168,8 +169,8 @@ function calEvButton(e) {
   const title = calTitleOf(e);
   const who = e.kind === 'task' ? '' : (e.contact_name ? `${e.contact_name}: ` : '');
   const when = e.event_time ? e.event_time : t('cal_all_day');
-  return `<button class="cal-ev ${e.type}${e.completed ? ' done' : ''}" data-ev="${e.uid}" onclick="event.stopPropagation();openCalendarEntry('${e.uid}')"
-    title="${esc(calTypeLabel(e.type))}: ${esc(who + title)}${e.event_time ? ', ' + esc(e.event_time) : ''}"
+  return `<button class="cal-ev ${e.type}${e.completed || e.cancelled ? ' done' : ''}${e.cancelled ? ' cancelled' : ''}" data-ev="${e.uid}" onclick="event.stopPropagation();openCalendarEntry('${e.uid}')"
+    title="${e.cancelled ? esc(t('act_cancelled')) + ': ' : ''}${esc(calTypeLabel(e.type))}: ${esc(who + title)}${e.event_time ? ', ' + esc(e.event_time) : ''}"
     aria-label="${esc(calTypeLabel(e.type))}: ${esc(who + title)}, ${esc(when)}, ${esc(calFmtDay(e.event_date, { weekday: 'long', day: 'numeric', month: 'long' }))}">${
     e.event_time ? `<b>${esc(e.event_time)}</b>` : ''}${esc(who + title)}</button>`;
 }
@@ -231,7 +232,7 @@ function calWeekEvButton(x, h0) {
   const top = (x.s - h0 * 60) / 60 * CAL_HH;
   const hgt = Math.max(22, (x.en - x.s) / 60 * CAL_HH - 2);
   const w = 100 / x.lanes, e = x.ev, title = calTitleOf(e);
-  return `<button class="cal-ev cal-wev ${e.type}${e.completed ? ' done' : ''}${hgt < 40 ? ' tight' : ''}" data-ev="${e.uid}"
+  return `<button class="cal-ev cal-wev ${e.type}${e.completed || e.cancelled ? ' done' : ''}${e.cancelled ? ' cancelled' : ''}${hgt < 40 ? ' tight' : ''}" data-ev="${e.uid}"
     onclick="event.stopPropagation();openCalendarEntry('${e.uid}')"
     style="top:${top}px;height:${hgt}px;left:calc(${x.lane * w}% + 2px);width:calc(${w}% - 4px)"
     title="${esc(title)}, ${esc(e.event_time)}" aria-label="${esc(calTypeLabel(e.type))}: ${esc(title)}, ${esc(e.event_time)}"><span class="t"><b>${esc(e.event_time)}</b>${esc(title)}</span>${
@@ -287,7 +288,7 @@ function calendarUpcoming() {
     html += `<div class="cal-up-day">${esc(head)}</div>` + evs.map(e => `
       <button class="cal-up-item" data-ev="${e.uid}" onclick="openCalendarEntry('${e.uid}')">
         <span class="cal-bar ${e.type}"></span>
-        <div class="grow" style="min-width:0"><div class="t truncate${e.completed ? ' done' : ''}">${esc(calTitleOf(e))}</div>
+        <div class="grow" style="min-width:0"><div class="t truncate${e.completed || e.cancelled ? ' done' : ''}">${e.cancelled ? esc(t('act_cancelled')) + ': ' : ''}${esc(calTitleOf(e))}</div>
         <div class="m truncate">${e.event_time ? esc(e.event_time) : esc(t('cal_all_day'))}${e.kind === 'task' ? ' · ' + esc(t('new_task')) : ''}${e.contact_name ? ', ' + esc(e.contact_name) : ''}</div></div>
         ${e.created_by_name ? avatar(e.created_by_name, 'sm') : ''}</button>`).join('');
   }
@@ -431,6 +432,7 @@ function calNormalize(data) {
       stored_time: storedTime,
       event_tz: e.event_tz || null,
       completed: !!e.completed,
+      cancelled: !!e.cancelled_at,   // a Cal.com booking that was cancelled stays on the calendar, struck through
     };
   });
 }
@@ -485,6 +487,8 @@ function openCalendarEventDetail(uid) {
         <span class="badge"><i class="cal-dot ${e.type}"></i>${esc(t(ty.key))}</span>
         <span class="badge badge-outline">${esc(rel)}</span>
         ${e.completed ? `<span class="badge badge-success">${esc(t('tk_done'))}</span>` : ''}
+        ${e.calcom_uid ? `<span class="badge badge-outline">${esc(t('src_calcom'))}</span>` : ''}
+        ${e.cancelled_at ? `<span class="badge badge-danger">${esc(t('act_cancelled'))}</span>` : ''}
       </div>
       <dl class="kv" style="grid-template-columns:100px minmax(0,1fr);align-items:start">
         <dt>${esc(t('cal_when'))}</dt><dd>${esc(calFmtDay(e.event_date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}
@@ -502,10 +506,17 @@ function openCalendarEventDetail(uid) {
       </dl>
       <label class="check"><input type="checkbox" ${e.completed ? 'checked' : ''}
         onchange="toggleCalendarDone('${e.uid}', this.checked)"><span>${esc(t('cal_mark_done'))}</span></label>
-      <div class="cal-note">${esc(stripHtml(e.content || '')) || `<span class="muted">${esc(t('cal_no_details'))}</span>`}</div>
+      <div class="cal-note">${dvActHtml(e.content) || `<span class="muted">${esc(t('cal_no_details'))}</span>`}</div>
     </div>`,
-    footer: `<button class="btn btn-secondary" data-close>${esc(t('btn_close'))}</button>`,
+    footer: `${dvJoinButton(e, 'btn btn-primary')}${dvIsLiveMeeting(e) ? `<button class="btn btn-secondary" data-cal-resched>${icon('refresh')}${esc(t('cal_resched_btn'))}</button><button class="btn btn-danger-ghost" data-cal-cancel>${icon('x')}${esc(t('cal_cancel_btn'))}</button>` : ''}<button class="btn btn-secondary" data-close>${esc(t('btn_close'))}</button>`,
   });
+  // a booked meeting can be moved or cancelled from here (detail-views.js); the calendar reloads after
+  if (dvIsLiveMeeting(e)) {
+    const entry = { id: e.id, source: e.source, calcom_uid: e.calcom_uid, calcom_event_type_id: e.calcom_event_type_id, event_date: e.stored_date, event_time: e.stored_time, event_tz: e.event_tz, cancelled_at: e.cancelled_at, contact_id: e.contact_id, contact_name: e.contact_name, deal_id: e.deal_id };
+    const who = { id: e.contact_id, name: e.contact_name || t('lbl_contact') };
+    on(calDetailModal.el, 'click', '[data-cal-resched]', () => { const m = calDetailModal; calDetailModal = null; m.close(); openCalcomBooking({ reschedule: entry, contact: who, dealId: e.deal_id || null, onBooked: () => renderCalendar() }); });
+    on(calDetailModal.el, 'click', '[data-cal-cancel]', () => { const m = calDetailModal; calDetailModal = null; m.close(); cancelCalcomMeeting(entry, who.name, () => renderCalendar()); });
+  }
 }
 
 // Kept for callers that only have an activity id.

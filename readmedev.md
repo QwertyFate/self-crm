@@ -77,6 +77,7 @@ server.js
   │           └─ handler: plain SQL via pool.query, always filtered on req.workspaceId
   ├─ GET /adminconsole   → public/admin.html
   ├─ GET /landingpage    → public/landingpage.html (public, no session; landing.css + js/landing.js)
+  ├─ GET /landingpagetwo → public/landingpagetwo.html (public, no session; landing2.css + js/landing2.js; the second landing design, kept until one of the two is chosen)
   ├─ GET *               → public/index.html        (client-side "routing")
   └─ error handler       → 413 for entity.too.large, else 500 {error:'Internal server error'}
 ```
@@ -172,6 +173,8 @@ Every variable the code actually reads (grep `process.env`), grouped by what bre
 | `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | [storage.js](storage.js) | for attachments | Upload throws a clear error; rest of app fine |
 | `SMTP_HOST/PORT/SECURE/USER/PASS/FROM` | [utils/mailer.js](utils/mailer.js) | for email | Reset link is `console.log`ged and returned in the JSON response |
 | `APP_URL` | [routes/integrations.js](routes/integrations.js) | no | Webhook URL shown in the UI has no base |
+| `CALCOM_ENCRYPTION_KEY` | [utils/calcom.js](utils/calcom.js) | no | Seals the workspace's Cal.com API key at rest; falls back to `SESSION_SECRET` (rotating either makes stored keys unreadable: connect again) |
+| `CALCOM_API_URL` | [utils/calcom.js](utils/calcom.js) | no | A self-hosted Cal.com API base ending in `/v2`; default `https://api.cal.com/v2` |
 | `BASE_URL` | [routes/auth.js](routes/auth.js) | no | Reset links fall back to `http://localhost:$PORT` |
 | `ENGINE_ALLOW_PRIVATE_URLS` | [routes/engine.js](routes/engine.js) | dev only | `=1` lets the Engine URL point at localhost/private IPs (SSRF guard off) |
 | `TEST_APP_ROOT` | [tests/helpers/load-route.js](tests/helpers/load-route.js) | no | Points the tests at a mirror of the app, for baseline-first runs |
@@ -348,6 +351,7 @@ Conventions in the tables: **Auth** = who may call it. `session` = any logged-in
 | `/?reset=<token>` | `index.html`; `init()` opens the password-reset form |
 | `/js/*.js`, `/style.css`, `/images/*`, `/fonts/*` | `express.static`. HTML/CSS/JS are `no-store`; other assets `max-age=3600` |
 | `/socket.io/socket.io.js`, `/socket.io/*` | socket.io client + transport |
+| `/api/version` | `{version}`: the client files' fingerprint ([utils/app-version.js](utils/app-version.js)), `no-store`. Every tab watches it (core.js) and reloads itself when it changes; sockets also hear it on connect (`app:version`) |
 
 ### `/api/auth` — session, signup, workspaces
 
@@ -737,6 +741,28 @@ work across multiple instances — relevant the day we scale out.
 > Note the role gap: `/settings` and `/settings/regenerate-key` are **member**-level. Any member
 > can repoint or rotate the inbound webhook. If that is wrong for us, it is a one-line fix
 > mirroring `requireManage` in `routes/engine.js` — raise it rather than silently changing it.
+
+### `/api/integrations/calcom` — Cal.com, one account per workspace
+
+One Cal.com connection per workspace (`workspace_calcom`, `utils/calcom.js`). The API key of a personal
+Cal.com account is sealed at rest (AES-256-GCM under `CALCOM_ENCRYPTION_KEY`, else `SESSION_SECRET`)
+and never returned. `requireAuth` is applied per route so the public booking receiver (Step 2) can
+share the prefix.
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/calcom` | member | `{connected, calcom, can_manage}`; the event-type list only for owner/admin |
+| POST | `/calcom/connect` | owner, admin | `{api_key}` → `GET /v2/me` + `GET /v2/event-types` at Cal.com, upsert; 400 wrong key, 502 Cal.com unreachable |
+| PATCH | `/calcom` | owner, admin | `{event_type_id}` from the stored list; 404 when not connected |
+| POST | `/calcom/refresh` | owner, admin | Re-reads the event types; 409 when the stored key no longer opens (secret rotated) |
+| DELETE | `/calcom` | owner, admin | Removes the connection |
+| POST | `/calcom/register-webhook` | owner, admin | (Re)registers the booking webhook at Cal.com; 502 with the card's state when Cal.com refuses |
+| GET | `/calcom/logs` | member | Last 30 Cal.com deliveries (`webhook_logs` with `source='calcom'`; `GET /logs` is the lead log, `source='lead'`) |
+| GET | `/calcom/slots` | member | `?from=YYYY-MM-DD&days=1..14&event_type_id=` → the free slots per day (ISO instants) in the viewer's zone, from Cal.com's `GET /v2/slots` |
+| POST | `/calcom/book` | member | `{start, event_type_id?, deal_id? \| contact_id?, note?, language?}` → books at Cal.com (`POST /v2/bookings`, the contact as attendee, our ids in the metadata), writes the `meeting` activity at once (same uid as the later webhook), logs it; 400 for a missing email / unknown record, 409 when Cal.com refuses the slot, 502 unreachable |
+| | | | Part 12: the deal's assignee (else the contact's) rides along as a Cal.com guest (never the host or the attendee; dropped with one retry when the event type refuses guests) and gets one bell notification (`notifyUser`, category `activities`); the answer carries `booking.guests` and `told` |
+| POST | `/calcom/receive/:token` | **public** | Cal.com's booking webhook. `server.js` hands this path the raw body (`express.raw` before the global json parser) and the same two rate limits as the lead receiver; the route verifies `x-cal-signature-256` (HMAC-SHA256 over the raw bytes with the workspace's `webhook_secret`), then writes one `meeting` activity per booking (`calcom_uid`), moves it on reschedule, marks it (`cancelled_at`) on cancellation. An unknown attendee creates the contact and a deal by the lead webhook's settings. 404 unknown token, 401 bad signature (logged), 200 `{ignored}` for other triggers |
+| | | | Part 12: the link is read from `metadata.videoCallUrl`, `videoCallData.url` or `location`; the assignee is told of a NEW booking (`xmax = 0`), a move that found the old uid, a cancellation that found a live row — never of what the CRM did itself |
 
 ### `/api/engine` — outbound "Upgrads Engine"
 

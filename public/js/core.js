@@ -111,8 +111,8 @@ const TRANSLATIONS = {
     delete_activity:'Delete activity', activity_deleted:'Activity deleted', export_activities_csv:'Exported {n} activities',
     // Activities page, full port (compose card, Period chip, day groups, rail, kebab)
     chip_period:'Period', period_all:'All time', period_today:'Today', period_7d:'Last 7 days', period_30d:'Last 30 days',
-    act_verb_note:'Add note', act_verb_call:'Log call', act_verb_email:'Log email', act_verb_whatsapp:'Log message',
-    act_ph_note:'Write a note', act_ph_call:'What was discussed on the call?', act_ph_email:'Summarise the email or paste its key points', act_ph_whatsapp:'Message text or summary of the chat',
+    act_verb_note:'Add note', act_verb_call:'Log call', act_verb_email:'Log email', act_verb_whatsapp:'Log message', act_verb_meeting:'Log meeting',
+    act_ph_note:'Write a note', act_ph_call:'What was discussed on the call?', act_ph_email:'Summarise the email or paste its key points', act_ph_whatsapp:'Message text or summary of the chat', act_ph_meeting:'What was discussed in the meeting?',
     act_err_text:'Add a short description before saving.', act_err_link:'Link a deal or a contact so the entry can be found later.', act_err_save:'Could not save the entry. Try again.', act_logged:'{type} logged',
     act_compose_aria:'Log a new activity', opt_no_deal:'No deal', opt_no_contact:'No contact', one_activity:'1 activity', n_activities:'{n} activities',
     rail_aria:'Breakdown', rail_by_type:'By type', rail_by_person:'By person', rail_top_deals:'Most active deals', rail_no_deals:'No deal activity in this view',
@@ -150,7 +150,8 @@ const TRANSLATIONS = {
     filter_contains_ph:'Type to filter…', click_to_edit:'Click to edit', edit_entry:'Edit entry', delete_entry:'Delete entry', entry_updated:'Entry updated', enter_saves_esc_cancels:'Enter saves · Esc cancels · Shift+Enter for a new line', no_contacts_match:'No {noun} match your filters', no_contacts_yet:'No {noun} yet', n_items:'{n} {noun}', n_of_items:'{a} of {b} {noun}',
     no_activities:'No activities yet.', no_fields:'No custom fields yet.',
     drop_here:'Drop contacts here', unassigned:'Unassigned',
-    act_note:'Note', act_call:'Call', act_email:'Email', act_whatsapp:'WhatsApp',
+    act_note:'Note', act_call:'Call', act_email:'Email', act_whatsapp:'WhatsApp', act_meeting:'Meeting', act_cancelled:'Cancelled', src_calcom:'Cal.com',
+    app_update_ready:'A new version of the app is ready.', app_update_reload:'Reload',
     logged_by:'by',
     tab_general:'General', tab_pipeline:'Pipeline', tab_contacts:'Contacts', tab_team:'Team',
     set_stages:'Pipeline stages', set_fields:'Custom fields', set_kanban:'Kanban card fields',
@@ -337,6 +338,7 @@ const TRANSLATIONS = {
     chat_online:'Online:', chat_err_load:'Could not load messages.', chat_empty:'No messages yet. Say hello to your team!',
     chat_err_loading:'Error loading messages.', chat_loading:'Loading…', chat_you:'You',
     chat_ago_m:'{n}m ago', notif_by:'By {name}', notif_caught_up:'You\'re all caught up!',
+    notif_meeting_booked:'Meeting booked', notif_meeting_moved:'Meeting moved', notif_meeting_cancelled:'Meeting cancelled',
     notif_appear_here:'Notifications will appear here.',
     // Part 45 — German sweep: core
     core_network_error:'Network error', core_server_error:'Server error ({status})', core_confirm:'Confirm',
@@ -506,6 +508,43 @@ const TRANSLATIONS = {
     stg_copied_code:'Copied: {code}', stg_remove_member_confirm:'Remove {name} from this workspace? Their assigned contacts will become unassigned.', stg_delete_ws_confirm1:'Are you sure you want to delete this workspace? This action cannot be undone. All data will be permanently deleted.',
     stg_delete_ws_confirm2:'This will delete all contacts, deals, tasks, and messages. Confirm deletion?', stg_edit_status:'Edit Status', stg_add_status:'Add Status',
     stg_delete_status_confirm:'Delete this status? Tasks with this status will keep it but it won\'t appear in the kanban.', stg_edit_task_field:'Edit Task Field', stg_add_task_field:'Add Task Field',
+    // Cal.com (Integrations → Cal.com tab; routes/integrations.js /calcom)
+    intg_tab_calcom:'Cal.com', intg_pane_calcom:'Cal.com', intg_pane_calcom_hint:'One Cal.com account for the whole workspace: its bookings land on the calendar, and a meeting can be booked from a deal or a contact.',
+    cal_title:'Cal.com connection', cal_status_none:'Not connected', cal_status_connected:'Connected',
+    cal_hint:'Connect the Cal.com account whose bookings this workspace should see. Everyone in the workspace sees the account and its bookings; only owners and admins can change the connection.',
+    cal_readonly_hint:'Only owners and admins can connect or disconnect Cal.com.',
+    cal_key_label:'API key', cal_key_hint:'In Cal.com under Settings, Developer, API keys. The key is stored encrypted and never shown again.', cal_key_ph:'cal_live_…',
+    cal_btn_connect:'Connect', cal_key_required:'Paste the API key first.', cal_none:'No Cal.com account is connected yet.',
+    cal_guide_title:'How to connect Cal.com', cal_guide_show:'Show guide', cal_guide_hide:'Hide guide',
+    cal_guide_step1:'Log in to Cal.com with the account whose calendar the team will use. Every meeting booked from the CRM lands on this account.',
+    cal_guide_step2:'There, under <strong>Settings → Developer → API keys</strong>, click <strong>New</strong>: give it a name (Upgrads CRM, say), switch on <strong>Never expires</strong>, then <strong>Create</strong>.',
+    cal_guide_step3:'Copy the key right away: Cal.com shows it only this once. It starts with <code>cal_live_</code>.',
+    cal_guide_step4:'Paste the key above and press <strong>Connect</strong>. It is stored encrypted and never shown again; the booking webhook registers itself in the same step.',
+    cal_guide_step5:'Under <strong>Event type for bookings</strong>, pick the Cal.com event type the team books from a deal or a contact.',
+    cal_guide_step6:'For Google Meet or Zoom: connect the app in Cal.com under <strong>Apps</strong> (Google Meet needs Google Calendar) and add it to the event type under <strong>Location</strong>. Then press <strong>Refresh event types</strong>; the place is offered in the booking dialog.',
+    cal_guide_step7:'To check, the booking webhook under <strong>Connected account</strong> reads “registered”. If it reads “not registered”, the CRM must be reachable from the internet; then press <strong>Register webhook</strong>.',
+    cal_guide_note:'One account per workspace. Disconnecting removes the key; the meetings already on the deals stay.',
+    cal_account_label:'Connected account', cal_fact_account:'Account', cal_fact_username:'Username', cal_fact_timezone:'Time zone', cal_fact_connected_by:'Connected by', cal_connected_by_on:'{name}, {date}',
+    cal_event_type_label:'Event type for bookings', cal_event_type_hint:'The Cal.com event type a meeting booked from a deal or a contact uses.',
+    cal_minutes:'{n} min', cal_hidden_tag:'hidden in Cal.com', cal_no_event_types:'This account has no event types yet.',
+    cal_btn_refresh:'Refresh event types', cal_btn_disconnect:'Disconnect',
+    cal_confirm_disconnect:'Disconnect Cal.com? Bookings already on the calendar stay; new ones stop arriving until an account is connected again.',
+    cal_connected_ok:'Cal.com connected.', cal_disconnected_ok:'Cal.com disconnected.', cal_saved:'Saved.', cal_refreshed:'Event types refreshed.', cal_err_generic:'That did not work. Please try again.',
+    cal_fact_webhook:'Booking webhook', cal_webhook_on:'registered', cal_webhook_off:'not registered', cal_btn_register:'Register webhook', cal_registered_ok:'Webhook registered.',
+    cal_webhook_hint:'Cal.com reports every booking it hosts to this CRM, which must be reachable from the internet for that.',
+    cal_log_title:'Recent bookings', cal_log_hint:'Every booking Cal.com reported, and what became of it.', cal_log_none:'No booking has arrived yet.',
+    cal_log_BOOKING_CREATED:'Booked', cal_log_BOOKING_RESCHEDULED:'Rescheduled', cal_log_BOOKING_CANCELLED:'Cancelled', cal_log_new_contact:'new contact', cal_log_new_deal:'new deal', cal_log_BOOKED_FROM_CRM:'Booked from the CRM',
+    cal_book_btn:'Book meeting', cal_book_title:'Book a meeting with {name}', cal_book_type:'Event type', cal_book_zone:'Times in {zone}. Host: {host}.', cal_book_month_prev:'Previous month', cal_book_month_next:'Next month',
+    cal_book_loading:'Loading free times', cal_book_none_month:'Nothing is free this month.',
+    cal_book_note:'Note for the invitation (optional)', cal_book_note_ph:'For example: please bring the documents', cal_book_submit:'Book', cal_book_booking:'Booking', cal_book_pick_first:'Pick a time first.',
+    cal_book_done:'Booked: {when}. Cal.com sends the invitation.', cal_book_no_email:'The contact needs an email address for the invitation.', cal_book_open_contact:'Edit contact',
+    cal_book_date:'Date', cal_book_time:'Time', cal_book_time_ph:'Pick a time', cal_book_one_time:'1 free time', cal_book_n_times:'{n} free times',
+    cal_book_slot:'{from} to {to} ({ampm})', cal_book_where:'Where', cal_book_invite_to:'The invitation goes to {email}.', cal_book_with:'with {name}',
+    cal_resched_btn:'Reschedule', cal_resched_title:'Move the meeting with {name}', cal_resched_current:'Currently', cal_resched_submit:'Move', cal_resched_busy:'Moving', cal_resched_reason:'Reason (optional, {name} sees it)', cal_resched_reason_ph:'For example: something came up', cal_resched_done:'Moved to {when}. Cal.com informs {name}.',
+    cal_cancel_btn:'Cancel meeting', cal_cancel_q:'Cancel this meeting?', cal_cancel_msg:'The booking is cancelled in Cal.com and {name} is informed. The entry stays in the CRM, marked as cancelled.', cal_cancel_reason:'Reason (optional, the customer sees it)', cal_cancel_busy:'Cancelling', cal_cancel_done:'Meeting cancelled.',
+    cal_del_q:'Delete this meeting entry?', cal_del_msg:'This meeting is booked in Cal.com. Deleting the entry here does not cancel it there: the slot stays taken and the customer keeps the invitation.', cal_del_only:'Delete here only',
+    cal_log_CANCELLED_FROM_CRM:'Cancelled from the CRM', cal_log_RESCHEDULED_FROM_CRM:'Moved from the CRM', cal_loc_address:'In person: {address}', cal_loc_address_plain:'In person', cal_loc_link:'Link from the host', cal_loc_phone:'Phone call', cal_book_checking:'Checking the calendar', cal_book_conflict:'Conflict: {time} {title} ({who}) is already on the calendar.', cal_book_conflict_hint:'Cal.com does not see the tasks and entries of this CRM. Book anyway, or pick another time.', cal_book_anyway:'Book anyway',
+    cal_join:'Join {app}', cal_join_link:'Open the meeting link',
   },
   de: {
     nav_deals:'Deals', nav_contacts:'Kontakte', nav_activities:'Aktivitäten', nav_settings:'Einstellungen', nav_board:'Board',
@@ -531,8 +570,8 @@ const TRANSLATIONS = {
     delete_activity:'Aktivität löschen', activity_deleted:'Aktivität gelöscht', export_activities_csv:'{n} Aktivitäten exportiert',
     // Aktivitäten-Seite, vollständige Portierung (Erfassen-Karte, Zeitraum-Chip, Tagesgruppen, Seitenleiste, Menü)
     chip_period:'Zeitraum', period_all:'Gesamt', period_today:'Heute', period_7d:'Letzte 7 Tage', period_30d:'Letzte 30 Tage',
-    act_verb_note:'Notiz hinzufügen', act_verb_call:'Anruf erfassen', act_verb_email:'E-Mail erfassen', act_verb_whatsapp:'Nachricht erfassen',
-    act_ph_note:'Notiz schreiben', act_ph_call:'Was wurde im Gespräch besprochen?', act_ph_email:'E-Mail zusammenfassen oder die Kernpunkte einfügen', act_ph_whatsapp:'Nachrichtentext oder Zusammenfassung des Chats',
+    act_verb_note:'Notiz hinzufügen', act_verb_call:'Anruf erfassen', act_verb_email:'E-Mail erfassen', act_verb_whatsapp:'Nachricht erfassen', act_verb_meeting:'Termin erfassen',
+    act_ph_note:'Notiz schreiben', act_ph_call:'Was wurde im Gespräch besprochen?', act_ph_email:'E-Mail zusammenfassen oder die Kernpunkte einfügen', act_ph_whatsapp:'Nachrichtentext oder Zusammenfassung des Chats', act_ph_meeting:'Was wurde im Termin besprochen?',
     act_err_text:'Füge eine kurze Beschreibung hinzu, bevor du speicherst.', act_err_link:'Verknüpfe einen Deal oder einen Kontakt, damit der Eintrag später auffindbar ist.', act_err_save:'Der Eintrag konnte nicht gespeichert werden. Bitte erneut versuchen.', act_logged:'{type} erfasst',
     act_compose_aria:'Neue Aktivität erfassen', opt_no_deal:'Kein Deal', opt_no_contact:'Kein Kontakt', one_activity:'1 Aktivität', n_activities:'{n} Aktivitäten',
     rail_aria:'Aufschlüsselung', rail_by_type:'Nach Typ', rail_by_person:'Nach Person', rail_top_deals:'Aktivste Deals', rail_no_deals:'Keine Deal-Aktivität in dieser Ansicht',
@@ -570,7 +609,8 @@ const TRANSLATIONS = {
     filter_contains_ph:'Tippen zum Filtern…', click_to_edit:'Zum Bearbeiten klicken', edit_entry:'Eintrag bearbeiten', delete_entry:'Eintrag löschen', entry_updated:'Eintrag aktualisiert', enter_saves_esc_cancels:'Enter speichert · Esc bricht ab · Shift+Enter für eine neue Zeile', no_contacts_match:'Keine {noun} passen zu deinen Filtern', no_contacts_yet:'Noch keine {noun}', n_items:'{n} {noun}', n_of_items:'{a} von {b} {noun}',
     no_activities:'Noch keine Aktivitäten.', no_fields:'Noch keine benutzerdefinierten Felder.',
     drop_here:'Kontakte hierher ziehen', unassigned:'Nicht zugewiesen',
-    act_note:'Notiz', act_call:'Anruf', act_email:'E-Mail', act_whatsapp:'WhatsApp',
+    act_note:'Notiz', act_call:'Anruf', act_email:'E-Mail', act_whatsapp:'WhatsApp', act_meeting:'Termin', act_cancelled:'Abgesagt', src_calcom:'Cal.com',
+    app_update_ready:'Eine neue Version der App ist da.', app_update_reload:'Neu laden',
     logged_by:'von',
     tab_general:'Allgemein', tab_pipeline:'Pipeline', tab_contacts:'Kontakte', tab_team:'Team',
     set_stages:'Pipeline-Phasen', set_fields:'Benutzerdefinierte Felder', set_kanban:'Kanban-Kartenfelder',
@@ -757,6 +797,7 @@ const TRANSLATIONS = {
     chat_online:'Online:', chat_err_load:'Nachrichten konnten nicht geladen werden.', chat_empty:'Noch keine Nachrichten. Sag deinem Team Hallo!',
     chat_err_loading:'Fehler beim Laden der Nachrichten.', chat_loading:'Lädt…', chat_you:'Du',
     chat_ago_m:'vor {n} Min.', notif_by:'Von {name}', notif_caught_up:'Alles auf dem neuesten Stand!',
+    notif_meeting_booked:'Termin gebucht', notif_meeting_moved:'Termin verschoben', notif_meeting_cancelled:'Termin abgesagt',
     notif_appear_here:'Benachrichtigungen erscheinen hier.',
     // Part 45 — German sweep: core
     core_network_error:'Netzwerkfehler', core_server_error:'Serverfehler ({status})', core_confirm:'Bestätigen',
@@ -926,6 +967,43 @@ const TRANSLATIONS = {
     stg_copied_code:'Kopiert: {code}', stg_remove_member_confirm:'{name} aus diesem Arbeitsbereich entfernen? Zugewiesene Kontakte sind danach nicht mehr zugewiesen.', stg_delete_ws_confirm1:'Diesen Arbeitsbereich wirklich löschen? Das lässt sich nicht rückgängig machen. Alle Daten werden dauerhaft gelöscht.',
     stg_delete_ws_confirm2:'Alle Kontakte, Deals, Aufgaben und Nachrichten werden gelöscht. Löschen bestätigen?', stg_edit_status:'Status bearbeiten', stg_add_status:'Status hinzufügen',
     stg_delete_status_confirm:'Diesen Status löschen? Aufgaben behalten ihn, aber er erscheint nicht mehr im Kanban.', stg_edit_task_field:'Aufgabenfeld bearbeiten', stg_add_task_field:'Aufgabenfeld hinzufügen',
+    // Cal.com (Integrationen → Cal.com-Reiter; routes/integrations.js /calcom)
+    intg_tab_calcom:'Cal.com', intg_pane_calcom:'Cal.com', intg_pane_calcom_hint:'Ein Cal.com-Konto für den ganzen Arbeitsbereich: seine Buchungen landen im Kalender, und aus einem Deal oder Kontakt lässt sich ein Termin buchen.',
+    cal_title:'Cal.com-Verbindung', cal_status_none:'Nicht verbunden', cal_status_connected:'Verbunden',
+    cal_hint:'Das Cal.com-Konto verbinden, dessen Buchungen dieser Arbeitsbereich sehen soll. Alle im Arbeitsbereich sehen das Konto und seine Buchungen; nur Inhaber und Admins können die Verbindung ändern.',
+    cal_readonly_hint:'Nur Inhaber und Admins können Cal.com verbinden oder trennen.',
+    cal_key_label:'API-Schlüssel', cal_key_hint:'In Cal.com unter Einstellungen, Entwickler, API-Schlüssel. Der Schlüssel wird verschlüsselt gespeichert und nie wieder angezeigt.', cal_key_ph:'cal_live_…',
+    cal_btn_connect:'Verbinden', cal_key_required:'Zuerst den API-Schlüssel einfügen.', cal_none:'Noch kein Cal.com-Konto verbunden.',
+    cal_guide_title:'So wird Cal.com verbunden', cal_guide_show:'Anleitung anzeigen', cal_guide_hide:'Anleitung ausblenden',
+    cal_guide_step1:'In Cal.com mit dem Konto anmelden, dessen Kalender das Team nutzen soll. Jeder Termin aus dem CRM wird auf diesem Konto gebucht.',
+    cal_guide_step2:'Dort unter <strong>Einstellungen → Entwickler → API-Schlüssel</strong> auf <strong>Neu</strong> klicken: einen Namen vergeben (etwa Upgrads CRM), <strong>Läuft nie ab</strong> einschalten, dann <strong>Erstellen</strong>.',
+    cal_guide_step3:'Den Schlüssel sofort kopieren: Cal.com zeigt ihn nur dieses eine Mal. Er beginnt mit <code>cal_live_</code>.',
+    cal_guide_step4:'Den Schlüssel oben einfügen und <strong>Verbinden</strong> drücken. Er wird verschlüsselt gespeichert und nie wieder angezeigt; der Buchungs-Webhook wird im selben Schritt registriert.',
+    cal_guide_step5:'Unter <strong>Terminart für Buchungen</strong> die Cal.com-Terminart wählen, die das Team aus einem Deal oder Kontakt bucht.',
+    cal_guide_step6:'Für Google Meet oder Zoom: in Cal.com unter <strong>Apps</strong> die App verbinden (Google Meet braucht den Google-Kalender) und sie in der Terminart unter <strong>Ort</strong> hinzufügen. Danach <strong>Terminarten aktualisieren</strong> drücken; der Ort steht dann im Buchungsdialog zur Wahl.',
+    cal_guide_step7:'Zur Kontrolle steht unter <strong>Verbundenes Konto</strong> der Buchungs-Webhook auf „registriert“. Steht dort „nicht registriert“, muss das CRM aus dem Internet erreichbar sein; dann <strong>Webhook registrieren</strong> drücken.',
+    cal_guide_note:'Ein Konto je Arbeitsbereich. Trennen entfernt den Schlüssel; die Termine an den Deals bleiben.',
+    cal_account_label:'Verbundenes Konto', cal_fact_account:'Konto', cal_fact_username:'Benutzername', cal_fact_timezone:'Zeitzone', cal_fact_connected_by:'Verbunden von', cal_connected_by_on:'{name}, {date}',
+    cal_event_type_label:'Terminart für Buchungen', cal_event_type_hint:'Die Terminart (in Cal.com: Event Type), die ein aus einem Deal oder Kontakt gebuchter Termin verwendet.',
+    cal_minutes:'{n} Min.', cal_hidden_tag:'in Cal.com ausgeblendet', cal_no_event_types:'Dieses Konto hat noch keine Terminarten.',
+    cal_btn_refresh:'Terminarten aktualisieren', cal_btn_disconnect:'Trennen',
+    cal_confirm_disconnect:'Cal.com trennen? Buchungen, die schon im Kalender stehen, bleiben; neue kommen erst wieder an, wenn ein Konto verbunden ist.',
+    cal_connected_ok:'Cal.com verbunden.', cal_disconnected_ok:'Cal.com getrennt.', cal_saved:'Gespeichert.', cal_refreshed:'Terminarten aktualisiert.', cal_err_generic:'Das hat nicht geklappt. Bitte noch einmal versuchen.',
+    cal_fact_webhook:'Buchungs-Webhook', cal_webhook_on:'registriert', cal_webhook_off:'nicht registriert', cal_btn_register:'Webhook registrieren', cal_registered_ok:'Webhook registriert.',
+    cal_webhook_hint:'Cal.com meldet jede Buchung, die es ausrichtet, an dieses CRM; dafür muss das CRM aus dem Internet erreichbar sein.',
+    cal_log_title:'Letzte Buchungen', cal_log_hint:'Jede Buchung, die Cal.com gemeldet hat, und was daraus wurde.', cal_log_none:'Noch keine Buchung angekommen.',
+    cal_log_BOOKING_CREATED:'Gebucht', cal_log_BOOKING_RESCHEDULED:'Verschoben', cal_log_BOOKING_CANCELLED:'Abgesagt', cal_log_new_contact:'neuer Kontakt', cal_log_new_deal:'neuer Deal', cal_log_BOOKED_FROM_CRM:'Aus dem CRM gebucht',
+    cal_book_btn:'Termin buchen', cal_book_title:'Termin mit {name} buchen', cal_book_type:'Terminart', cal_book_zone:'Zeiten in {zone}. Gastgeber: {host}.', cal_book_month_prev:'Voriger Monat', cal_book_month_next:'Nächster Monat',
+    cal_book_loading:'Freie Zeiten werden geladen', cal_book_none_month:'In diesem Monat ist nichts frei.',
+    cal_book_note:'Notiz für die Einladung (optional)', cal_book_note_ph:'Zum Beispiel: bitte die Unterlagen mitbringen', cal_book_submit:'Buchen', cal_book_booking:'Wird gebucht', cal_book_pick_first:'Zuerst eine Zeit wählen.',
+    cal_book_done:'Gebucht: {when}. Cal.com schickt die Einladung.', cal_book_no_email:'Für die Einladung braucht der Kontakt eine E-Mail-Adresse.', cal_book_open_contact:'Kontakt bearbeiten',
+    cal_book_date:'Datum', cal_book_time:'Uhrzeit', cal_book_time_ph:'Uhrzeit wählen', cal_book_one_time:'1 freie Zeit', cal_book_n_times:'{n} freie Zeiten',
+    cal_book_slot:'{from} bis {to} ({ampm})', cal_book_where:'Wo', cal_book_invite_to:'Die Einladung geht an {email}.', cal_book_with:'mit {name}',
+    cal_resched_btn:'Verschieben', cal_resched_title:'Termin mit {name} verschieben', cal_resched_current:'Bisher', cal_resched_submit:'Verschieben', cal_resched_busy:'Wird verschoben', cal_resched_reason:'Grund (optional, {name} sieht ihn)', cal_resched_reason_ph:'Zum Beispiel: etwas ist dazwischengekommen', cal_resched_done:'Verschoben auf {when}. Cal.com informiert {name}.',
+    cal_cancel_btn:'Termin absagen', cal_cancel_q:'Diesen Termin absagen?', cal_cancel_msg:'Die Buchung wird in Cal.com abgesagt und {name} wird informiert. Der Eintrag bleibt im CRM, als abgesagt markiert.', cal_cancel_reason:'Grund (optional, der Kunde sieht ihn)', cal_cancel_busy:'Wird abgesagt', cal_cancel_done:'Termin abgesagt.',
+    cal_del_q:'Diesen Termin-Eintrag löschen?', cal_del_msg:'Dieser Termin ist in Cal.com gebucht. Den Eintrag hier zu löschen sagt ihn dort nicht ab: der Slot bleibt belegt und der Kunde behält die Einladung.', cal_del_only:'Nur hier löschen',
+    cal_log_CANCELLED_FROM_CRM:'Aus dem CRM abgesagt', cal_log_RESCHEDULED_FROM_CRM:'Aus dem CRM verschoben', cal_loc_address:'Vor Ort: {address}', cal_loc_address_plain:'Vor Ort', cal_loc_link:'Link des Gastgebers', cal_loc_phone:'Telefonat', cal_book_checking:'Kalender wird geprüft', cal_book_conflict:'Konflikt: um {time} steht bereits {title} ({who}) im Kalender.', cal_book_conflict_hint:'Cal.com kennt die Aufgaben und Einträge dieses CRM nicht. Trotzdem buchen oder eine andere Zeit wählen.', cal_book_anyway:'Trotzdem buchen',
+    cal_join:'{app} beitreten', cal_join_link:'Link zum Termin öffnen',
   },
 };
 
@@ -1177,6 +1255,53 @@ async function apiFetchSilent(url, opts = {}) {
   } catch { return { error: t('core_network_error') }; }
 }
 
+/* ---------- a new version of the app ---------- */
+// The server fingerprints its client files (utils/app-version.js, GET /api/version). A tab learns
+// the fingerprint it was loaded with and checks again on every socket connect (chat.js), when it
+// comes back into view, and once a minute. A changed fingerprint reloads the tab by itself as soon
+// as nobody is typing, no dialog is open and no draft sits in a note or chat field; until then a
+// toast offers the reload with one click. The reload comes back to the page that was open.
+let appVersion = null, appVersionPending = false, appVersionToast = null;
+const APP_PAGES = ['deals', 'contacts', 'suppliers', 'activities', 'calendar', 'settings', 'objects', 'tasks', 'board', 'analytics', 'onboarding', 'integrations', 'workspaces', 'chat'];
+function appIsQuiet() {
+  const a = document.activeElement;
+  const typing = !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable);
+  const draft = Array.from(document.querySelectorAll('textarea, input.chat-input')).some(el => el.value && el.value.trim());
+  return !typing && !draft && !document.querySelector('.overlay');
+}
+// The page that is open, kept across the reload for five minutes (sessionStorage: this tab only).
+function appRememberPage() {
+  const page = document.querySelector('.sb-link[aria-current="page"]')?.dataset.page;
+  try { if (page) sessionStorage.setItem('crm_reload_page', JSON.stringify({ page, at: Date.now() })); } catch { /* storage blocked: Deals it is */ }
+}
+function appRestorePage() {
+  try {
+    const raw = sessionStorage.getItem('crm_reload_page'); if (!raw) return null;
+    sessionStorage.removeItem('crm_reload_page');
+    const { page, at } = JSON.parse(raw);
+    return APP_PAGES.includes(page) && Date.now() - at < 5 * 60 * 1000 ? page : null;
+  } catch { return null; }
+}
+function appReloadNow() { appRememberPage(); location.reload(); }
+function noteAppVersion(v) {
+  if (typeof v !== 'string' || !v) return;
+  if (appVersion === null) { appVersion = v; return; }
+  if (v !== appVersion && !appVersionPending) { appVersionPending = true; appReloadWhenQuiet(); }
+}
+async function checkAppVersion() {
+  try { const r = await fetch('/api/version', { cache: 'no-store' }); if (r.ok) noteAppVersion((await r.json()).version); } catch { /* offline: the next check will tell */ }
+}
+function appReloadWhenQuiet() {
+  if (document.visibilityState === 'visible' && appIsQuiet()) { appReloadNow(); return; }
+  if (!appVersionToast) appVersionToast = ui.toast(t('app_update_ready'), { ms: 24 * 60 * 60 * 1000, action: { label: t('app_update_reload'), onClick: appReloadNow } });
+  setTimeout(appReloadWhenQuiet, 10000);
+}
+function startAppVersionWatch() {
+  checkAppVersion();
+  setInterval(checkAppVersion, 60000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') return; if (appVersionPending) appReloadWhenQuiet(); else checkAppVersion(); });
+}
+
 const api = {
   get:   url      => apiFetch(url),
   post:  (url, d) => apiFetch(url, { method:'POST',   headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) }),
@@ -1225,7 +1350,7 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const ICON_ALIAS = { deals: 'kanban', contacts: 'users', tasks: 'check-square', suppliers: 'truck', chat: 'message', activities: 'activity',
   listings: 'building', objects: 'building', analytics: 'bar-chart', integrations: 'plug', board: 'presentation', workspaces: 'building', logout: 'log-out', more: 'ellipsis',
   // activity/timeline entry types (shared by the Activities feed, the deal modal and contact panel timelines)
-  call: 'phone', email: 'mail', whatsapp: 'message-circle' };
+  call: 'phone', email: 'mail', whatsapp: 'message-circle', meeting: 'calendar' };
 function icon(name, cls = '') { return `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${ICON_ALIAS[name] || name}"/></svg>`; }
 
 /* ---------- people ---------- */

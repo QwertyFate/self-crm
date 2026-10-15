@@ -34,10 +34,16 @@ const NOTIF_ICONS = {
   task_created:    '✅',
   system:          '🚀',
   mention:         '@',
+  meeting_booked:    '📅',   // a meeting on a deal or a contact of mine (Cal.com, Part 12)
+  meeting_moved:     '🗓️',
+  meeting_cancelled: '🚫',
   default:         '🔔',
 };
+// Kinds that carry a translated line above the title: the title itself is the meeting's own name.
+const NOTIF_KINDS = { meeting_booked: 'notif_meeting_booked', meeting_moved: 'notif_meeting_moved', meeting_cancelled: 'notif_meeting_cancelled' };
 
 function notifIcon(type) { return NOTIF_ICONS[type] || NOTIF_ICONS.default; }
+function notifKind(type) { return NOTIF_KINDS[type] ? `<div class="notif-kind">${esc(t(NOTIF_KINDS[type]))}</div>` : ''; }
 
 function notifTimeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -82,7 +88,7 @@ function renderNotifList(notifications) {
       <span class="notif-dot${n.read ? ' read' : ''}"></span>
       <span class="notif-icon">${notifIcon(n.type)}</span>
       <div class="notif-content">
-        <div class="notif-title">${esc(n.title)}</div>
+        ${notifKind(n.type)}<div class="notif-title">${esc(n.title)}</div>
         ${n.body ? `<div class="notif-body">${esc(n.body)}</div>` : ''}
         ${n.actor_name ? `<div class="notif-body">${tf('notif_by', { name: esc(n.actor_name) })}</div>` : ''}
         <div class="notif-time">${notifTimeAgo(n.created_at)}</div>
@@ -99,6 +105,7 @@ async function onNotifClick(id, entityType, entityId) {
   } else if ((entityType === 'contact') && entityId) {
     toggleNotifPanel();
     switchPage('contacts');
+    if (typeof openContactDetail === 'function') openContactDetail(entityId);   // straight to the contact (a meeting on it, say)
   }
   loadNotifications();
 }

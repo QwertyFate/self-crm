@@ -55,7 +55,8 @@ router.get('/', async (req, res, next) => {
              NULL AS status, NULL AS priority,
              u.name AS created_by_name,
              c.name AS contact_name, c.id AS contact_id,
-             COALESCE(db.id, d.id) AS deal_id, COALESCE(db.title, d.title) AS deal_title
+             COALESCE(db.id, d.id) AS deal_id, COALESCE(db.title, d.title) AS deal_title,
+             a.cancelled_at AS cancelled_at, a.source AS source, a.calcom_uid AS calcom_uid, a.calcom_event_type_id AS calcom_event_type_id
       FROM activities a
       LEFT JOIN users    u ON u.id = a.created_by
       LEFT JOIN contacts c ON c.id = a.contact_id
@@ -80,7 +81,8 @@ router.get('/', async (req, res, next) => {
              t.status, t.priority,
              ut.name AS created_by_name,
              ct.name AS contact_name, ct.id AS contact_id,
-             dt.id AS deal_id, dt.title AS deal_title
+             dt.id AS deal_id, dt.title AS deal_title,
+             NULL::timestamptz AS cancelled_at, 'user' AS source, NULL::text AS calcom_uid, NULL::integer AS calcom_event_type_id
       FROM tasks t
       LEFT JOIN users    ut ON ut.id = COALESCE(t.assigned_to, t.created_by)
       LEFT JOIN contacts ct ON ct.id = t.contact_id
@@ -107,7 +109,8 @@ router.get('/today', async (req, res, next) => {
              NULL AS status, NULL AS priority,
              u.name AS created_by_name,
              c.name AS contact_name, c.id AS contact_id,
-             COALESCE(db.id, d.id) AS deal_id, COALESCE(db.title, d.title) AS deal_title
+             COALESCE(db.id, d.id) AS deal_id, COALESCE(db.title, d.title) AS deal_title,
+             a.cancelled_at AS cancelled_at, a.source AS source, a.calcom_uid AS calcom_uid, a.calcom_event_type_id AS calcom_event_type_id
       FROM activities a
       LEFT JOIN users    u ON u.id = a.created_by
       LEFT JOIN contacts c ON c.id = a.contact_id
@@ -130,7 +133,8 @@ router.get('/today', async (req, res, next) => {
              t.status, t.priority,
              ut.name AS created_by_name,
              ct.name AS contact_name, ct.id AS contact_id,
-             dt.id AS deal_id, dt.title AS deal_title
+             dt.id AS deal_id, dt.title AS deal_title,
+             NULL::timestamptz AS cancelled_at, 'user' AS source, NULL::text AS calcom_uid, NULL::integer AS calcom_event_type_id
       FROM tasks t
       LEFT JOIN users    ut ON ut.id = COALESCE(t.assigned_to, t.created_by)
       LEFT JOIN contacts ct ON ct.id = t.contact_id

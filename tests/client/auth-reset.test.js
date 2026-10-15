@@ -48,9 +48,9 @@ describe('auth flow', () => {
     assert.ok(s.indexOf('resetClientState()') > 0 && s.indexOf('resetClientState()') < s.indexOf('showAuth()'), 'reset, then showAuth');
     assert.doesNotMatch(s, /contacts = stages = fields/, 'the old partial reset is gone');
   });
-  test('entering the app always lands on a freshly loaded Deals page', () => {
+  test('entering the app always lands on a freshly loaded Deals page; only a self-reload (core.js, a new app version) comes back to the page that was open', () => {
     const s = sliceFn(auth, 'showApp', 'auth.js');
-    assert.match(s, /switchPage\('deals'\)/);
+    assert.match(s, /switchPage\(appRestorePage\(\) \|\| 'deals'\)/);
     assert.doesNotMatch(s, /\bloadDeals\(\)/, 'the page switch loads deals; no bare loader call that leaves the previous page active');
   });
   test('login and workspace selection set every workspace-scoped column list', () => {
