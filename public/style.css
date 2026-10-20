@@ -643,6 +643,11 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 #app.rail .sb-ws { justify-content: center; padding: 8px 0; }
 #app.rail .sb-link { justify-content: center; padding: 0; }
 #app.rail .sb-user { justify-content: center; padding: 8px 0; }
+/* The break's way in (js/break-game.js): four faint squares under the user button, light sky when reached. */
+.brk-egg { display: flex; align-items: center; justify-content: center; width: 28px; height: 20px; margin: 4px auto 0; border-radius: 6px; color: var(--sb-text-dim); opacity: .3; transition: opacity var(--dur), color var(--dur); }
+.brk-egg:hover, .brk-egg:focus-visible { opacity: 1; color: var(--sky-400); }
+.brk-egg:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.brk-egg-ic { width: 16px; height: 11px; fill: currentColor; }
 #app.rail .sb-label { display: block; height: 1px; padding: 0; margin: 10px 8px; background: var(--sb-border); font-size: 0; }
 @media (max-width: 1180px) { #app { grid-template-columns: var(--sb-width-rail) minmax(0, 1fr); }
   #app .sb-text, #app .sb-count, #app .sb-ws-name, #app .sb-ws-meta, #app .sb-user .who, #app .sb-brand img, #app .sb-chev, #app .sb-toggle { display: none; }

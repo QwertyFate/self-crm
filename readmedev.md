@@ -77,7 +77,7 @@ server.js
   │           └─ handler: plain SQL via pool.query, always filtered on req.workspaceId
   ├─ GET /adminconsole   → public/admin.html
   ├─ GET /landingpage    → public/landingpage.html (public, no session; landing.css + js/landing.js)
-  ├─ GET /landingpagetwo → public/landingpagetwo.html (public, no session; landing2.css + js/landing2.js; the second landing design, kept until one of the two is chosen)
+  ├─ GET /landingpagetwo → 301 to /landingpage (the old address of the design that became the landing page)
   ├─ GET *               → public/index.html        (client-side "routing")
   └─ error handler       → 413 for entity.too.large, else 500 {error:'Internal server error'}
 ```
@@ -332,6 +332,7 @@ Conventions in the tables: **Auth** = who may call it. `session` = any logged-in
 | `/api/notifications` | [routes/notifications.js](routes/notifications.js) | |
 | `/api/chat` | [routes/chat.js](routes/chat.js) | REST half of chat; socket.io is the live half |
 | `/api/analytics` | [routes/analytics.js](routes/analytics.js) | |
+| `/api/break-scores` | [routes/break-scores.js](routes/break-scores.js) | The break's team board (the hidden game); own rate limit |
 | `/api/tasks` *(2nd mount)* | [routes/task-attachments.js](routes/task-attachments.js) | Same prefix, deeper paths — see note below |
 | `/api/integrations` | [routes/integrations.js](routes/integrations.js) | `/receive/:key` is public + rate limited |
 | `/api/engine` | [routes/engine.js](routes/engine.js) | Outbound Engine settings and log |
@@ -728,6 +729,16 @@ work across multiple instances — relevant the day we scale out.
 > Analytics is the only place that splices a name into SQL (`custom_data->>'<field>'`). It is
 > guarded by `safeValueField()`. Read that function before you touch this file.
 
+
+### `/api/break-scores`
+
+The team's high score board for the break, the hidden falling-block game (`public/js/break-game.js`). One row per person
+and workspace in `break_scores`, their best game. Scores come from the browser: checked, capped, rate limited (30 / min / IP).
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/` | member | The ten best of `req.workspaceId`, current members only: `[{ name, score, lines, level, at, mine }]` |
+| POST | `/` | member | `{ score (1–10,000,000), lines (0–100,000), level (1–10,000) }`, whole numbers; kept only if it beats the caller's best; answers with the board |
 ### `/api/integrations` — inbound webhook
 
 | Method | Path | Auth | Notes |

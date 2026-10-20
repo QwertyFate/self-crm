@@ -43,7 +43,7 @@
      ui          ui.popover, ui.menu, ui.select, uiOverlay, ui.modal, ui.drawer,
                  ui.confirm, ui.toast, ui.formData, ui.closePopover
      shell       setCrumbs, toggleRail, applyRailState, setSidebarWorkspace,
-                 openNewMenu, openHelpMenu, openUserMenu, openPalette,
+                 openNewMenu, openHelpMenu, openUserMenu, openPalette, openBreak,
                  showShortcuts
 
    GOTCHA  esc() escapes & < > " — it does NOT escape single quotes. Never put
@@ -94,6 +94,14 @@ const TRANSLATIONS = {
     topbar_search:'Go to a page…', topbar_new:'New', new_deal:'Deal', new_contact:'Contact', new_task:'Task',
     kbd_shortcuts:'Keyboard shortcuts', start_tour:'Start the product tour', btn_close:'Close',
     sc_search:'Search and jump to a page', sc_close:'Close dialog or menu', sc_move:'Move in menus and search', palette_none:'No page matches', palette_group_pages:'Go to',
+    // The break: the hidden falling-block game (js/break-game.js asks for these words; the landing page has the same)
+    brk_title:'Quick break', brk_close:'Close', brk_field:'Playing field', brk_hold:'Hold', brk_next:'Next up',
+    brk_score:'Score', brk_lines:'Lines', brk_level:'Level', brk_record:'High score',
+    brk_pause:'Pause', brk_resume:'Resume', brk_board:'High scores', brk_back:'Back to the game', brk_again:'Play again',
+    brk_over:'Game over. {n} points.', brk_place:'Place {n} on the board!', brk_name_label:'Name for the high scores', brk_name_default:'Guest', brk_save:'Save',
+    brk_board_empty:'No entries yet. First place is open.', brk_scope_browser:'Kept in this browser.', brk_scope_team:'The whole team\u2019s high scores.',
+    brk_help:'Arrow keys move and turn, space drops, C holds, P pauses.',
+    brk_pad:'Controls', brk_key_left:'Left', brk_key_right:'Right', brk_key_rotate:'Turn', brk_key_down:'Down', brk_key_drop:'Drop', brk_key_hold:'Hold piece',
     kbd_to_move:'to move', kbd_to_open:'to open', kbd_to_close:'to close',
     set_miro:'Miro Board', hint_miro:'Paste the embed URL from Miro → Share → Embed.',
     add_deal:'Add deal', lbl_deal_title:'Title', lbl_deal_value:'Value',
@@ -553,6 +561,14 @@ const TRANSLATIONS = {
     topbar_search:'Zu einer Seite springen…', topbar_new:'Neu', new_deal:'Deal', new_contact:'Kontakt', new_task:'Aufgabe',
     kbd_shortcuts:'Tastenkürzel', start_tour:'Produkttour starten', btn_close:'Schließen',
     sc_search:'Suchen und zu einer Seite springen', sc_close:'Dialog oder Menü schließen', sc_move:'In Menüs und Suche bewegen', palette_none:'Keine Seite passt', palette_group_pages:'Gehe zu',
+    // Die Pause: das versteckte Spiel mit fallenden Blöcken (js/break-game.js fragt diese Wörter ab; die Landingpage hat dieselben)
+    brk_title:'Kurze Pause', brk_close:'Schließen', brk_field:'Spielfeld', brk_hold:'Gehalten', brk_next:'Als Nächstes',
+    brk_score:'Punkte', brk_lines:'Reihen', brk_level:'Stufe', brk_record:'Rekord',
+    brk_pause:'Pausieren', brk_resume:'Weiter', brk_board:'Bestenliste', brk_back:'Zurück zum Spiel', brk_again:'Nochmal',
+    brk_over:'Vorbei. {n} Punkte.', brk_place:'Platz {n} auf der Bestenliste!', brk_name_label:'Name für die Bestenliste', brk_name_default:'Gast', brk_save:'Eintragen',
+    brk_board_empty:'Noch keine Einträge. Platz eins ist frei.', brk_scope_browser:'Gespeichert in diesem Browser.', brk_scope_team:'Die Bestenliste des ganzen Teams.',
+    brk_help:'Pfeiltasten bewegen und drehen, Leertaste lässt fallen, C hält, P pausiert.',
+    brk_pad:'Steuerung', brk_key_left:'Links', brk_key_right:'Rechts', brk_key_rotate:'Drehen', brk_key_down:'Runter', brk_key_drop:'Fallen lassen', brk_key_hold:'Halten',
     kbd_to_move:'bewegen', kbd_to_open:'öffnen', kbd_to_close:'schließen',
     set_miro:'Miro-Board', hint_miro:'Embed-URL aus Miro → Teilen → Einbetten einfügen.',
     add_deal:'Deal hinzufügen', lbl_deal_title:'Titel', lbl_deal_value:'Wert',
@@ -1553,7 +1569,7 @@ function openPalette() {
     const s = $('[aria-selected="true"]', box); s && s.scrollIntoView({ block: 'nearest' });
   };
   const close = () => { m.remove(); document.removeEventListener('keydown', key, true); };
-  const run = i => { const it = list[i]; if (!it) return; close(); switchPage(it.page); };
+  const run = i => { const it = list[i]; if (!it) return; close(); if (it.action) it.action(); else switchPage(it.page); };
   const key = e => {
     if (e.key === 'Escape') { e.stopPropagation(); close(); }
     else if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(list.length - 1, sel + 1); draw(); }
@@ -1561,9 +1577,33 @@ function openPalette() {
     else if (e.key === 'Enter') { e.preventDefault(); run(sel); }
   };
   document.addEventListener('keydown', key, true);
-  q.addEventListener('input', () => { const term = q.value.trim().toLowerCase(); list = term ? all.filter(x => x.label.toLowerCase().includes(term)) : all; sel = 0; draw(); });
+  q.addEventListener('input', () => {
+    const term = q.value.trim().toLowerCase();
+    list = term ? all.filter(x => x.label.toLowerCase().includes(term)) : all;
+    if (breakPaletteMatch(term)) list = list.concat([{ label: t('brk_title'), icon: 'keyboard', action: openBreak }]);   // the hidden way in
+    sel = 0; draw();
+  });
   on(m, 'click', '.palette-item', (e, el) => run(+el.dataset.i)); m.addEventListener('mousedown', e => { if (e.target === m) close(); });
   draw(); q.focus();
+}
+/* ---------- the break: the hidden game (js/break-game.js) and the team's board (/api/break-scores) ---------- */
+// Two ways in, both hidden: the faint four squares at the foot of the sidebar, and "Kurze Pause" in the palette, which
+// shows up only when one of these words is typed. The board belongs to the workspace (routes/break-scores.js); the
+// signed-in user plays under their own name, so a finished game is saved without asking.
+const BREAK_WORDS = ['pause', 'break', 'spiel', 'game', 'tetris', 'blocks', 'blöcke'];
+function breakPaletteMatch(term) {
+  const q = String(term || '').trim().toLowerCase();
+  return q.length >= 4 && BREAK_WORDS.some(w => w.startsWith(q) || q.includes(w));
+}
+const breakTeamStore = {
+  scope: 'team',
+  load: () => api.get('/api/break-scores').then(r => (Array.isArray(r) ? r : [])),
+  save: e => api.post('/api/break-scores', { score: e.score, lines: e.lines, level: e.level }).then(r => (Array.isArray(r) ? r : Promise.reject(r))),
+};
+function openBreak() {
+  if (typeof brkOpen !== 'function') return;
+  ui.closePopover();
+  brkOpen({ t: (k, v) => (v ? tf(k, v) : t(k)), player: (currentUser && currentUser.name) || '', store: breakTeamStore });
 }
 function showShortcuts() {
   const row = (k, txt) => `<div class="row-between" style="padding:8px 0;border-bottom:1px solid var(--divider)"><span>${esc(txt)}</span><span class="kbd">${esc(k)}</span></div>`;

@@ -19,7 +19,7 @@ const crypto = require('crypto');
 // The files that make up the app in the browser, relative to `root` (the public folder).
 function clientFiles(root) {
   const js = fs.existsSync(path.join(root, 'js')) ? fs.readdirSync(path.join(root, 'js')).filter(f => f.endsWith('.js')).sort().map(f => path.join('js', f)) : [];
-  return ['index.html', 'style.css', ...js].filter(rel => fs.existsSync(path.join(root, rel)));
+  return ['index.html', 'style.css', 'break-game.css', ...js].filter(rel => fs.existsSync(path.join(root, rel)));
 }
 
 function computeVersion(root) {

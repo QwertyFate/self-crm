@@ -1,870 +1,523 @@
-/* ═══════════════════════════════════════════════════════════════════════════
-   LANDING PAGE (/landingpage) — standalone: no app scripts, no API calls.
-   Part 18, 2026-10-14: from scratch. The scroll tells the story.
+// ═══════════════════════════════════════════════════════════════════════════
+// LANDING PAGE — public/js/landing.js  (Part 36, 2026-10-20; Part 37 retouch; Part 38: chosen as the
+// landing page the same day, moved here from js/landing2.js)
+//
+// A short, friendly page that says plainly what Upgrads is: the hero sets one
+// deal beside the three things that happened to it this week, each numbered,
+// coloured and linked to its step below. The Monday wipe: the desk as it is
+// and the same things in Upgrads, a line dragged to the right tidies up.
+// Three moments to do by hand (a lead arrives, the calendar has a say, the
+// card goes to Won and the Engine takes over), each answered twice: by the
+// product in its own look, and by a hand-written note in the margin. German
+// first with every string a key of MO_I18N, English one click away; the
+// product's actions answer the way the app answers: a toast with Rückgängig.
+// Nothing moves by itself except one nudge of the wipe when it is first seen.
+//
+//   01 the words      02 language       03 helpers, the toast
+//   04 the hand       05 the wipe       06 leads
+//   07 the meeting    08 won, the Engine 09 the way into the break
+//   10 start
+// ═══════════════════════════════════════════════════════════════════════════
+'use strict';
 
-   One opening screen, then three acts. Each act is a tall section with a
-   screen pinned inside it; the act's scroll progress (0 → 1 while pinned)
-   drives the product on that screen, forwards and backwards:
-     leads   a lead flies from each ad platform into the board's first column
-             and lands as the card the inbound webhook would make (the payload
-             mapped through the webhook's own dot paths), one per fifth of the
-             scroll
-     deal    the record walks seven phases: the WhatsApp template, a task that
-             lands in the list and the overview, a note in the timeline, then
-             the booking dialog in place (a free day, the 11:00 clash with the
-             team calendar, a clean 14:00) and the booked meeting as the newest
-             entry with the join link; the words above swap with the phase
-     won     the deal card travels from Verhandlung into Gewonnen with the
-             scroll, lands and flashes, and the packet reaches the next
-             system, which confirms receipt (the real transfer: utils/engine.js)
-   The first touch of a scene hands it over: from then on the scroll leaves
-   it alone and every control works as in the app (drag, tabs, the sheet).
-   Reduced motion: nothing pins, every act stands at its end.
-
-   German is the default and the markup text IS the German dictionary (the
-   client test checks that key for key). Every string claims only what the
-   code does, every string is short, nothing technical appears anywhere.
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-const LP_I18N = {
+/* ── 01 · the words ───────────────────────────────────────────────────── */
+const MO_I18N = {
   de: {
-    lp_login: 'Anmelden', lp_request: 'Zugang anfragen', lp_request_subject: 'Zugang zu Upgrads CRM', lp_lang: 'Sprache', lp_crm: 'CRM',
-    lp_hero_title: 'Gewonnen ist erst der Anfang.',
-    lp_hero_sub: 'Ein Deal, vom Werbeklick bis zur Übergabe. Einfach scrollen.',
-
-    lp_a1_t: 'Leads kommen von selbst.', lp_a1_d: 'Aus Facebook, Instagram, TikTok und der Website. Über Make, Zapier oder n8n.',
-    lp_src_fb: 'Facebook Ads', lp_src_ig: 'Instagram Ads', lp_src_tt: 'TikTok Ads', lp_src_web: 'Website-Formular', lp_via: 'über',
-    lp_lead_from: 'Lead über {src}', lp_lead_fb: 'Lead über Facebook Ads',
-    lp_board: 'Vertrieb', lp_board_aria: 'Beispiel-Board. Karten mit der Maus oder den Pfeiltasten verschieben.',
-    lp_col_new: 'Neu', lp_col_offer: 'Angebot', lp_col_nego: 'Verhandlung', lp_col_won: 'Gewonnen',
-    lp_deal_one: 'Deal', lp_deal_many: 'Deals',
-    lp_urg_low: 'Niedrig', lp_urg_medium: 'Mittel', lp_urg_high: 'Hoch', lp_urg_very: 'Sehr dringend',
-    lp_stats_line: 'Offen {open} in {n} Deals. Gewonnen {won}. Anteil {rate} %.',
-    lp_toast_moved: 'Verschoben nach {stage}', lp_toast_undo: 'Rückgängig',
-
-    lp_a2_t: 'Alles passiert am Deal.', lp_a2b_t: 'Termin in drei Klicks.',
-    lp_p0: 'Anrufen, schreiben, WhatsApp mit fertiger Vorlage.',
-    lp_p1: 'Eine Aufgabe mit Uhrzeit landet im Teamkalender.',
-    lp_p2: 'Eine Notiz. Strg+Enter, und die Geschichte bleibt am Deal.',
-    lp_p3: 'Nur Tage mit freien Zeiten aus Cal.com.',
-    lp_p4: 'Was im Teamkalender steht, zeigt der Dialog vorher an.',
-    lp_p5: 'Eine freie Zeit. Die Einladung schickt Cal.com.',
-    lp_p6: 'Gebucht. Der Link zum Meeting hängt am Termin.',
-    lp_deal_name: 'Elbstraße 12, 3 Zimmer', lp_deal_created: 'Angelegt vor 11 Tagen',
-    lp_act_call: 'Anrufen', lp_act_email: 'E-Mail', lp_act_wa: 'WhatsApp', lp_act_book: 'Termin buchen',
-    lp_call_label: 'Ruft an', lp_mail_label: 'Schreibt an', lp_wa_label: 'WhatsApp, Vorlage vorausgefüllt',
-    lp_wa_tpl: 'Guten Tag Jana Weber, danke für die Anfrage zu Elbstraße 12. Beste Grüße, Mara Kühn',
-    lp_tab_overview: 'Übersicht', lp_tab_contact: 'Kontakt', lp_tab_tasks: 'Aufgaben', lp_tab_activity: 'Aktivität', lp_tab_objects: 'Objekte',
-    lp_kpi_value: 'Deal-Wert', lp_kpi_stage: 'Phase', lp_kpi_urg: 'Dringlichkeit', lp_kpi_owner: 'Zuständig', lp_kpi_last: 'Letzte Aktivität', lp_kpi_last_v: 'vor 2 Std.',
-    lp_ov_next: 'Nächste Aufgaben', lp_ov_latest: 'Letzte Aktivität',
-    lp_f_email: 'E-Mail', lp_f_phone: 'Telefon', lp_f_owner: 'Zuständig', lp_f_last: 'Letzter Kontakt', lp_f_last_v: 'gestern, 15:20',
-    lp_supplier: 'Lieferant', lp_supplier_role: 'Notariat',
-    lp_tasks_progress: '{d} von {n} erledigt',
-    lp_task1: 'Finanzierungsbestätigung anfordern', lp_task1_due: 'Fr, 10:00',
-    lp_task2: 'Energieausweis senden', lp_task2_due: 'erledigt',
-    lp_task3: 'Notartermin abstimmen', lp_task3_due: 'Di, 14:30',
-    lp_prio_high: 'Hoch', lp_prio_medium: 'Mittel',
-    lp_task_new: 'Neue Aufgabe', lp_task_title_v: 'Exposé senden', lp_task_due_v: 'Mi, 14:00', lp_task_add: 'Anlegen',
-    lp_note_ph: 'Notiz schreiben, Strg+Enter speichert', lp_note_save: 'Speichern', lp_note_preset: 'Finanzierung bestätigt, Notartermin am Dienstag.',
-    lp_type_note: 'Notiz', lp_type_call: 'Anruf', lp_type_email: 'E-Mail', lp_type_wa: 'WhatsApp', lp_tl_now: 'gerade eben',
-    lp_tl1_meta: 'Mara Kühn, gestern 15:20', lp_tl1_text: 'Kaufpreis besprochen, Finanzierung in Prüfung.',
-    lp_tl2_meta: 'Tim Berger, letzte Woche', lp_tl2_text: 'Erstkontakt über das Formular. Sucht 3 Zimmer, Altbau.',
-    lp_meet: 'Termin', lp_meet_title: '{type} mit Jana Weber', lp_join: 'Google Meet beitreten', lp_join_link: 'Link zum Termin öffnen',
-    lp_obj_title: 'Verknüpfte Objekte', lp_obj_meta: '87 m², 3 Zimmer, Baujahr 1962', lp_obj_open: 'Öffnen',
-
-    lp_bk_title: 'Termin mit Jana Weber buchen', lp_bk_type: 'Terminart', lp_bk_type1: 'Erstgespräch', lp_bk_type2: 'Besichtigung', lp_bk_where: 'Wo', lp_bk_month: 'Oktober 2026',
-    lp_bk_time: 'Uhrzeit', lp_bk_slot: '{from} bis {to} ({ampm})', lp_bk_conflict: 'Konflikt: um {time} steht bereits {title} ({who}) im Kalender.', lp_bk_busy: 'Übergabe Kanalweg',
-    lp_bk_book: 'Buchen', lp_bk_anyway: 'Trotzdem buchen', lp_bk_cancel: 'Abbrechen', lp_bk_with: 'mit {name}', lp_bk_invite: 'Die Einladung geht an {email}.',
-    lp_bk_done: 'Gebucht: {when}. Cal.com schickt die Einladung.',
-    lp_wd1: 'Mo', lp_wd2: 'Di', lp_wd3: 'Mi', lp_wd4: 'Do', lp_wd5: 'Fr', lp_wd6: 'Sa', lp_wd7: 'So',
-
-    lp_a3_t: 'Unterschrieben. Weitergemeldet.', lp_a3_d: 'Ein Zug nach Gewonnen, und das nächste System weiß Bescheid.',
-    lp_next: 'Nächstes System', lp_next_sub: 'Abwicklung, Buchhaltung, Verwaltung', lp_next_idle: 'Wartet auf einen Deal in Gewonnen', lp_next_pending: 'Wird übertragen', lp_next_done: 'Empfangen und bestätigt', lp_received: 'Empfangen',
-
-    lp_num_t: 'Zahlen nach den eigenen Phasen.', lp_num_d: 'Gewinnquote, Trichter, offene Pipeline. Ohne Tabelle nebenher.',
-    lp_an_period: 'Zeitraum', lp_an_period_3: '3 Monate', lp_an_period_6: '6 Monate', lp_an_period_12: '12 Monate',
-    lp_an_c_open: 'Offene Pipeline', lp_an_c_won: 'Gewonnener Wert', lp_an_c_rate: 'Gewinnquote', lp_an_c_new: 'Neue Deals',
-    lp_an_rate_m: 'Gewinnquote je Monat', lp_an_funnel: 'Trichter', lp_an_lost: 'Verloren', lp_an_funnel_hint: '{p} % weiter zu {stage}',
-    lp_an_tip: '{month}: {rate} %, {won} gewonnen, {lost} verloren',
-
-    lp_vs_t: 'Weniger CRM. Mehr Unterschriften.', lp_vs_a: 'Anderswo', lp_vs_b: 'Bei Upgrads',
-    lp_vs1a: 'Leads werden abgetippt.', lp_vs1b: 'Leads kommen von selbst an.',
-    lp_vs2a: 'Gewonnen ist das Ende.', lp_vs2b: 'Gewonnen ist eine Übergabe.',
-    lp_vs3a: 'Aus dem Englischen übersetzt.', lp_vs3b: 'Auf Deutsch gebaut. Englisch einen Klick entfernt.',
-    lp_vs4a: 'Die Software bestimmt die Begriffe.', lp_vs4b: 'Phasen, Objekte, Lieferanten heißen wie im Team.',
-    lp_vs5a: 'Noch ein Tool für Termine.', lp_vs5b: 'Termine aus dem Deal heraus gebucht.',
-
-    lp_cta_t: 'Nur auf Einladung.', lp_cta_d: 'Zugang anfragen. Der Einladungscode kommt per E-Mail.',
-    lp_foot_tag: 'Upgrads CRM. Gewonnen ist erst der Anfang.',
+    mo_lang: 'Sprache', mo_crm: 'CRM', mo_login: 'Anmelden', mo_request: 'Zugang anfragen',
+    mo_hero_t: 'Das CRM, das den Kleinkram übernimmt.',
+    mo_hero_d: 'Leads kommen von selbst rein, Termine prüfen den Kalender, und nach dem Abschluss startet das Onboarding allein. Mehr Zeit fürs Verkaufen.',
+    mo_hero_note: 'Deutsch und Englisch. Zugang per Einladung.',
+    mo_hero_card: 'Diese Woche', mo_hero_l1: 'Lead aus Instagram, von allein im CRM', mo_hero_l2: 'Termin gebucht, Kalender geprüft', mo_hero_l3: 'Onboarding startet von allein',
+    mo_wipe_t: 'Montag, 8:47 Uhr.', mo_wipe_d: 'Derselbe Montag zweimal: links mit Upgrads, rechts ohne.',
+    mo_wipe_with: 'Mit Upgrads', mo_wipe_without: 'Ohne Upgrads',
+    mo_wipe_aria: 'Derselbe Montag, ohne und mit Upgrads', mo_wipe_range: 'Vergleichen: ziehen oder Pfeiltasten', mo_wipe_value: '{n} Prozent aufgeräumt',
+    mo_m1_t: 'Leads tippt hier niemand mehr ab.',
+    mo_m1_d: 'Facebook, Instagram, TikTok oder die eigene Website: Über Make, Zapier oder n8n landet jeder Lead von selbst im CRM, auf Wunsch gleich als Deal.',
+    mo_m2_t: 'Der Kalender hat ein Wörtchen mitzureden.',
+    mo_m2_d: 'Termine entstehen direkt am Deal über Cal.com. Steht zur selben Zeit schon etwas im eigenen Kalender, meldet sich das CRM.',
+    mo_m3_t: 'Nach der Unterschrift hat der Vertrieb Feierabend.',
+    mo_m3_d: 'Landet ein Deal in Gewonnen, übernimmt die Upgrads Engine das Onboarding und meldet jeden Schritt an den Deal zurück.',
+    mo_faq_t: 'Was oft gefragt wird.',
+    mo_q1: 'Wie kommen die Leads rein?', mo_a1: 'Über Make, Zapier oder n8n. Einmal verbunden, kommen sie von allein, mit den Feldern, die das Formular liefert.',
+    mo_q2: 'Passt das zu unserem Geschäft?', mo_a2: 'Phasen, Felder und sogar die Namen für Objekte und Lieferanten legt das Team selbst fest.',
+    mo_close_t: 'Bereit für weniger Kleinkram?', mo_close_d: 'Der Zugang ist schnell eingerichtet.',
+    mo_c1: 'Kurze Mail an team@upgrads.de', mo_c2: 'Code erhalten, mit Rolle: Mitglied, Admin oder Inhaber', mo_c3: 'Anmelden, und der erste Lead kann kommen',
+    mo_foot_fiction: 'Alle Namen und Zahlen auf dieser Seite sind erfunden.',
+    // the hand: what to try, and what it says once something was done
+    mo_n_wipe_idle: 'nach rechts ziehen', mo_n_wipe_done: 'Schon besser.', mo_n_wipe_back: 'Zurück ins Chaos?',
+    mo_n_leads_idle: 'eine Quelle antippen', mo_n_leads_one: 'Da ist er. Ohne Abtippen.', mo_n_leads_known: 'Gleiche E-Mail? Dann wird der Kontakt aktualisiert, nicht verdoppelt.',
+    mo_n_cal_idle: 'Dienstag, 11 Uhr probieren', mo_n_cal_conflict: 'Ups. Da ist schon was.', mo_n_cal_free: 'Frei. So einfach.', mo_n_cal_booked: 'Gebucht. Die Einladung verschickt Cal.com.',
+    mo_n_won_idle: 'Karte rüberziehen', mo_n_won_done: 'Ab hier läuft es ohne den Vertrieb.', mo_n_won_undo: 'Doch noch nicht? Auch gut.',
+    mo_sources: 'Lead-Quellen', mo_inbox_aria: 'Erste Phase', mo_won_aria: 'Die letzten zwei Phasen', mo_week_aria: 'Kalender dieser Woche',
+    mo_src_fb: 'Facebook Ads', mo_src_ig: 'Instagram Ads', mo_src_tt: 'TikTok Ads', mo_src_web: 'Website',
+    mo_updated: 'aktualisiert', mo_just_now: 'gerade eben',
+    mo_d0: 'Mo', mo_d1: 'Di', mo_d2: 'Mi', mo_d3: 'Do', mo_d4: 'Fr', mo_d_sat: 'Sa', mo_d_sun: 'So',
+    // the product's own words (pinned to the app's dictionary by the suite)
+    mo_undo: 'Rückgängig', mo_moved_to: 'Verschoben nach {s}', mo_move_to: 'Nach {s} verschieben', mo_current_stage: 'Aktuelle Phase: {s}',
+    mo_st_new: 'Neu', mo_st_nego: 'Verhandlung', mo_st_won: 'Gewonnen',
+    mo_urg_1: 'Niedrig', mo_urg_3: 'Hoch',
+    mo_act_whatsapp: 'WhatsApp', mo_act_email: 'E-Mail', mo_act_meeting: 'Termin',
+    mo_open_dialer: 'Anrufen', mo_open_whatsapp: 'WhatsApp öffnen',
+    mo_book_title: 'Termin mit {name} buchen', mo_book_date: 'Datum', mo_book_time: 'Uhrzeit', mo_book_submit: 'Buchen', mo_book_anyway: 'Trotzdem buchen',
+    mo_book_conflict: 'Konflikt: um {time} steht bereits {title} ({who}) im Kalender.', mo_book_conflict_hint: 'Cal.com kennt die Aufgaben und Einträge dieses CRM nicht. Trotzdem buchen oder eine andere Zeit wählen.',
+    mo_book_done: 'Gebucht: {when}. Cal.com schickt die Einladung.',
+    mo_engine_title: 'Upgrads Engine', mo_engine_active: 'Aktiv', mo_engine_stages_label: 'Auslöser-Phasen', mo_deliveries_title: 'Gesendete Ereignisse', mo_no_deliveries: 'Noch keine Ereignisse gesendet.',
+    mo_status_pending: 'Ausstehend', mo_status_success: 'Zugestellt', mo_attempt_one: 'Versuch', mo_onb_col_status: 'Engine-Status',
+    mo_onb_s0: 'Kein Onboarding', mo_onb_s1: 'Formular versendet', mo_onb_s2: 'Formular ausgefüllt', mo_onb_s3: 'Termin gebucht', mo_onb_s4: 'Call erfolgt', mo_onb_s5: 'Briefing fertig', mo_onb_s6: 'Abgeschlossen',
+    // the invented Monday (names and numbers stay, the words switch)
+    mo_x_mail_subj: 'Fwd: Fwd: Neuer Lead (Facebook)', mo_x_name: 'Name', mo_x_phone: 'Telefon', mo_x_empty: 'leer?', mo_x_sent: 'Gesendet',
+    mo_x_file: 'Leads_Oktober_final2.xlsx', mo_x_source: 'Quelle', mo_x_state: 'Stand', mo_x_twice: 'doppelt?',
+    mo_x_bubble: 'Kommt das Angebot heute noch?', mo_x_sticky: 'Lindner zurückrufen!! Nummer??',
+    mo_x_tuesday: 'Dienstag', mo_x_todo1: 'Formular schicken', mo_x_todo2: 'Call ausmachen', mo_x_todo3: 'Briefing schreiben',
+    mo_x_offer: 'Angebot gesendet, Laufzeit zwölf Monate.',
+    mo_x_meet_when: 'Di, 14:00 bis 14:30', mo_x_invite: 'Einladung an marie.lindner@example.de', mo_x_meet_note: '11:00 war schon belegt.', mo_x_join: 'Google Meet beitreten',
+    mo_x_e1: 'Rückruf Berger', mo_x_e2: 'Teammeeting', mo_x_e3: 'Besichtigung Krüger', mo_x_e4: 'Übergabe Hofmann',
+    mo_ev_name: 'Vertrag unterschrieben',
+    // the break: the falling-block game behind the footer's little block (/js/break-game.js asks for these brk_* words)
+    brk_title: 'Kurze Pause', brk_close: 'Schließen', brk_field: 'Spielfeld', brk_hold: 'Gehalten', brk_next: 'Als Nächstes',
+    brk_score: 'Punkte', brk_lines: 'Reihen', brk_level: 'Stufe', brk_record: 'Rekord',
+    brk_pause: 'Pausieren', brk_resume: 'Weiter', brk_board: 'Bestenliste', brk_back: 'Zurück zum Spiel', brk_again: 'Nochmal',
+    brk_over: 'Vorbei. {n} Punkte.', brk_place: 'Platz {n} auf der Bestenliste!', brk_name_label: 'Name für die Bestenliste', brk_name_default: 'Gast', brk_save: 'Eintragen',
+    brk_board_empty: 'Noch keine Einträge. Platz eins ist frei.', brk_scope_browser: 'Gespeichert in diesem Browser.', brk_scope_team: 'Die Bestenliste des ganzen Teams.',
+    brk_help: 'Pfeiltasten bewegen und drehen, Leertaste lässt fallen, C hält, P pausiert.',
+    brk_pad: 'Steuerung', brk_key_left: 'Links', brk_key_right: 'Rechts', brk_key_rotate: 'Drehen', brk_key_down: 'Runter', brk_key_drop: 'Fallen lassen', brk_key_hold: 'Halten',
   },
   en: {
-    lp_login: 'Log in', lp_request: 'Request access', lp_request_subject: 'Access to Upgrads CRM', lp_lang: 'Language', lp_crm: 'CRM',
-    lp_hero_title: 'Won is only the beginning.',
-    lp_hero_sub: 'One deal, from the ad click to the hand-over. Just scroll.',
-
-    lp_a1_t: 'Leads arrive on their own.', lp_a1_d: 'From Facebook, Instagram, TikTok and the website. Via Make, Zapier or n8n.',
-    lp_src_fb: 'Facebook Ads', lp_src_ig: 'Instagram Ads', lp_src_tt: 'TikTok Ads', lp_src_web: 'Website form', lp_via: 'via',
-    lp_lead_from: 'Lead via {src}', lp_lead_fb: 'Lead via Facebook Ads',
-    lp_board: 'Sales', lp_board_aria: 'Example board. Move cards with the mouse or the arrow keys.',
-    lp_col_new: 'New', lp_col_offer: 'Proposal', lp_col_nego: 'Negotiation', lp_col_won: 'Won',
-    lp_deal_one: 'deal', lp_deal_many: 'deals',
-    lp_urg_low: 'Low', lp_urg_medium: 'Medium', lp_urg_high: 'High', lp_urg_very: 'Very urgent',
-    lp_stats_line: 'Open {open} across {n} deals. Won {won}. Share {rate} %.',
-    lp_toast_moved: 'Moved to {stage}', lp_toast_undo: 'Undo',
-
-    lp_a2_t: 'Everything happens on the deal.', lp_a2b_t: 'A meeting in three clicks.',
-    lp_p0: 'Call, write, WhatsApp with the template filled in.',
-    lp_p1: 'A task with a time lands on the team calendar.',
-    lp_p2: 'A note. Ctrl+Enter, and the story stays on the deal.',
-    lp_p3: 'Only days with free times, from Cal.com.',
-    lp_p4: 'Whatever the team calendar holds, the dialog shows first.',
-    lp_p5: 'A free time. Cal.com sends the invitation.',
-    lp_p6: 'Booked. The meeting link sits on the entry.',
-    lp_deal_name: 'Elbstraße 12, 3 rooms', lp_deal_created: 'Created 11 days ago',
-    lp_act_call: 'Call', lp_act_email: 'Email', lp_act_wa: 'WhatsApp', lp_act_book: 'Book meeting',
-    lp_call_label: 'Calls', lp_mail_label: 'Writes to', lp_wa_label: 'WhatsApp, template filled in',
-    lp_wa_tpl: 'Hello Jana Weber, thank you for the enquiry about Elbstraße 12. Best regards, Mara Kühn',
-    lp_tab_overview: 'Overview', lp_tab_contact: 'Contact', lp_tab_tasks: 'Tasks', lp_tab_activity: 'Activity', lp_tab_objects: 'Listings',
-    lp_kpi_value: 'Deal value', lp_kpi_stage: 'Stage', lp_kpi_urg: 'Urgency', lp_kpi_owner: 'Owner', lp_kpi_last: 'Last activity', lp_kpi_last_v: '2 h ago',
-    lp_ov_next: 'Next tasks', lp_ov_latest: 'Latest activity',
-    lp_f_email: 'Email', lp_f_phone: 'Phone', lp_f_owner: 'Owner', lp_f_last: 'Last contact', lp_f_last_v: 'yesterday, 15:20',
-    lp_supplier: 'Supplier', lp_supplier_role: 'Notary office',
-    lp_tasks_progress: '{d} of {n} done',
-    lp_task1: 'Request financing confirmation', lp_task1_due: 'Fri, 10:00',
-    lp_task2: 'Send energy certificate', lp_task2_due: 'done',
-    lp_task3: 'Agree the notary appointment', lp_task3_due: 'Tue, 14:30',
-    lp_prio_high: 'High', lp_prio_medium: 'Medium',
-    lp_task_new: 'New task', lp_task_title_v: 'Send exposé', lp_task_due_v: 'Wed, 14:00', lp_task_add: 'Add',
-    lp_note_ph: 'Write a note, Ctrl+Enter saves', lp_note_save: 'Save', lp_note_preset: 'Financing confirmed, notary appointment on Tuesday.',
-    lp_type_note: 'Note', lp_type_call: 'Call', lp_type_email: 'Email', lp_type_wa: 'WhatsApp', lp_tl_now: 'just now',
-    lp_tl1_meta: 'Mara Kühn, yesterday 15:20', lp_tl1_text: 'Discussed the price, financing under review.',
-    lp_tl2_meta: 'Tim Berger, last week', lp_tl2_text: 'First contact through the form. Looking for 3 rooms, period building.',
-    lp_meet: 'Meeting', lp_meet_title: '{type} with Jana Weber', lp_join: 'Join Google Meet', lp_join_link: 'Open the meeting link',
-    lp_obj_title: 'Linked listings', lp_obj_meta: '87 m², 3 rooms, built 1962', lp_obj_open: 'Open',
-
-    lp_bk_title: 'Book a meeting with Jana Weber', lp_bk_type: 'Event type', lp_bk_type1: 'Intro call', lp_bk_type2: 'Viewing', lp_bk_where: 'Where', lp_bk_month: 'October 2026',
-    lp_bk_time: 'Time', lp_bk_slot: '{from} to {to} ({ampm})', lp_bk_conflict: 'Conflict: {time} {title} ({who}) is already on the calendar.', lp_bk_busy: 'Handover Kanalweg',
-    lp_bk_book: 'Book', lp_bk_anyway: 'Book anyway', lp_bk_cancel: 'Cancel', lp_bk_with: 'with {name}', lp_bk_invite: 'The invitation goes to {email}.',
-    lp_bk_done: 'Booked: {when}. Cal.com sends the invitation.',
-    lp_wd1: 'Mon', lp_wd2: 'Tue', lp_wd3: 'Wed', lp_wd4: 'Thu', lp_wd5: 'Fri', lp_wd6: 'Sat', lp_wd7: 'Sun',
-
-    lp_a3_t: 'Signed. Passed on.', lp_a3_d: 'One move into Won, and the next system knows.',
-    lp_next: 'Next system', lp_next_sub: 'Fulfilment, accounting, administration', lp_next_idle: 'Waiting for a deal in Won', lp_next_pending: 'Transferring', lp_next_done: 'Received and confirmed', lp_received: 'Received',
-
-    lp_num_t: 'Numbers by your own stages.', lp_num_d: 'Win rate, funnel, open pipeline. No spreadsheet on the side.',
-    lp_an_period: 'Period', lp_an_period_3: '3 months', lp_an_period_6: '6 months', lp_an_period_12: '12 months',
-    lp_an_c_open: 'Open pipeline', lp_an_c_won: 'Won value', lp_an_c_rate: 'Win rate', lp_an_c_new: 'New deals',
-    lp_an_rate_m: 'Win rate per month', lp_an_funnel: 'Funnel', lp_an_lost: 'Lost', lp_an_funnel_hint: '{p} % on to {stage}',
-    lp_an_tip: '{month}: {rate} %, {won} won, {lost} lost',
-
-    lp_vs_t: 'Less CRM. More signatures.', lp_vs_a: 'Elsewhere', lp_vs_b: 'At Upgrads',
-    lp_vs1a: 'Leads get retyped.', lp_vs1b: 'Leads arrive on their own.',
-    lp_vs2a: 'Won is the finish line.', lp_vs2b: 'Won is a hand-over.',
-    lp_vs3a: 'Translated from English.', lp_vs3b: 'Built in German. English one click away.',
-    lp_vs4a: 'The software picks the words.', lp_vs4b: 'Stages, listings, suppliers named as the team names them.',
-    lp_vs5a: 'Another tool for meetings.', lp_vs5b: 'Meetings booked from the deal.',
-
-    lp_cta_t: 'By invitation only.', lp_cta_d: 'Request access. The invite code arrives by email.',
-    lp_foot_tag: 'Upgrads CRM. Won is only the beginning.',
+    mo_lang: 'Language', mo_crm: 'CRM', mo_login: 'Sign in', mo_request: 'Request access',
+    mo_hero_t: 'The CRM that handles the small stuff.',
+    mo_hero_d: 'Leads come in by themselves, meetings check the calendar, and won deals start their onboarding on their own. More time for selling.',
+    mo_hero_note: 'German and English. Access by invitation.',
+    mo_hero_card: 'This week', mo_hero_l1: 'Lead from Instagram, in the CRM by itself', mo_hero_l2: 'Meeting booked, calendar checked', mo_hero_l3: 'Onboarding starts by itself',
+    mo_wipe_t: 'Monday, 8:47 a.m.', mo_wipe_d: 'The same Monday twice: left with Upgrads, right without.',
+    mo_wipe_with: 'With Upgrads', mo_wipe_without: 'Without Upgrads',
+    mo_wipe_aria: 'The same Monday, without and with Upgrads', mo_wipe_range: 'Compare: drag or use the arrow keys', mo_wipe_value: '{n} percent tidied',
+    mo_m1_t: 'Nobody types leads in here anymore.',
+    mo_m1_d: 'Facebook, Instagram, TikTok or your own website: via Make, Zapier or n8n, every lead lands in the CRM by itself, as a deal if you like.',
+    mo_m2_t: 'The calendar gets a say.',
+    mo_m2_d: 'Meetings are booked from the deal via Cal.com. If your calendar already has something then, the CRM speaks up.',
+    mo_m3_t: 'After the signature, sales can call it a day.',
+    mo_m3_d: 'When a deal lands in Won, the Upgrads Engine takes over the onboarding and reports each step back.',
+    mo_faq_t: 'What people usually ask.',
+    mo_q1: 'How do the leads get in?', mo_a1: 'Via Make, Zapier or n8n. Connect once and they arrive on their own, with whatever fields the form sends.',
+    mo_q2: 'Will it fit our business?', mo_a2: 'Stages, fields and even what listings and suppliers are called are up to the team.',
+    mo_close_t: 'Ready for less busywork?', mo_close_d: 'Getting access is quick.',
+    mo_c1: 'A short email to team@upgrads.de', mo_c2: 'Get a code with a role: member, admin or owner', mo_c3: 'Sign in, and the first lead can arrive',
+    mo_foot_fiction: 'Every name and number on this page is made up.',
+    mo_n_wipe_idle: 'drag to the right', mo_n_wipe_done: 'Much better.', mo_n_wipe_back: 'Back to the chaos?',
+    mo_n_leads_idle: 'tap a source', mo_n_leads_one: 'There it is. Nobody typed a thing.', mo_n_leads_known: 'Same email? The contact gets updated, not doubled.',
+    mo_n_cal_idle: 'try Tuesday at 11', mo_n_cal_conflict: 'Oops. Something is already there.', mo_n_cal_free: 'That one\u2019s open.', mo_n_cal_booked: 'Booked. Cal.com sends the invite.',
+    mo_n_won_idle: 'drag the card across', mo_n_won_done: 'From here on, it runs without sales.', mo_n_won_undo: 'Not yet after all? Fine.',
+    mo_sources: 'Lead sources', mo_inbox_aria: 'First stage', mo_won_aria: 'The last two stages', mo_week_aria: 'This week’s calendar',
+    mo_src_fb: 'Facebook Ads', mo_src_ig: 'Instagram Ads', mo_src_tt: 'TikTok Ads', mo_src_web: 'Website',
+    mo_updated: 'updated', mo_just_now: 'just now',
+    mo_d0: 'Mon', mo_d1: 'Tue', mo_d2: 'Wed', mo_d3: 'Thu', mo_d4: 'Fri', mo_d_sat: 'Sat', mo_d_sun: 'Sun',
+    mo_undo: 'Undo', mo_moved_to: 'Moved to {s}', mo_move_to: 'Move to {s}', mo_current_stage: 'Current stage: {s}',
+    mo_st_new: 'New', mo_st_nego: 'Negotiation', mo_st_won: 'Won',
+    mo_urg_1: 'Low', mo_urg_3: 'High',
+    mo_act_whatsapp: 'WhatsApp', mo_act_email: 'Email', mo_act_meeting: 'Meeting',
+    mo_open_dialer: 'Open dialer', mo_open_whatsapp: 'Open WhatsApp',
+    mo_book_title: 'Book a meeting with {name}', mo_book_date: 'Date', mo_book_time: 'Time', mo_book_submit: 'Book', mo_book_anyway: 'Book anyway',
+    mo_book_conflict: 'Conflict: {time} {title} ({who}) is already on the calendar.', mo_book_conflict_hint: 'Cal.com does not see the tasks and entries of this CRM. Book anyway, or pick another time.',
+    mo_book_done: 'Booked: {when}. Cal.com sends the invitation.',
+    mo_engine_title: 'Upgrads Engine', mo_engine_active: 'Active', mo_engine_stages_label: 'Trigger stages', mo_deliveries_title: 'Sent events', mo_no_deliveries: 'No events sent yet.',
+    mo_status_pending: 'Pending', mo_status_success: 'Delivered', mo_attempt_one: 'attempt', mo_onb_col_status: 'Engine status',
+    mo_onb_s0: 'No onboarding', mo_onb_s1: 'Form sent', mo_onb_s2: 'Form completed', mo_onb_s3: 'Appointment booked', mo_onb_s4: 'Call done', mo_onb_s5: 'Briefing ready', mo_onb_s6: 'Completed',
+    mo_x_mail_subj: 'Fwd: Fwd: New lead (Facebook)', mo_x_name: 'Name', mo_x_phone: 'Phone', mo_x_empty: 'empty?', mo_x_sent: 'Sent',
+    mo_x_file: 'Leads_October_final2.xlsx', mo_x_source: 'Source', mo_x_state: 'Status', mo_x_twice: 'twice?',
+    mo_x_bubble: 'Is the proposal coming today?', mo_x_sticky: 'Call Lindner back!! Number??',
+    mo_x_tuesday: 'Tuesday', mo_x_todo1: 'Send the form', mo_x_todo2: 'Set up the call', mo_x_todo3: 'Write the briefing',
+    mo_x_offer: 'Proposal sent, twelve-month term.',
+    mo_x_meet_when: 'Tue, 14:00 to 14:30', mo_x_invite: 'Invitation to marie.lindner@example.de', mo_x_meet_note: '11:00 was already taken.', mo_x_join: 'Join Google Meet',
+    mo_x_e1: 'Call-back Berger', mo_x_e2: 'Team meeting', mo_x_e3: 'Viewing Krüger', mo_x_e4: 'Hand-over Hofmann',
+    mo_ev_name: 'Contract signed',
+    brk_title: 'Quick break', brk_close: 'Close', brk_field: 'Playing field', brk_hold: 'Hold', brk_next: 'Next up',
+    brk_score: 'Score', brk_lines: 'Lines', brk_level: 'Level', brk_record: 'High score',
+    brk_pause: 'Pause', brk_resume: 'Resume', brk_board: 'High scores', brk_back: 'Back to the game', brk_again: 'Play again',
+    brk_over: 'Game over. {n} points.', brk_place: 'Place {n} on the board!', brk_name_label: 'Name for the high scores', brk_name_default: 'Guest', brk_save: 'Save',
+    brk_board_empty: 'No entries yet. First place is open.', brk_scope_browser: 'Kept in this browser.', brk_scope_team: 'The whole team\u2019s high scores.',
+    brk_help: 'Arrow keys move and turn, space drops, C holds, P pauses.',
+    brk_pad: 'Controls', brk_key_left: 'Left', brk_key_right: 'Right', brk_key_rotate: 'Turn', brk_key_down: 'Down', brk_key_drop: 'Drop', brk_key_hold: 'Hold piece',
   },
 };
 
-const LP_MONTHS = {
-  de: ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'],
-  en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-};
-
-// What each ad platform hands over: a real payload shape and the mapping that reads it (the inbound
-// webhook's own dot-path mapping), so the card that lands is what the webhook would make of it.
-const LP_LEADS = {
-  fb:  { key: 'lp_src_fb',  payload: { data: { lead: { name: 'Lena Hoffmann', email: 'lena.hoffmann@example.de', company: 'Hoffmann Immobilien' } } }, map: { name: 'data.lead.name', email: 'data.lead.email', phone: 'data.lead.phone', company: 'data.lead.company' } },
-  ig:  { key: 'lp_src_ig',  payload: { first_name: 'Sofia', last_name: 'Marin', email_address: 'sofia.marin@example.de', phone_number: '+49 160 9876543' }, map: { name: 'first_name', email: 'email_address', phone: 'phone_number', company: 'company_name' } },
-  tt:  { key: 'lp_src_tt',  payload: { full_name: 'Jonas Richter', contact: { email: 'jonas.richter@example.de', phone: '+49 171 5550123' } }, map: { name: 'full_name', email: 'contact.email', phone: 'contact.phone', company: 'company' } },
-  web: { key: 'lp_src_web', payload: { name: 'Miriam Vogt', email: 'miriam.vogt@example.de', company: 'Vogt & Söhne' }, map: { name: 'name', email: 'email', phone: 'phone', company: 'company' } },
-};
-const LP_LEAD_ORDER = ['fb', 'ig', 'tt', 'web'];
-
-// Three periods of example figures for the numbers surface.
-const LP_ANALYTICS = {
-  3:  { open: 1840000, won: 1210000, rate: 46, newDeals: 23, rates: [38, 44, 47], wonM: [5, 7, 8], lostM: [8, 9, 9], funnel: [31, 19, 12, 8], lost: 10 },
-  6:  { open: 1840000, won: 2370000, rate: 42, newDeals: 48, rates: [31, 35, 38, 38, 44, 47], wonM: [4, 5, 6, 5, 7, 8], lostM: [9, 9, 10, 8, 9, 9], funnel: [64, 39, 24, 17], lost: 21 },
-  12: { open: 1840000, won: 4620000, rate: 38, newDeals: 97, rates: [26, 28, 27, 30, 31, 29, 31, 35, 38, 38, 44, 47], wonM: [3, 3, 3, 4, 4, 3, 4, 5, 6, 5, 7, 8], lostM: [8, 8, 8, 9, 9, 7, 9, 9, 10, 8, 9, 9], funnel: [131, 76, 46, 31], lost: 43 },
-};
-
-// The booking month as the dialog draws it: October 2026, Monday first (the 1st is a Thursday, so
-// three blanks lead), the 7th is today, the weekdays with free times, the times of a day, the two
-// event types' lengths, and the one entry the team calendar already holds (Thursday the 8th, 11:00).
-const LP_MEET = { month: 10, lead: 3, days: 31, today: 7, free: [8, 12, 13, 14, 15, 19, 20, 21, 22, 26, 27, 28, 29], slots: ['09:00', '10:00', '11:00', '14:00', '15:30'], types: { 1: 30, 2: 60 }, busy: { day: 8, time: '11:00', key: 'lp_bk_busy', who: 'Tim Berger' } };
-const LP_CONTACT = { name: 'Jana Weber', email: 'jana.weber@example.de', phone: '+49 171 2345678' };
-
-let lpLang = 'de';
-const lpRerender = [];   // functions that repaint script-generated text when the language changes
-const LP_ACTS = {};      // act name → the function the scroll drives with its progress (0..1)
-const LP_REC = {};       // what the record lets the acts do (filled by lpInitRecord)
-const LP_BOOK = {};      // what the booking sheet lets the acts do (filled by lpInitBooking)
-
-// ── i18n ────────────────────────────────────────────────────────────────────
-function lpT(key, vars) {
-  const d = LP_I18N[lpLang] || LP_I18N.en;
-  let s = (d && d[key]) ?? LP_I18N.en[key] ?? key;
-  if (vars) for (const k of Object.keys(vars)) s = s.split('{' + k + '}').join(String(vars[k]));
+/* ── 02 · language ────────────────────────────────────────────────────── */
+let moLang = 'de';
+function moT(k, vars) {
+  let s = (MO_I18N[moLang] && MO_I18N[moLang][k]) ?? MO_I18N.de[k] ?? k;
+  if (vars) for (const [a, b] of Object.entries(vars)) s = s.split('{' + a + '}').join(String(b));
   return s;
 }
-function lpApplyLang(lang) {
-  lpLang = LP_I18N[lang] ? lang : 'de';
-  document.documentElement.lang = lpLang;
-  try { localStorage.setItem('lang', lpLang); } catch {}
-  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = lpT(el.dataset.i18n); });
-  document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = lpT(el.dataset.i18nPh); });
-  document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', lpT(el.dataset.i18nAria)); });
-  document.querySelectorAll('.lp-lang-btn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lpLang)));
-  document.querySelectorAll('.lp-request').forEach(a => { a.href = 'mailto:hello@upgrads.de?subject=' + encodeURIComponent(lpT('lp_request_subject')); });
-  for (const fn of lpRerender) fn();
+function moApplyLang() {
+  document.documentElement.lang = moLang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = moT(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => el.setAttribute('aria-label', moT(el.dataset.i18nAria)));
+  document.querySelectorAll('.mo-lang-btn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === moLang)));
+  moRefreshNotes();
+  moSetCut(MO_W.cut, false);
+  moRenderAll();
 }
-function lpSetLang(lang) { lpApplyLang(lang); }
+function moSetLang(l) {
+  if (l !== 'de' && l !== 'en') return;
+  moLang = l;
+  try { localStorage.setItem('lang', l); } catch (e) { /* private mode */ }
+  moApplyLang();
+}
 
-// ── small helpers ───────────────────────────────────────────────────────────
-const lpReduce = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const lpEl = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-const lpSvg = id => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('class', 'lp-ic lp-ic-sm'); const u = document.createElementNS('http://www.w3.org/2000/svg', 'use'); u.setAttribute('href', '#' + id); s.appendChild(u); return s; };
-function lpFmtEur(n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' €'; }
-function lpFmtEurShort(n) {
-  if (n >= 1e6) return (n / 1e6).toFixed(2).replace('.', ',') + ' M €';
-  if (n >= 1e3) return Math.round(n / 1e3) + ' k €';
-  return lpFmtEur(n);
+/* ── 03 · helpers, the toast ──────────────────────────────────────────── */
+function moEsc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function moClamp(n, a, b) { return Math.min(b, Math.max(a, n)); }
+// Money as the app's board shows it (public/js/deals.js: 9.8k €, 1.2M €).
+function moMoney(v) {
+  if (v == null) return '';
+  if (v >= 1e6) return (v / 1e6).toLocaleString('en-US', { maximumFractionDigits: 2 }) + 'M €';
+  if (v >= 1e3) return (v / 1e3).toLocaleString('en-US', { maximumFractionDigits: 2 }) + 'k €';
+  return v + ' €';
 }
-// cards: [{ value, won }] → open and won sums, counts, and the won share in percent
-function lpBoardStats(cards) {
-  let open = 0, won = 0, openN = 0, wonN = 0;
-  for (const c of cards) { if (c.won) { won += c.value; wonN++; } else { open += c.value; openN++; } }
-  const total = openN + wonN;
-  return { open, won, openN, wonN, total, rate: total ? Math.round((wonN / total) * 100) : 0 };
+function moIcon(name, cls) { return `<svg class="mo-ic${cls ? ' ' + cls : ''}" aria-hidden="true"><use href="#mo-i-${name}"/></svg>`; }
+function moReduced() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+// The app's toast: a line and a bare Rückgängig button, three at most, gone after 4.2 s.
+function moToast(text, undo) {
+  const host = document.getElementById('mo-toasts'); if (!host) return;
+  while (host.children.length >= 3) host.firstChild.remove();
+  const el = document.createElement('div'); el.className = 'mo-toast';
+  el.innerHTML = `<span>${moEsc(text)}</span>${undo ? `<button type="button">${moEsc(moT('mo_undo'))}</button>` : ''}`;
+  if (undo) el.querySelector('button').addEventListener('click', () => { el.remove(); undo(); });
+  host.appendChild(el);
+  setTimeout(() => el.remove(), 4200);
 }
-// dot-path lookup, as routes/integrations.js reads mapped keys ("data.lead.email")
-function lpGetPath(obj, path) {
-  if (!path) return undefined;
-  return String(path).split('.').reduce((o, k) => (o !== null && o !== undefined && typeof o === 'object' && k in o ? o[k] : undefined), obj);
+
+/* ── 04 · the hand: the notes in the margin ───────────────────────────── */
+// Each note says what to try; once something was done, it answers. The arrow redraws only when the words change.
+const MO_NOTES = { wipe: 'mo_n_wipe_idle', leads: 'mo_n_leads_idle', cal: 'mo_n_cal_idle', won: 'mo_n_won_idle' };
+function moNote(name, key) {
+  const changed = MO_NOTES[name] !== key;
+  MO_NOTES[name] = key;
+  const el = document.querySelector(`.mo-note[data-note="${name}"]`); if (!el) return;
+  const text = el.querySelector('.mo-note-text'); if (text) text.textContent = moT(key);
+  if (changed && !moReduced()) { el.classList.remove('is-fresh'); void el.offsetWidth; el.classList.add('is-fresh'); }
 }
-function lpMapLead(payload, map) {
-  const fields = {}, missing = [];
-  for (const [field, key] of Object.entries(map || {})) {
-    if (!key) continue;
-    const v = lpGetPath(payload, key);
-    if (v === undefined || v === null || v === '') missing.push(key); else fields[field] = String(v);
+function moRefreshNotes() {
+  for (const [name, key] of Object.entries(MO_NOTES)) {
+    const text = document.querySelector(`.mo-note[data-note="${name}"] .mo-note-text`);
+    if (text) text.textContent = moT(key);
   }
-  return { ok: Boolean(fields.name || fields.email), fields, missing };
-}
-// times, as the booking dialog shows them
-function lpAmPm(t) { const [h, m] = String(t).split(':').map(Number); return (h % 12 || 12) + ':' + String(m || 0).padStart(2, '0') + ' ' + (h < 12 ? 'AM' : 'PM'); }
-function lpAddMin(t, n) { const [h, m] = String(t).split(':').map(Number); const x = h * 60 + (m || 0) + n; return String(Math.floor(x / 60) % 24).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0'); }
-function lpMeetDay(d) {
-  const wd = lpT('lp_wd' + (((LP_MEET.lead + d - 1) % 7) + 1));
-  const mon = (LP_MONTHS[lpLang] || LP_MONTHS.en)[LP_MEET.month - 1];
-  return lpLang === 'de' ? `${wd}, ${d}. ${mon}` : `${wd}, ${d} ${mon}`;
-}
-// the ease the moving card follows with the scroll
-function lpEase(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
-// move `el` into `parent` (before `before`) and animate it from where it was: FLIP
-function lpFlip(el, parent, before, reduce, start) {
-  const a = start || el.getBoundingClientRect();   // `start`: where the element is drawn right now, when a transform has carried it away from its box
-  if (before) parent.insertBefore(el, before); else parent.appendChild(el);
-  if (reduce) return;
-  const b = el.getBoundingClientRect();
-  const dx = a.left - b.left, dy = a.top - b.top;
-  if (!dx && !dy) return;
-  el.style.transition = 'none'; el.style.transform = `translate(${dx}px, ${dy}px)`;
-  requestAnimationFrame(() => { el.style.transition = 'transform .55s cubic-bezier(.32,.72,0,1)'; el.style.transform = ''; });
-  el.addEventListener('transitionend', () => { el.style.transition = ''; }, { once: true });
-}
-// the throw: a point on the flat arc from (x0, y0) to (x1, y1), lifted by about a fifth of the distance; u in [0, 1]
-function lpArcPoint(x0, y0, x1, y1, u) {
-  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2 - Math.hypot(x1 - x0, y1 - y0) * 0.22, v = 1 - u;
-  return { x: v * v * x0 + 2 * v * u * cx + u * u * x1, y: v * v * y0 + 2 * v * u * cy + u * u * y1 };
-}
-// the centres of `from` and `to`, measured inside `frame`
-function lpArcEnds(frame, from, to) {
-  const f = frame.getBoundingClientRect(), a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
-  return { x0: a.left - f.left + a.width / 2, y0: a.top - f.top + a.height / 2, x1: b.left - f.left + b.width / 2, y1: b.top - f.top + b.height / 2 };
-}
-// fly `packet` (absolute inside `frame`) along the throw from `from` to `to`, growing on the way and fading at both ends
-function lpFly(packet, frame, from, to, ms) {
-  const { x0, y0, x1, y1 } = lpArcEnds(frame, from, to);
-  packet.classList.remove('hidden');
-  if (lpReduce() || !packet.animate) { packet.style.transform = `translate(${x1}px, ${y1}px)`; return Promise.resolve(); }
-  const frames = [];
-  for (let i = 0; i <= 16; i++) { const u = i / 16, q = lpArcPoint(x0, y0, x1, y1, u), s = Math.sin(Math.PI * u); frames.push({ transform: `translate(${q.x}px, ${q.y}px) scale(${0.55 + 0.45 * s})`, opacity: Math.min(1, s * 2.2) }); }
-  const anim = packet.animate(frames, { duration: ms, easing: 'cubic-bezier(.45, 0, .2, 1)', fill: 'forwards' });
-  return anim.finished.catch(() => {});
-}
-function lpCountUp(el, target, fmt, ms) {
-  const t0 = performance.now();
-  const step = now => { const t = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - t, 3); el.textContent = fmt(target * e); if (t < 1) requestAnimationFrame(step); };
-  requestAnimationFrame(step);
-}
-// a toast inside a surface, with an optional undo; hides itself
-function lpToast(el, text, undoFn) {
-  if (!el) return;
-  const t = el.querySelector('.lp-toast-text'); if (t) t.textContent = text;
-  const u = el.querySelector('.lp-toast-undo'); if (u) { u.classList.toggle('hidden', !undoFn); u.onclick = () => { undoFn?.(); el.classList.add('hidden'); }; }
-  el.classList.remove('hidden');
-  clearTimeout(el.__timer); el.__timer = setTimeout(() => el.classList.add('hidden'), 4200);
 }
 
-// ── the bar ─────────────────────────────────────────────────────────────────
-function lpInitBar() {
-  const bar = document.querySelector('.lp-bar');
-  if (!bar) return;
-  const onScroll = () => bar.classList.toggle('is-scrolled', window.scrollY > 16);
-  window.addEventListener('scroll', onScroll, { passive: true });
-  onScroll();
-  document.querySelectorAll('.lp-lang-btn').forEach(b => b.addEventListener('click', () => lpSetLang(b.dataset.lang)));
+/* ── 05 · the wipe: the same Monday, twice ────────────────────────────── */
+// cut: how much of the width shows Upgrads, in percent. A mouse moves the line at once; a finger only after a
+// sideways move of 6 px, so a vertical swipe over the desk still scrolls the page.
+const MO_W = { cut: 12, done: false, drag: null, touched: false, raf: 0 };
+function moCutAt(x, left, width) { return width > 0 ? moClamp((x - left) / width * 100, 0, 100) : 0; }
+function moSetCut(v, byHand) {
+  const stage = document.getElementById('mo-wipe'), range = document.getElementById('mo-wipe-range'); if (!stage) return;
+  MO_W.cut = moClamp(v, 0, 100);
+  stage.style.setProperty('--mo-cut', MO_W.cut.toFixed(2) + '%');
+  if (range) { range.value = String(Math.round(MO_W.cut)); range.setAttribute('aria-valuetext', moT('mo_wipe_value', { n: Math.round(MO_W.cut) })); }
+  if (byHand) moWipeNote();
 }
-
-// ── a board: the real drag-and-drop board with live totals ──────────────────
-// One per act. Returns what the acts need: a lead card that lands (and leaves again when the
-// page scrolls back), the deal card driven toward Gewonnen, a reset.
-function lpBoard(root, { onWon } = {}) {
-  const board = root.querySelector('.lp-board');
-  if (!board) return null;
-  const reduce = lpReduce();
-  const cols = [...board.querySelectorAll('.lp-col')], colOf = stage => cols.find(c => c.dataset.stage === stage);
-  const stats = root.querySelector('.lp-stats'), toast = root.querySelector('.lp-toast');
-  const hero = board.querySelector('.lp-card[data-hero]');
-  const home = new Map([...board.querySelectorAll('.lp-card')].map(c => [c, { parent: c.parentElement, next: c.nextElementSibling }]));
-
-  function refresh() {
-    const all = [];
-    for (const c of cols) {
-      const cards = [...c.querySelectorAll('.lp-card')], won = c.dataset.stage === 'won';
-      let sum = 0;
-      for (const card of cards) { const v = Number(card.dataset.value) || 0; sum += v; all.push({ value: v, won }); }
-      c.querySelector('.lp-col-count').textContent = cards.length + ' ' + lpT(cards.length === 1 ? 'lp_deal_one' : 'lp_deal_many');
-      c.querySelector('.lp-col-sum').textContent = lpFmtEurShort(sum);
-    }
-    const s = lpBoardStats(all);
-    if (stats) stats.textContent = lpT('lp_stats_line', { open: lpFmtEurShort(s.open), n: s.openN, won: lpFmtEurShort(s.won), rate: s.rate });
-    board.querySelectorAll('.lp-card.is-lead[data-src]').forEach(card => { const sub = card.querySelector('.lp-card-sub'); if (sub && !sub.dataset.i18n) sub.textContent = lpT('lp_lead_from', { src: lpT(LP_LEADS[card.dataset.src]?.key || 'lp_src_web') }); });
+// Nearly tidy: "Schon besser." Back at the mess after that: "Zurück ins Chaos?"
+function moWipeNote() {
+  if (MO_W.cut >= 88) { MO_W.done = true; moNote('wipe', 'mo_n_wipe_done'); }
+  else if (MO_W.done && MO_W.cut <= 8) { MO_W.done = false; moNote('wipe', 'mo_n_wipe_back'); }
+}
+function moStopNudge() { MO_W.touched = true; cancelAnimationFrame(MO_W.raf); }
+// The page's one unasked movement: when the desk is first seen, the line leans 22 points to the right and back.
+function moNudge() {
+  if (MO_W.touched || moReduced()) return;
+  const from = MO_W.cut, t0 = performance.now(), dur = 1400;
+  const step = now => {
+    if (MO_W.touched) return;
+    const p = Math.min(1, (now - t0) / dur);
+    moSetCut(from + 22 * Math.sin(Math.PI * p), false);
+    if (p < 1) MO_W.raf = requestAnimationFrame(step);
+  };
+  MO_W.raf = requestAnimationFrame(step);
+}
+function moInitWipe() {
+  const stage = document.getElementById('mo-wipe'), range = document.getElementById('mo-wipe-range'); if (!stage || !range) return;
+  const at = e => { const r = stage.getBoundingClientRect(); return moCutAt(e.clientX, r.left, r.width); };
+  const engage = e => { MO_W.drag.live = true; stage.setPointerCapture(e.pointerId); stage.classList.add('is-dragging'); moStopNudge(); moSetCut(at(e), true); };
+  stage.addEventListener('pointerdown', e => {
+    if (e.button) return;
+    MO_W.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, live: false };
+    if (e.pointerType === 'mouse') { e.preventDefault(); engage(e); }
+  });
+  stage.addEventListener('pointermove', e => {
+    const d = MO_W.drag; if (!d || d.id !== e.pointerId) return;
+    if (!d.live) { const dx = Math.abs(e.clientX - d.x), dy = Math.abs(e.clientY - d.y); if (dx > 6 && dx > dy) engage(e); return; }
+    moSetCut(at(e), true);
+  });
+  const end = e => { if (!MO_W.drag || MO_W.drag.id !== e.pointerId) return; MO_W.drag = null; stage.classList.remove('is-dragging'); };
+  stage.addEventListener('pointerup', end);
+  stage.addEventListener('pointercancel', end);
+  range.addEventListener('input', () => { moStopNudge(); moSetCut(+range.value, true); });
+  moSetCut(MO_W.cut, false);
+  if ('IntersectionObserver' in window && !moReduced()) {
+    const io = new IntersectionObserver(entries => { if (entries.some(en => en.isIntersecting)) { io.disconnect(); moNudge(); } }, { threshold: .6 });
+    io.observe(stage);
   }
-  lpRerender.push(refresh);
+}
 
-  // move a card into a column (before a sibling), announce, tell the act if it reached Won
-  function place(card, c, before, { quiet = false, start = null } = {}) {
-    const from = card.parentElement, nextSib = card.nextElementSibling;
-    lpFlip(card, c.querySelector('.lp-col-cards'), before, reduce, start);
-    card.classList.toggle('is-won', c.dataset.stage === 'won');
-    refresh();
-    if (from === card.parentElement) return;
-    if (!quiet) lpToast(toast, lpT('lp_toast_moved', { stage: c.querySelector('h3').textContent }), () => { from.insertBefore(card, nextSib && nextSib.parentElement === from ? nextSib : null); card.classList.toggle('is-won', from.closest('.lp-col').dataset.stage === 'won'); refresh(); });
-    if (c.dataset.stage === 'won') { if (!reduce) { c.classList.remove('is-flash'); void c.offsetWidth; c.classList.add('is-flash'); } onWon?.(); }
-  }
+/* ── 06 · leads: what the webhook does ────────────────────────────────── */
+// The column starts with the weekend's leads. Each source sends a new person first, then someone already there:
+// a known email updates the contact instead of making a second one. Nobody is notified, so nothing says so.
+let moLeads = [
+  { name: 'Tom Riedel', email: 'tom.riedel@example.de', src: 'tt', day: 'mo_d0', time: '07:55' },
+  { name: 'Sophie Brandt', email: 'sophie.brandt@example.de', src: 'ig', day: 'mo_d_sun', time: '10:02' },
+  { name: 'Jonas Weber', email: 'jonas.weber@example.de', src: 'fb', day: 'mo_d_sat', time: '23:14' },
+];
+const MO_LEAD_POOL = {
+  fb: [['Eva Schulz', 'eva.schulz@example.de'], ['Jonas Weber', 'jonas.weber@example.de']],
+  ig: [['Lea Fischer', 'lea.fischer@example.de'], ['Sophie Brandt', 'sophie.brandt@example.de']],
+  tt: [['Noah Klein', 'noah.klein@example.de'], ['Tom Riedel', 'tom.riedel@example.de']],
+  web: [['Clara Voss', 'clara.voss@example.de'], ['Eva Schulz', 'eva.schulz@example.de']],
+};
+let moLeadIx = { fb: 0, ig: 0, tt: 0, web: 0 };
+function moLeadCard(l) {
+  const mark = l.src === 'web' ? moIcon('globe', 'mo-logo-sm') : `<svg class="mo-logo mo-logo-sm" aria-hidden="true"><use href="#mo-l-${l.src}"/></svg>`;
+  const when = l.day ? moT(l.day) + ' ' + l.time : moT('mo_just_now');
+  return `<article class="mo-card${l.fresh ? ' is-fresh' : ''}">
+    <div class="mo-card-title">${moEsc(l.name)}</div>
+    <div class="mo-card-meta">${moEsc(l.email)}</div>
+    <div class="mo-card-foot"><span class="mo-card-src">${mark}${moEsc(moT('mo_src_' + l.src))}</span>${l.touched ? `<span class="mo-tag">${moEsc(moT('mo_updated'))}</span>` : ''}<span class="mo-card-time">${moEsc(when)}</span></div>
+  </article>`;
+}
+function moRenderInbox() {
+  const host = document.getElementById('mo-inbox'); if (!host) return;
+  host.innerHTML = `<section class="mo-col mo-s0" aria-label="${moEsc(moT('mo_st_new'))}">
+    <header class="mo-col-head"><span class="mo-dot"></span><span class="mo-col-name">${moEsc(moT('mo_st_new'))}</span><span class="mo-col-n">${moLeads.length}</span></header>
+    <div class="mo-col-cards">${moLeads.slice(0, 5).map(moLeadCard).join('')}</div>
+  </section>`;
+}
+function moArrive(src) {
+  const pool = MO_LEAD_POOL[src]; if (!pool) return;
+  const [name, email] = pool[moLeadIx[src] % pool.length]; moLeadIx[src]++;
+  moLeads.forEach(l => { l.fresh = false; l.touched = false; });
+  const known = moLeads.find(l => l.email === email);
+  if (known) { known.fresh = true; known.touched = true; moLeads = [known, ...moLeads.filter(l => l !== known)]; moNote('leads', 'mo_n_leads_known'); }
+  else { moLeads.unshift({ name, email, src, day: null, time: null, fresh: true }); moNote('leads', 'mo_n_leads_one'); }
+  moRenderInbox();
+}
+// The source's mark flies from its button into the first stage along a lifted arc, then the lead lands.
+function moFly(src, land) {
+  const from = document.querySelector(`#mo-sources .mo-src[data-src="${src}"] .mo-logo`), to = document.querySelector('#mo-inbox .mo-col-head'), host = document.getElementById('mo-fly');
+  if (!from || !to || !host || moReduced() || typeof host.animate !== 'function') { land(); return; }
+  const a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
+  const x0 = a.left + a.width / 2 - 18, y0 = a.top + a.height / 2 - 18, x1 = b.left + 24 - 18, y1 = b.top + b.height / 2 - 18;
+  const el = document.createElement('span'); el.className = 'mo-packet';
+  el.innerHTML = src === 'web' ? moIcon('globe', 'mo-logo') : `<svg class="mo-logo" aria-hidden="true"><use href="#mo-l-${src}"/></svg>`;
+  el.style.setProperty('--mo-px', x0 + 'px'); el.style.setProperty('--mo-py', y0 + 'px');
+  host.appendChild(el);
+  const mx = (x0 + x1) / 2, my = Math.min(y0, y1) - 64;
+  const anim = el.animate([
+    { transform: `translate(${x0}px, ${y0}px)` },
+    { transform: `translate(${mx}px, ${my}px)`, offset: .5 },
+    { transform: `translate(${x1}px, ${y1}px)` },
+  ], { duration: 600, easing: 'cubic-bezier(.3, .6, .2, 1)', fill: 'forwards' });
+  anim.onfinish = () => { el.remove(); land(); };
+}
+function moInitSources() {
+  const host = document.getElementById('mo-sources'); if (!host) return;
+  host.addEventListener('click', e => { const b = e.target.closest('.mo-src'); if (b) moFly(b.dataset.src, () => moArrive(b.dataset.src)); });
+}
 
-  // a lead card, as the webhook would make it from that platform's payload
-  function addLead(srcKey) {
-    if (board.querySelector(`.lp-card.is-lead[data-src="${srcKey}"]`)) return null;
-    const lead = LP_LEADS[srcKey], col = colOf('new');
-    const r = lpMapLead(lead.payload, lead.map);
-    const card = lpEl('article', 'lp-card is-lead is-new'); card.tabIndex = 0; card.dataset.value = '0'; card.dataset.src = srcKey;
-    card.appendChild(lpEl('span', 'lp-card-stripe'));
-    card.appendChild(lpEl('h4', 'lp-card-title', r.fields.name || r.fields.email));
-    card.appendChild(lpEl('p', 'lp-card-sub', lpT('lp_lead_from', { src: lpT(lead.key) })));
-    const foot = lpEl('div', 'lp-card-foot'); foot.appendChild(lpEl('span', 'lp-card-value', r.fields.company || r.fields.email || '')); foot.appendChild(lpEl('span', 'lp-avatar', 'MK')); card.appendChild(foot);
-    col.querySelector('.lp-col-cards').prepend(card);
-    if (!reduce) { col.classList.remove('is-hit'); void col.offsetWidth; col.classList.add('is-hit'); }
-    refresh();
-    return card;
-  }
-  function removeLead(srcKey) { const card = board.querySelector(`.lp-card.is-lead[data-src="${srcKey}"]:not([data-i18n])`); if (card && !home.has(card)) { card.remove(); refresh(); } }
+/* ── 07 · the meeting: the calendar has a say ─────────────────────────── */
+// The check the app does: the host's own entries on that day that overlap the slot. A colleague's entry is shown, not checked.
+const MO_DAYS = ['mo_d0', 'mo_d1', 'mo_d2', 'mo_d3', 'mo_d4'];
+const MO_SLOTS = ['09:00', '10:00', '11:00', '14:00', '15:00'];
+const MO_PEOPLE = { AW: 'Anna Weiß', JK: 'Jan Krause' };
+let moEvents = [
+  { id: 'e1', day: 0, start: '09:00', len: 30, who: 'AW', key: 'mo_x_e1' },
+  { id: 'e2', day: 1, start: '11:00', len: 30, who: 'AW', key: 'mo_x_e2' },
+  { id: 'e3', day: 1, start: '15:00', len: 60, who: 'AW', key: 'mo_x_e3' },
+  { id: 'e4', day: 3, start: '10:00', len: 30, who: 'JK', key: 'mo_x_e4' },
+];
+let moBookState = { day: 1, slot: null };
+let moNextId = 100;
+function moMin(t) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+function moConflict(day, slot, len, events, host) {
+  const s = moMin(slot), e = s + len;
+  return events.filter(ev => ev.day === day && ev.who === host && moMin(ev.start) < e && moMin(ev.start) + ev.len > s);
+}
+function moWeekHtml() {
+  const H0 = 9, H1 = 17;
+  const head = `<div class="mo-week-head"><span></span>${MO_DAYS.map(k => `<span>${moEsc(moT(k))}</span>`).join('')}</div>`;
+  let lines = '';
+  for (let h = H0; h < H1; h++) { lines += `<span class="mo-hr">${h}</span>`; for (let i = 0; i < 5; i++) lines += '<span class="mo-wcell"></span>'; }
+  const evs = moEvents.map(ev => {
+    const label = ev.key ? moT(ev.key) : ev.title;
+    return `<div class="mo-ev${ev.len === 30 ? ' mo-ev-30' : ''}${ev.who !== 'AW' ? ' mo-ev-other' : ''}${ev.booked ? ' is-new' : ''}" data-c="${ev.day + 2}" data-r="${Math.floor(moMin(ev.start) / 60) - H0 + 1}" data-rs="${Math.ceil(ev.len / 60)}" title="${moEsc(ev.start + ' ' + label + ' (' + MO_PEOPLE[ev.who] + ')')}">${moEsc(label)}</div>`;
+  }).join('');
+  return head + `<div class="mo-week-body"><div class="mo-week-lines">${lines}</div><div class="mo-week-evs">${evs}</div></div>`;
+}
+function moRenderBook() {
+  const host = document.getElementById('mo-book'); if (!host) return;
+  const B = moBookState;
+  const conflicts = B.slot ? moConflict(B.day, B.slot, 30, moEvents, 'AW') : [];
+  const chip = (attr, v, label, on) => `<button type="button" class="mo-chip${on ? ' is-on' : ''}" data-${attr}="${v}" aria-pressed="${on}">${moEsc(label)}</button>`;
+  const conflict = conflicts.length ? `<div class="mo-conflict" role="alert">${conflicts.map(c => `<p>${moEsc(moT('mo_book_conflict', { time: c.start, title: moT(c.key), who: MO_PEOPLE[c.who] }))}</p>`).join('')}<p>${moEsc(moT('mo_book_conflict_hint'))}</p></div>` : '';
+  host.innerHTML = `<div class="mo-dlg mo-surface">
+      <div class="mo-dlg-title">${moEsc(moT('mo_book_title', { name: 'Marie Lindner' }))}</div>
+      <span class="mo-label">${moEsc(moT('mo_book_date'))}</span><div class="mo-chips" role="group" aria-label="${moEsc(moT('mo_book_date'))}">${MO_DAYS.map((k, i) => chip('day', i, moT(k), B.day === i)).join('')}</div>
+      <span class="mo-label">${moEsc(moT('mo_book_time'))}</span><div class="mo-chips" role="group" aria-label="${moEsc(moT('mo_book_time'))}">${MO_SLOTS.map(s => chip('slot', s, s, B.slot === s)).join('')}</div>
+      ${conflict}
+      <div class="mo-dlg-foot"><button type="button" class="mo-btn mo-btn-primary" id="mo-book-go"${B.slot ? '' : ' disabled'}>${moEsc(moT(conflicts.length ? 'mo_book_anyway' : 'mo_book_submit'))}</button></div>
+    </div>
+    <div class="mo-week mo-surface" role="group" aria-label="${moEsc(moT('mo_week_aria'))}">${moWeekHtml()}</div>`;
+  host.querySelectorAll('.mo-ev').forEach(el => { el.style.setProperty('--mo-c', el.dataset.c); el.style.setProperty('--mo-r1', el.dataset.r); el.style.setProperty('--mo-rs', el.dataset.rs); });
+}
+// After a pick: a clash gets "Ups"; the first free pick after a clash gets "Frei".
+function moCalNote() {
+  const B = moBookState; if (!B.slot) return;
+  if (moConflict(B.day, B.slot, 30, moEvents, 'AW').length) moNote('cal', 'mo_n_cal_conflict');
+  else if (MO_NOTES.cal === 'mo_n_cal_conflict') moNote('cal', 'mo_n_cal_free');
+}
+function moBook() {
+  const B = moBookState; if (!B.slot) return;
+  const ev = { id: 'b' + moNextId++, day: B.day, start: B.slot, len: 30, who: 'AW', title: 'Marie Lindner', booked: true };
+  moEvents.push(ev);
+  const when = moT(MO_DAYS[B.day]) + ' ' + B.slot;
+  B.slot = null;
+  moRenderBook(); moNote('cal', 'mo_n_cal_booked');
+  moToast(moT('mo_book_done', { when }), () => { moEvents = moEvents.filter(e => e.id !== ev.id); moRenderBook(); moNote('cal', 'mo_n_cal_idle'); });
+}
+function moInitBook() {
+  const host = document.getElementById('mo-book'); if (!host) return;
+  host.addEventListener('click', e => {
+    const B = moBookState;
+    const day = e.target.closest('[data-day]'); if (day) { B.day = +day.dataset.day; moRenderBook(); moCalNote(); return; }
+    const slot = e.target.closest('[data-slot]'); if (slot) { B.slot = slot.dataset.slot; moRenderBook(); moCalNote(); return; }
+    if (e.target.closest('#mo-book-go')) moBook();
+  });
+}
 
-  // the deal card driven toward Gewonnen: q in (0, 1) carries it along the way, lifted a little as a hand would; 1 lands it; 0 brings it home
-  let wonPlaced = false;
-  function setWon(q) {
-    if (!hero) return;
-    const won = colOf('won'), nego = home.get(hero)?.parent;
-    if (!won || !nego) return;
-    const wc = won.querySelector('.lp-col-cards');
-    if (q >= 1) {
-      if (wonPlaced) return;
-      wonPlaced = true;
-      const start = hero.getBoundingClientRect();          // where the travel left it: the landing starts there, never from home
-      hero.style.transform = ''; hero.classList.remove('is-lifted');
-      place(hero, won, wc.firstElementChild, { quiet: true, start });
-      return;
-    }
-    if (wonPlaced) { wonPlaced = false; nego.insertBefore(hero, home.get(hero).next && home.get(hero).next.parentElement === nego ? home.get(hero).next : null); hero.classList.remove('is-won'); refresh(); }
-    if (q <= 0) { hero.style.transform = ''; hero.classList.remove('is-lifted'); return; }
-    // offsets ignore transforms: the way is measured from the card's own box to the top slot of Gewonnen, whatever the frame shows
-    const dx = wc.offsetLeft - nego.offsetLeft, dy = wc.offsetTop + parseFloat(getComputedStyle(wc).paddingTop) - hero.offsetTop;
-    const e = lpEase(q), lift = Math.sin(Math.PI * e);
-    hero.classList.add('is-lifted');
-    hero.style.transform = `translate(${dx * e}px, ${dy * e - 18 * lift}px) scale(${1 + .04 * lift})`;
-  }
-  function reset() {
-    wonPlaced = false;
-    board.querySelectorAll('.lp-card.is-lead:not([data-i18n])').forEach(c => { if (!home.has(c)) c.remove(); });
-    for (const [card, h] of home) { h.parent.insertBefore(card, h.next && h.next.parentElement === h.parent ? h.next : null); card.classList.toggle('is-won', h.parent.closest('.lp-col').dataset.stage === 'won'); card.style.transform = ''; card.classList.remove('is-lifted'); }
-    toast?.classList.add('hidden'); refresh();
-  }
-
-  // pointer drag: lifted into a fixed layer, a placeholder keeps the slot, the column under the pointer highlights
+/* ── 08 · won, the Engine ─────────────────────────────────────────────── */
+// One card moves: Marie Lindner, from Verhandlung to Gewonnen (drag, arrow keys, or the button). Into Gewonnen
+// the Engine gets one event: pending, delivered a moment later, the customer's first status follows. Back out, it forgets.
+const MO_HERO = 1;
+let moWonDeals = [
+  { id: 1, title: 'Marie Lindner', meta: 'Lindner & Sohn', value: 9800, urg: 3, stage: 'nego' },
+  { id: 7, title: 'Nadia Öztürk', meta: 'Öztürk Immobilien', value: 5600, urg: 1, stage: 'nego' },
+  { id: 8, title: 'Peters & Co.', meta: 'Daniel Peters', value: 8900, urg: 0, stage: 'won' },
+];
+let moEngine = { fired: false, delivered: false, step: 0 };
+let moEngineTimer = null;
+const moStageKey = st => st === 'won' ? 'mo_st_won' : 'mo_st_nego';
+function moDealCard(d) {
+  const hero = d.id === MO_HERO;
+  return `<article class="mo-card${hero ? ' is-hero' : ''}${d.fresh ? ' is-fresh' : ''}" data-id="${d.id}"${hero ? ' tabindex="0"' : ''} aria-label="${moEsc(d.title)}">
+    <div class="mo-card-title">${moEsc(d.title)}</div>
+    <div class="mo-card-meta">${moEsc(d.meta)}</div>
+    <div class="mo-card-foot"><span class="mo-card-val">${moEsc(moMoney(d.value))}</span>${d.urg ? `<span class="mo-badge mo-u${d.urg}">${moEsc(moT('mo_urg_' + d.urg))}</span>` : ''}</div>
+  </article>`;
+}
+function moColHtml(stage) {
+  const deals = moWonDeals.filter(d => d.stage === stage), sum = deals.reduce((a, d) => a + d.value, 0);
+  return `<section class="mo-col ${stage === 'won' ? 'mo-s4' : 'mo-s3'}" data-stage="${stage}" aria-label="${moEsc(moT(moStageKey(stage)))}">
+    <header class="mo-col-head"><span class="mo-dot"></span><span class="mo-col-name">${moEsc(moT(moStageKey(stage)))}</span><span class="mo-col-n">${deals.length}</span><span class="mo-col-sum">${moEsc(moMoney(sum))}</span></header>
+    <div class="mo-col-cards">${deals.map(moDealCard).join('')}</div>
+  </section>`;
+}
+function moRenderWon() {
+  const host = document.getElementById('mo-won'); if (!host) return;
+  const hero = moWonDeals.find(d => d.id === MO_HERO);
+  host.innerHTML = moColHtml('nego') + moColHtml('won')
+    + `<div class="mo-won-foot"><span class="mo-help">${moEsc(moT('mo_current_stage', { s: moT(moStageKey(hero.stage)) }))}</span><button type="button" class="mo-btn mo-btn-primary" id="mo-won-go"${hero.stage === 'won' ? ' disabled' : ''}>${moEsc(moT('mo_move_to', { s: moT('mo_st_won') }))}</button></div>`
+    + `<div class="mo-eng mo-surface" id="mo-engine"></div>`;
+  moRenderEngine();
+}
+function moMoveHero(stage, quiet) {
+  const d = moWonDeals.find(x => x.id === MO_HERO); if (!d || d.stage === stage) return;
+  const prev = d.stage;
+  moWonDeals.forEach(x => { x.fresh = false; });
+  d.stage = stage; d.fresh = true;
+  if (stage === 'won') { moEngineFire(); moNote('won', 'mo_n_won_done'); }
+  else { moEngineReset(); moNote('won', quiet ? 'mo_n_won_undo' : 'mo_n_won_idle'); }
+  moRenderWon();
+  if (quiet) return;
+  moToast(moT('mo_moved_to', { s: moT(moStageKey(stage)) }), () => moMoveHero(prev, true));
+}
+function moEngineFire() {
+  if (moEngine.fired) return;
+  moEngine = { fired: true, delivered: false, step: 0 };
+  const done = () => { if (!moEngine.fired) return; moEngine.delivered = true; moEngine.step = 1; moRenderEngine(); };
+  if (moReduced()) done(); else moEngineTimer = setTimeout(done, 1100);
+}
+function moEngineReset() {
+  clearTimeout(moEngineTimer);
+  moEngine = { fired: false, delivered: false, step: 0 };
+}
+function moRenderEngine() {
+  const host = document.getElementById('mo-engine'); if (!host) return;
+  const deliveries = moEngine.fired
+    ? `<div class="mo-dl"><div class="mo-dl-main"><b>${moEsc(moT('mo_ev_name'))}</b><span class="mo-help">Marie Lindner</span></div><span class="mo-badge ${moEngine.delivered ? 'mo-ok' : 'mo-wait'}">${moEsc(moT(moEngine.delivered ? 'mo_status_success' : 'mo_status_pending'))}</span><span class="mo-help">1 ${moEsc(moT('mo_attempt_one'))}</span></div>`
+    : `<p class="mo-help">${moEsc(moT('mo_no_deliveries'))}</p>`;
+  const path = [0, 1, 2, 3, 4, 5, 6].map(s => `<span class="mo-path-step${moEngine.step === s ? ' is-on' : ''}">${moEsc(moT('mo_onb_s' + s))}</span>`).join('');
+  host.innerHTML = `<div class="mo-eng-head"><b>${moEsc(moT('mo_engine_title'))}</b><span class="mo-badge mo-ok">${moEsc(moT('mo_engine_active'))}</span></div>
+    <div class="mo-eng-row"><span class="mo-label">${moEsc(moT('mo_engine_stages_label'))}</span><span class="mo-stage mo-s4"><span class="mo-dot"></span>${moEsc(moT('mo_st_won'))}</span></div>
+    <div class="mo-eng-row mo-eng-col"><span class="mo-label">${moEsc(moT('mo_deliveries_title'))}</span>${deliveries}</div>
+    <div class="mo-eng-row mo-eng-col"><span class="mo-label">${moEsc(moT('mo_onb_col_status'))}</span><div class="mo-path">${path}</div></div>`;
+}
+function moInitWon() {
+  const host = document.getElementById('mo-won'); if (!host) return;
   let drag = null;
-  board.addEventListener('pointerdown', e => {
-    const card = e.target.closest('.lp-card');
-    if (!card || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    const r = card.getBoundingClientRect();
-    drag = { card, id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: e.clientX - r.left, dy: e.clientY - r.top, w: r.width, h: r.height, moved: false, ph: null, over: null };
+  host.addEventListener('pointerdown', e => {
+    const card = e.target.closest('.mo-card.is-hero'); if (!card || e.button) return;
+    drag = { card, x: e.clientX, y: e.clientY, pid: e.pointerId, ghost: null, over: null, ox: 0, oy: 0 };
     card.setPointerCapture(e.pointerId);
   });
-  board.addEventListener('pointermove', e => {
-    if (!drag || e.pointerId !== drag.id) return;
-    if (!drag.moved) {
-      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 5) return;
-      drag.moved = true;
-      const ph = lpEl('div', 'lp-card-ph'); ph.style.height = drag.h + 'px';
-      drag.card.after(ph); drag.ph = ph;
-      drag.card.classList.add('is-dragging'); drag.card.style.width = drag.w + 'px';
-      board.classList.add('is-dragging');
+  host.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.pid) return;
+    if (!drag.ghost) {
+      if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return;
+      const r = drag.card.getBoundingClientRect();
+      drag.ghost = drag.card.cloneNode(true);
+      drag.ghost.classList.add('mo-ghost'); drag.ghost.classList.remove('is-fresh'); drag.ghost.removeAttribute('tabindex');
+      drag.ghost.style.setProperty('--mo-gw', r.width + 'px');
+      drag.ox = r.left - drag.x; drag.oy = r.top - drag.y;
+      document.body.appendChild(drag.ghost);
+      drag.card.classList.add('is-dragging');
     }
+    drag.ghost.style.setProperty('--mo-gx', (e.clientX + drag.ox) + 'px');
+    drag.ghost.style.setProperty('--mo-gy', (e.clientY + drag.oy) + 'px');
+    const col = document.elementFromPoint(e.clientX, e.clientY)?.closest('.mo-col');
+    const over = col && host.contains(col) ? col : null;
+    if (over !== drag.over) { drag.over?.classList.remove('is-over'); drag.over = over; drag.over?.classList.add('is-over'); }
     e.preventDefault();
-    drag.card.style.transform = `translate(${e.clientX - drag.dx}px, ${e.clientY - drag.dy}px)`;
-    const under = document.elementFromPoint(e.clientX, e.clientY);
-    const c = under?.closest('.lp-col');
-    if (drag.over && drag.over !== c) drag.over.classList.remove('is-over');
-    drag.over = c || null;
-    if (!c) return;
-    c.classList.add('is-over');
-    const w = c.querySelector('.lp-col-cards');
-    const before = [...w.querySelectorAll('.lp-card:not(.is-dragging)')].find(o => { const b = o.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
-    if (before) w.insertBefore(drag.ph, before); else w.appendChild(drag.ph);
   });
   const end = e => {
-    if (!drag || e.pointerId !== drag.id) return;
-    const { card, ph, over, moved } = drag;
-    drag = null;
-    if (!moved) return;
-    card.classList.remove('is-dragging'); card.style.transform = ''; card.style.width = '';
-    board.classList.remove('is-dragging'); over?.classList.remove('is-over');
-    const c = ph.closest('.lp-col'), nextSib = ph.nextElementSibling;
-    ph.remove();
-    if (card === hero) wonPlaced = c.dataset.stage === 'won';
-    place(card, c, nextSib);
-    card.focus({ preventScroll: true });
+    if (!drag || e.pointerId !== drag.pid) return;
+    const { ghost, over, card } = drag; drag = null;
+    ghost?.remove(); card.classList.remove('is-dragging'); over?.classList.remove('is-over');
+    if (ghost && over) moMoveHero(over.dataset.stage);
   };
-  board.addEventListener('pointerup', end);
-  board.addEventListener('pointercancel', end);
-  // keyboard: left and right move the focused card one column
-  board.addEventListener('keydown', e => {
-    const card = e.target.closest('.lp-card');
-    if (!card || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+  host.addEventListener('pointerup', end);
+  host.addEventListener('pointercancel', end);
+  host.addEventListener('keydown', e => {
+    if (!e.target.closest('.mo-card.is-hero') || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
     e.preventDefault();
-    const i = cols.indexOf(card.closest('.lp-col')), j = i + (e.key === 'ArrowRight' ? 1 : -1);
-    if (j < 0 || j >= cols.length) return;
-    if (card === hero) wonPlaced = cols[j].dataset.stage === 'won';
-    place(card, cols[j]); card.focus({ preventScroll: true });
+    moMoveHero(e.key === 'ArrowRight' ? 'won' : 'nego');
+    host.querySelector('.mo-card.is-hero')?.focus();
   });
-  refresh();
-  return { board, colOf, addLead, removeLead, setWon, reset, refresh };
+  host.addEventListener('click', e => { if (e.target.closest('#mo-won-go')) moMoveHero('won'); });
 }
 
-// ── act 1 · leads: one platform per fifth of the scroll ─────────────────────
-function lpInitLeads() {
-  const scene = document.getElementById('lp-scene-leads');
-  if (!scene) return;
-  const b = lpBoard(scene);
-  const packet = scene.querySelector('#lp-packet-leads'), marks = [...scene.querySelectorAll('.lp-src')];
-  const landed = [false, false, false, false];
-  // the scroll: each platform owns a fifth of the act. Its packet rides the throw from the mark into Neu as that fifth is
-  // scrolled, forwards and backwards, and the card lands when the throw is complete; the last fifth is rest. `final` is
-  // the hand-over to the visitor: whatever is more than half way lands, the rest goes back, the packet disappears.
-  LP_ACTS.leads = (p, final) => {
-    let flying = -1, u = 0;
-    LP_LEAD_ORDER.forEach((key, k) => {
-      const v = Math.min(1, Math.max(0, (p * 5 - k - 0.15) / 0.7));
-      const land = v >= 1 || (final && v > 0.5);
-      if (land && !landed[k]) { landed[k] = true; b?.addLead(key); }
-      else if (!land && landed[k]) { landed[k] = false; b?.removeLead(key); }
-      marks.find(m => m.dataset.src === key)?.classList.toggle('is-sent', final ? land : v > 0);
-      if (v > 0 && v < 1) { flying = k; u = v; }
-    });
-    const mark = flying >= 0 ? marks.find(m => m.dataset.src === LP_LEAD_ORDER[flying]) : null, col = b?.colOf('new');
-    if (!packet || final || !mark || !col) { packet?.classList.add('hidden'); return; }
-    const { x0, y0, x1, y1 } = lpArcEnds(scene, mark, col), q = lpArcPoint(x0, y0, x1, y1, lpEase(u)), s = Math.sin(Math.PI * u);
-    packet.style.transform = `translate(${q.x}px, ${q.y}px) scale(${0.55 + 0.45 * s})`;
-    packet.style.opacity = String(Math.min(1, s * 2.2));
-    packet.classList.remove('hidden');
-  };
+/* ── 09 · the way into the break ─────────────────────────────────────── */
+// The footer's little block opens the falling-block game from /js/break-game.js (shared with the app). This page gives
+// it its words and a high score board kept in this browser; there is no sign-in here, so nobody's scores leave it.
+function moInitGame() {
+  const egg = document.getElementById('mo-egg'); if (!egg || typeof brkOpen !== 'function') return;
+  egg.addEventListener('click', () => brkOpen({ t: moT, store: brkLocalStore('landing_break_board') }));
 }
 
-// ── act 2 · the record: seven phases ────────────────────────────────────────
-function lpInitRecord() {
-  const rec = document.getElementById('lp-record');
-  if (!rec) return;
-  const q = s => rec.querySelector(s);
-  const tabs = [...rec.querySelectorAll('.lp-tabs [role="tab"]')], panels = [...rec.querySelectorAll('.lp-pan')];
-  function selectTab(id) {
-    tabs.forEach(t => { const on = t.id === id; t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; });
-    panels.forEach(p => p.classList.toggle('hidden', p.id !== document.getElementById(id)?.getAttribute('aria-controls')));
-  }
-  tabs.forEach((t, i) => {
-    t.addEventListener('click', () => selectTab(t.id));
-    t.addEventListener('keydown', e => { if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return; e.preventDefault(); const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length]; selectTab(n.id); n.focus(); });
-  });
-
-  // reach the contact: each action opens a bubble with the number, the address, or the WhatsApp template
-  const bubble = q('#lp-wa');
-  let act = null;
-  function paintBubble() {
-    if (!bubble) return;
-    bubble.classList.toggle('hidden', !act);
-    const label = bubble.querySelector('small'), text = bubble.querySelector('p');
-    if (!act || !label || !text) return;
-    label.textContent = lpT(act === 'call' ? 'lp_call_label' : act === 'mail' ? 'lp_mail_label' : 'lp_wa_label');
-    text.textContent = act === 'call' ? LP_CONTACT.phone : act === 'mail' ? LP_CONTACT.email : lpT('lp_wa_tpl');
-  }
-  rec.querySelectorAll('#lp-rec-actions [data-act]').forEach(b => b.addEventListener('click', () => { act = act === b.dataset.act ? null : b.dataset.act; paintBubble(); }));
-  q('#lp-rec-book')?.addEventListener('click', () => LP_BOOK.open?.());
-
-  // tasks: ticks move the progress; the form adds the task to the list and the overview
-  const list = q('#lp-task-list'), progress = q('#lp-task-progress'), bar = q('.lp-task-bar i'), ovOpen = q('#lp-ov-open'), ovTasks = q('#lp-ov-tasks');
-  function refreshTasks() {
-    const rows = [...rec.querySelectorAll('#lp-task-list .lp-task')];
-    const done = rows.filter(r => r.querySelector('input').checked).length;
-    rows.forEach(r => r.classList.toggle('is-done', r.querySelector('input').checked));
-    if (progress) progress.textContent = lpT('lp_tasks_progress', { d: done, n: rows.length });
-    if (bar) bar.style.width = (rows.length ? (done / rows.length) * 100 : 0) + '%';
-    if (ovOpen) ovOpen.textContent = String(rows.length - done);
-  }
-  rec.addEventListener('change', e => { if (e.target.matches('#lp-task-list input')) refreshTasks(); });
-  let taskRow = null, taskMini = null;
-  function addTask() {
-    if (taskRow || !list) return false;
-    const li = lpEl('li', 'lp-task is-new');
-    const label = lpEl('label'); const input = document.createElement('input'); input.type = 'checkbox'; label.appendChild(input);
-    const check = lpEl('span', 'lp-check'); check.appendChild(lpSvg('lp-i-check')); label.appendChild(check);
-    const title = lpEl('span', 'lp-task-title', lpT('lp_task_title_v')); title.dataset.i18n = 'lp_task_title_v'; label.appendChild(title);
-    li.appendChild(label);
-    const badge = lpEl('span', 'lp-badge lp-badge-u3', lpT('lp_prio_high')); badge.dataset.i18n = 'lp_prio_high'; li.appendChild(badge);
-    const due = lpEl('small', null, lpT('lp_task_due_v')); due.dataset.i18n = 'lp_task_due_v'; li.appendChild(due);
-    list.prepend(li); taskRow = li;
-    if (ovTasks) { const m = lpEl('li', 'is-new'); m.appendChild(lpEl('span', 'lp-mini-dot')); const s = lpEl('span', null, lpT('lp_task_title_v')); s.dataset.i18n = 'lp_task_title_v'; m.appendChild(s); const d = lpEl('small', null, lpT('lp_task_due_v')); d.dataset.i18n = 'lp_task_due_v'; m.appendChild(d); ovTasks.prepend(m); taskMini = m; }
-    q('#lp-task-add')?.setAttribute('disabled', '');
-    refreshTasks();
-    return true;
-  }
-  function removeTask() { if (!taskRow) return; taskRow.remove(); taskRow = null; taskMini?.remove(); taskMini = null; q('#lp-task-add')?.removeAttribute('disabled'); refreshTasks(); }
-  q('#lp-task-add')?.addEventListener('click', addTask);
-
-  // the composer: a note lands in the timeline and in the overview
-  const ta = q('#lp-note'), timeline = q('#lp-timeline'), chips = [...rec.querySelectorAll('.lp-type-chip')];
-  const latest = q('#lp-ov-latest'), latestMeta = q('#lp-ov-latest-meta');
-  chips.forEach(c => c.addEventListener('click', () => chips.forEach(x => x.setAttribute('aria-pressed', String(x === c)))));
-  function tlItem(type, labelKey, metaText, text, extra) {
-    const li = lpEl('li', 'lp-tl-item is-new');
-    li.appendChild(lpEl('span', 'lp-tl-ic type-' + type));
-    const body = lpEl('div');
-    const meta = lpEl('p', 'lp-tl-meta'); const b = lpEl('b', null, lpT(labelKey)); b.dataset.i18n = labelKey; meta.appendChild(b);
-    if (extra) meta.appendChild(extra);
-    meta.appendChild(lpEl('span', null, metaText));
-    body.appendChild(meta);
-    body.appendChild(lpEl('p', 'lp-tl-text', text));
-    li.appendChild(body);
-    return li;
-  }
-  function paintLatest() {
-    const top = timeline?.querySelector('.lp-tl-item');
-    if (!top || !latest || !latestMeta) return;
-    if (top.dataset.own) { latest.textContent = top.querySelector('.lp-tl-text').textContent; delete latest.dataset.i18n; latestMeta.textContent = top.querySelector('.lp-tl-meta span:last-child').textContent; delete latestMeta.dataset.i18n; }
-    else { latest.dataset.i18n = 'lp_tl1_text'; latest.textContent = lpT('lp_tl1_text'); latestMeta.dataset.i18n = 'lp_tl1_meta'; latestMeta.textContent = lpT('lp_tl1_meta'); }
-  }
-  let noteRow = null;
-  function saveNote(preset) {
-    const text = (preset || ta?.value || '').trim();
-    if (!text || !timeline) return false;
-    const type = chips.find(c => c.getAttribute('aria-pressed') === 'true')?.dataset.type || 'note';
-    const li = tlItem(type, { note: 'lp_type_note', call: 'lp_type_call', email: 'lp_type_email', wa: 'lp_type_wa' }[type] || 'lp_type_note', 'Mara Kühn, ' + lpT('lp_tl_now'), text);
-    li.dataset.own = '1';
-    if (preset) { noteRow?.remove(); noteRow = li; }
-    timeline.prepend(li);
-    if (ta) ta.value = '';
-    paintLatest();
-    return true;
-  }
-  function removeNote() { if (!noteRow) return; noteRow.remove(); noteRow = null; paintLatest(); }
-  q('#lp-note-save')?.addEventListener('click', () => saveNote());
-  ta?.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); saveNote(); } });
-
-  // a booked meeting: the newest entry, with the way in (the join link, named after the app)
-  let meetRow = null;
-  function addMeeting({ when, place, typeName }) {
-    if (!timeline) return;
-    meetRow?.remove();
-    const tag = lpEl('span', 'lp-tl-tag', 'Cal.com');
-    const li = tlItem('meeting', 'lp_meet', when + ', ' + place, lpT('lp_meet_title', { type: typeName }), tag);
-    li.dataset.own = '1';
-    const join = lpEl('span', 'lp-join'); join.appendChild(lpSvg('lp-i-external')); join.appendChild(lpEl('span', null, place === 'Google Meet' ? lpT('lp_join') : lpT('lp_join_link')));
-    li.querySelector('div').appendChild(join);
-    timeline.prepend(li); meetRow = li;
-    paintLatest();
-    selectTab('lp-tab-activity');
-    lpToast(q('#lp-rec-toast'), lpT('lp_bk_done', { when }));
-  }
-  function removeMeeting() { if (!meetRow) return; meetRow.remove(); meetRow = null; paintLatest(); }
-
-  // the scroll: seven phases, forwards and backwards
-  const h = document.getElementById('lp-deal-h'), line = document.getElementById('lp-deal-line');
-  let phase = -1;
-  function caption(n) {
-    if (h) { const k = n >= 3 ? 'lp_a2b_t' : 'lp_a2_t'; if (h.dataset.i18n !== k) { h.dataset.i18n = k; h.textContent = lpT(k); } }
-    if (line) { const k = 'lp_p' + n; if (line.dataset.i18n !== k) { line.classList.add('is-swap'); setTimeout(() => { line.dataset.i18n = k; line.textContent = lpT(k); line.classList.remove('is-swap'); }, lpReduce() ? 0 : 180); } }
-  }
-  function setPhase(n) {
-    n = Math.max(0, Math.min(6, n));
-    if (n === phase) return;
-    phase = n;
-    caption(n);
-    act = n === 0 ? 'wa' : null; paintBubble();
-    if (n >= 1) addTask(); else removeTask();
-    if (n >= 2) saveNote(lpT('lp_note_preset')); else removeNote();
-    if (n >= 6) { LP_BOOK.setStage?.(3); LP_BOOK.book?.(); }
-    else { removeMeeting(); LP_BOOK.setStage?.(n >= 3 ? n - 2 : 0); }
-    selectTab(n === 0 ? 'lp-tab-overview' : n === 1 ? 'lp-tab-tasks' : 'lp-tab-activity');
-  }
-  LP_ACTS.deal = p => setPhase(Math.min(6, Math.floor(p * 7)));
-  Object.assign(LP_REC, { selectTab, addMeeting, removeMeeting, setPhase });
-  lpRerender.push(() => { refreshTasks(); paintBubble(); paintLatest(); });
-  refreshTasks();
+/* ── 10 · start ───────────────────────────────────────────────────────── */
+function moInitChrome() {
+  document.querySelectorAll('.mo-lang-btn').forEach(b => b.addEventListener('click', () => moSetLang(b.dataset.lang)));
 }
-
-// ── the booking sheet: the dialog, as the app opens it over the record ──────
-function lpInitBooking() {
-  const sheet = document.getElementById('lp-book');
-  if (!sheet) return;
-  const q = s => sheet.querySelector(s);
-  const typeSel = q('#lp-bk-type'), whereSel = q('#lp-bk-where'), grid = q('#lp-bk-grid'), slots = q('#lp-bk-slots');
-  const conflict = q('#lp-bk-conflict'), summary = q('#lp-bk-summary'), go = q('#lp-bk-go'), invite = q('#lp-bk-invite');
-  const B = { day: 0, time: '' };
-  const minutes = () => LP_MEET.types[typeSel?.value] || 30;
-  const typeName = () => lpT(typeSel?.selectedOptions?.[0]?.dataset.i18n || 'lp_bk_type1');
-  const place = () => whereSel?.value || 'Google Meet';
-  const clash = () => B.day === LP_MEET.busy.day && B.time === LP_MEET.busy.time;
-  const slotText = t => lpT('lp_bk_slot', { from: t, to: lpAddMin(t, minutes()), ampm: lpAmPm(t) });
-  const when = () => (B.day && B.time ? lpMeetDay(B.day) + ', ' + slotText(B.time) : '');
-
-  function paintMonth() {
-    if (!grid) return;
-    grid.textContent = '';
-    for (let k = 0; k < LP_MEET.lead; k++) { const s = lpEl('span', 'lp-bk-day is-blank'); s.setAttribute('aria-hidden', 'true'); grid.appendChild(s); }
-    for (let d = 1; d <= LP_MEET.days; d++) {
-      const free = LP_MEET.free.includes(d);
-      const b = lpEl('button', 'lp-bk-day' + (free ? ' is-free' : '') + (d === B.day ? ' is-on' : '') + (d === LP_MEET.today ? ' is-today' : ''), String(d));
-      b.type = 'button'; b.disabled = !free; b.setAttribute('aria-pressed', String(d === B.day)); b.setAttribute('aria-label', lpMeetDay(d));
-      if (free) b.addEventListener('click', () => pickDay(d));
-      grid.appendChild(b);
-    }
-  }
-  function pickDay(d) { B.day = d; B.time = ''; paintMonth(); paintSlots(); }
-  function paintSlots() {
-    if (!slots) return;
-    slots.textContent = '';
-    for (const t of LP_MEET.slots) { const b = lpEl('button', 'lp-bk-slot', slotText(t)); b.type = 'button'; b.disabled = !B.day; b.addEventListener('click', () => pickTime(t)); slots.appendChild(b); }
-    if (invite) invite.textContent = lpT('lp_bk_invite', { email: LP_CONTACT.email });
-    paintPick();
-  }
-  function paintPick() {
-    const has = Boolean(B.day && B.time), c = has && clash();
-    slots?.querySelectorAll('.lp-bk-slot').forEach((b, k) => b.setAttribute('aria-pressed', String(LP_MEET.slots[k] === B.time)));
-    if (conflict) { conflict.classList.toggle('hidden', !c); conflict.textContent = c ? lpT('lp_bk_conflict', { time: LP_MEET.busy.time, title: lpT(LP_MEET.busy.key), who: LP_MEET.busy.who }) : ''; }
-    if (summary) { summary.classList.toggle('hidden', !has); q('#lp-bk-when').textContent = when(); q('#lp-bk-who').textContent = place() + ', ' + lpT('lp_bk_with', { name: LP_CONTACT.name }); }
-    if (go) { go.disabled = !has; go.textContent = lpT(c ? 'lp_bk_anyway' : 'lp_bk_book'); }
-  }
-  function pickTime(t) { B.time = t; paintPick(); }
-  function open() { if (!sheet.classList.contains('hidden')) return; B.day = 0; B.time = ''; paintMonth(); paintSlots(); sheet.classList.remove('hidden'); }
-  function close() { sheet.classList.add('hidden'); }
-  function book() {
-    if (!B.day || !B.time) return false;
-    const detail = { when: when(), place: place(), typeName: typeName() };
-    close();
-    LP_REC.addMeeting?.(detail);
-    return true;
-  }
-  // the scroll's stages: 0 closed, 1 open on the 8th, 2 the 11:00 clash, 3 the clean 14:00
-  function setStage(k) {
-    if (k <= 0) { close(); return; }
-    if (sheet.classList.contains('hidden')) { B.day = 0; B.time = ''; sheet.classList.remove('hidden'); }
-    B.day = LP_MEET.busy.day; B.time = k === 2 ? LP_MEET.busy.time : k >= 3 ? '14:00' : '';
-    paintMonth(); paintSlots();
-  }
-  typeSel?.addEventListener('change', paintSlots);
-  whereSel?.addEventListener('change', paintPick);
-  go?.addEventListener('click', book);
-  q('#lp-bk-cancel')?.addEventListener('click', close);
-  q('#lp-bk-close')?.addEventListener('click', close);
-  Object.assign(LP_BOOK, { open, close, book, setStage, isOpen: () => !sheet.classList.contains('hidden') });
-  lpRerender.push(() => { if (LP_BOOK.isOpen()) { paintMonth(); paintSlots(); } });
+function moRenderAll() { moRenderInbox(); moRenderBook(); moRenderWon(); }
+function moInit() {
+  try { const l = localStorage.getItem('lang'); if (l === 'en' || l === 'de') moLang = l; } catch (e) { /* private mode */ }
+  moInitChrome(); moInitWipe(); moInitSources(); moInitBook(); moInitWon(); moInitGame();
+  moApplyLang();
 }
-
-// ── act 3 · won: the deal card travels into Gewonnen, the packet reaches the next system ──
-function lpInitWon() {
-  const scene = document.getElementById('lp-scene-won');
-  if (!scene) return;
-  const next = scene.querySelector('#lp-next'), state = scene.querySelector('#lp-next-state'), receipt = scene.querySelector('#lp-receipt'), packet = scene.querySelector('#lp-packet-won');
-  let phase = 'idle', flying = false, flown = false;
-  function paintNext() {
-    if (state) state.textContent = lpT(phase === 'idle' ? 'lp_next_idle' : phase === 'pending' ? 'lp_next_pending' : 'lp_next_done');
-    next?.classList.toggle('is-pending', phase === 'pending'); next?.classList.toggle('is-done', phase === 'done');
-    receipt?.classList.toggle('is-in', phase === 'done');
-  }
-  lpRerender.push(paintNext);
-  // the hand-over: the packet travels from the Won column to the next system, which confirms
-  async function deliver() {
-    if (flying || flown) return;
-    flying = true; flown = true;
-    phase = 'pending'; paintNext();
-    const won = b?.colOf('won');
-    if (packet && won && next) await lpFly(packet, scene, won, next, 1000);
-    packet?.classList.add('hidden');
-    if (flown) { phase = 'done'; paintNext(); }
-    flying = false;
-  }
-  function resetNext() { flown = false; phase = 'idle'; paintNext(); packet?.classList.add('hidden'); }
-  const b = lpBoard(scene, { onWon: deliver });
-  // the scroll: the card travels until half, lands, and the hand-over follows
-  LP_ACTS.won = p => {
-    const q = Math.min(1, p / 0.55);
-    b?.setWon(q);
-    if (q >= 1) deliver(); else resetNext();
-  };
-  paintNext();
-}
-
-// ── the acts: the scroll drives each pinned screen with its progress ────────
-// progress = 0 when the screen pins at the bar, 1 when the section's end releases it; the act's
-// --lp-p carries it for the stylesheet. The drawn progress follows the scroll with a short lag
-// (about 120 ms), so every screen glides instead of jumping. The first touch of a scene hands it
-// over to the visitor; the act is told once (`final`) so it can settle whatever was in flight.
-function lpInitActs() {
-  const acts = [...document.querySelectorAll('.lp-act')].map(el => ({ el, drive: LP_ACTS[el.dataset.act], handed: false, target: 0, cur: -1 }));
-  if (!acts.length) return;
-  if (lpReduce()) { acts.forEach(a => { a.el.style.setProperty('--lp-p', '1'); a.drive?.(1); }); return; }
-  const barH = () => parseFloat(getComputedStyle(document.body).getPropertyValue('--lp-bar-h')) || 56;
-  function progressOf(a) {
-    const r = a.el.getBoundingClientRect(), range = a.el.offsetHeight - (window.innerHeight - barH());
-    if (range <= 0) return 1;
-    return Math.min(1, Math.max(0, (barH() - r.top) / range));
-  }
-  let raf = 0, last = 0, dirty = true;
-  function frame(now) {
-    raf = 0;
-    if (dirty) { dirty = false; for (const a of acts) a.target = progressOf(a); }
-    const k = 1 - Math.exp(-Math.min(64, now - (last || now)) / 120); last = now;
-    let busy = false;
-    for (const a of acts) {
-      let p = a.cur < 0 ? a.target : a.cur + (a.target - a.cur) * k;
-      if (Math.abs(a.target - p) < 0.0005) p = a.target; else busy = true;
-      if (p === a.cur) continue;
-      a.cur = p; a.el.style.setProperty('--lp-p', p.toFixed(3));
-      if (!a.handed) a.drive?.(p);
-    }
-    if (busy) raf = requestAnimationFrame(frame); else last = 0;
-  }
-  const onScroll = () => { dirty = true; if (!raf) raf = requestAnimationFrame(frame); };
-  window.addEventListener('scroll', onScroll, { passive: true });
-  window.addEventListener('resize', onScroll);
-  acts.forEach(a => a.el.addEventListener('pointerdown', e => { if (e.target.closest('.lp-scene') && !a.handed) { a.handed = true; a.drive?.(a.cur, true); } }));
-  onScroll();
-}
-
-// ── numbers: three periods of figures ───────────────────────────────────────
-function lpInitAnalytics() {
-  const root = document.getElementById('numbers');
-  if (!root) return;
-  let period = 6;
-  const q = s => root.querySelector(s);
-  const months = n => { const all = LP_MONTHS[lpLang] || LP_MONTHS.en; const end = 9; const out = []; for (let i = n - 1; i >= 0; i--) out.push(all[((end - i) % 12 + 12) % 12]); return out; };
-  const svgNS = 'http://www.w3.org/2000/svg';
-  const stageKeys = ['lp_col_new', 'lp_col_offer', 'lp_col_nego', 'lp_col_won'];
-  const tip = q('#lp-an-tip');
-  let pts = [];
-  const reduce = lpReduce();
-  let animateNext = false;
-  function figure(sel, value, fmt) { const el = q(sel); if (!el) return; if (animateNext && !reduce) lpCountUp(el, value, fmt, 900); else el.textContent = fmt(value); }
-  function render() {
-    const a = LP_ANALYTICS[period];
-    root.querySelectorAll('.lp-period').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.period) === period)));
-    figure('#lp-an-open', a.open, lpFmtEurShort); figure('#lp-an-won', a.won, lpFmtEurShort);
-    figure('#lp-an-rate', a.rate, v => Math.round(v) + ' %'); figure('#lp-an-new', a.newDeals, v => String(Math.round(v)));
-    animateNext = false;
-    const funnel = q('#lp-an-funnel'); if (!funnel) return;
-    funnel.textContent = '';
-    const max = a.funnel[0];
-    a.funnel.forEach((n, k) => {
-      const row = lpEl('li', 'lp-funnel-row s' + (k + 1));
-      row.appendChild(lpEl('span', 'lp-funnel-label', lpT(stageKeys[k])));
-      const barEl = lpEl('span', 'lp-funnel-bar'); const fill = lpEl('i'); fill.style.width = Math.max(4, (n / max) * 100) + '%'; barEl.appendChild(fill); row.appendChild(barEl);
-      row.appendChild(lpEl('span', 'lp-funnel-val', String(n)));
-      if (k < a.funnel.length - 1) row.appendChild(lpEl('span', 'lp-funnel-hint', lpT('lp_an_funnel_hint', { p: Math.round((a.funnel[k + 1] / n) * 100), stage: lpT(stageKeys[k + 1]) })));
-      funnel.appendChild(row);
-    });
-    const lost = lpEl('li', 'lp-funnel-row is-lost');
-    lost.appendChild(lpEl('span', 'lp-funnel-label', lpT('lp_an_lost')));
-    const lb = lpEl('span', 'lp-funnel-bar'); const lf = lpEl('i'); lf.style.width = Math.max(4, (a.lost / max) * 100) + '%'; lb.appendChild(lf); lost.appendChild(lb);
-    lost.appendChild(lpEl('span', 'lp-funnel-val', String(a.lost))); funnel.appendChild(lost);
-    const svg = q('#lp-an-line'); if (!svg) return;
-    svg.textContent = '';
-    const W = 560, H = 180, padL = 30, padR = 12, padT = 12, padB = 26;
-    const xs = a.rates.map((_, k) => padL + (k * (W - padL - padR)) / Math.max(1, a.rates.length - 1));
-    const ys = a.rates.map(r => padT + (H - padT - padB) * (1 - r / 60));
-    for (const g of [0, 20, 40, 60]) {
-      const y = padT + (H - padT - padB) * (1 - g / 60);
-      const line = document.createElementNS(svgNS, 'line'); line.setAttribute('x1', padL); line.setAttribute('x2', W - padR); line.setAttribute('y1', y); line.setAttribute('y2', y); line.setAttribute('class', 'lp-grid'); svg.appendChild(line);
-      const tx = document.createElementNS(svgNS, 'text'); tx.setAttribute('x', padL - 6); tx.setAttribute('y', y + 3); tx.setAttribute('class', 'lp-axis'); tx.textContent = g + ' %'; svg.appendChild(tx);
-    }
-    const area = document.createElementNS(svgNS, 'path'); area.setAttribute('d', `M${xs[0]},${H - padB} ` + xs.map((x, k) => `L${x},${ys[k]}`).join(' ') + ` L${xs[xs.length - 1]},${H - padB} Z`); area.setAttribute('class', 'lp-area'); svg.appendChild(area);
-    const path = document.createElementNS(svgNS, 'path'); path.setAttribute('d', xs.map((x, k) => (k ? 'L' : 'M') + x + ',' + ys[k]).join(' ')); path.setAttribute('class', 'lp-line-path'); svg.appendChild(path);
-    const labels = months(a.rates.length);
-    pts = [];
-    xs.forEach((x, k) => {
-      const c = document.createElementNS(svgNS, 'circle'); c.setAttribute('cx', x); c.setAttribute('cy', ys[k]); c.setAttribute('r', 3.5); c.setAttribute('class', 'lp-pt'); svg.appendChild(c);
-      const tx = document.createElementNS(svgNS, 'text'); tx.setAttribute('x', x); tx.setAttribute('y', H - 8); tx.setAttribute('class', 'lp-axis lp-axis-x'); tx.textContent = labels[k]; svg.appendChild(tx);
-      pts.push({ x, y: ys[k], dot: c, i: k });
-    });
-    const cursor = document.createElementNS(svgNS, 'line'); cursor.setAttribute('class', 'lp-cursor-line hidden'); cursor.setAttribute('y1', padT); cursor.setAttribute('y2', H - padB); svg.appendChild(cursor);
-    svg.__cursor = cursor; svg.__W = W; svg.__labels = labels; svg.__a = a;
-  }
-  const svg = q('#lp-an-line');
-  svg?.addEventListener('pointermove', e => {
-    if (!pts.length || !tip) return;
-    const r = svg.getBoundingClientRect(), x = ((e.clientX - r.left) / r.width) * svg.__W;
-    let best = pts[0]; for (const p of pts) if (Math.abs(p.x - x) < Math.abs(best.x - x)) best = p;
-    pts.forEach(p => p.dot.classList.toggle('is-on', p === best));
-    svg.__cursor.setAttribute('x1', best.x); svg.__cursor.setAttribute('x2', best.x); svg.__cursor.classList.remove('hidden');
-    const a = svg.__a;
-    tip.textContent = lpT('lp_an_tip', { month: svg.__labels[best.i], rate: a.rates[best.i], won: a.wonM[best.i], lost: a.lostM[best.i] });
-    tip.classList.remove('hidden');
-    tip.style.left = Math.min(Math.max(0, (best.x / svg.__W) * r.width - tip.offsetWidth / 2), r.width - tip.offsetWidth) + 'px';
-  });
-  svg?.addEventListener('pointerleave', () => { tip?.classList.add('hidden'); svg.__cursor?.classList.add('hidden'); pts.forEach(p => p.dot.classList.remove('is-on')); });
-  root.querySelectorAll('.lp-period').forEach(b => b.addEventListener('click', () => { period = Number(b.dataset.period) || 6; animateNext = true; render(); }));
-  lpRerender.push(render);
-  render();
-  if ('IntersectionObserver' in window && !reduce) {
-    const io = new IntersectionObserver(entries => { if (entries.some(e => e.isIntersecting)) { io.disconnect(); animateNext = true; render(); } }, { threshold: 0.4 });
-    io.observe(root);
-  }
-}
-
-// ── boot ────────────────────────────────────────────────────────────────────
-function lpInit() {
-  document.body.classList.add('lp');
-  lpInitBar();
-  lpInitRecord();
-  lpInitBooking();
-  lpInitLeads();
-  lpInitWon();
-  lpInitAnalytics();
-  let saved = null;
-  try { saved = localStorage.getItem('lang'); } catch {}
-  lpApplyLang(saved || 'de');
-  lpInitActs();   // after the language and the scenes, so the first drive paints in the right words
-}
-
-if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', lpInit);
+document.addEventListener('DOMContentLoaded', moInit);

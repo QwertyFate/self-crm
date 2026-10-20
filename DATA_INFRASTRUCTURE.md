@@ -148,6 +148,11 @@ await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS due_time TIME`);
 | `object_contacts` | object ↔ contact |
 | `deal_objects` | deal ↔ object |
 
+### The break
+| Table | Purpose |
+|---|---|
+| `break_scores` | ws · each person's best game of the hidden falling-block game: `user_id`, `score`, `lines`, `level`, `updated_at`; primary key (`workspace_id`, `user_id`) |
+
 ### Custom fields
 Four identical tables — `custom_fields` (contacts), `deal_fields`, `task_fields`,
 `object_fields` — each `ws · name, field_key, type, options JSONB, position`. They define

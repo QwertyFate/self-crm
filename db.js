@@ -682,6 +682,21 @@ async function initDb() {
   await pool.query(`CREATE INDEX IF NOT EXISTS engine_api_requests_created_idx ON engine_api_requests (created_at DESC)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS engine_api_requests_ws_idx ON engine_api_requests (workspace_id, created_at DESC)`);
 
+  // The break's team board (routes/break-scores.js, public/js/break-game.js): one row per person and
+  // workspace, their best game. Client-reported, checked and capped by the route; the board shows the
+  // ten best of the workspace's current members.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS break_scores (
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+      score        INTEGER NOT NULL CHECK (score >= 0),
+      lines        INTEGER NOT NULL DEFAULT 0,
+      level        INTEGER NOT NULL DEFAULT 1,
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (workspace_id, user_id)
+    )
+  `);
+
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');
   if (wsCount === 0 && piCount === 0) {

@@ -1,368 +1,273 @@
 <!DOCTYPE html>
-<html lang="de" data-theme="dark">
+<html lang="de" data-theme="dark" class="mo-root">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Upgrads CRM: Gewonnen ist erst der Anfang. Ein Deal vom Werbeklick bis zur Übergabe: Leads aus Facebook, Instagram, TikTok und der Website, Termine und Aufgaben am Deal, nach Gewonnen weiß das nächste System Bescheid.">
+  <meta name="description" content="Upgrads CRM: Das CRM, das den Kleinkram übernimmt. Leads kommen von selbst rein, Termine prüfen den Kalender, und nach dem Abschluss startet das Onboarding allein.">
   <title>Upgrads CRM</title>
   <link rel="icon" href="/images/logo.png" type="image/png">
-  <link rel="preload" href="/fonts/InstrumentSans.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/Figtree.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/ShantellSans.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/landing.css">
+  <link rel="stylesheet" href="/break-game.css">
 </head>
-<body class="lp">
-<svg class="lp-sprite" aria-hidden="true" focusable="false">
-  <symbol id="lp-i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
-  <symbol id="lp-i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
-  <symbol id="lp-i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
-  <symbol id="lp-i-message" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-5A8 8 0 1 1 21 12z"/></symbol>
-  <symbol id="lp-i-play" viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></symbol>
-  <symbol id="lp-i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></symbol>
-  <symbol id="lp-i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
-  <symbol id="lp-i-building" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h2"/><path d="M13 7h2"/><path d="M9 11h2"/><path d="M13 11h2"/><path d="M9 15h2"/><path d="M13 15h2"/><path d="M10 21v-3h4v3"/></symbol>
-  <symbol id="lp-i-bolt" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
-  <symbol id="lp-i-pointer" viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-3 7z"/></symbol>
-  <symbol id="lp-i-kanban" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="9.5" y="4" width="5" height="11" rx="1"/><rect x="16" y="4" width="5" height="7" rx="1"/></symbol>
-  <symbol id="lp-i-sliders" viewBox="0 0 24 24"><path d="M4 7h10"/><path d="M18 7h2"/><circle cx="16" cy="7" r="2"/><path d="M4 17h4"/><path d="M12 17h8"/><circle cx="10" cy="17" r="2"/></symbol>
-  <symbol id="lp-i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></symbol>
-  <symbol id="lp-i-key" viewBox="0 0 24 24"><circle cx="8" cy="14" r="4"/><path d="M11 11l9-9"/><path d="M16 6l3 3"/><path d="M13 9l3 3"/></symbol>
-  <symbol id="lp-i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M17 13.5a6 6 0 0 1 4.5 6.5"/></symbol>
-  <symbol id="lp-i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></symbol>
-  <symbol id="lp-i-db" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
-  <symbol id="lp-l-fb" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#1877F2"/><path fill="#FFFFFF" d="M13.5 20.5v-6.6h2.2l.4-2.6h-2.6V9.6c0-.7.3-1.3 1.4-1.3h1.3V6.1c-.2 0-1-.1-2-.1-2 0-3.3 1.2-3.3 3.4v1.9H8.7v2.6h2.2v6.6z"/></symbol>
-  <symbol id="lp-l-ig" viewBox="0 0 24 24"><defs><linearGradient id="lp-ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#F9A23B"/><stop offset=".45" stop-color="#E1306C"/><stop offset="1" stop-color="#833AB4"/></linearGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6.5" fill="url(#lp-ig-g)"/><circle cx="12" cy="12" r="4.4" fill="none" stroke="#FFFFFF" stroke-width="1.9"/><circle cx="17.3" cy="6.7" r="1.25" fill="#FFFFFF"/></symbol>
-  <symbol id="lp-l-tt" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#111111"/><path fill="#25F4EE" d="M12.6 7.2v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3V7.2z" opacity=".9"/><path fill="#FE2C55" d="M13.6 6.4v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3V10a4.6 4.6 0 0 0 2.6.8V8.5a2.7 2.7 0 0 1-2.6-2.1z" opacity=".9"/><path fill="#FFFFFF" d="M13.1 6.8v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3v-4.7a4.6 4.6 0 0 0 2.6.8V9a2.7 2.7 0 0 1-2.6-2.2z"/></symbol>
-  <symbol id="lp-i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
-  <symbol id="lp-i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
-  <symbol id="lp-i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></symbol>
-  <symbol id="lp-i-external" viewBox="0 0 24 24"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol>
-  <symbol id="lp-i-x" viewBox="0 0 24 24"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></symbol>
+<body class="mo">
+<svg class="mo-sprite" aria-hidden="true" focusable="false">
+  <symbol id="mo-i-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+  <symbol id="mo-i-message" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-5A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="mo-i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></symbol>
+  <symbol id="mo-i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="mo-i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="mo-i-grip" viewBox="0 0 24 24"><path d="M9 7l-4 5 4 5M15 7l4 5-4 5"/></symbol>
+  <symbol id="mo-i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="mo-i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="mo-i-blocks" viewBox="0 0 18 12"><rect x="0" y="0" width="5.4" height="5.4" rx="1"/><rect x="6.3" y="0" width="5.4" height="5.4" rx="1"/><rect x="12.6" y="0" width="5.4" height="5.4" rx="1"/><rect x="6.3" y="6.3" width="5.4" height="5.4" rx="1"/></symbol>
+  <symbol id="mo-a-up" viewBox="0 0 40 56"><path pathLength="1" d="M11 52c-3-12 0-27 18-43M20 7.5l9.5 1.5-1.5 9.5"/></symbol>
+  <symbol id="mo-a-right" viewBox="0 0 64 40"><path pathLength="1" d="M4 29c12-15 30-20 52-10M48 11.5l8 7.5-9.5 5"/></symbol>
+  <symbol id="mo-l-fb" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#1877F2"/><path fill="#FFFFFF" d="M13.5 20.5v-6.6h2.2l.4-2.6h-2.6V9.6c0-.7.3-1.3 1.4-1.3h1.3V6.1c-.2 0-1-.1-2-.1-2 0-3.3 1.2-3.3 3.4v1.9H8.7v2.6h2.2v6.6z"/></symbol>
+  <symbol id="mo-l-ig" viewBox="0 0 24 24"><defs><linearGradient id="mo-ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#F9A23B"/><stop offset=".45" stop-color="#E1306C"/><stop offset="1" stop-color="#833AB4"/></linearGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6.5" fill="url(#mo-ig-g)"/><circle cx="12" cy="12" r="4.4" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="17.2" cy="6.8" r="1.3" fill="#FFFFFF"/></symbol>
+  <symbol id="mo-l-tt" viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#111111"/><path fill="#25F4EE" d="M12.6 7.2v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3V7.2z" opacity=".9"/><path fill="#FE2C55" d="M13.6 6.4v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3V10a4.6 4.6 0 0 0 2.6.8V8.5a2.7 2.7 0 0 1-2.6-2.1z" opacity=".9"/><path fill="#FFFFFF" d="M13.1 6.8v8.3a2 2 0 1 1-1.7-2v-2.3a4.3 4.3 0 1 0 4 4.3v-4.7a4.6 4.6 0 0 0 2.6.8V8.9a2.7 2.7 0 0 1-2.6-2.1z"/></symbol>
 </svg>
 
-<!-- ══ The bar ══════════════════════════════════════════════════════════ -->
-<header class="lp-bar">
-  <div class="lp-wrap lp-bar-in">
-    <a class="lp-brand" href="#top"><img src="/images/logo.png" alt="Upgrads"></a>
-    <nav class="lp-bar-links">
-      <div class="lp-lang" role="group" data-i18n-aria="lp_lang" aria-label="Sprache">
-        <button type="button" class="lp-lang-btn" data-lang="de" aria-pressed="true">DE</button>
-        <button type="button" class="lp-lang-btn" data-lang="en" aria-pressed="false">EN</button>
+<header class="mo-bar">
+  <div class="mo-wrap mo-bar-in">
+    <a class="mo-brand" href="#top"><img src="/images/logo.png" alt="Upgrads"><span data-i18n="mo_crm">CRM</span></a>
+    <nav class="mo-bar-nav">
+      <div class="mo-lang" role="group" data-i18n-aria="mo_lang" aria-label="Sprache">
+        <button type="button" class="mo-lang-btn" data-lang="de" aria-pressed="true">DE</button>
+        <button type="button" class="mo-lang-btn" data-lang="en" aria-pressed="false">EN</button>
       </div>
-      <a href="/" data-i18n="lp_login">Anmelden</a>
-      <a class="lp-pill lp-pill-sm lp-request" href="mailto:hello@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="lp_request">Zugang anfragen</a>
+      <a class="mo-link mo-bar-link" href="/" data-i18n="mo_login">Anmelden</a>
+      <a class="mo-pill mo-pill-sm" href="mailto:team@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="mo_request">Zugang anfragen</a>
     </nav>
   </div>
 </header>
 
-<main>
-<!-- ══ The opening: one screen, one line ════════════════════════════════ -->
-<section id="top" class="lp-open">
-  <div class="lp-wrap lp-open-in">
-    <p class="lp-lockup"><img src="/images/logo.png" alt="Upgrads"><span data-i18n="lp_crm">CRM</span></p>
-    <h1 class="lp-h1" data-i18n="lp_hero_title">Gewonnen ist erst der Anfang.</h1>
-    <p class="lp-lead" data-i18n="lp_hero_sub">Ein Deal, vom Werbeklick bis zur Übergabe. Einfach scrollen.</p>
-    <div class="lp-actions">
-      <a class="lp-pill lp-request" href="mailto:hello@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="lp_request">Zugang anfragen</a>
-      <a class="lp-pill lp-pill-line" href="/" data-i18n="lp_login">Anmelden</a>
-    </div>
-  </div>
-</section>
+<main id="top">
 
-<!-- ══ Act 1 · leads arrive as the page scrolls ═════════════════════════ -->
-<section id="leads" class="lp-act" data-act="leads">
-  <div class="lp-pin">
-    <div class="lp-wrap lp-cap">
-      <h2 class="lp-h2" data-i18n="lp_a1_t">Leads kommen von selbst.</h2>
-      <p class="lp-line" data-i18n="lp_a1_d">Aus Facebook, Instagram, TikTok und der Website. Über Make, Zapier oder n8n.</p>
-    </div>
-    <div class="lp-wide lp-scene lp-scene-leads" id="lp-scene-leads">
-      <div class="lp-marks">
-        <ul class="lp-src-list">
-          <li class="lp-src" data-src="fb"><svg class="lp-logo"><use href="#lp-l-fb"/></svg><span data-i18n="lp_src_fb">Facebook Ads</span></li>
-          <li class="lp-src" data-src="ig"><svg class="lp-logo"><use href="#lp-l-ig"/></svg><span data-i18n="lp_src_ig">Instagram Ads</span></li>
-          <li class="lp-src" data-src="tt"><svg class="lp-logo"><use href="#lp-l-tt"/></svg><span data-i18n="lp_src_tt">TikTok Ads</span></li>
-          <li class="lp-src" data-src="web"><svg class="lp-logo lp-logo-web"><use href="#lp-i-globe"/></svg><span data-i18n="lp_src_web">Website-Formular</span></li>
-        </ul>
-        <p class="lp-via"><span data-i18n="lp_via">über</span><b>Make</b><b>Zapier</b><b>n8n</b></p>
-      </div>
-      <div class="lp-surface lp-board-wrap">
-        <div class="lp-surface-bar"><span class="lp-dot s1"></span><b data-i18n="lp_board">Vertrieb</b></div>
-        <div class="lp-board" id="lp-board-leads" data-i18n-aria="lp_board_aria" aria-label="Beispiel-Board. Karten mit der Maus oder den Pfeiltasten verschieben.">
-          <section class="lp-col" data-stage="new">
-            <header class="lp-col-head"><span class="lp-dot s1"></span><h3 data-i18n="lp_col_new">Neu</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
-            <div class="lp-col-cards">
-              <article class="lp-card u2" tabindex="0" data-value="128000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Gewerbefläche Nordwind GmbH</h4><p class="lp-card-sub">Tim Berger</p><div class="lp-card-foot"><span class="lp-card-value">128.000 €</span><span class="lp-badge lp-badge-u2" data-i18n="lp_urg_medium">Mittel</span><span class="lp-avatar">TB</span></div></article>
-            </div>
-          </section>
-          <section class="lp-col" data-stage="offer">
-            <header class="lp-col-head"><span class="lp-dot s2"></span><h3 data-i18n="lp_col_offer">Angebot</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
-            <div class="lp-col-cards">
-              <article class="lp-card u1" tabindex="0" data-value="62500"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Lagerfläche Hafenweg 4</h4><p class="lp-card-sub">Hafenwerk KG</p><div class="lp-card-foot"><span class="lp-card-value">62.500 €</span><span class="lp-badge lp-badge-u1" data-i18n="lp_urg_low">Niedrig</span><span class="lp-avatar">LA</span></div></article>
-              <article class="lp-card u4" tabindex="0" data-value="310000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Wohnung Lindenhof 7</h4><p class="lp-card-sub">Sofia Marin</p><div class="lp-card-foot"><span class="lp-card-value">310.000 €</span><span class="lp-badge lp-badge-u4" data-i18n="lp_urg_very">Sehr dringend</span><span class="lp-avatar">MK</span></div></article>
-            </div>
-          </section>
-          <section class="lp-col" data-stage="nego">
-            <header class="lp-col-head"><span class="lp-dot s3"></span><h3 data-i18n="lp_col_nego">Verhandlung</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
-            <div class="lp-col-cards">
-              <article class="lp-card u3" tabindex="0" data-value="485000" data-hero><span class="lp-card-stripe"></span><h4 class="lp-card-title">Elbstraße 12, 3 Zimmer</h4><p class="lp-card-sub">Jana Weber</p><div class="lp-card-foot"><span class="lp-card-value">485.000 €</span><span class="lp-badge lp-badge-u3" data-i18n="lp_urg_high">Hoch</span><span class="lp-avatar">MK</span></div></article>
-              <article class="lp-card" tabindex="0" data-value="210000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Büroetage Kaistraße 9</h4><p class="lp-card-sub">Lenz &amp; Partner</p><div class="lp-card-foot"><span class="lp-card-value">210.000 €</span><span class="lp-avatar">TB</span></div></article>
-            </div>
-          </section>
-          <section class="lp-col is-won" data-stage="won">
-            <header class="lp-col-head"><span class="lp-dot s4"></span><h3 data-i18n="lp_col_won">Gewonnen</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
-            <div class="lp-col-cards">
-              <article class="lp-card is-won" tabindex="0" data-value="395000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Reihenhaus Am Anger 3</h4><p class="lp-card-sub">Familie Roth</p><div class="lp-card-foot"><span class="lp-card-value">395.000 €</span><span class="lp-avatar">LA</span></div></article>
-            </div>
-          </section>
+  <!-- The hook: what Upgrads is, in one sentence, beside one deal and the three things that happened to it this week.
+       Each of the three is a way to its step further down, in the same number and colour. -->
+  <section class="mo-hero">
+    <div class="mo-wrap mo-hero-grid">
+      <div class="mo-hero-copy">
+        <h1 class="mo-h1" data-i18n="mo_hero_t">Das CRM, das den Kleinkram übernimmt.</h1>
+        <p class="mo-lead" data-i18n="mo_hero_d">Leads kommen von selbst rein, Termine prüfen den Kalender, und nach dem Abschluss startet das Onboarding allein. Mehr Zeit fürs Verkaufen.</p>
+        <div class="mo-actions">
+          <a class="mo-pill" href="mailto:team@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="mo_request">Zugang anfragen</a>
+          <a class="mo-pill mo-pill-ghost" href="/" data-i18n="mo_login">Anmelden</a>
         </div>
-        <p class="lp-stats" aria-live="polite"></p>
-        <div class="lp-toast hidden" role="status"><span class="lp-toast-text"></span><button type="button" class="lp-toast-undo" data-i18n="lp_toast_undo">Rückgängig</button></div>
+        <p class="mo-small" data-i18n="mo_hero_note">Deutsch und Englisch. Zugang per Einladung.</p>
       </div>
-      <span class="lp-packet hidden" id="lp-packet-leads" aria-hidden="true"></span>
+      <aside class="mo-hcard" aria-labelledby="mo-hcard-t">
+        <div class="mo-hcard-top">
+          <span class="mo-avatar" aria-hidden="true">ML</span>
+          <div class="mo-hcard-who"><p class="mo-hcard-name" id="mo-hcard-t">Marie Lindner</p><p class="mo-hcard-meta">Lindner &amp; Sohn</p></div>
+          <span class="mo-stage mo-s4"><span class="mo-dot"></span><span data-i18n="mo_st_won">Gewonnen</span></span>
+        </div>
+        <p class="mo-hcard-label" data-i18n="mo_hero_card">Diese Woche</p>
+        <ol class="mo-hsteps">
+          <li><a class="mo-hstep mo-c1" href="#leads"><span class="mo-num" aria-hidden="true">1</span><span class="mo-hstep-text"><span class="mo-hstep-what" data-i18n="mo_hero_l1">Lead aus Instagram, von allein im CRM</span><span class="mo-hstep-when"><span data-i18n="mo_d0">Mo</span> 08:32</span></span><svg class="mo-ic mo-hstep-go" aria-hidden="true"><use href="#mo-i-chevron"/></svg></a></li>
+          <li><a class="mo-hstep mo-c2" href="#termin"><span class="mo-num" aria-hidden="true">2</span><span class="mo-hstep-text"><span class="mo-hstep-what" data-i18n="mo_hero_l2">Termin gebucht, Kalender geprüft</span><span class="mo-hstep-when"><span data-i18n="mo_d1">Di</span> 14:00</span></span><svg class="mo-ic mo-hstep-go" aria-hidden="true"><use href="#mo-i-chevron"/></svg></a></li>
+          <li><a class="mo-hstep mo-c3" href="#gewonnen"><span class="mo-num" aria-hidden="true">3</span><span class="mo-hstep-text"><span class="mo-hstep-what" data-i18n="mo_hero_l3">Onboarding startet von allein</span><span class="mo-hstep-when" data-i18n="mo_onb_s1">Formular versendet</span></span><svg class="mo-ic mo-hstep-go" aria-hidden="true"><use href="#mo-i-chevron"/></svg></a></li>
+        </ol>
+      </aside>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- ══ Act 2 · the deal, then the meeting, as the page scrolls ══════════ -->
-<section id="deal" class="lp-act" data-act="deal">
-  <div class="lp-pin">
-    <div class="lp-wrap lp-cap">
-      <h2 class="lp-h2" id="lp-deal-h" data-i18n="lp_a2_t">Alles passiert am Deal.</h2>
-      <p class="lp-line" id="lp-deal-line" data-i18n="lp_p0">Anrufen, schreiben, WhatsApp mit fertiger Vorlage.</p>
+  <!-- The same Monday twice: the same things in Upgrads (left), the desk as it usually is (right). Dragging right tidies up. -->
+  <section class="mo-sec" aria-labelledby="mo-wipe-t">
+    <div class="mo-wrap">
+      <h2 class="mo-h2" id="mo-wipe-t" data-i18n="mo_wipe_t">Montag, 8:47 Uhr.</h2>
+      <p class="mo-line" data-i18n="mo_wipe_d">Derselbe Montag zweimal: links mit Upgrads, rechts ohne.</p>
+      <div class="mo-wipe-labels" aria-hidden="true"><span class="mo-tagline mo-tagline-with" data-i18n="mo_wipe_with">Mit Upgrads</span><span class="mo-tagline" data-i18n="mo_wipe_without">Ohne Upgrads</span></div>
+      <div class="mo-wipe" id="mo-wipe" role="group" data-i18n-aria="mo_wipe_aria" aria-label="Derselbe Montag, ohne und mit Upgrads">
+
+        <div class="mo-layer mo-before">
+          <div class="mo-cell">
+            <div class="mo-obj mo-mail">
+              <p class="mo-mail-subj" data-i18n="mo_x_mail_subj">Fwd: Fwd: Neuer Lead (Facebook)</p>
+              <p><span data-i18n="mo_x_name">Name</span>: Jonas Weber</p>
+              <p><span data-i18n="mo_x_phone">Telefon</span>: <span class="mo-scrawl" data-i18n="mo_x_empty">leer?</span></p>
+              <p><span data-i18n="mo_x_sent">Gesendet</span>: <span data-i18n="mo_d_sat">Sa</span> 23:14</p>
+            </div>
+            <div class="mo-obj mo-xls">
+              <p class="mo-xls-name" data-i18n="mo_x_file">Leads_Oktober_final2.xlsx</p>
+              <p class="mo-xls-row mo-xls-head"><span data-i18n="mo_x_name">Name</span><span data-i18n="mo_x_source">Quelle</span><span data-i18n="mo_x_state">Stand</span></p>
+              <p class="mo-xls-row"><span>Sophie Brandt</span><span>Insta</span><span class="mo-scrawl">???</span></p>
+              <p class="mo-xls-row"><span>Tom Riedel</span><span>TikTok</span><span></span></p>
+              <p class="mo-xls-row"><span>Tom Riedel</span><span>TikTok</span><span class="mo-scrawl" data-i18n="mo_x_twice">doppelt?</span></p>
+            </div>
+          </div>
+          <div class="mo-cell">
+            <div class="mo-obj mo-phone">
+              <p class="mo-phone-who">Marie Lindner</p>
+              <p class="mo-bubble"><span data-i18n="mo_x_bubble">Kommt das Angebot heute noch?</span><span class="mo-bubble-time">08:31</span></p>
+            </div>
+            <p class="mo-obj mo-sticky" data-i18n="mo_x_sticky">Lindner zurückrufen!! Nummer??</p>
+          </div>
+          <div class="mo-cell">
+            <div class="mo-obj mo-cal">
+              <p class="mo-cal-day" data-i18n="mo_x_tuesday">Dienstag</p>
+              <p class="mo-cal-row"><b>11:00</b><span data-i18n="mo_x_e2">Teammeeting</span></p>
+              <p class="mo-cal-row"><b>11:00</b><span class="mo-scrawl">Lindner??</span></p>
+            </div>
+            <div class="mo-obj mo-todo">
+              <p class="mo-todo-title">Onboarding Peters &amp; Co.</p>
+              <p class="mo-todo-row"><span class="mo-box"></span><span data-i18n="mo_x_todo1">Formular schicken</span></p>
+              <p class="mo-todo-row"><span class="mo-box"></span><span data-i18n="mo_x_todo2">Call ausmachen</span></p>
+              <p class="mo-todo-row"><span class="mo-box"></span><span data-i18n="mo_x_todo3">Briefing schreiben</span></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mo-layer mo-after mo-app">
+          <div class="mo-cell">
+            <div class="mo-col mo-s0">
+              <div class="mo-col-head"><span class="mo-dot"></span><span class="mo-col-name" data-i18n="mo_st_new">Neu</span><span class="mo-col-n">3</span></div>
+              <div class="mo-col-cards">
+                <div class="mo-card"><p class="mo-card-title">Jonas Weber</p><p class="mo-card-foot"><span class="mo-card-src"><svg class="mo-logo mo-logo-sm" aria-hidden="true"><use href="#mo-l-fb"/></svg><span data-i18n="mo_src_fb">Facebook Ads</span></span><span class="mo-card-time"><span data-i18n="mo_d_sat">Sa</span> 23:14</span></p></div>
+                <div class="mo-card"><p class="mo-card-title">Sophie Brandt</p><p class="mo-card-foot"><span class="mo-card-src"><svg class="mo-logo mo-logo-sm" aria-hidden="true"><use href="#mo-l-ig"/></svg><span data-i18n="mo_src_ig">Instagram Ads</span></span><span class="mo-card-time"><span data-i18n="mo_d_sun">So</span> 10:02</span></p></div>
+                <div class="mo-card"><p class="mo-card-title">Tom Riedel</p><p class="mo-card-foot"><span class="mo-card-src"><svg class="mo-logo mo-logo-sm" aria-hidden="true"><use href="#mo-l-tt"/></svg><span data-i18n="mo_src_tt">TikTok Ads</span></span><span class="mo-card-time"><span data-i18n="mo_d0">Mo</span> 07:55</span></p></div>
+              </div>
+            </div>
+          </div>
+          <div class="mo-cell">
+            <div class="mo-rec">
+              <p class="mo-rec-name">Marie Lindner</p>
+              <p class="mo-rec-meta"><span class="mo-stage mo-s3"><span class="mo-dot"></span><span data-i18n="mo_st_nego">Verhandlung</span></span><span class="mo-badge mo-u3" data-i18n="mo_urg_3">Hoch</span></p>
+              <p class="mo-rec-row"><svg class="mo-ic" aria-hidden="true"><use href="#mo-i-phone"/></svg><span class="mo-grow">+49 171 5540 218</span><span class="mo-btn mo-btn-sm" data-i18n="mo_open_dialer">Anrufen</span></p>
+              <p class="mo-rec-row"><svg class="mo-ic" aria-hidden="true"><use href="#mo-i-message"/></svg><span class="mo-grow mo-muted">„Hi Marie Lindner, “</span><span class="mo-btn mo-btn-sm" data-i18n="mo_open_whatsapp">WhatsApp öffnen</span></p>
+              <div class="mo-tl">
+                <div class="mo-tl-item"><span class="mo-tl-ic mo-tl-wa"><svg class="mo-ic" aria-hidden="true"><use href="#mo-i-message"/></svg></span><div class="mo-tl-main"><p class="mo-tl-head"><b data-i18n="mo_act_whatsapp">WhatsApp</b><span class="mo-tl-time">08:31</span></p><p class="mo-tl-text" data-i18n="mo_x_bubble">Kommt das Angebot heute noch?</p></div></div>
+                <div class="mo-tl-item"><span class="mo-tl-ic mo-tl-mail"><svg class="mo-ic" aria-hidden="true"><use href="#mo-i-mail"/></svg></span><div class="mo-tl-main"><p class="mo-tl-head"><b data-i18n="mo_act_email">E-Mail</b><span class="mo-tl-time"><span data-i18n="mo_d4">Fr</span> 16:20</span></p><p class="mo-tl-text" data-i18n="mo_x_offer">Angebot gesendet, Laufzeit zwölf Monate.</p></div></div>
+              </div>
+            </div>
+          </div>
+          <div class="mo-cell">
+            <div class="mo-meet">
+              <p class="mo-meet-head"><svg class="mo-ic" aria-hidden="true"><use href="#mo-i-calendar"/></svg><b data-i18n="mo_act_meeting">Termin</b><span class="mo-muted">Marie Lindner</span></p>
+              <p class="mo-meet-when" data-i18n="mo_x_meet_when">Di, 14:00 bis 14:30</p>
+              <p class="mo-meet-sub" data-i18n="mo_x_invite">Einladung an marie.lindner@example.de</p>
+              <p class="mo-meet-sub" data-i18n="mo_x_meet_note">11:00 war schon belegt.</p>
+              <span class="mo-btn mo-btn-sm mo-btn-primary" data-i18n="mo_x_join">Google Meet beitreten</span>
+            </div>
+            <div class="mo-eng-mini">
+              <p class="mo-eng-mini-head"><b>Peters &amp; Co.</b><span class="mo-badge mo-ok" data-i18n="mo_onb_s1">Formular versendet</span></p>
+              <p class="mo-steps" aria-hidden="true"><span class="mo-steps-seg is-on"></span><span class="mo-steps-seg"></span><span class="mo-steps-seg"></span><span class="mo-steps-seg"></span><span class="mo-steps-seg"></span><span class="mo-steps-seg"></span></p>
+              <p class="mo-help" data-i18n="mo_onb_col_status">Engine-Status</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mo-handle" aria-hidden="true"><span class="mo-grip"><svg class="mo-ic" aria-hidden="true"><use href="#mo-i-grip"/></svg></span></div>
+        <input class="mo-wipe-range" id="mo-wipe-range" type="range" min="0" max="100" step="1" value="12" data-i18n-aria="mo_wipe_range" aria-label="Vergleichen: ziehen oder Pfeiltasten">
+      </div>
+      <p class="mo-note mo-note-wipe" data-note="wipe"><svg class="mo-scribble mo-scribble-up" aria-hidden="true"><use href="#mo-a-up"/></svg><span class="mo-note-text" data-i18n="mo_n_wipe_idle">nach rechts ziehen</span></p>
     </div>
-    <div class="lp-wide lp-scene lp-scene-deal">
-    <div class="lp-surface lp-record" id="lp-record">
-      <div class="lp-rec-head">
-        <div class="lp-rec-id">
-          <h3 class="lp-rec-title" data-i18n="lp_deal_name">Elbstraße 12, 3 Zimmer</h3>
-          <p class="lp-rec-meta"><span class="lp-stagepill" id="lp-rec-stage" data-i18n="lp_col_nego">Verhandlung</span><span class="lp-badge lp-badge-u3" data-i18n="lp_urg_high">Hoch</span><span class="lp-muted" data-i18n="lp_deal_created">Angelegt vor 11 Tagen</span></p>
+  </section>
+
+  <!-- Three steps of one deal's life, numbered and coloured as in the card at the top. Each answers in the product and in the margin. -->
+  <section class="mo-sec" id="leads" aria-labelledby="mo-m1-t">
+    <div class="mo-wrap">
+      <div class="mo-panel mo-moment mo-c1">
+        <div class="mo-copy">
+          <span class="mo-num mo-num-lg" aria-hidden="true">1</span>
+          <h2 class="mo-h2" id="mo-m1-t" data-i18n="mo_m1_t">Leads tippt hier niemand mehr ab.</h2>
+          <p class="mo-line" data-i18n="mo_m1_d">Facebook, Instagram, TikTok oder die eigene Website: Über Make, Zapier oder n8n landet jeder Lead von selbst im CRM, auf Wunsch gleich als Deal.</p>
+          <p class="mo-note" data-note="leads"><span class="mo-note-text" data-i18n="mo_n_leads_idle">eine Quelle antippen</span><svg class="mo-scribble mo-scribble-side" aria-hidden="true"><use href="#mo-a-right"/></svg></p>
         </div>
-        <div class="lp-rec-actions" id="lp-rec-actions">
-          <button type="button" class="lp-btn lp-btn-sm" data-act="call"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-phone"/></svg><span data-i18n="lp_act_call">Anrufen</span></button>
-          <button type="button" class="lp-btn lp-btn-sm" data-act="mail"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-mail"/></svg><span data-i18n="lp_act_email">E-Mail</span></button>
-          <button type="button" class="lp-btn lp-btn-sm" data-act="wa"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-message"/></svg><span data-i18n="lp_act_wa">WhatsApp</span></button>
-          <button type="button" class="lp-btn lp-btn-sm lp-btn-primary" id="lp-rec-book"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-calendar"/></svg><span data-i18n="lp_act_book">Termin buchen</span></button>
-        </div>
-        <div class="lp-bubble hidden" id="lp-wa"><small data-i18n="lp_wa_label">WhatsApp, Vorlage vorausgefüllt</small><p data-i18n="lp_wa_tpl">Guten Tag Jana Weber, danke für die Anfrage zu Elbstraße 12. Beste Grüße, Mara Kühn</p></div>
-      </div>
-      <div class="lp-tabs" role="tablist">
-        <button type="button" role="tab" id="lp-tab-overview" aria-controls="lp-pan-overview" aria-selected="true" data-i18n="lp_tab_overview">Übersicht</button>
-        <button type="button" role="tab" id="lp-tab-contact" aria-controls="lp-pan-contact" aria-selected="false" tabindex="-1" data-i18n="lp_tab_contact">Kontakt</button>
-        <button type="button" role="tab" id="lp-tab-tasks" aria-controls="lp-pan-tasks" aria-selected="false" tabindex="-1" data-i18n="lp_tab_tasks">Aufgaben</button>
-        <button type="button" role="tab" id="lp-tab-activity" aria-controls="lp-pan-activity" aria-selected="false" tabindex="-1" data-i18n="lp_tab_activity">Aktivität</button>
-        <button type="button" role="tab" id="lp-tab-objects" aria-controls="lp-pan-objects" aria-selected="false" tabindex="-1" data-i18n="lp_tab_objects">Objekte</button>
-      </div>
-      <div class="lp-pan" role="tabpanel" id="lp-pan-overview" aria-labelledby="lp-tab-overview">
-        <dl class="lp-kpis">
-          <div><dt data-i18n="lp_kpi_value">Deal-Wert</dt><dd>485.000 €</dd></div>
-          <div><dt data-i18n="lp_kpi_stage">Phase</dt><dd data-i18n="lp_col_nego">Verhandlung</dd></div>
-          <div><dt data-i18n="lp_kpi_urg">Dringlichkeit</dt><dd data-i18n="lp_urg_high">Hoch</dd></div>
-          <div><dt data-i18n="lp_kpi_owner">Zuständig</dt><dd>Mara Kühn</dd></div>
-          <div><dt data-i18n="lp_kpi_last">Letzte Aktivität</dt><dd data-i18n="lp_kpi_last_v">vor 2 Std.</dd></div>
-        </dl>
-        <div class="lp-ov">
-          <div class="lp-ov-box"><h4><span data-i18n="lp_ov_next">Nächste Aufgaben</span> <span class="lp-count" id="lp-ov-open">2</span></h4><ul class="lp-mini" id="lp-ov-tasks"><li><span class="lp-mini-dot"></span><span data-i18n="lp_task1">Finanzierungsbestätigung anfordern</span><small data-i18n="lp_task1_due">Fr, 10:00</small></li><li><span class="lp-mini-dot"></span><span data-i18n="lp_task3">Notartermin abstimmen</span><small data-i18n="lp_task3_due">Di, 14:30</small></li></ul></div>
-          <div class="lp-ov-box"><h4 data-i18n="lp_ov_latest">Letzte Aktivität</h4><p class="lp-muted" id="lp-ov-latest-meta" data-i18n="lp_tl1_meta">Mara Kühn, gestern 15:20</p><p class="lp-ov-latest" id="lp-ov-latest" data-i18n="lp_tl1_text">Kaufpreis besprochen, Finanzierung in Prüfung.</p></div>
-        </div>
-      </div>
-      <div class="lp-pan hidden" role="tabpanel" id="lp-pan-contact" aria-labelledby="lp-tab-contact">
-        <div class="lp-contact">
-          <span class="lp-avatar lp-avatar-lg">JW</span>
-          <div class="lp-contact-body">
-            <h4>Jana Weber</h4>
-            <dl class="lp-fields">
-              <dt data-i18n="lp_f_email">E-Mail</dt><dd>jana.weber@example.de</dd>
-              <dt data-i18n="lp_f_phone">Telefon</dt><dd>+49 171 2345678</dd>
-              <dt data-i18n="lp_f_owner">Zuständig</dt><dd>Mara Kühn</dd>
-              <dt data-i18n="lp_f_last">Letzter Kontakt</dt><dd data-i18n="lp_f_last_v">gestern, 15:20</dd>
-            </dl>
-          </div>
-        </div>
-        <div class="lp-supplier"><p class="lp-label" data-i18n="lp_supplier">Lieferant</p><div class="lp-supplier-row"><span class="lp-avatar">NF</span><div><b>Notariat Feld &amp; Kollegen</b><small data-i18n="lp_supplier_role">Notariat</small></div></div></div>
-      </div>
-      <div class="lp-pan hidden" role="tabpanel" id="lp-pan-tasks" aria-labelledby="lp-tab-tasks">
-        <div class="lp-task-head"><span id="lp-task-progress"></span><span class="lp-task-bar"><i></i></span></div>
-        <ul class="lp-task-list" id="lp-task-list">
-          <li class="lp-task"><label><input type="checkbox"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task1">Finanzierungsbestätigung anfordern</span></label><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span><small data-i18n="lp_task1_due">Fr, 10:00</small></li>
-          <li class="lp-task"><label><input type="checkbox" checked><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task2">Energieausweis senden</span></label><span class="lp-badge lp-badge-u2" data-i18n="lp_prio_medium">Mittel</span><small data-i18n="lp_task2_due">erledigt</small></li>
-          <li class="lp-task"><label><input type="checkbox"><span class="lp-check"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg></span><span class="lp-task-title" data-i18n="lp_task3">Notartermin abstimmen</span></label><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span><small data-i18n="lp_task3_due">Di, 14:30</small></li>
-        </ul>
-        <div class="lp-task-new" id="lp-task-new">
-          <span class="lp-label" data-i18n="lp_task_new">Neue Aufgabe</span>
-          <div class="lp-task-form">
-            <span class="lp-fm-v lp-fm-grow" data-i18n="lp_task_title_v">Exposé senden</span>
-            <span class="lp-fm-v"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-calendar"/></svg><span data-i18n="lp_task_due_v">Mi, 14:00</span></span>
-            <span class="lp-fm-v"><span class="lp-badge lp-badge-u3" data-i18n="lp_prio_high">Hoch</span></span>
-            <button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lp-task-add" data-i18n="lp_task_add">Anlegen</button>
+        <div class="mo-piece">
+          <div class="mo-flow">
+            <div class="mo-sources" id="mo-sources" role="group" data-i18n-aria="mo_sources" aria-label="Lead-Quellen">
+              <button type="button" class="mo-src" data-src="fb"><svg class="mo-logo" aria-hidden="true"><use href="#mo-l-fb"/></svg><span data-i18n="mo_src_fb">Facebook Ads</span></button>
+              <button type="button" class="mo-src" data-src="ig"><svg class="mo-logo" aria-hidden="true"><use href="#mo-l-ig"/></svg><span data-i18n="mo_src_ig">Instagram Ads</span></button>
+              <button type="button" class="mo-src" data-src="tt"><svg class="mo-logo" aria-hidden="true"><use href="#mo-l-tt"/></svg><span data-i18n="mo_src_tt">TikTok Ads</span></button>
+              <button type="button" class="mo-src" data-src="web"><svg class="mo-ic mo-logo" aria-hidden="true"><use href="#mo-i-globe"/></svg><span data-i18n="mo_src_web">Website</span></button>
+            </div>
+            <div class="mo-inbox" id="mo-inbox" role="group" data-i18n-aria="mo_inbox_aria" aria-label="Erste Phase"></div>
           </div>
         </div>
       </div>
-      <div class="lp-pan hidden" role="tabpanel" id="lp-pan-activity" aria-labelledby="lp-tab-activity">
-        <div class="lp-composer" id="lp-composer">
-          <div class="lp-type-chips">
-            <button type="button" class="lp-type-chip" data-type="note" aria-pressed="true" data-i18n="lp_type_note">Notiz</button>
-            <button type="button" class="lp-type-chip" data-type="call" aria-pressed="false" data-i18n="lp_type_call">Anruf</button>
-            <button type="button" class="lp-type-chip" data-type="email" aria-pressed="false" data-i18n="lp_type_email">E-Mail</button>
-            <button type="button" class="lp-type-chip" data-type="wa" aria-pressed="false" data-i18n="lp_type_wa">WhatsApp</button>
-          </div>
-          <textarea rows="2" id="lp-note" data-i18n-ph="lp_note_ph" placeholder="Notiz schreiben, Strg+Enter speichert"></textarea>
-          <button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lp-note-save" data-i18n="lp_note_save">Speichern</button>
+    </div>
+  </section>
+
+  <section class="mo-sec" id="termin" aria-labelledby="mo-m2-t">
+    <div class="mo-wrap">
+      <div class="mo-panel mo-moment mo-c2">
+        <div class="mo-copy">
+          <span class="mo-num mo-num-lg" aria-hidden="true">2</span>
+          <h2 class="mo-h2" id="mo-m2-t" data-i18n="mo_m2_t">Der Kalender hat ein Wörtchen mitzureden.</h2>
+          <p class="mo-line" data-i18n="mo_m2_d">Termine entstehen direkt am Deal über Cal.com. Steht zur selben Zeit schon etwas im eigenen Kalender, meldet sich das CRM.</p>
+          <p class="mo-note" data-note="cal"><span class="mo-note-text" data-i18n="mo_n_cal_idle">Dienstag, 11 Uhr probieren</span><svg class="mo-scribble mo-scribble-side" aria-hidden="true"><use href="#mo-a-right"/></svg></p>
         </div>
-        <ol class="lp-timeline" id="lp-timeline">
-          <li class="lp-tl-item"><span class="lp-tl-ic type-call"></span><div><p class="lp-tl-meta"><b data-i18n="lp_type_call">Anruf</b> <span data-i18n="lp_tl1_meta">Mara Kühn, gestern 15:20</span></p><p class="lp-tl-text" data-i18n="lp_tl1_text">Kaufpreis besprochen, Finanzierung in Prüfung.</p></div></li>
-          <li class="lp-tl-item"><span class="lp-tl-ic type-note"></span><div><p class="lp-tl-meta"><b data-i18n="lp_type_note">Notiz</b> <span data-i18n="lp_tl2_meta">Tim Berger, letzte Woche</span></p><p class="lp-tl-text" data-i18n="lp_tl2_text">Erstkontakt über das Formular. Sucht 3 Zimmer, Altbau.</p></div></li>
+        <div class="mo-piece"><div class="mo-book" id="mo-book"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mo-sec" id="gewonnen" aria-labelledby="mo-m3-t">
+    <div class="mo-wrap">
+      <div class="mo-panel mo-moment mo-c3">
+        <div class="mo-copy">
+          <span class="mo-num mo-num-lg" aria-hidden="true">3</span>
+          <h2 class="mo-h2" id="mo-m3-t" data-i18n="mo_m3_t">Nach der Unterschrift hat der Vertrieb Feierabend.</h2>
+          <p class="mo-line" data-i18n="mo_m3_d">Landet ein Deal in Gewonnen, übernimmt die Upgrads Engine das Onboarding und meldet jeden Schritt an den Deal zurück.</p>
+          <p class="mo-note" data-note="won"><span class="mo-note-text" data-i18n="mo_n_won_idle">Karte rüberziehen</span><svg class="mo-scribble mo-scribble-side" aria-hidden="true"><use href="#mo-a-right"/></svg></p>
+        </div>
+        <div class="mo-piece"><div class="mo-won" id="mo-won" role="group" data-i18n-aria="mo_won_aria" aria-label="Die letzten zwei Phasen"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="mo-sec" aria-labelledby="mo-faq-t">
+    <div class="mo-wrap">
+      <h2 class="mo-h2" id="mo-faq-t" data-i18n="mo_faq_t">Was oft gefragt wird.</h2>
+      <div class="mo-faq">
+        <details class="mo-q"><summary class="mo-q-sum"><span data-i18n="mo_q1">Wie kommen die Leads rein?</span><svg class="mo-ic mo-q-ic" aria-hidden="true"><use href="#mo-i-plus"/></svg></summary><p class="mo-q-a" data-i18n="mo_a1">Über Make, Zapier oder n8n. Einmal verbunden, kommen sie von allein, mit den Feldern, die das Formular liefert.</p></details>
+        <details class="mo-q"><summary class="mo-q-sum"><span data-i18n="mo_q2">Passt das zu unserem Geschäft?</span><svg class="mo-ic mo-q-ic" aria-hidden="true"><use href="#mo-i-plus"/></svg></summary><p class="mo-q-a" data-i18n="mo_a2">Phasen, Felder und sogar die Namen für Objekte und Lieferanten legt das Team selbst fest.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- The way in, said plainly: three steps (a real sequence) and two buttons. -->
+  <section class="mo-close">
+    <div class="mo-wrap">
+      <div class="mo-cta">
+        <div class="mo-cta-copy">
+          <h2 class="mo-h2" data-i18n="mo_close_t">Bereit für weniger Kleinkram?</h2>
+          <p class="mo-line" data-i18n="mo_close_d">Der Zugang ist schnell eingerichtet.</p>
+          <div class="mo-actions">
+            <a class="mo-pill" href="mailto:team@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="mo_request">Zugang anfragen</a>
+            <a class="mo-pill mo-pill-ghost" href="/" data-i18n="mo_login">Anmelden</a>
+          </div>
+        </div>
+        <ol class="mo-csteps">
+          <li class="mo-cstep"><span class="mo-num" aria-hidden="true">1</span><span data-i18n="mo_c1">Kurze Mail an team@upgrads.de</span></li>
+          <li class="mo-cstep"><span class="mo-num" aria-hidden="true">2</span><span data-i18n="mo_c2">Code erhalten, mit Rolle: Mitglied, Admin oder Inhaber</span></li>
+          <li class="mo-cstep"><span class="mo-num" aria-hidden="true">3</span><span data-i18n="mo_c3">Anmelden, und der erste Lead kann kommen</span></li>
         </ol>
       </div>
-      <div class="lp-pan hidden" role="tabpanel" id="lp-pan-objects" aria-labelledby="lp-tab-objects">
-        <p class="lp-label" data-i18n="lp_obj_title">Verknüpfte Objekte</p>
-        <div class="lp-object"><span class="lp-object-ic"><svg class="lp-ic"><use href="#lp-i-building"/></svg></span><div><b>Elbstraße 12, Whg. 3</b><small data-i18n="lp_obj_meta">87 m², 3 Zimmer, Baujahr 1962</small></div><button type="button" class="lp-btn lp-btn-sm" data-i18n="lp_obj_open">Öffnen</button></div>
-      </div>
-      <!-- the booking dialog, as the app opens it over the record -->
-      <div class="lp-sheet hidden" id="lp-book" role="dialog" aria-modal="true" aria-labelledby="lp-bk-title">
-        <div class="lp-sheet-head"><h4 id="lp-bk-title" data-i18n="lp_bk_title">Termin mit Jana Weber buchen</h4><button type="button" class="lp-iconbtn" id="lp-bk-close" data-i18n-aria="lp_bk_cancel" aria-label="Abbrechen"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-x"/></svg></button></div>
-        <p class="lp-hint" id="lp-bk-invite"></p>
-        <div class="lp-bk-fields">
-          <div class="lp-fm-row"><label class="lp-fm-l" for="lp-bk-type" data-i18n="lp_bk_type">Terminart</label><select class="lp-select" id="lp-bk-type"><option value="1" data-i18n="lp_bk_type1">Erstgespräch</option><option value="2" data-i18n="lp_bk_type2">Besichtigung</option></select></div>
-          <div class="lp-fm-row"><label class="lp-fm-l" for="lp-bk-where" data-i18n="lp_bk_where">Wo</label><select class="lp-select" id="lp-bk-where"><option>Google Meet</option><option>Zoom</option><option>Cal Video</option></select></div>
-        </div>
-        <div class="lp-bk-month">
-          <p class="lp-fm-l" data-i18n="lp_bk_month">Oktober 2026</p>
-          <div class="lp-bk-dows"><span data-i18n="lp_wd1">Mo</span><span data-i18n="lp_wd2">Di</span><span data-i18n="lp_wd3">Mi</span><span data-i18n="lp_wd4">Do</span><span data-i18n="lp_wd5">Fr</span><span data-i18n="lp_wd6">Sa</span><span data-i18n="lp_wd7">So</span></div>
-          <div class="lp-bk-grid" id="lp-bk-grid"></div>
-        </div>
-        <div class="lp-bk-time">
-          <p class="lp-fm-l" data-i18n="lp_bk_time">Uhrzeit</p>
-          <div class="lp-bk-slots" id="lp-bk-slots" role="group" data-i18n-aria="lp_bk_time" aria-label="Uhrzeit"></div>
-          <p class="lp-bk-conflict hidden" id="lp-bk-conflict" role="alert"></p>
-          <div class="lp-bk-summary hidden" id="lp-bk-summary"><svg class="lp-ic"><use href="#lp-i-calendar"/></svg><div><b id="lp-bk-when"></b><span id="lp-bk-who"></span></div></div>
-        </div>
-        <div class="lp-sheet-foot"><button type="button" class="lp-btn lp-btn-sm" id="lp-bk-cancel" data-i18n="lp_bk_cancel">Abbrechen</button><button type="button" class="lp-btn lp-btn-primary lp-btn-sm" id="lp-bk-go" disabled></button></div>
-      </div>
-      <div class="lp-toast hidden" id="lp-rec-toast" role="status"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg><span class="lp-toast-text" id="lp-rec-toast-text"></span></div>
     </div>
-    </div>
-  </div>
-</section>
+  </section>
 
-<!-- ══ Act 3 · won, and handed on, as the page scrolls ══════════════════ -->
-<section id="won" class="lp-act" data-act="won">
-  <div class="lp-pin">
-    <div class="lp-wrap lp-cap">
-      <h2 class="lp-h2" data-i18n="lp_a3_t">Unterschrieben. Weitergemeldet.</h2>
-      <p class="lp-line" data-i18n="lp_a3_d">Ein Zug nach Gewonnen, und das nächste System weiß Bescheid.</p>
-    </div>
-    <div class="lp-wide lp-scene lp-scene-won" id="lp-scene-won">
-      <div class="lp-surface lp-board-wrap">
-        <div class="lp-surface-bar"><span class="lp-dot s1"></span><b data-i18n="lp_board">Vertrieb</b></div>
-        <div class="lp-board" id="lp-board-won" data-i18n-aria="lp_board_aria" aria-label="Beispiel-Board. Karten mit der Maus oder den Pfeiltasten verschieben.">
-          <section class="lp-col" data-stage="new">
-            <header class="lp-col-head"><span class="lp-dot s1"></span><h3 data-i18n="lp_col_new">Neu</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
-            <div class="lp-col-cards">
-              <article class="lp-card is-lead" tabindex="0" data-value="0" data-src="fb"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Lena Hoffmann</h4><p class="lp-card-sub" data-i18n="lp_lead_fb">Lead über Facebook Ads</p><div class="lp-card-foot"><span class="lp-card-value">Hoffmann Immobilien</span><span class="lp-avatar">MK</span></div></article>
-              <article class="lp-card u2" tabindex="0" data-value="128000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Gewerbefläche Nordwind GmbH</h4><p class="lp-card-sub">Tim Berger</p><div class="lp-card-foot"><span class="lp-card-value">128.000 €</span><span class="lp-badge lp-badge-u2" data-i18n="lp_urg_medium">Mittel</span><span class="lp-avatar">TB</span></div></article>
-            </div>
-          </section>
-          <section class="lp-col" data-stage="offer">
-            <header class="lp-col-head"><span class="lp-dot s2"></span><h3 data-i18n="lp_col_offer">Angebot</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
-            <div class="lp-col-cards">
-              <article class="lp-card u1" tabindex="0" data-value="62500"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Lagerfläche Hafenweg 4</h4><p class="lp-card-sub">Hafenwerk KG</p><div class="lp-card-foot"><span class="lp-card-value">62.500 €</span><span class="lp-badge lp-badge-u1" data-i18n="lp_urg_low">Niedrig</span><span class="lp-avatar">LA</span></div></article>
-              <article class="lp-card u4" tabindex="0" data-value="310000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Wohnung Lindenhof 7</h4><p class="lp-card-sub">Sofia Marin</p><div class="lp-card-foot"><span class="lp-card-value">310.000 €</span><span class="lp-badge lp-badge-u4" data-i18n="lp_urg_very">Sehr dringend</span><span class="lp-avatar">MK</span></div></article>
-            </div>
-          </section>
-          <section class="lp-col" data-stage="nego">
-            <header class="lp-col-head"><span class="lp-dot s3"></span><h3 data-i18n="lp_col_nego">Verhandlung</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
-            <div class="lp-col-cards">
-              <article class="lp-card u3" tabindex="0" data-value="485000" data-hero><span class="lp-card-stripe"></span><h4 class="lp-card-title">Elbstraße 12, 3 Zimmer</h4><p class="lp-card-sub">Jana Weber</p><div class="lp-card-foot"><span class="lp-card-value">485.000 €</span><span class="lp-badge lp-badge-u3" data-i18n="lp_urg_high">Hoch</span><span class="lp-avatar">MK</span></div></article>
-              <article class="lp-card" tabindex="0" data-value="210000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Büroetage Kaistraße 9</h4><p class="lp-card-sub">Lenz &amp; Partner</p><div class="lp-card-foot"><span class="lp-card-value">210.000 €</span><span class="lp-avatar">TB</span></div></article>
-            </div>
-          </section>
-          <section class="lp-col is-won" data-stage="won">
-            <header class="lp-col-head"><span class="lp-dot s4"></span><h3 data-i18n="lp_col_won">Gewonnen</h3><span class="lp-col-count"></span><span class="lp-col-sum"></span></header>
-            <div class="lp-col-cards">
-              <article class="lp-card is-won" tabindex="0" data-value="395000"><span class="lp-card-stripe"></span><h4 class="lp-card-title">Reihenhaus Am Anger 3</h4><p class="lp-card-sub">Familie Roth</p><div class="lp-card-foot"><span class="lp-card-value">395.000 €</span><span class="lp-avatar">LA</span></div></article>
-            </div>
-          </section>
-        </div>
-        <p class="lp-stats" aria-live="polite"></p>
-        <div class="lp-toast hidden" role="status"><span class="lp-toast-text"></span><button type="button" class="lp-toast-undo" data-i18n="lp_toast_undo">Rückgängig</button></div>
-      </div>
-      <div class="lp-next" id="lp-next">
-        <p class="lp-next-name" data-i18n="lp_next">Nächstes System</p>
-        <p class="lp-next-sub" data-i18n="lp_next_sub">Abwicklung, Buchhaltung, Verwaltung</p>
-        <p class="lp-next-state"><i></i><span id="lp-next-state"></span></p>
-        <p class="lp-receipt" id="lp-receipt"><svg class="lp-ic lp-ic-sm"><use href="#lp-i-check"/></svg><span data-i18n="lp_received">Empfangen</span></p>
-      </div>
-      <span class="lp-packet hidden" id="lp-packet-won" aria-hidden="true"></span>
-    </div>
-  </div>
-</section>
-
-<!-- ══ Numbers ══════════════════════════════════════════════════════════ -->
-<section id="numbers" class="lp-sec">
-  <div class="lp-wrap lp-cap">
-    <h2 class="lp-h2" data-i18n="lp_num_t">Zahlen nach den eigenen Phasen.</h2>
-    <p class="lp-line" data-i18n="lp_num_d">Gewinnquote, Trichter, offene Pipeline. Ohne Tabelle nebenher.</p>
-  </div>
-  <div class="lp-wrap">
-    <div class="lp-surface lp-an">
-      <div class="lp-surface-bar">
-        <div class="lp-seg" role="group" data-i18n-aria="lp_an_period" aria-label="Zeitraum">
-          <button type="button" class="lp-period" data-period="3" aria-pressed="false" data-i18n="lp_an_period_3">3 Monate</button>
-          <button type="button" class="lp-period" data-period="6" aria-pressed="true" data-i18n="lp_an_period_6">6 Monate</button>
-          <button type="button" class="lp-period" data-period="12" aria-pressed="false" data-i18n="lp_an_period_12">12 Monate</button>
-        </div>
-      </div>
-      <dl class="lp-an-cards">
-        <div><dt data-i18n="lp_an_c_open">Offene Pipeline</dt><dd id="lp-an-open"></dd></div>
-        <div><dt data-i18n="lp_an_c_won">Gewonnener Wert</dt><dd id="lp-an-won"></dd></div>
-        <div><dt data-i18n="lp_an_c_rate">Gewinnquote</dt><dd id="lp-an-rate"></dd></div>
-        <div><dt data-i18n="lp_an_c_new">Neue Deals</dt><dd id="lp-an-new"></dd></div>
-      </dl>
-      <div class="lp-an-grid">
-        <div class="lp-an-box"><p class="lp-label" data-i18n="lp_an_rate_m">Gewinnquote je Monat</p><div class="lp-an-line-wrap"><svg id="lp-an-line" viewBox="0 0 560 180" preserveAspectRatio="none" role="img" aria-hidden="true"></svg><div class="lp-an-tip hidden" id="lp-an-tip"></div></div></div>
-        <div class="lp-an-box"><p class="lp-label" data-i18n="lp_an_funnel">Trichter</p><ol class="lp-funnel" id="lp-an-funnel"></ol></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ══ What is different ════════════════════════════════════════════════ -->
-<section id="anders" class="lp-sec">
-  <div class="lp-wrap lp-cap"><h2 class="lp-h2" data-i18n="lp_vs_t">Weniger CRM. Mehr Unterschriften.</h2></div>
-  <div class="lp-wrap">
-    <ol class="lp-vs">
-      <li class="lp-vs-head" aria-hidden="true"><span data-i18n="lp_vs_a">Anderswo</span><span data-i18n="lp_vs_b">Bei Upgrads</span></li>
-      <li class="lp-vs-row"><p class="lp-vs-a" data-i18n="lp_vs1a">Leads werden abgetippt.</p><p class="lp-vs-b" data-i18n="lp_vs1b">Leads kommen von selbst an.</p></li>
-      <li class="lp-vs-row"><p class="lp-vs-a" data-i18n="lp_vs2a">Gewonnen ist das Ende.</p><p class="lp-vs-b" data-i18n="lp_vs2b">Gewonnen ist eine Übergabe.</p></li>
-      <li class="lp-vs-row"><p class="lp-vs-a" data-i18n="lp_vs3a">Aus dem Englischen übersetzt.</p><p class="lp-vs-b" data-i18n="lp_vs3b">Auf Deutsch gebaut. Englisch einen Klick entfernt.</p></li>
-      <li class="lp-vs-row"><p class="lp-vs-a" data-i18n="lp_vs4a">Die Software bestimmt die Begriffe.</p><p class="lp-vs-b" data-i18n="lp_vs4b">Phasen, Objekte, Lieferanten heißen wie im Team.</p></li>
-      <li class="lp-vs-row"><p class="lp-vs-a" data-i18n="lp_vs5a">Noch ein Tool für Termine.</p><p class="lp-vs-b" data-i18n="lp_vs5b">Termine aus dem Deal heraus gebucht.</p></li>
-    </ol>
-  </div>
-</section>
-
-<!-- ══ Close ════════════════════════════════════════════════════════════ -->
-<section id="cta" class="lp-sec lp-close">
-  <div class="lp-wrap lp-cap">
-    <h2 class="lp-h2" data-i18n="lp_cta_t">Nur auf Einladung.</h2>
-    <p class="lp-line" data-i18n="lp_cta_d">Zugang anfragen. Der Einladungscode kommt per E-Mail.</p>
-    <div class="lp-actions">
-      <a class="lp-pill lp-request" href="mailto:hello@upgrads.de?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="lp_request">Zugang anfragen</a>
-      <a class="lp-pill lp-pill-line" href="/" data-i18n="lp_login">Anmelden</a>
-    </div>
-  </div>
-</section>
 </main>
 
-<footer class="lp-footer">
-  <div class="lp-wrap lp-footer-in">
-    <a class="lp-brand" href="#top"><img src="/images/logo.png" alt="Upgrads"></a>
-    <p data-i18n="lp_foot_tag">Upgrads CRM. Gewonnen ist erst der Anfang.</p>
+<footer class="mo-foot">
+  <div class="mo-wrap mo-foot-in">
+    <img class="mo-foot-logo" src="/images/logo.png" alt="Upgrads">
+    <div class="mo-foot-end">
+      <p data-i18n="mo_foot_fiction">Alle Namen und Zahlen auf dieser Seite sind erfunden.</p>
+      <button type="button" class="mo-egg" id="mo-egg" data-i18n-aria="brk_title" aria-label="Kurze Pause"><svg class="mo-egg-ic" aria-hidden="true"><use href="#mo-i-blocks"/></svg></button>
+    </div>
   </div>
 </footer>
 
+<div class="mo-fly" id="mo-fly" aria-hidden="true"></div>
+<div class="mo-toasts" id="mo-toasts" role="status" aria-live="polite"></div>
+<script src="/js/break-game.js"></script>
 <script src="/js/landing.js"></script>
 </body>
 </html>

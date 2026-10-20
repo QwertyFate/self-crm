@@ -22,7 +22,7 @@
    6. routes              every /api/* mount, one line each. The ONLY place
                           that knows the full URL map.
    7. /adminconsole       serves public/admin.html; /landingpage serves public/landingpage.html;
-      /landingpagetwo serves public/landingpagetwo.html (the second landing design, kept for comparison).
+      /landingpagetwo redirects there (its old address, from before it became the landing page).
    8. catch-all GET *     serves public/index.html, which is why the client can
                           have "pages" without any URL routing.
    9. error handler       entity.too.large → 413 with a readable message,
@@ -134,6 +134,13 @@ const engineApiLimiter = rateLimit({
   message: { fehler: { code: 'zu_viele_anfragen', nachricht: 'Zu viele Anfragen. Bitte später erneut versuchen.' } },
   standardHeaders: true, legacyHeaders: false,
 });
+// The break's team board (/api/break-scores): scores are reported by the browser, so 30 requests a minute
+// per IP is plenty for reading the board and saving finished games, and too little for a flood.
+const breakScoresLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 30,
+  message: { error: 'Too many score requests. Please wait a minute.' },
+  standardHeaders: true, legacyHeaders: false,
+});
 
 // Express's json() default body limit is 100kb, too small for a CSV contact import
 // sent as a JSON array of rows; raise it just for that route (body-parser skips
@@ -201,6 +208,8 @@ app.use('/api/task-projects', require('./routes/task-projects'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/chat',          require('./routes/chat'));
 app.use('/api/analytics',     require('./routes/analytics'));
+app.use('/api/break-scores', breakScoresLimiter);
+app.use('/api/break-scores', require('./routes/break-scores'));   // the break's team board (public/js/break-game.js)
 app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations/calcom/receive', webhookIpLimiter, calcomTokenLimiter);
@@ -219,8 +228,8 @@ app.use('/api/dokumente',     require('./routes/engine-dokumente'));   // GET /:
 app.get('/adminconsole', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 // The public landing page: a standalone document (landingpage.html + landing.css + js/landing.js), no session.
 app.get('/landingpage', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landingpage.html')));
-// The second landing design (landingpagetwo.html + landing2.css + js/landing2.js), standalone like the first; one of the two will be removed once chosen.
-app.get('/landingpagetwo', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landingpagetwo.html')));
+// The old address of the design that became the landing page: shared links land on the page, not on the app's catch-all.
+app.get('/landingpagetwo', (req, res) => res.redirect(301, '/landingpage'));
 
 // The client files' fingerprint. Every open tab asks for it (and hears it on each socket connect)
 // and reloads itself when it changes, so a deploy reaches people without a manual refresh.

@@ -7,6 +7,7 @@
   <meta name="theme-color" content="#18345D" />
   <meta name="color-scheme" content="light dark" />
   <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="break-game.css" />
 </head>
 <body>
 
@@ -367,6 +368,8 @@
           <span class="sidebar-user-avatar" id="sidebar-user-avatar"></span>
           <span class="who"><b id="sidebar-user"></b><span id="sidebar-user-role"></span></span>
         </button>
+        <!-- The break: a hidden game (js/break-game.js). Four faint squares; the palette finds it too ("Pause"). -->
+        <button class="brk-egg" id="brk-egg" type="button" onclick="openBreak()" aria-label="Quick break" data-i18n-aria="brk_title"><svg class="brk-egg-ic" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="0" width="5.4" height="5.4" rx="1"/><rect x="6.3" y="0" width="5.4" height="5.4" rx="1"/><rect x="12.6" y="0" width="5.4" height="5.4" rx="1"/><rect x="6.3" y="6.3" width="5.4" height="5.4" rx="1"/></svg></button>
       </div>
     </nav>
 
@@ -1917,6 +1920,7 @@
   </div>
 
   <script src="js/core.js"></script>
+  <script src="js/break-game.js"></script>
   <script src="js/auth.js"></script>
   <script src="js/deals.js"></script>
   <script src="js/contacts.js"></script>
