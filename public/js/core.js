@@ -147,7 +147,7 @@ const TRANSLATIONS = {
     col_name:'Name', col_company:'Company', col_email:'Email', col_phone:'Phone', col_stage:'Stage', col_assignee:'Assignee', col_created_at:'Date Added',
     search_ph:'Search name, company, email or phone', chip_last:'Last contact', last_today:'Today', last_week:'Last 7 days', last_month:'Last 30 days', last_older:'Older than 30 days', last_never:'Never contacted',
     add_filter:'Filter', remove_filter:'Remove filter', btn_select:'Select',
-    filter_contains_ph:'Type to filter…', click_to_edit:'Click to edit', edit_entry:'Edit entry', delete_entry:'Delete entry', entry_updated:'Entry updated', enter_saves_esc_cancels:'Enter saves · Esc cancels · Shift+Enter for a new line', no_contacts_match:'No {noun} match your filters', no_contacts_yet:'No {noun} yet', n_items:'{n} {noun}', n_of_items:'{a} of {b} {noun}',
+    filter_contains_ph:'Type to filter…', click_to_edit:'Click to edit', edit_entry:'Edit entry', delete_entry:'Delete entry', entry_updated:'Entry updated', ctrl_enter_saves_esc_cancels:'Ctrl+Enter saves · Esc cancels', no_contacts_match:'No {noun} match your filters', no_contacts_yet:'No {noun} yet', n_items:'{n} {noun}', n_of_items:'{a} of {b} {noun}',
     no_activities:'No activities yet.', no_fields:'No custom fields yet.',
     drop_here:'Drop contacts here', unassigned:'Unassigned',
     act_note:'Note', act_call:'Call', act_email:'Email', act_whatsapp:'WhatsApp', act_meeting:'Meeting', act_cancelled:'Cancelled', src_calcom:'Cal.com',
@@ -606,7 +606,7 @@ const TRANSLATIONS = {
     col_name:'Name', col_company:'Unternehmen', col_email:'E-Mail', col_phone:'Telefon', col_stage:'Phase', col_assignee:'Zuständig', col_created_at:'Hinzugefügt am',
     search_ph:'Name, Unternehmen, E-Mail oder Telefon suchen', chip_last:'Letzter Kontakt', last_today:'Heute', last_week:'Letzte 7 Tage', last_month:'Letzte 30 Tage', last_older:'Älter als 30 Tage', last_never:'Nie kontaktiert',
     add_filter:'Filter', remove_filter:'Filter entfernen', btn_select:'Auswählen',
-    filter_contains_ph:'Tippen zum Filtern…', click_to_edit:'Zum Bearbeiten klicken', edit_entry:'Eintrag bearbeiten', delete_entry:'Eintrag löschen', entry_updated:'Eintrag aktualisiert', enter_saves_esc_cancels:'Enter speichert · Esc bricht ab · Shift+Enter für eine neue Zeile', no_contacts_match:'Keine {noun} passen zu deinen Filtern', no_contacts_yet:'Noch keine {noun}', n_items:'{n} {noun}', n_of_items:'{a} von {b} {noun}',
+    filter_contains_ph:'Tippen zum Filtern…', click_to_edit:'Zum Bearbeiten klicken', edit_entry:'Eintrag bearbeiten', delete_entry:'Eintrag löschen', entry_updated:'Eintrag aktualisiert', ctrl_enter_saves_esc_cancels:'Strg+Enter speichert · Esc bricht ab', no_contacts_match:'Keine {noun} passen zu deinen Filtern', no_contacts_yet:'Noch keine {noun}', n_items:'{n} {noun}', n_of_items:'{a} von {b} {noun}',
     no_activities:'Noch keine Aktivitäten.', no_fields:'Noch keine benutzerdefinierten Felder.',
     drop_here:'Kontakte hierher ziehen', unassigned:'Nicht zugewiesen',
     act_note:'Notiz', act_call:'Anruf', act_email:'E-Mail', act_whatsapp:'WhatsApp', act_meeting:'Termin', act_cancelled:'Abgesagt', src_calcom:'Cal.com',
@@ -1325,6 +1325,26 @@ document.addEventListener('submit', e => {
     if (btn) btn.disabled = false;
   }, 10000);
 }, true);
+
+// One press per second on a save button (2026-10-20). A second click on the same primary or submit
+// button within SAVE_LOCK_MS is swallowed here, before any handler sees it, so a double click cannot
+// save twice. Keyboard shortcuts that save by clicking the button (btn.click()) and a form's implicit
+// submission on Enter dispatch a click too, so they pass through the same lock. The lock is a class,
+// never `disabled`: the form guard above and handlers that disable their own button keep control.
+const SAVE_LOCK_MS = 1000;
+const SAVE_BUTTONS = 'button.btn-primary, button[type="submit"]';
+const saveLocks = new WeakSet();
+function lockSave(btn) {
+  saveLocks.add(btn); btn.classList.add('is-save-locked');
+  setTimeout(() => { saveLocks.delete(btn); btn.classList.remove('is-save-locked'); }, SAVE_LOCK_MS);
+}
+function saveLockClick(e) {
+  const btn = e.target && e.target.closest ? e.target.closest(SAVE_BUTTONS) : null;
+  if (!btn || btn.disabled) return;
+  if (saveLocks.has(btn)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+  lockSave(btn);
+}
+document.addEventListener('click', saveLockClick, true);
 
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.add('hidden'); });

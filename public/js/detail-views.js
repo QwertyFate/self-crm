@@ -808,7 +808,8 @@ async function openDealDetail(id, opts = {}) {
   on(root, 'dblclick', '[data-note]', (e, el) => { if (!e.target.closest('a')) noteEdit(el); });
   on(root, 'keydown', '#dd-act-edit', e => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.editAct = null; render('main'); }
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const b = R('[data-act="act-save"]'); b && A['act-save'](b); }
+    // Enter is a new line. Ctrl/Cmd+Enter saves by clicking Save, so the one-press lock (core.js) applies.
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); R('[data-act="act-save"]')?.click(); }
   });
   on(root, 'input', '#dd-taskform [name]', (e, el) => { S.task[el.name] = el.type === 'checkbox' ? el.checked : el.value; if (el.name === 'title' && S.taskErr) { S.taskErr = ''; el.removeAttribute('aria-invalid'); } });
   on(root, 'change', '#dd-taskform [name]', (e, el) => { S.task[el.name] = el.type === 'checkbox' ? el.checked : el.value;
@@ -860,7 +861,7 @@ async function openContactDetail(id, opts = {}) {
     return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main"><div class="tl-head"><b>${esc(t(ty.label))}</b>${a.cancelled_at ? `<span class="badge badge-danger" style="margin-left:6px">${esc(t('act_cancelled'))}</span>` : ''}${a.deal_title ? `<span class="badge badge-outline" title="${esc(t('dv_logged_on_deal'))}" style="margin-left:6px">${esc(a.deal_title)}</span>` : ''}<span class="muted" style="font-size:var(--fs-sm)">${a.logged_by_name ? esc(tf('dv_by_name', { name: a.logged_by_name })) : ''}</span><span class="muted" style="margin-left:auto;font-size:var(--fs-sm)" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
       <span class="dd-tl-actions">${dvMeetingButtons(a)}<button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
       ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="ct-aedit" rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
-          <div class="row-between"><span class="help">${esc(t('enter_saves_esc_cancels'))}</span><span class="row"><button class="btn btn-secondary btn-sm" type="button" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" type="button" data-act="act-save">${esc(t('btn_save'))}</button></span></div></div>`
+          <div class="row-between"><span class="help">${esc(t('ctrl_enter_saves_esc_cancels'))}</span><span class="row"><button class="btn btn-secondary btn-sm" type="button" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" type="button" data-act="act-save">${esc(t('btn_save'))}</button></span></div></div>`
         : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActHtml(a.content)}</div>${dvJoinRow(a)}`}</div></div>`;
   };
   const taskRow = x => { const done = x.status === dvDoneKey(), pr = DV_PRIO[x.priority] || DV_PRIO.medium, late = taskIsOverdue(x, done);
@@ -1047,10 +1048,13 @@ async function openContactDetail(id, opts = {}) {
     if (ta) { dvAutoGrow(ta); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
   }
   async function saveNoteEdit() {
+    // The id is read once, before any wait. The first save clears S.editAct while the contact
+    // reloads; a second save in that gap used to send "null" as the id (2026-10-20).
+    const aid = S.editAct; if (!aid) return;
     const ta = host.querySelector('#ct-aedit'); if (!ta) return;
     const v = ta.value.trim();
     if (!v) { ta.setAttribute('aria-invalid', 'true'); ta.focus(); return; }
-    const res = await api.patch(`/api/activities/${S.editAct}`, { content: esc(v).replace(/\n/g, '<br>') });
+    const res = await api.patch(`/api/activities/${aid}`, { content: esc(v).replace(/\n/g, '<br>') });
     if (res?.error) return ui.toast(res.error);
     S.editAct = null; S.editText = '';
     const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh;
@@ -1062,7 +1066,8 @@ async function openContactDetail(id, opts = {}) {
   offs.push(on(host, 'input', '#ct-aedit', (e, el) => { S.editText = el.value; el.removeAttribute('aria-invalid'); dvAutoGrow(el); }));
   offs.push(on(host, 'keydown', '#ct-aedit', e => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.editAct = null; S.editText = ''; render(); }
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveNoteEdit(); }
+    // Enter is a new line. Ctrl/Cmd+Enter saves by clicking Save, so the one-press lock (core.js) applies.
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); host.querySelector('[data-act="act-save"]')?.click(); }
   }));
   render();
   return { close, render };

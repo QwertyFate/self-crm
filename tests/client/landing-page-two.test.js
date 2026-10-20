@@ -1,17 +1,19 @@
 // CLIENT (static + pure-function) tests for the second public landing page at /landingpagetwo.
-// Part 28 (2026-10-15, from scratch): built to be compared with /landingpage, then one deleted.
-// Page one is a film the visitor scrolls through. Page two has no sections and no scroll story: the
-// product's own board fills the page — one card, five columns in the pipeline's order — and the visitor
-// drags the card to Gewonnen (pointer, touch, the card's arrows, the keyboard). The column it lands in
-// widens and shows what the product does at that stage: the lead's arrival, the record, the meeting,
-// tasks and the team, the Engine and the next deal. Every move gets the app's own toast with Rückgängig.
-// Pinned: the route, the CSP-safe document, Syne self-hosted with its licence, German first and equal
-// to the dictionary key for key, impersonal German, the caps on words, the claims audit, the bar as the
-// app's Deals header, the five columns and their anatomy and contents, the card's anatomy, the state →
-// render contract (done/active/next, counts, sums, the arrows), docking by measurement, the flight on a
-// move, the drag with pointer capture, the keyboard, the undo, the stacked board at 860, reduced motion
-// last, tokens only, no timers but the toast's, no scroll or pointer engines, and that the two pages
-// share nothing but the subject.
+// Part 35 (2026-10-20, from scratch): built to be compared with /landingpage, then one deleted. Page one
+// is a film the visitor scrolls through. Page two is the crossed-off list as a reel: the hero ticks the
+// four chores a sales team does by hand (the product's own task rows), then six frames side by side,
+// one per swipe; each middle frame takes one chore, the product does it once on arrival, and the chore
+// is struck through; the fourth strikes when the hand drops the card into Gewonnen. Pinned: the route,
+// the CSP-safe document, Funnel Display self-hosted with its licence, the pager (the 100 % height
+// chain, the snapping track, the six frames and segments, inert off-screen frames, the wheel lock, the
+// keys, the hash, the settle), the reel (the segments fill per scene, each scene once, the flight,
+// the strikes, the hero list), German first and equal to the dictionary key for key, impersonal
+// German, the caps on words (concise), the claims audit, every screen's anatomy and the app's own
+// words, the contracts (move + undo, the arrival, the booking, the hand-over), and the stylesheet
+// audit: every class used has a rule and every rule is used, every token resolves, every property is
+// real, every spacing value is on the scale, no selector is declared twice, breakpoints descend,
+// reduced motion comes last, nothing follows the pointer, nothing plays on scroll, no gradient, no
+// viewport-height unit.
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs     = require('fs');
@@ -25,230 +27,499 @@ const css    = read('public/landing2.css');
 const js     = read('public/js/landing2.js');
 const style  = read('public/style.css');
 const one    = { html: read('public/landingpage.html'), css: read('public/landing.css'), js: read('public/js/landing.js') };
-const dict   = new Function(sliceConst('public/js/landing2.js', 'BD_I18N').replace(/^[^{]*/, 'return '))();
-const stages = new Function(sliceConst('public/js/landing2.js', 'BD_STAGES').replace(/^[^[]*/, 'return '))();
+const dict   = new Function(sliceConst('public/js/landing2.js', 'RL_I18N').replace(/^[^{]*/, 'return '))();
+const app    = new Function(sliceConst('public/js/core.js', 'TRANSLATIONS').replace(/^[^{]*/, 'return '))();
+const ids6   = new Function(sliceConst('public/js/landing2.js', 'RL_IDS').replace(/^[^[]*/, 'return '))();
+const sceneMs = new Function(sliceConst('public/js/landing2.js', 'RL_SCENE_MS').replace(/^[^[]*/, 'return '))();
 const head   = html.slice(0, html.indexOf('<body'));
 const body   = html.slice(html.indexOf('<body'));
 const bare   = css.replace(/\/\*[\s\S]*?\*\//g, '');
-const unesc  = s => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-const col = stage => { const s = html.lastIndexOf('<section class="bd-col', html.indexOf(`data-stage="${stage}" data-i=`)); let e = html.indexOf('\n      <section class="bd-col', s + 1); if (e < 0) e = html.indexOf('\n      <article class="bd-card"', s); return html.slice(s, e); };
 const IMPERSONAL = /\b(du|dich|dir|dein\w*|Sie|Ihnen|Ihr\w*)\b/;
-const words = s => String(s).trim().split(/\s+/).filter(Boolean).length;
-const textOf = src => [...src.matchAll(/>([^<]+)</g)].map(m => m[1].trim()).filter(Boolean).join(' ');
-const fnBody = name => { const i = js.indexOf(`function ${name}(`); const s = js.indexOf('{', i); let d = 0; for (let j = s; j < js.length; j++) { if (js[j] === '{') d++; else if (js[j] === '}' && !--d) return js.slice(s, j + 1); } return ''; };
+const words  = s => String(s).trim().split(/\s+/).filter(Boolean).length;
+const block  = (startMark, endMark) => { const s = html.indexOf(startMark); assert.ok(s >= 0, startMark); return html.slice(s, html.indexOf(endMark, s)); };
+const fnBody = name => { const i = js.indexOf(`function ${name}(`); assert.ok(i >= 0, name); const s = js.indexOf('{', i); let d = 0; for (let j = s; j < js.length; j++) { if (js[j] === '{') d++; else if (js[j] === '}' && !--d) return js.slice(s, j + 1); } return ''; };
+const same   = (k, appKey) => { for (const lang of ['de', 'en']) { assert.ok(appKey in app[lang], `${appKey} is an app key`); assert.equal(dict[lang][k], app[lang][appKey], `${lang} ${k} = app ${appKey}`); } };
+const PAGE_KEYS = Object.keys(dict.de).filter(k => /^rl_(hero_|c\d$|p\d_|tab_|hint_|close_|foot_|lang$|login|request|crm|nav_aria|list_aria|via|src_|sources|inbox_aria|won_aria|week_aria|deal_stage_aria|types_aria|prev|next)/.test(k));
+const USED_HOOKS = ['Gewonnen ist erst der Anfang.', 'Nur noch verkaufen.', 'Nur auf Einladung.', 'Just sell.', 'The CRM that keeps working.', 'Leads arrive. Deals depart.', 'One card. Drag it to Won.', 'Alles nach dem Klick.', 'Everything after the click.'];
+
+// ── a small stylesheet parser: rules with their declarations, and the at-rule they sit in ─────────────
+function parseCss(src) {
+  const rules = []; let i = 0; const stack = [];
+  const skipWs = () => { while (i < src.length && /\s/.test(src[i])) i++; };
+  while (i < src.length) {
+    skipWs(); if (i >= src.length) break;
+    if (src[i] === '}') { stack.pop(); i++; continue; }
+    const open = src.indexOf('{', i); const selector = src.slice(i, open).trim();
+    if (/^@(media|keyframes|supports)/.test(selector)) { stack.push(selector); i = open + 1; continue; }
+    const close = src.indexOf('}', open);
+    const decls = src.slice(open + 1, close).split(/;(?![^(]*\))/).map(s => s.trim()).filter(Boolean).map(d => { const c = d.indexOf(':'); return [d.slice(0, c).trim(), d.slice(c + 1).trim()]; });
+    rules.push({ selector, decls, in: stack.join(' > ') });
+    i = close + 1;
+  }
+  return rules;
+}
+const rules = parseCss(bare);
+const classesIn = s => [...s.matchAll(/\.(rl-[a-z0-9-]+|is-[a-z-]+)/g)].map(m => m[1]);
+const cssClasses = new Set(rules.flatMap(r => r.selector.startsWith('@') ? [] : classesIn(r.selector)));
+// class tokens the markup and the script use: static attributes, template attributes with `${…}` cut out, classList calls, state strings
+const stripped = (() => { let s = js; for (let n = 0; n < 10; n++) s = s.replace(/\$\{[^{}]*\}/g, ' '); return s; })();
+const usedClasses = new Set();
+for (const src of [html, stripped]) for (const m of src.matchAll(/class="([^"]*)"/g)) m[1].split(/\s+/).filter(Boolean).forEach(c => usedClasses.add(c));
+for (const m of js.matchAll(/class="([^"$]*)"/g)) m[1].split(/\s+/).filter(Boolean).forEach(c => usedClasses.add(c));
+for (const m of js.matchAll(/classList\.(?:add|remove|toggle)\('([^']+)'/g)) usedClasses.add(m[1]);
+for (const m of js.matchAll(/className = '([^']+)'/g)) m[1].split(' ').forEach(c => usedClasses.add(c));
+for (const m of js.matchAll(/'(?: )?((?:rl|is)-[a-z0-9-]+)'/g)) usedClasses.add(m[1]);
+const dynamicPrefixes = [...new Set([...js.matchAll(/((?:rl|is)-[a-z0-9-]*)(?=\$\{)/g)].map(m => m[1]))];
+const dynamicTokens = new Set([...js.matchAll(/'(?: )?((?:rl|is)-[a-z0-9-]*)' \+/g)].map(m => m[1]));
+const ids = new Set([...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]).concat([...js.matchAll(/ id="([^"$]+)"/g)].map(m => m[1])).concat([...js.matchAll(/\.id = '([^']+)'/g)].map(m => m[1])));
 
 describe('route', () => {
   test('/landingpagetwo serves public/landingpagetwo.html, right after /landingpage and before the SPA catch-all', () => {
-    const r1 = server.indexOf("app.get('/landingpage'"), r2 = server.indexOf("app.get('/landingpagetwo'");
-    assert.ok(r1 > 0 && r2 > r1, 'both routes, in order');
-    assert.match(server, /app\.get\('\/landingpagetwo', \(req, res\) => res\.sendFile\(path\.join\(__dirname, 'public', 'landingpagetwo\.html'\)\)\);/);
-    assert.ok(r2 < server.indexOf("app.get('*'"), 'before the catch-all');
-    assert.ok(fs.existsSync(path.join(ROOT, 'public', 'landingpagetwo.html')));
+    const r1 = server.indexOf("app.get('/landingpage'"), r2 = server.indexOf("app.get('/landingpagetwo'"), catchAll = server.indexOf("app.get('*'") >= 0 ? server.indexOf("app.get('*'") : server.indexOf("app.get(/");
+    assert.ok(r1 >= 0 && r2 > r1, 'route order');
+    assert.match(server.slice(r2, r2 + 200), /sendFile\(path\.join\(__dirname, 'public', 'landingpagetwo\.html'\)\)/);
+    if (catchAll >= 0) assert.ok(r2 < catchAll, 'before the catch-all');
     assert.match(read('readmedev.md'), /GET \/landingpagetwo → public\/landingpagetwo\.html/);
   });
 });
 
-describe('document', () => {
-  test('standalone head: dark root, viewport, title, description, the app stylesheet then its own, Syne and Inter preloaded, no scripts in the head', () => {
-    assert.match(head, /<html lang="de" data-theme="dark">/);
-    assert.match(head, /<meta name="viewport" content="width=device-width, initial-scale=1\.0">/);
+describe('the document', () => {
+  test('the head: German, the app in dark, the root class, viewport-fit, the face and Inter preloaded, the app stylesheet first', () => {
+    assert.match(head, /<html lang="de" data-theme="dark" class="rl-root">/);
+    assert.match(head, /<meta name="viewport" content="width=device-width, initial-scale=1\.0, viewport-fit=cover">/);
+    assert.match(head, /<meta name="color-scheme" content="dark">/);
+    assert.match(head, /<meta name="description" content="Upgrads CRM: Vier Handgriffe gestrichen\./);
     assert.match(head, /<title>Upgrads CRM<\/title>/);
-    assert.match(head, /<meta name="description" content="[^"]{80,}">/);
-    assert.ok(head.indexOf('href="/style.css"') < head.indexOf('href="/landing2.css"'), 'the app stylesheet first');
-    assert.match(head, /<link rel="preload" href="\/fonts\/Syne\.woff2" as="font" type="font\/woff2" crossorigin>/);
-    assert.match(head, /<link rel="preload" href="\/fonts\/inter-latin-wght\.woff2" as="font" type="font\/woff2" crossorigin>/);
-    assert.doesNotMatch(head, /<script/);
+    assert.match(head, /<link rel="preload" href="\/fonts\/FunnelDisplay\.woff2" as="font" type="font\/woff2" crossorigin>/);
+    assert.match(head, /<link rel="preload" href="\/fonts\/inter-latin-wght\.woff2" as="font"/);
+    assert.ok(head.indexOf('href="/style.css"') < head.indexOf('href="/landing2.css"'));
+    assert.doesNotMatch(head, /https?:\/\//, 'no external host in the head');
+    assert.equal((html.match(/<script/g) || []).length, 1);
+    assert.match(html, /<script src="\/js\/landing2\.js"><\/script>\s*<\/body>/);
   });
-  test('CSP-safe: one script at the end, no inline handlers, no external hosts, no inline <style>', () => {
-    assert.equal((body.match(/<script/g) || []).length, 1);
-    assert.match(body, /<script src="\/js\/landing2\.js"><\/script>\s*<\/body>/);
-    assert.doesNotMatch(html, /\son[a-z]+="/i, 'no inline handlers');
-    assert.doesNotMatch(html, /<style/);
-    for (const m of html.matchAll(/(?<![\w-])(?:href|src)="([^"]+)"/g)) assert.ok(/^(\/|#|mailto:)/.test(m[1]), `local only: ${m[1]}`);
-  });
-  test('the face: Syne, self-hosted with its licence, variable in weight, for the words; Inter inside the board; the faces of the earlier designs are not on this page', () => {
-    assert.match(css, /@font-face \{ font-family: "Syne"; font-style: normal; font-weight: 400 800; font-display: swap; src: url\(\/fonts\/Syne\.woff2\) format\("woff2"\); \}/);
-    for (const f of ['Syne.woff2', 'OFL-Syne.txt']) assert.ok(fs.existsSync(path.join(ROOT, 'public/fonts', f)), f);
-    assert.match(read('public/fonts/OFL-Syne.txt'), /SIL OPEN FONT LICENSE/i);
-    assert.match(css, /--bd-face: "Syne", var\(--font\);/);
-    assert.match(css, /\.bd-h1, \.bd-h2, \.bd-lead, \.bd-lockup, \.bd-foot-note, \.bd-foot-line, \.bd-col-desc, \.bd-next b \{ font-family: var\(--bd-face\); \}/);
-    assert.match(css, /body \{[^}]*font-family: var\(--font\);[^}]*font-size: 13\.5px;/, 'the board in Inter at the app\'s size');
-    for (const f of ['Epilogue', 'Familjen', 'Newsreader', 'Sora', 'Archivo', 'InstrumentSerif', 'BricolageGrotesque', 'SchibstedGrotesk', 'Manrope']) assert.doesNotMatch(html + css + js, new RegExp(f), `${f} not on this page`);
-    for (const f of ['Epilogue.woff2', 'FamiljenGrotesk.woff2', 'Newsreader.woff2', 'Sora.woff2']) assert.ok(!fs.existsSync(path.join(ROOT, 'public/fonts', f)), `${f} gone`);
-    assert.equal((css.match(/@font-face/g) || []).length, 1);
-  });
-  test('two pages, two grammars: page two shares no class prefix, no token and no function with page one; neither carries the other\'s hook; no pinned acts, no track, no scenes', () => {
-    assert.doesNotMatch(html + css + js, /\blp-/); assert.doesNotMatch(one.html + one.css + one.js, /\bbd-/);
-    assert.doesNotMatch(css, /--lp-/); assert.doesNotMatch(js, /\blp[A-Z]\w*\(/);
-    assert.ok(!html.includes('Gewonnen ist erst der Anfang.'), 'page two has its own hook');
-    assert.ok(!one.html.includes('Eine Karte.'));
-    assert.doesNotMatch(html + css, /bd-act\b|bd-pin|bd-track|bd-scene|bd-world|bd-coach|bd-index/);
-    assert.doesNotMatch(css, /position: sticky/.source.replace('sticky', 'sticky') && /\.bd-(col|board|card)[^{]*\{[^}]*position: sticky/, 'nothing on the board is pinned');
-  });
-});
-
-describe('the bar and the opening', () => {
-  test('the bar is the app\'s Deals header: the crumb "Deals · Verkauf", the language switch, Anmelden, and "Zugang anfragen" as the primary button with the plus', () => {
-    const bar = html.slice(html.indexOf('<header class="bd-bar">'), html.indexOf('</header>'));
-    assert.match(bar, /<p class="bd-crumb"><span data-i18n="bd_deals">Deals<\/span><i aria-hidden="true">·<\/i><span>Verkauf<\/span><\/p>/);
-    assert.match(bar, /<div class="bd-lang" role="group" data-i18n-aria="bd_lang" aria-label="Sprache">\s*<button type="button" class="bd-lang-btn" data-lang="de" aria-pressed="true">DE<\/button>\s*<button type="button" class="bd-lang-btn" data-lang="en" aria-pressed="false">EN<\/button>/);
-    assert.match(bar, /<a href="\/" data-i18n="bd_login">Anmelden<\/a>/);
-    assert.match(bar, /<a class="bd-btn bd-btn-primary bd-request" href="mailto:hello@upgrads\.de\?subject=[^"]+"><svg class="bd-ic"><use href="#bd-i-plus"\/><\/svg><span data-i18n="bd_request">Zugang anfragen<\/span><\/a>/);
-  });
-  test('the opening is four words and one line, then the board; no pills, no lockup, no scroll prompt', () => {
-    const o = html.slice(html.indexOf('<section id="top"'), html.indexOf('<section id="board"'));
-    assert.match(o, /<h1 class="bd-h1" data-i18n="bd_hero_title">Eine Karte\. Bis Gewonnen ziehen\.<\/h1>\s*<p class="bd-lead" data-i18n="bd_hero_line">Jede Spalte zeigt, was das Produkt in dieser Phase tut\. Nichts scrollen, ziehen\.<\/p>\s*<\/div>\s*<\/section>/);
-    assert.doesNotMatch(o, /bd-pill|bd-actions|bd-lockup|href="#/);
-    assert.equal(words(dict.de.bd_hero_title), 5); assert.ok(words(dict.en.bd_hero_title) <= 6);
-  });
-});
-
-describe('the board is the page', () => {
-  test('five columns in the pipeline\'s order, each with its head (dot, name, count), its sum, its slot, its one line and its piece; the first is active; the card is the board\'s last child', () => {
-    const b = html.slice(html.indexOf('<div class="bd-board" id="bd-board"'), html.indexOf('<p class="bd-foot-line"'));
-    assert.match(b, /<div class="bd-board" id="bd-board" role="group" data-i18n-aria="bd_board_aria" aria-label="[^"]+">/);
-    assert.deepEqual([...b.matchAll(/<section class="bd-col( is-active| bd-col-won)?" data-stage="(\w+)" data-i="(\d)">/g)].map(m => [m[2], Number(m[3]), m[1] || '']), [['new', 0, ' is-active'], ['contacted', 1, ''], ['offer', 2, ''], ['nego', 3, ''], ['won', 4, ' bd-col-won']]);
-    assert.deepEqual(stages, ['new', 'contacted', 'offer', 'nego', 'won']);
-    for (const s of stages) {
-      const c = col(s);
-      assert.match(c, new RegExp(`<header class="bd-col-head"><i class="bd-dot s-${s}"></i><span data-i18n="bd_st_${s}">[^<]+</span><b class="bd-count">[01]</b></header>\\s*<p class="bd-col-sum">[^<]+</p>\\s*<div class="bd-slot" id="bd-slot-\\d"></div>\\s*<p class="bd-col-desc" data-i18n="bd_d\\d">[^<]+</p>\\s*<div class="bd-piece">`), s);
+  test('Funnel Display is self-hosted with its licence; the faces of the rejected pages are gone', () => {
+    const font = path.join(ROOT, 'public/fonts/FunnelDisplay.woff2');
+    assert.ok(fs.existsSync(font) && fs.statSync(font).size > 15000, 'FunnelDisplay.woff2 present');
+    assert.match(fs.readFileSync(path.join(ROOT, 'public/fonts/OFL-FunnelDisplay.txt'), 'utf8'), /SIL Open Font License, Version 1\.1/);
+    assert.match(bare, /@font-face \{ font-family: "Funnel Display"; font-style: normal; font-weight: 300 800; font-display: swap; src: url\(\/fonts\/FunnelDisplay\.woff2\) format\("woff2"\); \}/);
+    assert.equal((bare.match(/@font-face/g) || []).length, 1, 'one face: Inter comes from style.css');
+    for (const f of ['Onest', 'AlbertSans', 'SofiaSans', 'SofiaSansCondensed', 'HostGrotesk', 'Jost', 'Syne', 'Epilogue', 'FamiljenGrotesk', 'Newsreader', 'Sora', 'InstrumentSerif', 'Archivo']) {
+      assert.ok(!fs.existsSync(path.join(ROOT, `public/fonts/${f}.woff2`)), `${f}.woff2 gone`);
+      assert.ok(!fs.existsSync(path.join(ROOT, `public/fonts/OFL-${f}.txt`)), `OFL-${f}.txt gone`);
     }
-    assert.deepEqual([...b.matchAll(/<p class="bd-col-desc" data-i18n="(bd_d\d)">([^<]+)<\/p>/g)].map(m => m[2]), [
-      'Der Lead kommt an, bevor jemand ihn abtippt.', 'Anruf, E-Mail, WhatsApp: jede Berührung steht am Deal.', 'Der Termin wird aus dem Deal gebucht.', 'Aufgaben, Kalender, Team-Chat: alle am selben Deal.', 'Gewonnen ist ein Zug. Dann übernimmt die Upgrads Engine.'
-    ]);
-    assert.deepEqual([...b.matchAll(/id="bd-slot-(\d)"/g)].map(m => Number(m[1])), [0, 1, 2, 3, 4]);
-    assert.match(b, /<\/section>\s*<article class="bd-card" id="bd-card" tabindex="0" role="button" data-i18n-aria="bd_card_aria" aria-label="[^"]+">[\s\S]*<\/article>\s*<\/div>\s*$/);
   });
-  test('the pieces: Neu has the four marks via Make, Zapier, n8n and the received-lead line; Kontaktiert the composer with WhatsApp pressed, the template hint, two entries and Strg+Enter; Angebot the booking with the team-calendar check, Gebucht and the join link; Verhandlung three tasks (one done) and the chat with presence; Gewonnen the Engine delivered, the six stations with the first lit, the rule, and the next-deal card that asks for access', () => {
-    const n = col('new');
-    assert.deepEqual([...n.matchAll(/<span class="bd-source"><svg class="bd-logo( bd-logo-line)?"><use href="#(bd-[li]-\w+)"\/><\/svg><span data-i18n="(bd_src_\w+)">([^<]+)<\/span><\/span>/g)].map(m => [m[2], m[4]]), [['bd-l-fb', 'Facebook Ads'], ['bd-l-ig', 'Instagram Ads'], ['bd-l-tt', 'TikTok Ads'], ['bd-i-globe', 'Website-Formular']]);
-    assert.match(n, /<p class="bd-via"><span data-i18n="bd_via">über<\/span><b>Make<\/b><b>Zapier<\/b><b>n8n<\/b><\/p>\s*<div class="bd-log"><span class="bd-badge bd-badge-ok" data-i18n="bd_lead_received">Lead empfangen<\/span><span data-i18n="bd_lead_result">Kontakt angelegt · Deal in Neu · Anna Weber<\/span><\/div>/);
-    const c = col('contacted');
-    assert.match(c, /<div class="bd-seg"><span data-i18n="bd_act_note">Notiz<\/span><span data-i18n="bd_act_call">Anruf<\/span><span data-i18n="bd_act_email">E-Mail<\/span><span aria-pressed="true" data-i18n="bd_act_whatsapp">WhatsApp<\/span><\/div>\s*<p class="bd-hint" data-i18n="bd_wa_hint">Lena Hoffmann, \+49 151 2345678 · Vorlage: „Hallo Lena, “<\/p>/);
-    assert.equal((c.match(/<div class="bd-entry">/g) || []).length, 2);
-    assert.match(c, /<p class="bd-hint" data-i18n="bd_ctrl_enter">Strg\+Enter speichert\.<\/p>/);
-    const o = col('offer');
-    assert.match(o, /<dt data-i18n="bd_book_check">Teamkalender<\/dt><dd data-i18n="bd_book_check_v">geprüft, keine Überschneidung<\/dd>/);
-    assert.match(o, /<span class="bd-badge bd-badge-ok" data-i18n="bd_booked">Gebucht<\/span><span data-i18n="bd_booked_d">Cal\.com schickt die Einladung an l\.hoffmann@hoffmann-partner\.de\.<\/span>/);
-    assert.match(o, /<p class="bd-join"><svg class="bd-ic"><use href="#bd-i-external"\/><\/svg><span data-i18n="bd_join">Google Meet beitreten<\/span><small data-i18n="bd_in_history">im Verlauf des Deals<\/small><\/p>/);
-    const g = col('nego');
-    assert.equal((g.match(/<div class="bd-task( is-done)?">/g) || []).length, 3); assert.equal((g.match(/<div class="bd-task is-done">/g) || []).length, 1);
-    assert.match(g, /<div class="bd-chat"><span class="bd-avatar">MS<\/span><div><b>Mira Schulz <small data-i18n="bd_chat_online">online<\/small><\/b><p data-i18n="bd_chat_msg">@Anna Weber die Unterlagen liegen im Deal\.<\/p><\/div><\/div>/);
-    const w = col('won');
-    assert.match(w, /<div class="bd-log"><b data-i18n="bd_engine">Upgrads Engine<\/b><span class="bd-badge bd-badge-ok" data-i18n="bd_delivered">Zugestellt<\/span><\/div>/);
-    assert.deepEqual([...w.matchAll(/<li( class="is-on")?><i><\/i><span data-i18n="(bd_s\d)">([^<]+)<\/span><\/li>/g)].map(m => [m[3], !!m[1]]), [['Formular versendet', true], ['Formular ausgefüllt', false], ['Termin gebucht', false], ['Call erfolgt', false], ['Briefing fertig', false], ['Abgeschlossen', false]]);
-    assert.match(w, /<p class="bd-hint" data-i18n="bd_engine_rule">Die Engine füllt nur leere Felder\. Was das Team eingetragen hat, bleibt\.<\/p>\s*<a class="bd-next" href="mailto:hello@upgrads\.de\?subject=[^"]+"><b data-i18n="bd_next_t">Der nächste Deal wartet\.<\/b><span data-i18n="bd_next_d">Nur auf Einladung\. Zugang anfragen\.<\/span><\/a>/);
+  test('the two pages share nothing but the subject; the hook is new', () => {
+    assert.doesNotMatch(html + css + js, /\blp-|LP_I18N|lpInit/, 'page two never uses page one\'s names');
+    assert.doesNotMatch(one.html + one.css + one.js, /\brl-|RL_I18N|rlInit/, 'page one never uses page two\'s names');
+    const lpHook = new Function(sliceConst('public/js/landing.js', 'LP_I18N').replace(/^[^{]*/, 'return '))().de.lp_hero_title;
+    for (const lang of ['de', 'en']) { assert.notEqual(dict[lang].rl_hero_t, lpHook); assert.ok(!USED_HOOKS.includes(dict[lang].rl_hero_t), `${lang}: a hook not used before`); }
   });
-  test('the card: the deal\'s title, contact, value, the urgency stripe and badge, the source, the owner, and two arrows with their labels; the line under the board says how to move it', () => {
-    const c = html.slice(html.indexOf('<article class="bd-card"'), html.indexOf('</article>'));
-    assert.match(c, /<b class="bd-card-title">Elbstraße 12, Verkauf<\/b>\s*<small>Lena Hoffmann, Hoffmann &amp; Partner<\/small>\s*<span class="bd-card-value">420\.000 €<\/span>/);
-    assert.match(c, /<span class="bd-badge bd-badge-warn" data-i18n="bd_urg_high">Hoch<\/span><span class="bd-src"><svg class="bd-logo"><use href="#bd-l-fb"\/><\/svg><span data-i18n="bd_from_fb">aus Facebook Ads<\/span><\/span><span class="bd-avatar">AW<\/span>/);
-    assert.match(c, /<button type="button" class="bd-step" data-dir="-1" data-i18n-aria="bd_back" aria-label="Eine Phase zurück">[\s\S]*<button type="button" class="bd-step" data-dir="1" data-i18n-aria="bd_forward" aria-label="Eine Phase weiter">/);
-    assert.match(css, /\.bd-card::before \{[^}]*background: var\(--warning\);/, 'the urgency stripe');
-    assert.match(html, /<p class="bd-foot-line" data-i18n="bd_board_foot">Ziehen, antippen oder Pfeiltasten\. Jeder Zug lässt sich zurücknehmen\.<\/p>/);
+  test('the sprite holds exactly the icons and marks the page uses; no inline style anywhere', () => {
+    const syms = [...html.matchAll(/<symbol id="([^"]+)"/g)].map(m => m[1]);
+    assert.deepEqual(syms, ['rl-i-check', 'rl-i-phone', 'rl-i-mail', 'rl-i-message', 'rl-i-note', 'rl-i-calendar', 'rl-i-chevron', 'rl-i-globe', 'rl-l-fb', 'rl-l-ig', 'rl-l-tt']);
+    const typeIcons = Object.values(new Function(sliceConst('public/js/landing2.js', 'RL_TYPE_ICON').replace(/^[^{]*/, 'return '))()).map(n => 'rl-i-' + n);
+    const used = new Set([...js.matchAll(/rlIcon\('([a-z-]+)'/g)].map(m => 'rl-i-' + m[1]).concat([...(html + js).matchAll(/href="#(rl-[il]-[a-z-]+)"/g)].map(m => m[1]), typeIcons));
+    for (const s of syms) assert.ok(used.has(s), `${s} is used`);
+    for (const u of used) assert.ok(syms.includes(u), `${u} exists`);
+    assert.doesNotMatch(body, /style="/, 'no inline styles in the markup');
+    assert.doesNotMatch(js, /style="|\.style\.(?!setProperty)/, 'the script only sets custom properties');
   });
-  test('state → render: done / active / next on the columns, the count and the sum follow the card, the arrows disable at the ends; docking measures the slot against the board; a move flies (not under reduced motion) and answers with the toast and Rückgängig; undo moves back quietly', () => {
-    assert.match(fnBody('bdRender'), /col\.classList\.toggle\('is-done', i < bdStage\); col\.classList\.toggle\('is-active', i === bdStage\); col\.classList\.toggle\('is-next', i > bdStage\);/);
-    assert.match(fnBody('bdRender'), /\.bd-count'\)\.textContent = i === bdStage \? '1' : '0';[\s\S]*bdT\(i === bdStage \? 'bd_sum' : 'bd_sum_zero'\)/);
-    assert.match(fnBody('bdRender'), /b\.disabled = bdStage \+ d < 0 \|\| bdStage \+ d >= BD_STAGES\.length/);
-    assert.match(fnBody('bdSlotPos'), /x: s\.left - b\.left, y: s\.top - b\.top/);
-    assert.match(fnBody('bdDock'), /if \(fly && !bdReduced\(\)\) \{ card\.classList\.add\('is-flying'\); requestAnimationFrame\(\(\) => bdPlace\(target\)\);[\s\S]*else \{ card\.classList\.remove\('is-flying'\); bdPlace\(target\); \}/);
-    assert.match(fnBody('bdMove'), /if \(i === bdStage\) \{ bdDock\(true\); return; \}[\s\S]*bdToast\(bdT\('bd_moved_to', \{ s: bdStageName\(i\) \}\), \(\) => \{ bdMove\(from, true\); bdToast\(bdT\('bd_undone'\)\); \}\)/);
-    assert.match(css, /\.bd-card\.is-flying \{ transition: transform \.5s var\(--ease\); \}/);
-    assert.match(css, /\.bd-col\.is-active \{ flex: var\(--bd-active\) 1 0; border-color: var\(--line\); \}/);
-    assert.match(css, /\.bd-col\.is-active \.bd-piece \{ display: block; \}/);
+});
+
+describe('the pager', () => {
+  test('six frames side by side with ids the script knows, each a tabpanel; six segments as tabs, the arrows at the edges', () => {
+    const frames = [...body.matchAll(/<section class="rl-frame" id="([a-z]+)" role="tabpanel" aria-labelledby="rl-tab-(\d)" tabindex="-1">/g)].map(m => [m[1], +m[2]]);
+    assert.deepEqual(frames.map(p => p[0]), ['start', 'leads', 'deal', 'termin', 'gewonnen', 'zugang']);
+    assert.deepEqual(frames.map(p => p[1]), [0, 1, 2, 3, 4, 5]);
+    assert.deepEqual(ids6, frames.map(p => p[0]), 'RL_IDS equals the markup');
+    assert.equal((body.match(/<section class="rl-frame"/g) || []).length, 6);
+    const segs = [...body.matchAll(/<button type="button" class="rl-seg( is-on)?" role="tab" id="rl-tab-(\d)" data-go="(\d)" aria-selected="(true|false)" aria-controls="([a-z]+)"><span class="rl-seg-track"><span class="rl-seg-fill"><\/span><\/span><span class="rl-seg-name" data-i18n="rl_tab_(\d)">/g)];
+    assert.equal(segs.length, 6);
+    segs.forEach((m, k) => { assert.equal(+m[2], k); assert.equal(+m[3], k); assert.equal(m[5], ids6[k]); assert.equal(+m[6], k); assert.equal(!!m[1], k === 0); assert.equal(m[4], String(k === 0)); });
+    assert.match(body, /<div class="rl-segs" role="tablist" data-i18n-aria="rl_nav_aria" aria-label="Abschnitte">/);
+    assert.match(body, /<button type="button" class="rl-arrow rl-arrow-prev" id="rl-prev" data-go="prev" data-i18n-aria="rl_prev" aria-label="Zurück" disabled>/);
+    assert.match(body, /<button type="button" class="rl-arrow rl-arrow-next" id="rl-next" data-go="next" data-i18n-aria="rl_next" aria-label="Weiter">/);
+    assert.ok(body.indexOf('<header class="rl-bar">') < body.indexOf('<main class="rl-track" id="rl-track">'));
+    assert.ok(body.indexOf('</main>') < body.indexOf('id="rl-prev"'));
   });
-  test('the hand: pointer capture on the card (not on its arrows), the column under the pointer lights while dragging, a drop on another column moves, elsewhere snaps back; arrows and Home/End on the keyboard; the stacked board reads the pointer\'s y', () => {
-    const h = fnBody('bdInitHand');
-    assert.match(h, /card\.addEventListener\('pointerdown', e => \{\s*if \(e\.target\.closest\('\.bd-step'\) \|\| e\.button > 0\) return;[\s\S]*card\.setPointerCapture\(e\.pointerId\); card\.classList\.add\('is-dragging'\)/);
-    assert.match(h, /col\.classList\.toggle\('is-over', i === over && i !== bdStage\)/);
-    assert.match(h, /if \(over >= 0 && over !== bdStage\) bdMove\(over\); else bdDock\(true\);/);
-    assert.match(h, /card\.addEventListener\('pointerup', end\); card\.addEventListener\('pointercancel', end\);/);
-    assert.match(h, /\{ ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 \}\[e\.key\]/);
-    assert.match(h, /e\.key === 'Home'[\s\S]*bdMove\(0\)[\s\S]*e\.key === 'End'[\s\S]*bdMove\(BD_STAGES\.length - 1\)/);
-    assert.match(fnBody('bdColAt'), /stacked \? y >= r\.top && y <= r\.bottom : x >= r\.left && x <= r\.right/);
-    assert.match(css, /\.bd-card \{[^}]*touch-action: none; user-select: none;/, 'the hand owns the card on touch');
-    assert.match(css, /\.bd-col\.is-over \{ border-color: var\(--brand-line\); background: var\(--brand-subtle\); \}/);
+  test('the stylesheet: the 100 % height chain, the snapping track, the frames, the inner scrollers; no viewport-height unit, nothing sticky', () => {
+    assert.match(bare, /^html\.rl-root, body\.rl \{ height: 100%; overflow: hidden; overscroll-behavior: none; \}$/m);
+    assert.match(bare, /^\.rl-track \{ display: flex; height: 100%; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; \}$/m);
+    assert.match(bare, /^\.rl-track::-webkit-scrollbar \{ display: none; \}$/m);
+    assert.match(bare, /^\.rl-frame \{ flex: 0 0 100%; width: 100%; height: 100%; padding: calc\(var\(--rl-bar\) \+ 24px\) var\(--rl-gutter\) calc\(24px \+ env\(safe-area-inset-bottom\)\); scroll-snap-align: start; scroll-snap-stop: always; outline: none; \}$/m);
+    assert.match(bare, /^\.rl-scroll \{ min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; \}$/m);
+    assert.match(bare, /^\.rl-card \{[^}]*touch-action: pan-y; user-select: none;/m);
+    assert.doesNotMatch(bare, /\d(vh|dvh|svh|lvh)\b/, 'no viewport-height unit: the height chain does it');
+    assert.doesNotMatch(bare, /(?<!over)scroll-behavior/, 'every scrollTo names its behavior');
+    assert.equal((bare.match(/overflow-x: auto/g) || []).length, 1, 'only the track scrolls sideways');
+    const fixed = rules.filter(r => r.decls.some(([p, v]) => p === 'position' && v === 'fixed')).map(r => r.selector);
+    assert.deepEqual(fixed, ['.rl-bar', '.rl-arrow', '.rl-fly', '.rl-ghost', '.rl-toasts']);
+    assert.ok(!rules.some(r => r.decls.some(([p, v]) => p === 'position' && v === 'sticky')));
+    assert.match(bare, /\.rl-arrow:disabled \{ opacity: 0; pointer-events: none; \}/);
+    assert.match(bare, /@media \(pointer: coarse\) \{\s*\.rl-hint-touch \{ display: inline; \}\s*\.rl-hint-key \{ display: none; \}\s*\}/);
+  });
+  test('rlGo: clamped, the segment and the inert frames marked, the scene asked for, the hash replaced (never pushed), the jump instant under reduced motion, focus without scrolling', () => {
+    const g = fnBody('rlGo'), m = fnBody('rlMark');
+    assert.match(g, /i = rlClamp\(i, 0, RL_IDS\.length - 1\);/);
+    assert.match(g, /history\.replaceState\(null, '', '#' \+ RL_IDS\[i\]\);/);
+    assert.match(g, /track\.scrollTo\(\{ left: i \* track\.clientWidth, behavior: instant \|\| rlReduced\(\) \? 'instant' : 'smooth' \}\);/);
+    assert.match(g, /if \(focus\) document\.getElementById\(RL_IDS\[i\]\)\?\.focus\(\{ preventScroll: true \}\);/);
+    assert.match(m, /document\.querySelectorAll\('\.rl-seg'\)\.forEach\(\(t, k\) => \{ t\.classList\.toggle\('is-on', k === i\); t\.setAttribute\('aria-selected', String\(k === i\)\); \}\);/);
+    assert.match(m, /document\.querySelectorAll\('\.rl-frame'\)\.forEach\(\(p, k\) => p\.toggleAttribute\('inert', k !== i\)\);/);
+    assert.match(m, /prev\.disabled = i === 0;/); assert.match(m, /next\.disabled = i === RL_IDS\.length - 1;/);
+    assert.match(m, /rlPlay\(i\);\s*\}$/);
+    assert.doesNotMatch(js, /pushState|IntersectionObserver|requestAnimationFrame|scrollend|scrollY/);
+  });
+  test('the wheel is one gesture: sideways stays native, an inner scroller scrolls first, the first notch pages, the stream is held until quiet', () => {
+    const w = fnBody('rlOnWheel'), l = fnBody('rlWheelLock');
+    assert.match(w, /if \(RL\.drag \|\| RL\.busy\) return;/);
+    assert.match(w, /if \(Math\.abs\(e\.deltaX\) > Math\.abs\(e\.deltaY\)\) return;/);
+    assert.match(w, /const dy = e\.deltaMode === 1 \? e\.deltaY \* 16 : e\.deltaMode === 2 \? e\.deltaY \* window\.innerHeight : e\.deltaY;/);
+    assert.match(w, /const s = e\.target\.closest\('\.rl-scroll'\);/);
+    assert.match(w, /s\.scrollTop \+ s\.clientHeight < s\.scrollHeight - 1\)\)\) \{ rlWheelLock\(\); return; \}/);
+    assert.match(w, /e\.preventDefault\(\);\s*if \(RL\.wheelLock\) \{ rlWheelLock\(\); return; \}/);
+    assert.match(w, /if \(Math\.abs\(RL\.wheelAcc\) < 24\) return;\s*rlGo\(RL\.i \+ Math\.sign\(RL\.wheelAcc\)\);/);
+    assert.match(l, /Date\.now\(\) - RL\.wheelSince >= 450/); assert.match(l, /\}, 160\);/);
+    assert.match(fnBody('rlInitPager'), /document\.addEventListener\('wheel', rlOnWheel, \{ passive: false \}\);/);
+  });
+  test('the keys page unless a field or a card took them; the settle adopts a swipe, repairs an interrupted jump; resize, hash, focus and the hero rows realign', () => {
+    const k = fnBody('rlOnKey'), s = fnBody('rlSettle'), p = fnBody('rlInitPager');
+    assert.match(k, /^\{\s*if \(e\.defaultPrevented \|\| RL\.drag \|\| e\.target\.closest\('input, textarea, select, \[contenteditable\]'\)\) return;/);
+    assert.match(k, /ArrowRight: RL\.i \+ 1, PageDown: RL\.i \+ 1, ArrowLeft: RL\.i - 1, PageUp: RL\.i - 1, Home: 0, End: RL_IDS\.length - 1/);
+    assert.match(k, /rlGo\(map\[e\.key\], false, true\);/);
+    assert.match(s, /k = Math\.round\(track\.scrollLeft \/ w\);/);
+    assert.match(s, /if \(RL\.busy && k !== RL\.i\) track\.scrollTo\(\{ left: RL\.i \* w, behavior: 'instant' \}\);/);
+    assert.match(s, /else if \(k !== RL\.i\) \{ rlMark\(k\); history\.replaceState\(null, '', '#' \+ RL_IDS\[k\]\); \}/);
+    assert.match(p, /history\.scrollRestoration = 'manual';/);
+    assert.match(p, /track\.addEventListener\('scroll', \(\) => \{ clearTimeout\(RL\.settleTimer\); RL\.settleTimer = setTimeout\(rlSettle, 120\); \}, \{ passive: true \}\);/);
+    assert.match(p, /window\.addEventListener\('resize', \(\) => track\.scrollTo\(\{ left: RL\.i \* track\.clientWidth, behavior: 'instant' \}\)\);/);
+    assert.match(p, /window\.addEventListener\('hashchange', \(\) => rlGo\(rlIndexOf\(location\.hash\), true\)\);/);
+    assert.match(p, /track\.addEventListener\('focusin'/);
+    assert.match(p, /const a = e\.target\.closest\('a\[href\^="#"\]'\);\s*if \(a\) \{ e\.preventDefault\(\); rlGo\(rlIndexOf\(a\.getAttribute\('href'\)\), false, true\); \}/);
+    assert.match(fnBody('rlInit'), /rlGo\(rlIndexOf\(location\.hash\), true\);\s*\}$/);
+    const w = fnBody('rlInitWon');
+    assert.match(w, /RL\.drag = true;\s*card\.setPointerCapture\(e\.pointerId\);/); assert.match(w, /drag = null; RL\.drag = false;/);
+  });
+});
+
+describe('the reel: segments, scenes, the flight, the strikes', () => {
+  test('six scene lengths; a segment fills with its scene (0 ms under reduced motion); a chore is struck once; the ring lasts 1.2 s', () => {
+    assert.equal(sceneMs.length, 6);
+    const f = fnBody('rlFill'), s = fnBody('rlStrike'), l = fnBody('rlLit');
+    assert.match(f, /const f = document\.querySelectorAll\('\.rl-seg-fill'\)\[i\]; if \(!f\) return;/);
+    assert.match(f, /f\.style\.setProperty\('--rl-sd', \(rlReduced\(\) \? 0 : ms\) \+ 'ms'\);\s*f\.style\.setProperty\('--rl-f', '100%'\);/);
+    assert.match(s, /if \(RL\.struck\[n\]\) return; RL\.struck\[n\] = true;\s*document\.getElementById\('rl-chore-' \+ n\)\?\.classList\.add\('is-struck'\);/);
+    assert.match(l, /el\.classList\.add\('is-lit'\);\s*clearTimeout\(RL\.litTimer\);\s*RL\.litTimer = setTimeout\(\(\) => el\.classList\.remove\('is-lit'\), 1200\);/);
+    assert.match(bare, /^\.rl-seg-fill \{ display: block; width: var\(--rl-f, 0%\); height: 100%; background: var\(--ink\); transition: width var\(--rl-sd, \.3s\) linear; \}$/m);
+  });
+  test('each scene plays once, 400 ms after its frame is reached, only if the frame is still current (else it waits for the next visit); reduced motion stands at the end at once', () => {
+    const p = fnBody('rlPlay');
+    assert.match(p, /if \(RL\.seen\[i\]\) return; RL\.seen\[i\] = true;/);
+    assert.match(p, /const scene = RL_SCENES\[i\]; if \(!scene\) return;/);
+    assert.match(p, /if \(rlReduced\(\)\) \{ scene\(true\); return; \}/);
+    assert.match(p, /setTimeout\(\(\) => \{ if \(RL\.i === i\) scene\(false\); else RL\.seen\[i\] = false; \}, 400\);/);
+    assert.match(js, /^const RL_SCENES = \{ 0: rlSceneList, 1: rlSceneLead, 2: rlSceneNumber, 3: rlSceneConflict, 5: rlSceneClose \};$/m, 'frame 4 has no scene: it is the hand\'s');
+  });
+  test('the hero ticks the four rows one by one (300 ms, then every 320 ms); leads: the packet flies from Instagram and the lead lands with the strike; the deal: WhatsApp with the ring; the meeting: Tuesday 11:00 with the ring; the close fills', () => {
+    const a = fnBody('rlSceneList'), b = fnBody('rlSceneLead'), c = fnBody('rlSceneNumber'), d = fnBody('rlSceneConflict'), e = fnBody('rlSceneClose');
+    assert.match(a, /rlFill\(0, RL_SCENE_MS\[0\]\);/);
+    assert.match(a, /document\.querySelectorAll\('#rl-list \.rl-row'\)\.forEach\(\(r, k\) => \{\s*if \(instant\) r\.classList\.add\('is-done'\);\s*else setTimeout\(\(\) => r\.classList\.add\('is-done'\), 300 \+ k \* 320\);/);
+    assert.match(b, /rlFill\(1, RL_SCENE_MS\[1\]\);\s*const land = \(\) => \{ rlArrive\('ig'\); rlStrike\(1\); \};\s*if \(instant\) land\(\); else rlFly\('ig', land\);/);
+    assert.match(c, /rlFill\(2, RL_SCENE_MS\[2\]\);\s*rlRec\.type = 'whatsapp'; rlRenderRecord\(\);\s*if \(!instant\) rlLit\(document\.querySelector\('#rl-record \.rl-chint'\)\);\s*rlStrike\(2\);/);
+    assert.match(d, /rlFill\(3, RL_SCENE_MS\[3\]\);\s*rlBookState\.day = 1; rlBookState\.slot = '11:00'; rlRenderBook\(\);\s*if \(!instant\) rlLit\(document\.querySelector\('#rl-book \.rl-conflict'\)\);\s*rlStrike\(3\);/);
+    assert.match(e, /rlFill\(5, RL_SCENE_MS\[5\]\);/);
+    assert.match(fnBody('rlMoveDeal'), /if \(d\.id === RL_HERO\) \{ if \(stage === 4\) \{ rlEngineFire\(\); rlStrike\(4\); rlFill\(4, RL_SCENE_MS\[4\]\); \} else rlEngineReset\(\); \}/, 'the fourth chore is struck by the hand');
+    assert.match(fnBody('rlInit'), /rlInitChrome\(\); rlInitSources\(\); rlInitWon\(\); rlInitRecord\(\); rlInitBook\(\); rlInitPager\(\);/);
+    assert.doesNotMatch(fnBody('rlInit'), /rlArrive|rlScene|rlStrike/, 'nothing plays from init itself: the hash jump marks the frame, and the frame plays');
+  });
+  test('the flight: a packet with the mark, from the source button to the first stage\'s head, three keyframes along a lifted arc, kept at the end, removed on finish; no flight under reduced motion or without the API', () => {
+    const f = fnBody('rlFly');
+    assert.match(f, /const from = document\.querySelector\(`#rl-sources \.rl-src\[data-src="\$\{src\}"\] \.rl-logo`\), to = document\.querySelector\('#rl-inbox \.rl-col-head'\), host = document\.getElementById\('rl-fly'\);/);
+    assert.match(f, /if \(!from \|\| !to \|\| !host \|\| rlReduced\(\) \|\| typeof host\.animate !== 'function'\) \{ land\(\); return; \}/);
+    assert.match(f, /el\.className = 'rl-packet';/);
+    assert.match(f, /el\.style\.setProperty\('--rl-px', x0 \+ 'px'\); el\.style\.setProperty\('--rl-py', y0 \+ 'px'\);/);
+    assert.match(f, /const mx = \(x0 \+ x1\) \/ 2, my = Math\.min\(y0, y1\) - 56;/);
+    assert.match(f, /\{ transform: `translate\(\$\{mx\}px, \$\{my\}px\)`, offset: \.5 \}/);
+    assert.match(f, /\{ duration: 650, easing: 'cubic-bezier\(\.3, \.6, \.2, 1\)', fill: 'forwards' \}/);
+    assert.match(f, /anim\.onfinish = \(\) => \{ el\.remove\(\); land\(\); \};/);
+    assert.match(fnBody('rlInitSources'), /if \(b\) rlFly\(b\.dataset\.src, \(\) => rlArrive\(b\.dataset\.src\)\);/);
+    assert.match(bare, /^\.rl-fly \{ position: fixed; inset: 0; z-index: 90; pointer-events: none; \}$/m);
+    assert.match(bare, /^\.rl-packet \{[^}]*transform: translate\(var\(--rl-px\), var\(--rl-py\)\); \}$/m);
+    assert.equal((js.match(/setTimeout\(/g) || []).length, 7, 'the toast, the wheel quiet, the settle, the ring, the hero ticks, the scene delay, the delivery');
+  });
+  test('the strike in the stylesheet: the chore is one line with a drawn line and a step back in colour; the hero rows tick like the app\'s tasks', () => {
+    assert.match(bare, /^\.rl-chore \{ position: relative; display: inline-block;[^}]*white-space: nowrap; transition: color \.5s var\(--ease\); \}$/m);
+    assert.match(bare, /^\.rl-chore::after \{ content: ""; position: absolute; left: -\.04em; right: -\.04em; top: 52%; height: \.075em; border-radius: 2px; background: var\(--ink\); transform: scaleX\(0\); transform-origin: left center; transition: transform \.55s var\(--ease-out\); \}$/m);
+    assert.match(bare, /^\.rl-chore\.is-struck \{ color: var\(--ink-muted\); \}$/m);
+    assert.match(bare, /^\.rl-chore\.is-struck::after \{ transform: scaleX\(1\); \}$/m);
+    assert.match(bare, /^\.rl-row\.is-done \.rl-done \{ background: var\(--success\); border-color: var\(--success\); color: var\(--surface\); \}$/m);
+    assert.match(bare, /^\.rl-row\.is-done \.rl-row-title::after \{ transform: scaleX\(1\); \}$/m);
+    assert.match(bare, /@media \(max-width: 860px\) \{[^}]*\}[\s\S]*?\.rl-chore \{ white-space: normal; \}/, 'the chore may wrap on a phone');
+  });
+});
+
+describe('the opening and the close', () => {
+  const start = block('<section class="rl-frame" id="start"', '</section>');
+  const close = block('<section class="rl-frame" id="zugang"', '</section>');
+  test('the bar, the hook, the lead, the four rows as the product\'s task rows (each a way to its frame), two pills, the swipe hint', () => {
+    const bar = block('<header class="rl-bar">', '</header>');
+    assert.match(bar, /<a class="rl-brand" href="#start"><img src="\/images\/logo\.png" alt="Upgrads"><span data-i18n="rl_crm">CRM<\/span><\/a>/);
+    assert.match(bar, /data-lang="de" aria-pressed="true">DE<\/button>/); assert.match(bar, /data-lang="en" aria-pressed="false">EN<\/button>/);
+    assert.match(bar, /<a class="rl-pill rl-pill-sm" href="mailto:hello@upgrads\.de\?subject=Zugang%20zu%20Upgrads%20CRM" data-i18n="rl_request">Zugang anfragen<\/a>/);
+    assert.match(start, /<h1 class="rl-h1" data-i18n="rl_hero_t">Vier Handgriffe gestrichen\.<\/h1>/);
+    assert.match(start, /<p class="rl-lead" data-i18n="rl_hero_d">/);
+    assert.match(start, /<ol class="rl-list" id="rl-list" data-i18n-aria="rl_list_aria" aria-label="Die vier Handgriffe">/);
+    const rows = [...start.matchAll(/<li class="rl-row"><button type="button" class="rl-row-btn" data-go="(\d)"><span class="rl-done" aria-hidden="true"><svg class="rl-ic" aria-hidden="true"><use href="#rl-i-check"\/><\/svg><\/span><span class="rl-row-title" data-i18n="rl_c(\d)">([^<]+)<\/span><svg class="rl-ic rl-row-go" aria-hidden="true"><use href="#rl-i-chevron"\/><\/svg><\/button><\/li>/g)];
+    assert.equal(rows.length, 4);
+    rows.forEach((m, k) => { assert.equal(+m[1], k + 1); assert.equal(+m[2], k + 1); assert.equal(m[3], dict.de['rl_c' + (k + 1)]); });
+    assert.match(start, /<a class="rl-pill" href="mailto:[^"]+" data-i18n="rl_request">Zugang anfragen<\/a>\s*<a class="rl-pill rl-pill-line" href="\/" data-i18n="rl_login">Anmelden<\/a>/);
+    assert.match(start, /<p class="rl-hint"><span class="rl-hint-touch" data-i18n="rl_hint_touch">[^<]+<\/span><span class="rl-hint-key" data-i18n="rl_hint_key">[^<]+<\/span><svg class="rl-ic rl-hint-ic" aria-hidden="true"><use href="#rl-i-chevron"\/><\/svg><\/p>/);
+    assert.match(close, /<h2 class="rl-h2-big" data-i18n="rl_close_t">Der fünfte Handgriff\.<\/h2>/);
+    assert.match(close, /<p class="rl-lead" data-i18n="rl_close_d">/);
+    assert.match(close, /<p class="rl-note" data-i18n="rl_foot_fiction">Alle Daten auf dieser Seite sind erfunden\.<\/p>/);
+    assert.match(dict.de.rl_close_d, /Mitglied, Admin oder Inhaber/); assert.match(dict.en.rl_close_d, /member, admin or owner/);
+  });
+  test('each of the four middle frames: the chore (the same key as its hero row), one line, one screen', () => {
+    for (const [id, n, piece] of [['leads', 1, 'rl-inbox'], ['deal', 2, 'rl-record'], ['termin', 3, 'rl-book'], ['gewonnen', 4, 'rl-won']]) {
+      const sec = block(`<section class="rl-frame" id="${id}"`, '</section>');
+      assert.match(sec, new RegExp(`<h2 class="rl-chore" id="rl-chore-${n}" data-i18n="rl_c${n}">${dict.de['rl_c' + n]}</h2>`));
+      assert.match(sec, new RegExp(`<p class="rl-line" data-i18n="rl_p${n}_d">`));
+      assert.match(sec, new RegExp(`id="${piece}"`)); assert.match(sec, /<div class="rl-piece rl-scroll">/);
+    }
+  });
+});
+
+describe('leads: the arrival', () => {
+  test('four sources with their marks, the via line, the first stage column; an arrival does what the webhook does; nobody is told', () => {
+    const sec = block('<section class="rl-frame" id="leads"', '</section>');
+    for (const [src, mark] of [['fb', '#rl-l-fb'], ['ig', '#rl-l-ig'], ['tt', '#rl-l-tt'], ['web', '#rl-i-globe']]) assert.match(sec, new RegExp(`<button type="button" class="rl-src" data-src="${src}"><svg class="(rl-logo|rl-ic rl-logo)" aria-hidden="true"><use href="${mark}"/></svg><span data-i18n="rl_src_${src}">`));
+    assert.match(sec, /<div class="rl-via"><span class="rl-via-line"><\/span><span class="rl-via-text" data-i18n="rl_via">über Make, Zapier oder n8n<\/span><span class="rl-via-line"><\/span><\/div>/);
+    assert.match(sec, /<div class="rl-inbox" id="rl-inbox" role="group" data-i18n-aria="rl_inbox_aria" aria-label="Erste Phase mit neuen Leads"><\/div>/);
+    const a = fnBody('rlArrive');
+    assert.match(a, /const known = rlDeals\.find\(d => d\.email === email\);/);
+    assert.match(a, /if \(known\) \{ known\.touched = true; known\.fresh = true; known\.updated = 0; known\.phone = phone; \}/);
+    assert.match(a, /else rlDeals\.unshift\(\{ id: rlNextId\+\+, title: name, contact: name, company: '', email, phone, value: null, urg: 0, stage: 0, owner: 'AW', created: 0, updated: 0, src, time: rlNow\(\), fresh: true \}\);/);
+    assert.doesNotMatch(a, /rlToast/, 'the lead webhook notifies nobody');
+    assert.match(fnBody('rlRenderInbox'), /rlColHtml\(0, rlDeals\.filter\(d => d\.stage === 0\), true\)/);
+    const col = fnBody('rlColHtml'), card = fnBody('rlCardHtml');
+    assert.match(col, /<span class="rl-dot"><\/span><span class="rl-col-name">[^<]+<\/span><span class="rl-col-n">\$\{deals\.length\}<\/span><span class="rl-col-sum">\$\{sum \? rlEsc\(rlMoney\(sum\)\) : ''\}<\/span>/);
+    assert.match(card, /<article class="rl-card\$\{d\.urg \? ' rl-urg-' \+ d\.urg : ''\}\$\{d\.fresh \? ' is-fresh' : ''\}" data-id="\$\{d\.id\}"\$\{quiet \? '' : ' tabindex="0"'\}/);
+    assert.match(card, /\$\{d\.touched \? `<span class="rl-tag">\$\{rlEsc\(rlT\('rl_updated_tag'\)\)\}<\/span>` : ''\}/);
+    for (const n of [1, 2, 3, 4]) same(`rl_urg_${n}`, `urg_${n}`);
+    same('rl_created_ago', 'dv_created_ago');
+    const seeded = [...read('db.js').matchAll(/\['(New|Contacted|Proposal|Negotiation|Won)',\s*'#([0-9a-f]{6})'/g)].map(m => m[1]);
+    assert.deepEqual(seeded, ['New', 'Contacted', 'Proposal', 'Negotiation', 'Won'], 'the five stages on the page are the seeded ones, in order');
+    for (const [i, tok] of [[0, 'neutral'], [1, 'info'], [2, 'warning'], [3, 'violet'], [4, 'success']]) assert.match(bare, new RegExp(`^\\.rl-s${i} \\{ --rl-sc: var\\(--${tok}\\); \\}$`, 'm'));
+  });
+});
+
+describe('the deal record', () => {
+  const r = fnBody('rlRenderRecord');
+  test('the header, the stepper, the composer with the app\'s types, verbs, placeholders, the number and the template, Strg+Enter, the history', () => {
+    assert.match(r, /<div class="rl-rec-name">\$\{rlEsc\(d\.title\)\}<\/div>/);
+    assert.match(r, /\$\{rlEsc\(rlT\('rl_deal_value'\)\)\}: <b>\$\{rlEsc\(rlMoney\(d\.value\)\)\}<\/b>/);
+    assert.match(r, /<a class="rl-btn rl-btn-primary" href="#termin">\$\{rlIcon\('calendar'\)\}\$\{rlEsc\(rlT\('rl_book_btn'\)\)\}<\/a>/);
+    assert.match(r, /class="rl-step rl-s\$\{i\}\$\{i < d\.stage \? ' is-done' : ''\}\$\{i === d\.stage \? ' is-current' : ''\}\$\{i === 4 \? ' is-won' : ''\}" data-stage="\$\{i\}" aria-pressed="\$\{i === d\.stage\}"/);
+    assert.match(r, /\['note', 'call', 'email', 'whatsapp'\]\.map\(typeBtn\)/);
+    assert.match(r, /<textarea class="rl-textarea" id="rl-compose-text" rows="2" maxlength="2000" placeholder="\$\{rlEsc\(rlT\('rl_ph_' \+ rlRec\.type\)\)\}"/);
+    assert.match(r, /<b>\$\{rlEsc\(d\.contact\)\}<\/b>, \$\{rlEsc\(d\.phone\)\}<\/span><span class="rl-btn rl-btn-sm">\$\{rlEsc\(rlT\('rl_open_whatsapp'\)\)\}<\/span><\/div><p class="rl-help rl-template">\$\{rlEsc\(rlT\('rl_wa_template_lbl'\)\)\}: „Hi \$\{rlEsc\(d\.contact\)\}, “<\/p>/);
+    assert.match(r, /\$\{rlEsc\(rlT\('rl_logged_as_on', \{ user: RL_PEOPLE\.AW, contact: d\.contact \}\)\)\} \$\{rlEsc\(rlT\('rl_ctrl_enter'\)\)\}<\/span><button type="submit" class="rl-btn rl-btn-primary rl-btn-sm">\$\{rlEsc\(rlT\('rl_verb_' \+ rlRec\.type\)\)\}<\/button>/);
+    assert.match(r, /acts\.slice\(0, 2\)\.map/, 'the latest two entries: the record fits a 720 px laptop without an inner scroll');
+    assert.match(r, /\$\{a\.join \? `<span class="rl-btn rl-btn-sm rl-tl-join">\$\{rlIcon\('calendar'\)\}\$\{rlEsc\(rlT\('rl_join', \{ app: a\.join \}\)\)\}<\/span>` : ''\}/);
+    assert.match(js, /^let rlRec = \{ type: 'call', text: '' \};$/m, 'the composer opens on Call; the scene switches it to WhatsApp');
+    assert.match(fnBody('rlInitRecord'), /e\.key === 'Enter' && \(e\.ctrlKey \|\| e\.metaKey\)\) \{ e\.preventDefault\(\); rlLog\(e\.target\.value\); \}/);
+    const l = fnBody('rlLog');
+    assert.match(l, /const t = text\.trim\(\); if \(!t\) return;/);
+    assert.match(l, /rlToast\(rlT\('rl_act_logged', \{ type: rlT\('rl_act_' \+ act\.type\) \}\), \(\) => \{ rlActs = rlActs\.filter\(a => a\.id !== act\.id\); rlRenderRecord\(\); \}\);/);
+    assert.match(read('db.js'), /'Hi \{\{name\}\}, '/, 'the default WhatsApp template the hint shows');
+    for (const t of ['note', 'call', 'email', 'whatsapp']) { same(`rl_act_${t}`, `act_${t}`); same(`rl_verb_${t}`, `act_verb_${t}`); same(`rl_ph_${t}`, `act_ph_${t}`); }
+    for (const [k, a] of [['rl_act_meeting', 'act_meeting'], ['rl_to_whom', 'dv_to_whom'], ['rl_open_dialer', 'dv_open_dialer'], ['rl_open_mail', 'dv_open_mail'], ['rl_open_whatsapp', 'dv_open_whatsapp'], ['rl_logged_as_on', 'dv_logged_as_on'], ['rl_ctrl_enter', 'dv_ctrl_enter'], ['rl_act_logged', 'act_logged'], ['rl_by_name', 'dv_by_name'], ['rl_compose_text_lbl', 'dv_compose_text_lbl'], ['rl_wa_template_lbl', 'set_wa_template'], ['rl_types_aria', 'dv_activity_type'], ['rl_join', 'cal_join'], ['rl_deal_value', 'dv_deal_value'], ['rl_current_stage', 'dv_current_stage'], ['rl_move_to', 'dv_move_to_stage'], ['rl_deal_stage_aria', 'dv_deal_stage_aria'], ['rl_book_btn', 'cal_book_btn']]) same(k, a);
+    for (const t of ['note', 'call', 'email', 'whatsapp', 'meeting']) assert.match(bare, new RegExp(`\\.rl-tl-${t} \\{ color: var\\(--`));
+  });
+});
+
+describe('the meeting', () => {
+  const b = fnBody('rlRenderBook'), w = fnBody('rlWeekHtml');
+  test('the sheet as the app\'s dialog beside the week; the booking and its undo', () => {
+    assert.match(b, /<div class="rl-sheet-title">\$\{rlEsc\(rlT\('rl_book_title', \{ name: d\.contact \}\)\)\}<\/div>/);
+    assert.match(b, /field\('rl_book_type', seg\('len', \[\[30, 'rl_type_30'\], \[60, 'rl_type_60'\]\], B\.len\)\)/);
+    assert.match(b, /field\('rl_book_where', seg\('where', \[\['meet', 'rl_where_meet'\], \['phone', 'rl_where_phone'\]\], B\.where\)\)/);
+    assert.match(b, /<select class="rl-select" id="rl-book-time"[^>]*><option value="">\$\{rlEsc\(rlT\('rl_book_time_ph'\)\)\}<\/option>/);
+    assert.match(b, /const slotLabel = s => rlT\('rl_book_slot', \{ from: s, to: rlFmt\(rlMin\(s\) \+ B\.len\), ampm: rlAmPm\(s\) \}\);/);
+    assert.match(b, /rlT\('rl_book_zone', \{ zone: 'Europe\/Berlin', host: RL_PEOPLE\.AW \}\)/);
+    assert.match(b, /<div class="rl-conflict" role="alert">\$\{conflicts\.map\(c => `<p>\$\{rlEsc\(rlT\('rl_book_conflict', \{ time: c\.start, title: rlT\(c\.key\), who: RL_PEOPLE\[c\.who\] \}\)\)\}<\/p>`\)\.join\(''\)\}<p>\$\{rlEsc\(rlT\('rl_book_conflict_hint'\)\)\}<\/p><\/div>/);
+    assert.match(b, /id="rl-book-go"\$\{B\.slot \? '' : ' disabled'\}>\$\{rlEsc\(rlT\(conflicts\.length \? 'rl_book_anyway' : 'rl_book_submit'\)\)\}/);
+    assert.match(w, /const H0 = 9, H1 = 17;/);
+    assert.match(w, /data-c="\$\{ev\.day \+ 2\}" data-r="\$\{Math\.floor\(rlMin\(ev\.start\) \/ 60\) - H0 \+ 1\}" data-rs="\$\{Math\.ceil\(ev\.len \/ 60\)\}"/);
+    assert.match(bare, /\.rl-week-lines, \.rl-week-evs \{ display: grid; grid-template-columns: 48px repeat\(5, minmax\(0, 1fr\)\); grid-auto-rows: 44px; \}/);
+    assert.match(bare, /\.rl-week-evs \{ position: absolute; inset: 0; pointer-events: none; \}/);
+    const k = fnBody('rlBook');
+    assert.match(k, /const ev = \{ id: 'b' \+ rlNextId\+\+, day: B\.day, start: B\.slot, len: B\.len, who: 'AW', title: d\.contact, booked: true \};/);
+    assert.match(k, /type: 'meeting', who: 'AW', days: 0, time: rlNow\(\), key: 'rl_x_booked', vars: \{[^}]*\}, join: B\.where === 'meet' \? 'Google Meet' : null \};/);
+    assert.match(k, /rlToast\(rlT\('rl_book_done', \{ when \}\), \(\) => rlCancelBooking\(ev\.id, act\.id\)\);/);
+    for (const k2 of ['title', 'type', 'where', 'date', 'time', 'time_ph', 'slot', 'zone', 'invite_to', 'submit', 'anyway', 'conflict', 'conflict_hint', 'done', 'with']) same(`rl_book_${k2}`, `cal_book_${k2}`);
+  });
+});
+
+describe('Gewonnen and the Engine', () => {
+  test('the hero\'s stage beside Gewonnen, the foot, the Engine card in the same frame; the drag and the keys; the move contract; the Engine fires on Won and forgets on the way back', () => {
+    const w = fnBody('rlRenderWon'), m = fnBody('rlMoveDeal'), i = fnBody('rlInitWon');
+    assert.match(w, /if \(hero\.stage < 4\) rlLeftStage = hero\.stage;/);
+    assert.match(w, /rlColHtml\(rlLeftStage, rlDeals\.filter\(d => d\.stage === rlLeftStage\), false\) \+ rlColHtml\(4, rlDeals\.filter\(d => d\.stage === 4\), false\)/);
+    assert.match(w, /<button type="button" class="rl-btn rl-btn-primary" id="rl-won-go"\$\{hero\.stage === 4 \? ' disabled' : ''\}>\$\{rlEsc\(rlT\('rl_move_to', \{ s: rlStageName\(4\) \}\)\)\}<\/button>/);
+    assert.match(w, /`<div class="rl-eng rl-surface" id="rl-engine"><\/div>`;\s*rlRenderEngine\(\);/);
+    assert.match(fnBody('rlRenderAll'), /^\{ rlRenderInbox\(\); rlRenderRecord\(\); rlRenderBook\(\); rlRenderWon\(\); \}$/);
+    assert.match(m, /stage = rlClamp\(stage, 0, RL_STAGES\.length - 1\);/);
+    assert.match(m, /rlToast\(rlT\('rl_moved_to', \{ s: rlStageName\(stage\) \}\), \(\) => rlMoveDeal\(id, prev, true\)\);/);
+    assert.match(i, /if \(Math\.hypot\(e\.clientX - drag\.x, e\.clientY - drag\.y\) < 6\) return;/);
+    assert.match(i, /document\.elementFromPoint\(e\.clientX, e\.clientY\)\?\.closest\('\.rl-col'\)/);
+    assert.match(i, /if \(ghost && over\) rlMoveDeal\(id, \+over\.dataset\.stage\);/);
+    assert.match(i, /rlMoveDeal\(d\.id, e\.key === 'ArrowRight' \? 4 : rlLeftStage\);/);
+    assert.match(i, /if \(e\.target\.closest\('#rl-won-go'\)\) rlMoveDeal\(RL_HERO, 4\);/);
+    assert.match(bare, /\.rl-ghost \{ position: fixed; left: 0; top: 0; z-index: 90;[^}]*pointer-events: none; \}/);
+    assert.match(bare, /^\.rl-won \{ display: grid; grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1fr\) minmax\(0, 1\.15fr\); gap: 20px; align-items: start; \}$/m);
+    assert.match(bare, /^\.rl-eng \{ grid-column: 3; grid-row: 1 \/ 3; padding: 14px 16px 16px; \}$/m);
+    same('rl_moved_to', 'moved_to'); same('rl_undo', 'undo'); same('rl_st_won', 'an_won');
+    const t = fnBody('rlToast');
+    assert.match(t, /while \(host\.children\.length >= 3\) host\.firstChild\.remove\(\);/); assert.match(t, /setTimeout\(\(\) => el\.remove\(\), 4200\);/);
+  });
+  test('the Engine card: Aktiv, the trigger stage, one event Ausstehend → Zugestellt with one attempt, the seven statuses in the schema\'s order; seven attempts; no invented note', () => {
+    const e = fnBody('rlRenderEngine'), f = fnBody('rlEngineFire'), r = fnBody('rlEngineReset');
+    assert.match(e, /<span class="rl-badge rl-ok">\$\{rlEsc\(rlT\('rl_engine_active'\)\)\}<\/span>/);
+    assert.match(e, /\$\{rlEsc\(rlT\('rl_engine_stages_label'\)\)\}<\/span><span class="rl-stage rl-s4"><span class="rl-dot"><\/span>\$\{rlEsc\(rlStageName\(4\)\)\}<\/span>/);
+    assert.match(e, /<span class="rl-badge \$\{rlEngine\.delivered \? 'rl-ok' : 'rl-wait'\}">\$\{rlEsc\(rlT\(rlEngine\.delivered \? 'rl_status_success' : 'rl_status_pending'\)\)\}<\/span><span class="rl-help">1 \$\{rlEsc\(rlT\('rl_attempt_one'\)\)\}<\/span>/);
+    assert.match(e, /: `<p class="rl-help">\$\{rlEsc\(rlT\('rl_no_deliveries'\)\)\}<\/p>`/);
+    assert.match(e, /\[0, 1, 2, 3, 4, 5, 6\]\.map\(s => `<span class="rl-path-step\$\{rlEngine\.step === s \? ' is-on' : ''\}">\$\{rlEsc\(rlT\('rl_onb_s' \+ s\)\)\}<\/span>`\)/);
+    assert.match(f, /rlEngine = \{ fired: true, delivered: false, step: 0 \};/);
+    assert.match(f, /rlEngine\.delivered = true; rlEngine\.step = 1; rlRenderEngine\(\);/);
+    assert.match(f, /if \(rlReduced\(\)\) done\(\); else rlEngineTimer = setTimeout\(done, 1100\);/);
+    assert.match(r, /clearTimeout\(rlEngineTimer\);/);
+    assert.doesNotMatch(f + r, /rlActs/, 'no invented Engine note in the history');
+    const db = read('db.js'); const i = db.indexOf('onboarding_status IN ('); const order = [...db.slice(i, db.indexOf('))', i)).matchAll(/'([a-z_]+)'/g)].map(m => m[1]);
+    assert.equal(order.length, 7);
+    order.forEach((s, n) => same(`rl_onb_s${n}`, `onb_status_${s}`));
+    const delays = new Function(sliceConst('utils/engine.js', 'RETRY_DELAYS_SEC').replace(/^[^[]*/, 'return '))();
+    assert.match(read('utils/engine.js'), /const MAX_ATTEMPTS\s*=\s*RETRY_DELAYS_SEC\.length \+ 1;/); assert.equal(delays.length + 1, 7);
+    for (const [k, a] of [['rl_engine_title', 'engine_title'], ['rl_engine_active', 'engine_active'], ['rl_engine_stages_label', 'engine_stages_label'], ['rl_deliveries_title', 'engine_deliveries_title'], ['rl_no_deliveries', 'engine_no_deliveries'], ['rl_status_pending', 'engine_status_pending'], ['rl_status_success', 'engine_status_success'], ['rl_attempt_one', 'engine_attempt_one'], ['rl_onb_col_status', 'onb_col_status']]) same(k, a);
   });
 });
 
 describe('words', () => {
-  test('German first; every key in both languages; the markup equals the German dictionary key for key; no dead keys; no unknown keys', () => {
-    assert.deepEqual(Object.keys(dict), ['de', 'en']);
-    assert.deepEqual(Object.keys(dict.de).sort(), Object.keys(dict.en).sort());
-    assert.ok(js.indexOf('de: {') < js.indexOf('en: {'));
-    for (const m of html.matchAll(/data-i18n="([^"]+)"[^>]*>([^<]*)</g)) assert.equal(unesc(m[2]), dict.de[m[1]], m[1]);
-    for (const m of html.matchAll(/data-i18n-aria="([^"]+)"[^>]*aria-label="([^"]*)"/g)) assert.equal(unesc(m[2]), dict.de[m[1]], m[1]);
-    const used = new Set([...js.matchAll(/'(bd_[a-z0-9_]+)'/g)].map(m => m[1]).concat([...html.matchAll(/data-i18n(?:-aria)?="([^"]+)"/g)].map(m => m[1])));
-    assert.deepEqual([...used].filter(k => !(k in dict.de) && !/_$/.test(k)), [], 'unknown keys');
-    assert.deepEqual(Object.keys(dict.de).filter(k => !used.has(k) && !/^bd_st_/.test(k)), [], 'dead keys');
+  test('both languages hold the same keys; the markup equals the German value key for key, aria included', () => {
+    assert.deepEqual(Object.keys(dict.de), Object.keys(dict.en));
+    for (const m of html.matchAll(/data-i18n="([^"]+)"[^>]*>([^<]*)</g)) assert.equal(m[2].replace(/&amp;/g, '&'), dict.de[m[1]], m[1]);
+    for (const m of html.matchAll(/data-i18n-aria="([^"]+)" aria-label="([^"]+)"/g)) assert.equal(m[2], dict.de[m[1]], m[1]);
   });
-  test('impersonal German everywhere; every German value differs from its English one unless it is a name or a product word', () => {
-    for (const [k, v] of Object.entries(dict.de)) assert.doesNotMatch(v, IMPERSONAL, k);
-    for (const k of Object.keys(dict.de).filter(k => dict.de[k] === dict.en[k])) assert.match(dict.de[k], /^(CRM|Deals|WhatsApp|Upgrads Engine|Facebook Ads|Instagram Ads|TikTok Ads|online)$/, `${k} untranslated: ${dict.de[k]}`);
+  test('no dead keys, no unknown keys (dynamic families counted by their prefix)', () => {
+    const used = new Set([...html.matchAll(/data-i18n(?:-aria)?="([^"]+)"/g)].map(m => m[1]));
+    for (const m of js.matchAll(/'(rl_[a-z0-9_]+)'/g)) used.add(m[1]);
+    const prefixes = [...new Set([...js.matchAll(/'(rl_[a-z0-9_]*)' \+/g)].map(m => m[1]))];
+    const dynamic = ['rl_x_', 'rl_d', 'rl_st_'];
+    for (const k of Object.keys(dict.de)) assert.ok(used.has(k) || prefixes.some(p => k.startsWith(p)) || dynamic.some(p => k.startsWith(p)), `${k} is used`);
+    for (const k of used) if (!prefixes.includes(k)) assert.ok(k in dict.de, `${k} exists`);
+    for (const k of Object.keys(dict.de).filter(k => dynamic.some(p => k.startsWith(p)))) assert.ok(js.includes(`'${k}'`), `${k} is referenced as a value`);
   });
-  test('few words: the hook ≤ 6, every column line ≤ 10, outside the pieces ≤ 150, the whole markup ≤ 360', () => {
-    for (const lang of ['de', 'en']) {
-      assert.ok(words(dict[lang].bd_hero_title) <= 6, lang + ' hook');
-      for (let i = 1; i <= 5; i++) assert.ok(words(dict[lang]['bd_d' + i]) <= 10, `${lang} d${i}: ${words(dict[lang]['bd_d' + i])}`);
-      assert.ok(words(dict[lang].bd_hero_line) <= 14 && words(dict[lang].bd_close_line) <= 14, lang + ' lines');
+  test('impersonal German, English where it differs, a short allow-list of names that stay', () => {
+    const KEEP = /^(CRM|Deal|Start|Leads|Website|WhatsApp|Google Meet|Upgrads Engine|Facebook Ads|Instagram Ads|TikTok Ads)$/;
+    for (const [k, v] of Object.entries(dict.de)) {
+      assert.doesNotMatch(v, IMPERSONAL, `${k} is impersonal: ${v}`);
+      if (!KEEP.test(v)) assert.notEqual(v, dict.en[k], `${k} is translated`);
     }
-    const outside = body.replace(/<div class="bd-piece">[\s\S]*?\n        <\/div>\n/g, '');
-    const n = words(textOf(outside)); assert.ok(n <= 150, `outside the pieces: ${n}`);
-    const all = words(textOf(body)); assert.ok(all <= 360, `markup: ${all}`);
+    assert.doesNotMatch(body.replace(/<svg[\s\S]*?<\/svg>/g, ''), IMPERSONAL);
   });
-  test('claims audit: no competitor names, no superlatives, nothing technical, no e-mail promises, no dollar figures, no "Lead Ads"', () => {
-    const all = Object.values(dict.de).concat(Object.values(dict.en)).join(' ') + textOf(body);
-    assert.doesNotMatch(all, /pipedrive|hubspot|onoffice|propstack|salesforce/i);
-    assert.doesNotMatch(all, /\b(beste[rsn]?|schnellste|einzige|führende|#1|best|fastest|leading|only CRM|revolution)\b/i);
-    assert.doesNotMatch(all, /hmac|sha256|signiert|signed with|payload|json|curl|header|endpoint|\bapi\b|webhook|vertrag\.unterschrieben|oauth/i);
-    assert.doesNotMatch(all, /Lead Ads|E-Mails? (?:versendet|verschickt|gesendet)|sends? (?:an )?e-?mails?|synchronis|Forecast/i);
-    assert.doesNotMatch(all, /\$\s?\d|\d\s?\$/);
+  test('concise: the caps on the hook, the leads, the chores, the lines, the tabs, the hints, the page copy as a whole', () => {
+    for (const lang of ['de', 'en']) {
+      const d = dict[lang];
+      assert.ok(words(d.rl_hero_t) <= 5, `${lang} hook ≤ 5`);
+      for (const k of ['rl_hero_d', 'rl_close_d']) assert.ok(words(d[k]) <= 14, `${lang} ${k} ≤ 14: ${d[k]}`);
+      for (const k of ['rl_c1', 'rl_c2', 'rl_c3', 'rl_c4']) { assert.ok(words(d[k]) <= 3, `${lang} ${k} ≤ 3: ${d[k]}`); assert.doesNotMatch(d[k], /[.!]$/, `${lang} ${k}: a chore, not a sentence`); }
+      assert.ok(words(d.rl_close_t) <= 4, `${lang} close ≤ 4`);
+      for (const k of ['rl_p1_d', 'rl_p2_d', 'rl_p3_d', 'rl_p4_d']) assert.ok(words(d[k]) <= 13, `${lang} ${k} ≤ 13: ${d[k]}`);
+      for (let n = 0; n < 6; n++) assert.ok(words(d['rl_tab_' + n]) === 1, `${lang} tab ${n} is one word`);
+      assert.equal(new Set([0, 1, 2, 3, 4, 5].map(n => d['rl_tab_' + n])).size, 6, `${lang}: six distinct tabs`);
+      for (const k of ['rl_hint_touch', 'rl_hint_key']) assert.ok(words(d[k]) <= 4, `${lang} ${k}`);
+      assert.ok(words(d.rl_via) <= 5, `${lang} via ≤ 5`);
+      const total = PAGE_KEYS.reduce((a, k) => a + words(d[k]), 0);
+      assert.ok(total <= 160, `${lang}: ${total} words of page copy`);
+    }
+  });
+  test('the claims audit: no code or protocol words, no competitor, no superlative, no price, no notification or mention promise', () => {
+    const copy = Object.values(dict.de).concat(Object.values(dict.en)).join('\n') + '\n' + body.replace(/<!--[\s\S]*?-->/g, '').replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]+>/g, ' ');
+    assert.doesNotMatch(copy, /\b(webhook|api|endpoint|payload|json|hmac|http|url|token|header|curl)\b/i);
+    assert.doesNotMatch(copy, /pipedrive|hubspot|onoffice|propstack|salesforce/i);
+    assert.doesNotMatch(copy, /(?<!\p{L})(beste[rsn]?|schnellste[rsn]?|einfachste[rsn]?|einzige[rsn]?|revolutionär|führend|marktführer|best|fastest|easiest|leading|revolutionary|world-class)(?!\p{L})/iu);
+    assert.doesNotMatch(copy, /\b(preis|price|kostenlos|free|trial|testphase|rabatt|discount)\b|€|\$/i);
+    assert.doesNotMatch(copy, /benachrichtig|glocke|notification|erwähn|mention|@\w/i);
+    assert.doesNotMatch(copy, /Lead Ads|Doppelbuchung|double.?booking|forecast|prognose/i);
+    assert.doesNotMatch(js.replace(/\/\/.*$/gm, ''), /notif|bell|Glocke/i, 'no notification claims');
   });
 });
 
-describe('pure helpers (loaded from the real file)', () => {
-  const F = loadFns('public/js/landing2.js', ['bdT', 'bdEsc', 'bdClamp', 'bdStageName'], { state: { BD_I18N: dict, bdLang: 'de', BD_STAGES: stages } });
-  test('bdT: the language, a fallback, variables; the stage names in both languages; clamp; escaping', () => {
-    assert.equal(F.bdT('bd_moved_to', { s: 'Gewonnen' }), 'Verschoben nach Gewonnen');
-    assert.equal(F.bdT('nope'), 'nope');
-    assert.deepEqual([0, 1, 2, 3, 4].map(F.bdStageName), ['Neu', 'Kontaktiert', 'Angebot', 'Verhandlung', 'Gewonnen']);
-    F.__set('bdLang', 'en'); assert.deepEqual([0, 4].map(F.bdStageName), ['New', 'Won']); assert.equal(F.bdT('bd_moved_to', { s: 'Won' }), 'Moved to Won'); F.__set('bdLang', 'de');
-    assert.equal(F.bdClamp(9, 0, 4), 4); assert.equal(F.bdClamp(-2, 0, 4), 0); assert.equal(F.bdClamp(2, 0, 4), 2);
-    assert.equal(F.bdEsc('<b>&"\''), '&lt;b&gt;&amp;&quot;&#39;');
+describe('pure helpers', () => {
+  const F = loadFns('public/js/landing2.js', ['rlMoney', 'rlClamp', 'rlEsc', 'rlMin', 'rlFmt', 'rlAmPm', 'rlConflict', 'rlIndexOf'], { state: { RL_IDS: ['start', 'leads', 'deal', 'termin', 'gewonnen', 'zugang'] } });
+  test('money as the board shows it; the hash to a frame index', () => {
+    assert.equal(F.rlMoney(9800), '9.8k €'); assert.equal(F.rlMoney(1200000), '1.2M €'); assert.equal(F.rlMoney(900), '900 €'); assert.equal(F.rlMoney(null), '');
+    assert.equal(F.rlIndexOf('#termin'), 3); assert.equal(F.rlIndexOf('#nothing'), 0); assert.equal(F.rlIndexOf(''), 0); assert.equal(F.rlIndexOf('#zugang'), 5);
+    assert.equal(F.rlClamp(9, 0, 5), 5); assert.equal(F.rlEsc('<b>&"'), '&lt;b&gt;&amp;&quot;');
+  });
+  test('time helpers and the conflict check: the host\'s own entries on that day, overlapping, nothing else; the scene\'s pick really conflicts', () => {
+    assert.equal(F.rlMin('14:00'), 840); assert.equal(F.rlFmt(870), '14:30'); assert.equal(F.rlAmPm('14:00'), '2 pm'); assert.equal(F.rlAmPm('09:00'), '9 am');
+    const events = new Function('return ' + js.match(/\nlet rlEvents = (\[[\s\S]*?\n\]);/)[1])();
+    assert.deepEqual(F.rlConflict(1, '11:00', 30, events, 'AW').map(e => e.id), ['e2'], 'Tuesday 11:00 meets the team meeting: what the scene shows');
+    assert.deepEqual(F.rlConflict(1, '10:30', 60, events, 'AW').map(e => e.id), ['e2'], 'an hour from 10:30 overlaps 11:00');
+    assert.deepEqual(F.rlConflict(1, '14:00', 60, events, 'AW').map(e => e.id), [], 'an hour from 14:00 ends as the viewing starts');
+    assert.deepEqual(F.rlConflict(3, '10:00', 30, events, 'AW'), [], 'another person\'s entry is not the host\'s');
+    for (const ev of events) { const h = +ev.start.slice(0, 2); assert.ok(h >= 9 && h + ev.len / 60 <= 17, `${ev.id} inside the week's hours`); }
   });
 });
 
-describe('stylesheet and script discipline', () => {
-  test('every selector is bd- prefixed (plus the five stage colours); tokens only (no hex, no gradients); the ground is the app\'s canvas, the columns its surfaces; the stage colours are the app\'s; no caps; every token resolves', () => {
-    const sels = [...bare.matchAll(/^([.#][\w-]+)/gm)].map(m => m[1]);
-    assert.ok(sels.length > 100);
-    assert.deepEqual(sels.filter(s => !s.startsWith('.bd-') && s !== '.hidden' && !/^\.s-(new|contacted|offer|nego|won)$/.test(s)), []);
-    assert.doesNotMatch(bare, /#[0-9a-fA-F]{3,6}\b/); assert.doesNotMatch(bare, /gradient\(/);
-    assert.match(css, /body \{[^}]*background: var\(--canvas\); color: var\(--ink\);/); assert.match(css, /\.bd-col \{[^}]*background: var\(--surface\);/);
-    assert.match(css, /\.s-new \{ background: var\(--neutral\); \}\s*\.s-contacted \{ background: var\(--info\); \}\s*\.s-offer \{ background: var\(--warning\); \}\s*\.s-nego \{ background: var\(--violet\); \}\s*\.s-won \{ background: var\(--success\); \}/);
-    const tokens = [...new Set([...bare.matchAll(/var\((--[\w-]+)\)/g)].map(m => m[1]))];
-    assert.deepEqual(tokens.filter(t => !bare.includes(t + ':') && !style.includes(t + ':')), [], 'every token resolves');
-    assert.doesNotMatch(bare, /text-transform: uppercase/);
-    assert.match(css, /:where\(body\) :focus-visible \{ outline: 2px solid var\(--focus\)/);
+describe('stylesheet discipline and the audit', () => {
+  const SCALE = new Set([0, 1, 2, 3, 4, 6, 8, 10, 12, 14, 16, 20, 24, 28, 32, 36, 40, 48, 56, 64, 80, 96, 128]);
+  const PROPS = new Set(('position top right bottom left inset z-index display flex flex-direction flex-wrap align-items align-content align-self justify-content gap column-gap row-gap grid-template-columns grid-template-rows grid-auto-rows grid-column grid-row place-items width min-width max-width height min-height max-height margin margin-top margin-bottom margin-left margin-inline padding padding-top padding-bottom padding-left border border-top border-bottom border-left border-color border-left-color border-bottom-color border-radius background color font-family font-size font-weight font-style font-display font-variant-numeric src line-height letter-spacing text-align text-wrap text-overflow text-decoration white-space overflow overflow-x overflow-y overflow-wrap overscroll-behavior overscroll-behavior-x overscroll-behavior-y scroll-snap-type scroll-snap-align scroll-snap-stop scrollbar-width opacity transform transform-origin translate transition animation box-shadow outline outline-offset cursor user-select -webkit-user-select pointer-events touch-action isolation content fill stroke stroke-width stroke-linecap stroke-linejoin resize list-style backdrop-filter -webkit-backdrop-filter').split(' '));
+  test('every class in the stylesheet is used by the markup or the script, and every class they use has a rule', () => {
+    for (const c of cssClasses) assert.ok(usedClasses.has(c) || dynamicPrefixes.some(p => c.startsWith(p)) || [...dynamicTokens].some(p => c.startsWith(p)), `.${c} is used`);
+    for (const c of usedClasses) if (/^(rl|is)-/.test(c) && !ids.has(c) && !dynamicPrefixes.includes(c) && !dynamicTokens.has(c)) assert.ok(cssClasses.has(c), `.${c} has a rule`);
   });
-  test('four breakpoints widest first, reduced motion last; at 860 the board stands up (columns stacked, the slots of the other columns collapse); reduced motion: no flight, no reveal', () => {
-    const bps = [...css.matchAll(/@media \(max-width: (\d+)px\)/g)].map(m => Number(m[1]));
-    assert.deepEqual(bps, [1024, 860, 600, 400]);
-    const rm = css.lastIndexOf('@media (prefers-reduced-motion: reduce)');
-    assert.ok(rm > css.lastIndexOf('@media (max-width'), 'reduced motion is the last block');
-    assert.match(css.slice(rm), /\.bd-card\.is-flying \{ transition: none; \}\s*\.bd-col\.is-active \.bd-piece > \* \{ animation: none; \}/);
-    assert.match(css, /@media \(max-width: 860px\) \{[\s\S]*\.bd-board \{ flex-direction: column; min-height: 0; \}[\s\S]*\.bd-col\.is-done \.bd-slot, \.bd-col\.is-next \.bd-slot \{ height: 0; border: 0; \}/);
-    assert.match(css, /@media \(max-width: 600px\) \{[\s\S]*\.bd-bar-links > a:not\(\.bd-btn\) \{ display: none; \}/);
+  test('prefix, tokens only, no gradient, two keyframes, no caps, no pointer effects, no !important', () => {
+    for (const r of rules) if (!r.selector.startsWith('@') && !r.in.includes('@keyframes')) assert.ok(/rl-|body\.rl|html\.rl/.test(r.selector), `scoped: ${r.selector}`);
+    assert.doesNotMatch(bare, /#[0-9a-f]{3,8}\b/i, 'no hex');
+    assert.equal((bare.match(/gradient\(/g) || []).length, 0, 'no gradient: the page is flat, colour comes from the product');
+    assert.deepEqual([...bare.matchAll(/@keyframes ([a-z-]+)/g)].map(m => m[1]), ['rl-nudge', 'rl-in']);
+    assert.doesNotMatch(bare, /text-transform|!important|mousemove|rotateX|rotateY|perspective|deviceorientation/);
+    assert.doesNotMatch(js, /mousemove|rotateX|rotateY|perspective|deviceorientation|innerHTML \+=/);
+    assert.match(bare, /body\.rl \{[^}]*--rl-ground: var\(--canvas\);/);
+    assert.match(bare, /^\.rl-pill \{[^}]*border: 1px solid var\(--ink\);[^}]*background: var\(--ink\); color: var\(--canvas\);/m, 'the page\'s own voice is monochrome');
   });
-  test('no scroll engine, no pointer-following, no IntersectionObserver, no timer but the toast\'s; every id the script touches exists; the language is shared with the app', () => {
-    assert.doesNotMatch(js, /setInterval|mousemove|deviceorientation|IntersectionObserver|addEventListener\('scroll'/);
-    assert.equal((js.match(/setTimeout\(/g) || []).length, 1); assert.match(fnBody('bdToast'), /setTimeout\(/);
-    assert.doesNotMatch(js.replace(fnBody('bdInitHand'), ''), /pointermove/, 'pointer moves are read only while the hand holds the card');
-    const ids = new Set([...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]));
-    const used = [...js.matchAll(/getElementById\('([^']+)'\)/g)].map(m => m[1]).concat([...js.matchAll(/querySelector(?:All)?\(`?'?#([\w-]+)/g)].map(m => m[1])).filter(i => !/^bd-slot-$/.test(i));
-    assert.deepEqual([...new Set(used)].filter(i => !ids.has(i)), []);
-    assert.match(js, /localStorage\.setItem\('lang', l\)/); assert.match(js, /localStorage\.getItem\('lang'\)/);
-    assert.match(js, /document\.addEventListener\('DOMContentLoaded', bdInit\);\s*$/);
+  test('every custom property resolves; every property name is a real one; no declaration is repeated in a rule; no selector is declared twice at the same level', () => {
+    const defined = new Set([...(style + bare).matchAll(/(--[a-z0-9-]+)\s*:/g)].map(m => m[1]).concat([...js.matchAll(/setProperty\('(--[a-z0-9-]+)'/g)].map(m => m[1])));
+    for (const m of bare.matchAll(/var\((--[a-z0-9-]+)/g)) assert.ok(defined.has(m[1]), `${m[1]} resolves`);
+    const seen = new Set();
+    for (const r of rules) {
+      const props = r.decls.map(([p]) => p);
+      for (const p of props) assert.ok(PROPS.has(p) || p.startsWith('--'), `${r.selector}: "${p}" is a property`);
+      assert.equal(new Set(props).size, props.length, `${r.selector}: no repeated declaration`);
+      const key = r.in + ' | ' + r.selector; assert.ok(!seen.has(key), `${key} declared once`); seen.add(key);
+    }
+  });
+  test('spacing on the scale, breakpoints descending, reduced motion last, the z-index ladder', () => {
+    for (const r of rules) for (const [p, v] of r.decls) if (/^(margin|padding|gap|column-gap|row-gap)/.test(p)) {
+      let flat = v; while (/\([^()]*\)/.test(flat)) flat = flat.replace(/\([^()]*\)/g, '~');
+      for (const tok of flat.split(/\s+/)) {
+        if (/^(0|auto|none|-?[a-z-]+~|[\d.]+%)$/.test(tok)) continue;
+        const px = tok.match(/^(-?\d+)px$/); assert.ok(px && SCALE.has(Math.abs(+px[1])), `${r.selector}: ${p}: ${v} on the scale`);
+      }
+    }
+    const bps = [...bare.matchAll(/@media \(max-width: (\d+)px\)/g)].map(m => +m[1]);
+    assert.deepEqual(bps, [1200, 1024, 860, 600, 480]);
+    assert.ok(bare.lastIndexOf('@media (prefers-reduced-motion: reduce)') > bare.lastIndexOf('@media (max-width'));
+    assert.ok(bare.lastIndexOf('@media (prefers-reduced-motion: reduce)') > bare.lastIndexOf('@media (pointer: coarse)'));
+    const z = Object.fromEntries(rules.filter(r => r.decls.some(([p]) => p === 'z-index')).map(r => [r.selector, r.decls.find(([p]) => p === 'z-index')[1]]));
+    assert.deepEqual(z, { '.rl-bar': '50', '.rl-arrow': '50', '.rl-fly': '90', '.rl-ghost': '90', '.rl-toasts': '80' });
+  });
+  test('the script: every id it touches exists, the app\'s language key, the start on DOMContentLoaded', () => {
+    for (const m of js.matchAll(/getElementById\('([^']+)'\)|closest\('#([^']+)'\)|querySelector\('#([^']+) /g)) assert.ok(ids.has(m[1] || m[2] || m[3]), `#${m[1] || m[2] || m[3]} exists`);
+    assert.match(js, /localStorage\.getItem\('lang'\)/); assert.match(js, /localStorage\.setItem\('lang', l\)/);
+    assert.match(js.trim(), /document\.addEventListener\('DOMContentLoaded', rlInit\);$/);
+    assert.match(js, /^'use strict';$/m);
   });
 });

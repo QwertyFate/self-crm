@@ -204,7 +204,7 @@ describe('detail-views.js: the reference contact detail in the side panel (or a 
     assert.match(c, /on\(host, 'click', '\[data-note\]'/);
     assert.match(c, /on\(host, 'dblclick', '\[data-note\]'/);
     assert.match(c, /id="ct-aedit"/);
-    assert.match(c, /api\.patch\(`\/api\/activities\/\$\{S\.editAct\}`, \{ content:/);
+    assert.match(c, /api\.patch\(`\/api\/activities\/\$\{aid\}`, \{ content:/);   // the id captured before the wait (2026-10-20, tests/client/save-lock.test.js)
     assert.match(c, /'act-save'/); assert.match(c, /'act-cancel'/);
     assert.match(c, /e\.key === 'Escape'/);
   });
