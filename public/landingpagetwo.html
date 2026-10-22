@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="de" class="vs-root">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Upgrads ist das CRM für Vertriebsteams, in dem Anfragen, Termine, Gesprächsnotizen und das Onboarding nach dem Abschluss an einem Ort zusammenkommen.">
+  <title>Upgrads CRM</title>
+  <link rel="icon" href="/images/logo.png" type="image/png">
+  <link rel="preload" href="/fonts/Geologica.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/landing-two.css">
+  <script src="/js/landing-two.js" defer></script>
+</head>
+<body class="vs">
+<header class="vs-head">
+  <div class="vs-wrap vs-top">
+    <a class="vs-brand" href="#top"><img src="/images/logo.png" alt="Upgrads"><span data-i18n="vs_crm">CRM</span></a>
+    <nav class="vs-top-links" data-i18n-aria="vs_nav" aria-label="Seiten">
+      <a class="vs-a" href="#vs-detail" data-i18n="vs_nav_detail">Der Vergleich</a>
+      <a class="vs-a" href="#vs-faq" data-i18n="vs_nav_faq">Fragen</a>
+    </nav>
+    <div class="vs-top-end">
+      <div class="vs-lang" role="group" data-i18n-aria="vs_lang" aria-label="Sprache">
+        <button type="button" class="vs-lang-btn" data-lang="de" aria-pressed="true">DE</button>
+        <button type="button" class="vs-lang-btn" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <a class="vs-a vs-top-login" href="/" data-i18n="vs_login">Anmelden</a>
+      <a class="vs-btn vs-btn-sm" href="#vs-ask" data-i18n="vs_request">Zugang anfragen</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <!-- The comparison as the first screen: grey for other CRM platforms, navy for Upgrads, four rows that open their detail. -->
+  <section aria-labelledby="vs-h1">
+    <h1 class="vs-sr" id="vs-h1" data-i18n="vs_h1">Bei anderen CRMs ein Zusatz, bei Upgrads eingebaut.</h1>
+    <div class="vs-split">
+      <div class="vs-cell vs-o vs-big-cell" aria-hidden="true"><p class="vs-k" data-i18n="vs_o_k">Bei anderen CRMs</p><p class="vs-big" data-i18n="vs_o_big">ein Zusatz.</p></div>
+      <div class="vs-cell vs-u vs-big-cell" aria-hidden="true"><p class="vs-k" data-i18n="vs_u_k">Bei Upgrads</p><p class="vs-big" data-i18n="vs_u_big">eingebaut.</p></div>
+      <div class="vs-rows" role="group" data-i18n-aria="vs_rows" aria-label="Vier Unterschiede">
+        <button type="button" class="vs-row" data-topic="leads" aria-pressed="true" aria-controls="vs-detail">
+          <span class="vs-cell vs-o"><span class="vs-topic" data-i18n="vs_t_leads">Anfragen</span> <span class="vs-what" data-i18n="vs_o_leads">Anbindung per Programmierung oder Profi-Paket</span></span>
+          <span class="vs-cell vs-u"><span class="vs-topic" data-i18n="vs_t_leads">Anfragen</span> <span class="vs-what" data-i18n="vs_u_leads">Eine Adresse pro Arbeitsbereich, mit Feldzuordnung und Protokoll</span> <span class="vs-yes" data-i18n="vs_yes">eingebaut</span></span>
+        </button>
+        <button type="button" class="vs-row" data-topic="notes" aria-pressed="false" aria-controls="vs-detail">
+          <span class="vs-cell vs-o"><span class="vs-topic" data-i18n="vs_t_notes">Gesprächsnotizen</span> <span class="vs-what" data-i18n="vs_o_notes">Notetaker im Bezahlpaket oder aus dem Marktplatz, oft nur auf Englisch</span></span>
+          <span class="vs-cell vs-u"><span class="vs-topic" data-i18n="vs_t_notes">Gesprächsnotizen</span> <span class="vs-what" data-i18n="vs_u_notes">Notizen in der Sprache des Gesprächs, direkt im Deal</span> <span class="vs-yes" data-i18n="vs_yes">eingebaut</span></span>
+        </button>
+        <button type="button" class="vs-row" data-topic="list" aria-pressed="false" aria-controls="vs-detail">
+          <span class="vs-cell vs-o"><span class="vs-topic" data-i18n="vs_t_list">Eigene Liste</span> <span class="vs-what" data-i18n="vs_o_list">Eigene Objekte oft erst im größten Paket</span></span>
+          <span class="vs-cell vs-u"><span class="vs-topic" data-i18n="vs_t_list">Eigene Liste</span> <span class="vs-what" data-i18n="vs_u_list">Eine eigene Liste mit eigenen Feldern, mit Deals verknüpft</span> <span class="vs-yes" data-i18n="vs_yes">eingebaut</span></span>
+        </button>
+        <button type="button" class="vs-row" data-topic="handover" aria-pressed="false" aria-controls="vs-detail">
+          <span class="vs-cell vs-o"><span class="vs-topic" data-i18n="vs_t_handover">Nach dem Abschluss</span> <span class="vs-what" data-i18n="vs_o_handover">Onboarding als Zusatzmodul oder zweites Werkzeug</span></span>
+          <span class="vs-cell vs-u"><span class="vs-topic" data-i18n="vs_t_handover">Nach dem Abschluss</span> <span class="vs-what" data-i18n="vs_u_handover">Übergabe an die Upgrads Engine, der Stand kommt zurück</span> <span class="vs-yes" data-i18n="vs_yes">eingebaut</span></span>
+        </button>
+      </div>
+      <div class="vs-cell vs-o vs-end-cell"><p class="vs-hint" data-i18n="vs_hint">Eine Zeile antippen für die Einzelheiten.</p></div>
+      <div class="vs-cell vs-u vs-end-cell"><a class="vs-btn vs-btn-sky" href="#vs-ask" data-i18n="vs_request">Zugang anfragen</a></div>
+    </div>
+  </section>
+
+  <!-- What Upgrads is, and where the comparison comes from. -->
+  <section aria-label="Upgrads">
+    <div class="vs-wrap vs-intro-in">
+      <p class="vs-lead" data-i18n="vs_intro">Upgrads ist das CRM für Vertriebsteams, in dem Anfragen, Termine, Gesprächsnotizen und das Onboarding nach dem Abschluss an einem Ort zusammenkommen.</p>
+      <div><p class="vs-small" data-i18n="vs_note">Zugang nur auf Einladung, auf Deutsch und Englisch.</p><p class="vs-small" data-i18n="vs_source">Andere CRMs: nach den Hilfe- und Preisseiten großer Anbieter, Stand Oktober 2026.</p></div>
+    </div>
+  </section>
+
+  <!-- The open row in detail: what the others need, against what Upgrads does. -->
+  <section class="vs-sec vs-band" id="vs-detail" aria-labelledby="vs-detail-t">
+    <div class="vs-wrap">
+      <h2 class="vs-h2" id="vs-detail-t">Anfragen im Vergleich</h2>
+      <div class="vs-panel" data-panel="leads">
+        <div class="vs-card vs-card-o">
+          <p class="vs-card-h" data-i18n="vs_d_o">Übliche CRM-Plattformen</p>
+          <ul class="vs-list"><li data-i18n="vs_leads_o1">Eine Adresse für eingehende Anfragen fehlt oft, dann braucht es die Programmierschnittstelle.</li><li data-i18n="vs_leads_o2">Wo es sie gibt, steckt sie meist im Profi-Paket und nimmt nur Kontakte an, die es schon gibt.</li></ul>
+          <p class="vs-card-src" data-i18n="vs_source">Andere CRMs: nach den Hilfe- und Preisseiten großer Anbieter, Stand Oktober 2026.</p>
+        </div>
+        <div class="vs-card vs-card-u">
+          <p class="vs-card-h" data-i18n="vs_d_u">Upgrads</p>
+          <ul class="vs-list"><li data-i18n="vs_leads_u1">Jeder Arbeitsbereich hat eine eigene Adresse, beliefert von Make, Zapier, n8n oder dem eigenen Formular.</li><li data-i18n="vs_leads_u2">Neue Anfragen werden Kontakte, auf Wunsch gleich mit Deal. Eine bekannte E-Mail aktualisiert den Kontakt.</li><li data-i18n="vs_leads_u3">Das Protokoll zeigt, was ankam und welche Angaben fehlten.</li></ul>
+          <div class="vs-mini" aria-hidden="true">
+            <p class="vs-chrome"><span class="vs-dots"></span><span data-i18n="vs_app_recent">Letzte Leads</span></p>
+            <div class="vs-mini-in">
+              <p class="vs-log"><span class="vs-ok"></span><span data-i18n="vs_app_received">Lead empfangen</span><b>Mara Lindner</b><time data-i18n="vs_app_now">Gerade eben</time></p>
+              <p class="vs-log"><span class="vs-ok"></span><span data-i18n="vs_app_received">Lead empfangen</span><b>Kemal Kaya</b><time>09:12</time></p>
+              <p class="vs-log is-bad"><span class="vs-ok"></span><span data-i18n="vs_app_rejected">Abgelehnt</span><b></b><time>08:40</time></p>
+            </div>
+          </div>
+        </div>
+        <p class="vs-panel-next"><button type="button" class="vs-link" data-next data-i18n="vs_next">Nächster Unterschied</button></p>
+      </div>
+      <div class="vs-panel" data-panel="notes" hidden>
+        <div class="vs-card vs-card-o">
+          <p class="vs-card-h" data-i18n="vs_d_o">Übliche CRM-Plattformen</p>
+          <ul class="vs-list"><li data-i18n="vs_notes_o1">Der Notetaker steckt im Bezahlpaket oder kommt als App aus dem Marktplatz.</li><li data-i18n="vs_notes_o2">Abschriften gibt es oft nur auf Englisch.</li></ul>
+          <p class="vs-card-src" data-i18n="vs_source">Andere CRMs: nach den Hilfe- und Preisseiten großer Anbieter, Stand Oktober 2026.</p>
+        </div>
+        <div class="vs-card vs-card-u">
+          <p class="vs-card-h" data-i18n="vs_d_u">Upgrads</p>
+          <ul class="vs-list"><li data-i18n="vs_notes_u1">Beim Buchen ein Haken, und der Notetaker kommt mit ins Google Meet.</li><li data-i18n="vs_notes_u2">Er schreibt in der Sprache, in der gesprochen wurde.</li><li data-i18n="vs_notes_u3">Die Notiz steht danach im Deal: Zusammenfassung, Entscheidungen, Aufgaben, offene Fragen.</li></ul>
+          <div class="vs-mini" aria-hidden="true">
+            <p class="vs-chrome"><span class="vs-dots"></span><span data-i18n="vs_app_note">Notiz</span></p>
+            <div class="vs-mini-in">
+              <p class="vs-note-h"><b data-i18n="vs_app_note">Notiz</b><span data-i18n="vs_by_nt">von Notetaker</span></p>
+              <p class="vs-strong" data-i18n="vs_d_n_title">Erstgespräch Nordwerk</p>
+              <p data-i18n="vs_d_n_sum">Zwei Standorte, Start im Januar.</p>
+              <p class="vs-gap" data-i18n="vs_n_head">Aufgaben</p>
+              <p class="vs-li" data-i18n="vs_d_n_a1">Angebot schicken (Anna), bis Freitag</p>
+            </div>
+          </div>
+        </div>
+        <p class="vs-panel-next"><button type="button" class="vs-link" data-next data-i18n="vs_next">Nächster Unterschied</button></p>
+      </div>
+      <div class="vs-panel" data-panel="list" hidden>
+        <div class="vs-card vs-card-o">
+          <p class="vs-card-h" data-i18n="vs_d_o">Übliche CRM-Plattformen</p>
+          <ul class="vs-list"><li data-i18n="vs_list_o1">Eigene Objekte gibt es oft erst im größten Paket.</li><li data-i18n="vs_list_o2">Manche Anbieter haben gar keine, dann bleibt nur ein Feld mehr am Deal.</li></ul>
+          <p class="vs-card-src" data-i18n="vs_source">Andere CRMs: nach den Hilfe- und Preisseiten großer Anbieter, Stand Oktober 2026.</p>
+        </div>
+        <div class="vs-card vs-card-u">
+          <p class="vs-card-h" data-i18n="vs_d_u">Upgrads</p>
+          <ul class="vs-list"><li data-i18n="vs_list_u1">Eine eigene Liste mit eigenem Namen, etwa Immobilien oder Fahrzeuge.</li><li data-i18n="vs_list_u2">Eigene Felder, verknüpft mit Deals und Kontakten.</li></ul>
+          <div class="vs-mini" aria-hidden="true">
+            <p class="vs-chrome"><span class="vs-dots"></span><span data-i18n="vs_d_list">Immobilien</span></p>
+            <div class="vs-mini-in">
+              <p class="vs-strong">Lindenstraße 12</p>
+              <p class="vs-field"><span data-i18n="vs_d_city">Ort</span><b>Köln</b></p>
+              <p class="vs-field"><span data-i18n="vs_d_rooms">Zimmer</span><b>4</b></p>
+              <p class="vs-gap vs-lbl" data-i18n="vs_app_deals">Deals</p>
+              <p class="vs-link-row"><b>Familie Kaya</b><span class="vs-badge" data-i18n="vs_app_linked">Verknüpft</span></p>
+            </div>
+          </div>
+        </div>
+        <p class="vs-panel-next"><button type="button" class="vs-link" data-next data-i18n="vs_next">Nächster Unterschied</button></p>
+      </div>
+      <div class="vs-panel" data-panel="handover" hidden>
+        <div class="vs-card vs-card-o">
+          <p class="vs-card-h" data-i18n="vs_d_o">Übliche CRM-Plattformen</p>
+          <ul class="vs-list"><li data-i18n="vs_handover_o1">Nach dem Abschluss braucht es oft ein Zusatzmodul oder ein zweites Werkzeug.</li><li data-i18n="vs_handover_o2">Der Stand des Onboardings steht dann meist woanders.</li></ul>
+          <p class="vs-card-src" data-i18n="vs_source">Andere CRMs: nach den Hilfe- und Preisseiten großer Anbieter, Stand Oktober 2026.</p>
+        </div>
+        <div class="vs-card vs-card-u">
+          <p class="vs-card-h" data-i18n="vs_d_u">Upgrads</p>
+          <ul class="vs-list"><li data-i18n="vs_handover_u1">Ein gewonnener Deal geht an die Upgrads Engine.</li><li data-i18n="vs_handover_u2">Den Stand meldet die Engine zurück, vom versendeten Formular bis zum fertigen Briefing.</li><li data-i18n="vs_handover_u3">Was das Team eingetragen hat, überschreibt sie nicht.</li></ul>
+          <div class="vs-mini" aria-hidden="true">
+            <p class="vs-chrome"><span class="vs-dots"></span><span data-i18n="vs_app_onboarding">Onboarding</span></p>
+            <div class="vs-mini-in vs-onb">
+              <span class="vs-th" data-i18n="vs_app_customer">Kunde</span><span class="vs-th" data-i18n="vs_app_status">Engine-Status</span><span class="vs-th" data-i18n="vs_app_delivery">Webhook</span>
+              <b>Nordwerk GmbH</b><span class="vs-status" data-i18n="vs_app_briefing">Briefing fertig</span><span class="vs-badge" data-i18n="vs_app_delivered">Zugestellt</span>
+              <b>Familie Kaya</b><span class="vs-status" data-i18n="vs_app_form_done">Formular ausgefüllt</span><span class="vs-badge" data-i18n="vs_app_delivered">Zugestellt</span>
+            </div>
+          </div>
+        </div>
+        <p class="vs-panel-next"><button type="button" class="vs-link" data-next data-i18n="vs_next">Nächster Unterschied</button></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- What Upgrads leaves out on purpose. -->
+  <section class="vs-sec" aria-labelledby="vs-no-t">
+    <div class="vs-wrap">
+      <h2 class="vs-h2" id="vs-no-t" data-i18n="vs_no_t">Was Upgrads bewusst weglässt.</h2>
+      <div class="vs-no">
+        <div class="vs-no-i"><h3 class="vs-h3" data-i18n="vs_no1_t">Keine Mails aus dem CRM</h3><p data-i18n="vs_no1_d">Telefon, Mail und WhatsApp öffnen sich in den eigenen Apps. Einladungen zu Terminen kommen von Cal.com.</p></div>
+        <div class="vs-no-i"><h3 class="vs-h3" data-i18n="vs_no2_t">Kein Marktplatz voller Apps</h3><p data-i18n="vs_no2_d">Die vier Dinge oben sind eingebaut, nicht nachgerüstet.</p></div>
+        <div class="vs-no-i"><h3 class="vs-h3" data-i18n="vs_no3_t">Keine offene Anmeldung</h3><p data-i18n="vs_no3_d">Jeder Arbeitsbereich wird eingerichtet, die Rollen kommen per Einladungscode.</p></div>
+      </div>
+      <h2 class="vs-h2 vs-h2-next" id="vs-x-t" data-i18n="vs_x_t">Und was jedes CRM können muss, kann Upgrads auch.</h2>
+      <ul class="vs-days" aria-labelledby="vs-x-t">
+        <li data-i18n="vs_x1">Board mit Wert pro Phase, und Rückgängig</li>
+        <li data-i18n="vs_x2">Termine im Deal buchen, mit Warnung bei Überschneidung</li>
+        <li data-i18n="vs_x3">Aufgaben mit Projekten, Unteraufgaben und Uhrzeit</li>
+        <li data-i18n="vs_x4">Ein Kalender fürs Team, jede Person auf der eigenen Uhr</li>
+        <li data-i18n="vs_x5">Analysen: Abschlussquote, gewonnener Wert, Funnel</li>
+        <li data-i18n="vs_x6">Import aus CSV, Team-Chat, mehrere Arbeitsbereiche</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Questions about the comparison. -->
+  <section class="vs-sec vs-band" id="vs-faq" aria-labelledby="vs-q-t">
+    <div class="vs-wrap vs-faq-in">
+      <div>
+        <h2 class="vs-h2" id="vs-q-t" data-i18n="vs_q_t">Fragen zum Vergleich.</h2>
+        <p class="vs-sub"><span data-i18n="vs_q_d">Noch etwas offen? Das Team antwortet unter</span> <a class="vs-a vs-a-line" data-mail href="mailto:team@upgrads.de?subject=Anfrage%20zu%20Upgrads%20CRM">team@upgrads.de</a></p>
+      </div>
+      <div class="vs-faq">
+        <details class="vs-qa"><summary data-i18n="vs_q1_q">Woher stammen die Angaben zu anderen CRMs?</summary><p data-i18n="vs_q1_a">Aus den Hilfe- und Preisseiten großer CRM-Anbieter, Stand Oktober 2026. Pakete ändern sich, ein Blick in den eigenen Tarif lohnt sich.</p></details>
+        <details class="vs-qa"><summary data-i18n="vs_q2_q">Warum stehen keine Namen dabei?</summary><p data-i18n="vs_q2_a">Weil es um die Sache geht: was ein Vertriebsteam braucht und wo es das bekommt. Die Angaben gelten für große Anbieter, nicht für jeden einzelnen.</p></details>
+        <details class="vs-qa"><summary data-i18n="vs_q3_q">Sind Notetaker und Engine Teil des CRM?</summary><p data-i18n="vs_q3_a">Beide laufen als eigene Dienste neben dem CRM und sind fest angebunden. Der Notetaker zeichnet Termine in Google Meet auf, die Upgrads Engine führt das Onboarding nach dem Abschluss.</p></details>
+        <details class="vs-qa"><summary data-i18n="vs_q4_q">Für wen ist Upgrads gemacht?</summary><p data-i18n="vs_q4_a">Für Vertriebsteams, deren Anfragen über Formulare kommen, die Termine per Video führen und nach dem Abschluss ein Onboarding übergeben.</p></details>
+        <details class="vs-qa"><summary data-i18n="vs_q5_q">Wie kommt ein Team zu Upgrads?</summary><p data-i18n="vs_q5_a">Nur auf Einladung. Nach einer Anfrage richtet das Upgrads-Team den Arbeitsbereich ein, Einladungscodes legen die Rollen fest.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- The way in: a request into the team's CRM, or a mail. -->
+  <section class="vs-close" id="vs-ask" aria-labelledby="vs-c-t">
+    <div class="vs-wrap vs-close-in">
+      <div>
+        <h2 class="vs-h2" id="vs-c-t" data-i18n="vs_c_t">Selbst vergleichen, im eigenen Arbeitsbereich.</h2>
+        <p class="vs-sub" id="vs-c-d" data-i18n="vs_c_d_mail">Name und E-Mail genügen. Die Anfrage geht per Mail an das Upgrads-Team.</p>
+      </div>
+      <div class="vs-ask">
+        <form class="vs-ask-form" id="vs-ask-form" novalidate data-i18n-aria="vs_request" aria-label="Zugang anfragen">
+          <label class="vs-ask-f" for="vs-ask-name"><span data-i18n="vs_f_name">Name</span><input class="vs-ask-i" id="vs-ask-name" name="name" type="text" autocomplete="name" maxlength="120" required aria-describedby="vs-ask-err"></label>
+          <label class="vs-ask-f" for="vs-ask-email"><span data-i18n="vs_f_email">E-Mail</span><input class="vs-ask-i" id="vs-ask-email" name="email" type="email" autocomplete="email" maxlength="254" required aria-describedby="vs-ask-err"></label>
+          <label class="vs-ask-f" for="vs-ask-company"><span data-i18n="vs_f_company">Firma (optional)</span><input class="vs-ask-i" id="vs-ask-company" name="company" type="text" autocomplete="organization" maxlength="120"></label>
+          <div class="vs-trap" aria-hidden="true"><label for="vs-website">Website</label><input id="vs-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+          <p class="vs-err" id="vs-ask-err" data-i18n="vs_f_err" hidden>Bitte einen Namen und eine E-Mail-Adresse eintragen.</p>
+          <button type="submit" class="vs-btn" id="vs-ask-send" data-i18n="vs_f_send_mail">Per Mail senden</button>
+          <p class="vs-fine"><span data-i18n="vs_f_privacy">Die Angaben dienen nur dieser Anfrage.</span> <a class="vs-a vs-a-line" href="https://upgrads.de/datenschutz" target="_blank" rel="noopener" data-i18n="vs_privacy">Datenschutz</a></p>
+        </form>
+        <p class="vs-ask-done" id="vs-ask-done" tabindex="-1" aria-live="polite" hidden></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="vs-foot">
+  <div class="vs-wrap vs-foot-in">
+    <span data-i18n="vs_foot">Upgrads CRM für Vertriebsteams</span>
+    <span class="vs-foot-note" data-i18n="vs_fiction">Namen und Zahlen in den Bildschirmen sind erfunden.</span>
+    <nav class="vs-foot-nav" data-i18n-aria="vs_legal" aria-label="Rechtliches">
+      <a class="vs-a" href="https://upgrads.de/datenschutz" data-i18n="vs_privacy">Datenschutz</a>
+      <a class="vs-a" href="https://upgrads.de/impressum" data-i18n="vs_imprint">Impressum</a>
+      <a class="vs-a" data-mail href="mailto:team@upgrads.de?subject=Anfrage%20zu%20Upgrads%20CRM">team@upgrads.de</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

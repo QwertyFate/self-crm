@@ -77,7 +77,8 @@ server.js
   │           └─ handler: plain SQL via pool.query, always filtered on req.workspaceId
   ├─ GET /adminconsole   → public/admin.html
   ├─ GET /landingpage    → public/landingpage.html (public, no session; landing.css + js/landing.js)
-  ├─ GET /landingpagetwo → 301 to /landingpage (the old address of the design that became the landing page)
+  ├─ GET /landingpagetwo → public/landingpagetwo.html (public, no session; a second design to compare: landing-two.css + js/landing-two.js)
+  ├─ INTERNAL_TOOLS_PATH (the fixed secret path in server.js) → internal-tools/ (not part of the CRM: the team's separate tools, audio → Notetaker transcription; page + API only under that path; the ADMIN_SECRET's value as password on every request; no settings, no database)
   ├─ GET *               → public/index.html        (client-side "routing")
   └─ error handler       → 413 for entity.too.large, else 500 {error:'Internal server error'}
 ```

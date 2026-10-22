@@ -212,7 +212,8 @@ router.patch('/:id', (req, res, next) =>
         continue;                                                  // equal or different: the CRM's value stands
       }
       if (feld === 'email') {                                      // the CRM keeps one contact per email and workspace
-        const { rows: [taken] } = await pool.query('SELECT id FROM contacts WHERE workspace_id=$1 AND email=$2 AND id<>$3', [req.workspaceId, value, id]);
+        // case-blind: value is lowercased, but a contact saved by an edit before 2026-10-22 may hold capitals (DESIGN_PRO Part 49)
+        const { rows: [taken] } = await pool.query('SELECT id FROM contacts WHERE workspace_id=$1 AND lower(email)=$2 AND id<>$3', [req.workspaceId, value, id]);
         if (taken) { konflikte.push({ feld, crm: null, engine: value, grund: 'email_vergeben' }); continue; }
       }
       params.push(value);

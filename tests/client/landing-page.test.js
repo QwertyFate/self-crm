@@ -76,18 +76,18 @@ const dynamicPrefixes = [...new Set([...js.matchAll(/((?:mo|is)-[a-z0-9-]*)(?=\$
 const ids = new Set([...html.matchAll(/ id="([^"]+)"/g)].map(m => m[1]).concat([...js.matchAll(/ id="([^"$]+)"/g)].map(m => m[1])));
 
 describe('route', () => {
-  test('/landingpage serves public/landingpage.html; /landingpagetwo, its old address, redirects there for good; both before the SPA catch-all', () => {
+  test('/landingpage serves public/landingpage.html; /landingpagetwo serves the second design to compare (Part 41, its own suite: landing-page-two.test.js); both before the SPA catch-all', () => {
     const r1 = server.indexOf("app.get('/landingpage'"), r2 = server.indexOf("app.get('/landingpagetwo'"), catchAll = server.indexOf("app.get('*'") >= 0 ? server.indexOf("app.get('*'") : server.indexOf("app.get(/");
     assert.ok(r1 >= 0 && r2 > r1, 'route order');
     assert.match(server, /app\.get\('\/landingpage', \(req, res\) => res\.sendFile\(path\.join\(__dirname, 'public', 'landingpage\.html'\)\)\);/);
-    assert.match(server, /app\.get\('\/landingpagetwo', \(req, res\) => res\.redirect\(301, '\/landingpage'\)\);/);
+    assert.match(server, /app\.get\('\/landingpagetwo', \(req, res\) => res\.sendFile\(path\.join\(__dirname, 'public', 'landingpagetwo\.html'\)\)\);/);
     if (catchAll >= 0) assert.ok(r2 < catchAll, 'before the catch-all');
     assert.match(read('readmedev.md'), /GET \/landingpage    → public\/landingpage\.html/);
-    assert.match(read('readmedev.md'), /GET \/landingpagetwo → 301 to \/landingpage/);
-    assert.doesNotMatch(server, /landingpagetwo\.html|landing2\.css|landing2\.js/);
+    assert.match(read('readmedev.md'), /GET \/landingpagetwo → public\/landingpagetwo\.html/);
+    assert.doesNotMatch(server, /landing2\.css|landing2\.js/);
   });
-  test('the page that was here (the scroll film) is gone with its face; the second design\'s files are gone, it lives here now', () => {
-    for (const f of ['public/landingpagetwo.html', 'public/landing2.css', 'public/js/landing2.js', 'tests/client/landing-page-two.test.js', 'public/fonts/InstrumentSans.woff2', 'public/fonts/OFL-InstrumentSans.txt', 'public/fonts/Manrope.woff2', 'public/fonts/OFL-Manrope.txt']) assert.ok(!fs.existsSync(path.join(ROOT, f)), `${f} gone`);
+  test('the page that was here (the scroll film) is gone with its face; the earlier second design\'s files are gone, it lives here now (the new landingpagetwo.html of Part 41 is another page, prefix cv-)', () => {
+    for (const f of ['public/landing2.css', 'public/js/landing2.js', 'public/fonts/InstrumentSans.woff2', 'public/fonts/OFL-InstrumentSans.txt', 'public/fonts/Manrope.woff2', 'public/fonts/OFL-Manrope.txt']) assert.ok(!fs.existsSync(path.join(ROOT, f)), `${f} gone`);
     assert.doesNotMatch(html + css + js, /\blp-|LP_I18N|lpInit|Instrument Sans/, 'nothing of the film is left');
     assert.match(js, /^const MO_I18N = \{/m);
   });

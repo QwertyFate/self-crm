@@ -653,6 +653,11 @@
               <select id="analytics-value-field" class="form-control" style="width:100%"></select>
             </div>
             <div class="analytics-config-group" style="margin-top:20px">
+              <div class="analytics-config-label" data-i18n="html_currency">Currency</div>
+              <p class="text-xs text-muted" data-i18n="html_currency_hint">How money is shown in Analytics.</p>
+              <select id="analytics-currency" class="form-control" style="width:100%"></select>
+            </div>
+            <div class="analytics-config-group" style="margin-top:20px">
               <div class="analytics-config-label" style="color:#22c55e" data-i18n="html_won_stages">Won Stages</div>
               <div id="analytics-won-stages"></div>
             </div>
@@ -1158,7 +1163,7 @@
                 </div>
                 <div class="intg-field">
                   <select id="intg-assignee" class="form-control" onchange="saveIntegration(true)">
-                    <option value="" data-i18n="opt_assignee_self">Not set (assigned to yourself)</option>
+                    <option value="" data-i18n="opt_assignee_self">Nobody (left unassigned)</option>
                   </select>
                 </div>
               </div>
@@ -1530,11 +1535,12 @@
         <div class="modal-body" id="contact-modal-body">
           <div class="field"><label class="label" for="cf-name"><span data-i18n="lbl_name">Name</span> <span class="req">*</span></label><input type="text" id="cf-name" required /></div>
           <div class="field"><label class="label" for="cf-company" data-i18n="lbl_company">Company</label><input type="text" id="cf-company" /></div>
-          <div class="field"><label class="label" for="cf-email" data-i18n="lbl_email">Email</label><input type="email" id="cf-email" /></div>
+          <div class="field"><label class="label" for="cf-email" data-i18n="lbl_email">Email</label><input type="email" id="cf-email" aria-describedby="cf-error" /></div>
           <div class="field"><label class="label" for="cf-phone" data-i18n="lbl_phone">Phone</label><input type="tel" id="cf-phone" /></div>
           <div class="field"><label class="label" for="cf-stage" data-i18n="lbl_stage">Stage</label><select id="cf-stage"></select></div>
           <div class="field"><label class="label" for="cf-assignee" data-i18n="lbl_assignee">Assignee</label><select id="cf-assignee"></select></div>
           <div id="cf-custom-fields" class="col"></div>
+          <p class="error-text" id="cf-error" role="alert" hidden></p>
         </div>
         <div class="modal-foot">
           <button type="button" class="btn btn-secondary" onclick="closeModal('contact-modal')" data-i18n="btn_cancel">Cancel</button>

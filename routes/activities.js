@@ -136,7 +136,7 @@ router.get('/', async (req, res, next) => {
              c.name AS contact_name,
              a.deal_id AS bound_deal_id,
              COALESCE(db.id, d.id) AS deal_id, COALESCE(db.title, d.title) AS deal_title,
-             COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' END) AS logged_by_name, u.email AS logged_by_email
+             COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' WHEN a.source = 'notetaker' THEN 'Notetaker' END) AS logged_by_name, u.email AS logged_by_email
       FROM activities a
       LEFT JOIN contacts c ON c.id = a.contact_id
       LEFT JOIN users   u ON u.id = a.created_by
@@ -188,7 +188,7 @@ router.get('/:id', async (req, res, next) => {
       SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
              a.completed, a.source, a.cancelled_at, a.calcom_uid, a.calcom_event_type_id,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
-             COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' END) AS logged_by_name, u.email AS logged_by_email
+             COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' WHEN a.source = 'notetaker' THEN 'Notetaker' END) AS logged_by_name, u.email AS logged_by_email
       FROM activities a
       LEFT JOIN users u ON u.id = a.created_by
       WHERE a.id = $1 AND a.workspace_id = $2

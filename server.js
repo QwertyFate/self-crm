@@ -22,7 +22,8 @@
    6. routes              every /api/* mount, one line each. The ONLY place
                           that knows the full URL map.
    7. /adminconsole       serves public/admin.html; /landingpage serves public/landingpage.html;
-      /landingpagetwo redirects there (its old address, from before it became the landing page).
+      /landingpagetwo serves public/landingpagetwo.html, a second design to compare (Part 41).
+      INTERNAL_TOOLS_PATH (a fixed secret path) mounts internal-tools/, the team's separate tools.
    8. catch-all GET *     serves public/index.html, which is why the client can
                           have "pages" without any URL routing.
    9. error handler       entity.too.large → 413 with a readable message,
@@ -52,6 +53,7 @@ const helmet     = require('helmet');
 const { rateLimit } = require('express-rate-limit');
 const { pool, initDb } = require('./db');
 const engine     = require('./utils/engine');   // outgoing Engine webhooks: the retry worker is started after initDb()
+const integrations = require('./routes/integrations');   // the Cal.com and Notetaker routes; the Notetaker's link watch is started after initDb()
 
 const app        = express();
 const httpServer = http.createServer(app);
@@ -113,11 +115,14 @@ const webhookIpLimiter = rateLimit({
   message: { error: 'Too many webhook requests from this IP. Please slow down.' },
   standardHeaders: true, legacyHeaders: false,
 });
+// Keyed by the path below the mount ("/<key>"), like the two receivers below: mounted with app.use, the limiter runs
+// before the router has matched ":key", so req.params.key was always undefined and every workspace shared one bucket
+// (fixed 2026-10-22, tests/unit/webhook-key-limiter.test.js).
 const webhookKeyLimiter = rateLimit({
   windowMs: 60 * 1000, max: 120,
   message: { error: 'Webhook rate limit exceeded. Maximum 120 requests per minute per key.' },
   standardHeaders: true, legacyHeaders: false,
-  keyGenerator: (req) => req.params.key || 'unknown',
+  keyGenerator: (req) => req.path || 'unknown',
 });
 // Cal.com's booking receiver: the same two limits, the second keyed by the receive token in the path.
 const calcomTokenLimiter = rateLimit({
@@ -125,6 +130,21 @@ const calcomTokenLimiter = rateLimit({
   message: { error: 'Webhook rate limit exceeded. Maximum 120 requests per minute per receiver.' },
   standardHeaders: true, legacyHeaders: false,
   keyGenerator: (req) => req.path || 'unknown',
+});
+// The Notetaker's result link (routes/notetaker.js): one secret link per recorded meeting, keyed by the path like
+// Cal.com's receiver; the Notetaker retries a result five times at most, so 30 a minute is plenty.
+const notetakerLinkLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 30,
+  message: { error: 'Too many deliveries for this recording.' },
+  standardHeaders: true, legacyHeaders: false,
+  keyGenerator: (req) => req.path || 'unknown',
+});
+// The landing page's request form (routes/landing.js): a person asks once or twice; five a quarter hour per
+// address is room for typos and too little for a flood of fake leads in the team's CRM.
+const landingAskLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 5,
+  message: { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true, legacyHeaders: false,
 });
 // Onboarding Engine API (/api/kunden): 300 requests per minute per IP. The number is
 // published to the Engine team in ENGINE_INTEGRATION.md; the body is the Engine's error
@@ -151,6 +171,9 @@ app.use('/api/contacts/import', express.json({ limit: '10mb' }));
 // keeps the bytes for routes/integrations.js to verify; the global json() below skips a body
 // that was already read.
 app.use('/api/integrations/calcom/receive', express.raw({ type: '*/*', limit: '1mb' }));
+// The Notetaker's result is signed over the raw body (X-Notetaker-Signature) and carries the whole transcript,
+// so this path keeps the bytes and allows more than json()'s 100kb.
+app.use('/api/notetaker/webhook', express.raw({ type: '*/*', limit: '5mb' }));
 app.use(express.json());
 // Engine API paths: a malformed or oversized body is a body-parser error BEFORE the routers run.
 // Answer the Engine's { fehler } shape (400 / 413) instead of the browser's { error } — and never a crash.
@@ -158,6 +181,12 @@ const engineGate = require('./middleware/engine-gate');
 const engineRequestLog = require('./middleware/engine-request-log');
 app.use('/api/kunden',    engineGate.engineBodyErrors);
 app.use('/api/dokumente', engineGate.engineBodyErrors);
+
+// The internal team's tools: a separate little app (internal-tools/), not part of the CRM, at one fixed secret path that
+// nothing links to. Its page and API live only under it; the ADMIN_SECRET's value is its password, sent with every
+// request. Mounted before the session, so it never reads or writes the CRM's sessions (or their database table).
+const INTERNAL_TOOLS_PATH = '/abec51839ff2263df763d138';
+app.use(INTERNAL_TOOLS_PATH, require('./internal-tools'));
 
 const sessionMiddleware = session({
   store: new pgSession({ pool, createTableIfMissing: true }),
@@ -213,7 +242,11 @@ app.use('/api/break-scores', require('./routes/break-scores'));   // the break's
 app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations/calcom/receive', webhookIpLimiter, calcomTokenLimiter);
-app.use('/api/integrations',  require('./routes/integrations'));
+app.use('/api/integrations',  integrations);
+app.use('/api/notetaker/webhook', webhookIpLimiter, notetakerLinkLimiter);
+app.use('/api/notetaker',     require('./routes/notetaker'));   // PUBLIC: the Notetaker's result for one meeting, by its secret link
+app.use('/api/landing/ask', landingAskLimiter);
+app.use('/api/landing',       require('./routes/landing'));   // PUBLIC: the landing page's request form becomes a lead in the team's CRM
 app.use('/api/engine',        require('./routes/engine'));
 // Onboarding Engine API: API-key auth (no session), German error shape, rate-limited.
 app.use('/api/kunden',        engineRequestLog);                                 // every call is logged (admin Engine Monitor)
@@ -228,8 +261,8 @@ app.use('/api/dokumente',     require('./routes/engine-dokumente'));   // GET /:
 app.get('/adminconsole', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 // The public landing page: a standalone document (landingpage.html + landing.css + js/landing.js), no session.
 app.get('/landingpage', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landingpage.html')));
-// The old address of the design that became the landing page: shared links land on the page, not on the app's catch-all.
-app.get('/landingpagetwo', (req, res) => res.redirect(301, '/landingpage'));
+// A second landing page to compare with the first (landingpagetwo.html + landing-two.css + js/landing-two.js), no session.
+app.get('/landingpagetwo', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landingpagetwo.html')));
 
 // The client files' fingerprint. Every open tab asks for it (and hears it on each socket connect)
 // and reloads itself when it changes, so a deploy reaches people without a manual refresh.
@@ -341,5 +374,8 @@ initDb()
     // ~24 h) and so survives restarts. ENGINE_RETRY_WORKER=0 disables it, e.g. on a second
     // instance that should not compete for the same rows.
     if (process.env.ENGINE_RETRY_WORKER !== '0') engine.startRetryWorker();
+    // Requests for the Notetaker whose Google Meet link has not come: asks Cal.com for it every 20 seconds
+    // (routes/integrations.js, NOTETAKER_CHANGES Part 4), so a CRM that Cal.com's webhook cannot reach still sends the bot.
+    integrations.startNotetakerLinkWatch();
   })
   .catch(err => { console.error('Database init failed:', err); process.exit(1); });

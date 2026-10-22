@@ -56,6 +56,7 @@
      POST  /calcom/cancel              cancel a booked meeting at Cal.com and mark the entry (everyone)
      POST  /calcom/reschedule          move a booked meeting to a new slot at Cal.com and on the entry (everyone)
      POST  /calcom/receive/:token      PUBLIC: Cal.com's booking webhook, signed
+     GET   /notetaker/health           is the Notetaker there and does it accept the token (everyone; 15 s cache, ?fresh=1)
 
    TELLING THE ASSIGNEE (Part 12)  every booked, moved or cancelled meeting is announced to the
      assignee of the deal, else of the contact, as one bell notification (calTellAssignee): from
@@ -72,6 +73,7 @@ const requireAuth = require('../middleware/auth');
 const engine      = require('../utils/engine');            // "a lead comes in" → kunde.angelegt / kunde.aktualisiert
 const { masterDataChanges } = require('../utils/kunde');
 const calcom      = require('../utils/calcom');            // the Cal.com client and the sealing of its key
+const notetaker   = require('../utils/notetaker');         // the Notetaker recording bot for Google Meet (2026-10-20)
 const baseUrl     = require('../utils/base-url');          // the public origin Cal.com must reach for the booking webhook
 const { notifyUser } = require('../notifications');         // the assignee of a deal or a contact is told of a meeting (Part 12)
 
@@ -590,9 +592,10 @@ async function calContactFor(wid, b, conn) {
     const { rows: [c] } = await pool.query('SELECT id, name FROM contacts WHERE id=$1 AND workspace_id=$2', [b.contactId, wid]);
     if (c) return { contact: c, createdContact: false, createdDealId: null };
   }
-  const email = b.attendee?.email || null;
+  const email = b.attendee?.email || null;   // lower-cased by calcom.parseBooking
   if (email) {
-    const { rows: [c] } = await pool.query('SELECT id, name FROM contacts WHERE workspace_id=$1 AND email=$2', [wid, email]);
+    // case-blind: a contact saved by an edit before 2026-10-22 may hold capitals (DESIGN_PRO Part 50)
+    const { rows: [c] } = await pool.query('SELECT id, name FROM contacts WHERE workspace_id=$1 AND lower(email)=$2', [wid, email]);
     if (c) return { contact: c, createdContact: false, createdDealId: null };
   }
   const { rows: [wh] } = await pool.query('SELECT pipeline_id, stage_id, default_assignee_id FROM workspace_webhook WHERE workspace_id=$1', [wid]);
@@ -633,6 +636,163 @@ router.get('/calcom/logs', requireAuth, async (req, res, next) => {
     );
     res.json({ logs: rows });
   } catch (err) { next(err); }
+});
+
+// ═══ The Notetaker: the recording bot for Google Meet (2026-10-20) ═══════════════
+// "Mit Notetaker aufzeichnen" in the booking dialog leaves a row in notetaker_recordings for the meeting. The bot is
+// sent (utils/notetaker.js) the first time the meeting's Google Meet link is known: in Cal.com's answer to the
+// booking, else when the BOOKING_CREATED webhook brings it. It is sent again when the meeting moves or gets another
+// link, under the same external_id, so the service updates its job; a redelivery that changes nothing sends
+// nothing; a cancelled meeting is never sent; a failed send is tried again on the next delivery. Nothing here ever
+// fails a booking or a webhook: a problem is kept on the row and answered as status 'failed'.
+// The way back (Part 2): every request carries the meeting's own secret result link as callback_url; the Notetaker
+// sends the notes there when the meeting is over (routes/notetaker.js writes them on the deal). A meeting whose
+// result has come (finished_at) is never sent again. A row from before the link gets one on its next sync, and is
+// sent again so the Notetaker's job learns it.
+const NOTETAKER_SENT = ['scheduled', 'queued', 'updated', 'duplicate'];
+const isMeetLocation = loc => !!loc && loc.type === 'integration' && /^google[-:]?meet$/i.test(String(loc.integration || ''));
+async function notetakerSync(wid, activityId) {
+  const { rows: [r] } = await pool.query(
+    `SELECT n.id, n.external_id, n.meeting_url, n.join_at, n.status, n.job_id, n.language, n.requested_by, n.callback_token, n.finished_at,
+            a.content, a.event_date, a.event_time, a.event_tz, a.deal_id, a.contact_id, a.cancelled_at
+     FROM notetaker_recordings n JOIN activities a ON a.id = n.activity_id AND a.workspace_id = n.workspace_id
+     WHERE n.workspace_id = $1 AND n.activity_id = $2`,
+    [wid, activityId]
+  );
+  if (!r) return null;
+  const now = { status: r.status, job_id: r.job_id };
+  if (r.cancelled_at || r.finished_at) return now;                     // cancelled, or the result has already come
+  const url = notetaker.meetUrlOf(calcom.meetingLinkOf(r.content));
+  if (!url) return now;                                                  // waiting for Cal.com's link
+  const utc = calcom.utcFromWallClock(r.event_date, r.event_time, r.event_tz);
+  const joinAt = utc ? notetaker.isoWithOffset(utc, r.event_tz) : null;
+  if (!joinAt) {   // never a silent wait: the request says why it cannot go (Part 4)
+    const error = 'The meeting has no start time the Notetaker can use';
+    await pool.query('UPDATE notetaker_recordings SET status=$1, error=$2, updated_at=NOW() WHERE id=$3', ['failed', error, r.id]);
+    return { status: 'failed', job_id: r.job_id, error };
+  }
+  if (NOTETAKER_SENT.includes(r.status) && r.meeting_url === url && r.join_at === joinAt && r.callback_token) return now;   // nothing changed since the last send
+  // the result link: the row's own; a row from before Part 2 gets one here (atomically, so two syncs agree on it)
+  const callbackToken = r.callback_token || (await pool.query(
+    'UPDATE notetaker_recordings SET callback_token = COALESCE(callback_token, $1) WHERE id = $2 RETURNING callback_token',
+    [notetaker.newCallbackToken(), r.id]
+  )).rows[0]?.callback_token;
+  if (!callbackToken) return now;
+  const metadata = { workspace_id: String(wid), activity_id: String(activityId) };
+  if (r.deal_id) metadata.deal_id = String(r.deal_id);
+  if (r.contact_id) metadata.contact_id = String(r.contact_id);
+  if (r.requested_by) metadata.user_id = String(r.requested_by);
+  const result = await notetaker.send(notetaker.payload({ meetingUrl: url, joinAt, externalId: r.external_id, metadata, language: r.language, callbackToken }));
+  await pool.query(
+    'UPDATE notetaker_recordings SET meeting_url=$1, join_at=$2, status=$3, job_id=COALESCE($4, job_id), http_status=$5, error=$6, sent_at=NOW(), updated_at=NOW() WHERE id=$7',
+    [url, joinAt, result.status, result.job_id, result.http, result.error || null, r.id]
+  );
+  return { status: result.status, job_id: result.job_id || r.job_id, error: result.error || null };
+}
+async function notetakerSafe(wid, activityId) {
+  try { return await notetakerSync(wid, activityId); }
+  catch (err) { console.error('Notetaker error:', err); return { status: 'failed', job_id: null, error: 'The Notetaker request could not be kept' }; }
+}
+// The box ticked at booking: remember it with the meeting and its result link, then send if the Meet link is already there.
+async function notetakerRequest(wid, activityId, userId, language) {
+  try {
+    await pool.query(
+      'INSERT INTO notetaker_recordings (workspace_id, activity_id, requested_by, external_id, language, callback_token) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (activity_id) DO NOTHING',
+      [wid, activityId, userId, notetaker.externalIdFor(activityId), language === 'en' ? 'en' : 'de', notetaker.newCallbackToken()]
+    );
+  } catch (err) { console.error('Notetaker error:', err); return { status: 'failed', job_id: null, error: 'The Notetaker request could not be kept' }; }
+  return notetakerSafe(wid, activityId);
+}
+// ── The Meet link, fetched (Part 4) ──
+// Cal.com often answers a Google Meet booking with the app's name only and creates the Meet a moment later; its
+// webhook would bring the link, but a CRM that Cal.com cannot reach (on localhost, say) never hears it. So a request
+// still waiting is looked after here: if its entry already holds the Meet link, it is simply sent; otherwise Cal.com
+// is asked for the booking (GET /v2/bookings/:uid) and, once `location` holds the Meet link, the link is written into
+// the entry (as the webhook would) and the bot is sent. Without a link past the start (the Notetaker takes a start up
+// to 30 minutes ago) the request stops waiting and says why; with the link, the Notetaker's own answer says it.
+// A send that failed because the Notetaker could not be reached (no HTTP answer) is tried again here too, until the
+// meeting starts; then it is left as it is (http_status cleared, so it is not picked up again). Only requests of the last three days, twenty per tick, cancelled
+// meetings left alone. Never throws; answers what became of each request.
+const NT_LINK_LATE_MS = 30 * 60 * 1000;
+async function notetakerLinkTick({ now = Date.now(), limit = 20 } = {}) {
+  const { rows } = await pool.query(
+    `SELECT n.id, n.workspace_id, n.activity_id, n.status, a.content, a.calcom_uid, a.event_date, a.event_time, a.event_tz, c.api_key_sealed
+       FROM notetaker_recordings n
+       JOIN activities a ON a.id = n.activity_id AND a.workspace_id = n.workspace_id
+       LEFT JOIN workspace_calcom c ON c.workspace_id = n.workspace_id
+      WHERE (n.status = 'waiting_link' OR (n.status = 'failed' AND n.http_status = 0))
+        AND n.finished_at IS NULL AND a.cancelled_at IS NULL AND a.calcom_uid IS NOT NULL
+        AND n.created_at > NOW() - INTERVAL '3 days'
+      ORDER BY n.id LIMIT $1`,
+    [limit]
+  );
+  const out = [];
+  for (const r of rows) {
+    try {
+      if (r.status === 'failed') {   // the Notetaker was not reachable: again, until the meeting starts
+        const start = calcom.utcFromWallClock(r.event_date, r.event_time, r.event_tz);
+        if (!start || Date.parse(start) < now) {
+          await pool.query("UPDATE notetaker_recordings SET http_status=NULL, updated_at=NOW() WHERE id=$1 AND status='failed'", [r.id]);
+          out.push({ id: r.id, status: 'failed' });
+          continue;
+        }
+      } else if (!notetaker.meetUrlOf(calcom.meetingLinkOf(r.content))) {   // with the link in the entry the sync decides (the Notetaker judges a late start)
+        const start = calcom.utcFromWallClock(r.event_date, r.event_time, r.event_tz);
+        if (start && Date.parse(start) < now - NT_LINK_LATE_MS) {
+          await pool.query("UPDATE notetaker_recordings SET status='failed', error=$1, updated_at=NOW() WHERE id=$2 AND status='waiting_link'", ['The Google Meet link never arrived from Cal.com', r.id]);
+          out.push({ id: r.id, status: 'failed' });
+          continue;
+        }
+        if (!r.api_key_sealed) { out.push({ id: r.id, status: 'waiting_link' }); continue; }
+        const b = await calcom.getBooking(calcom.openKey(r.api_key_sealed), r.calcom_uid);
+        const url = notetaker.meetUrlOf(b.meetingUrl);
+        if (!url) { out.push({ id: r.id, status: 'waiting_link' }); continue; }
+        await pool.query('UPDATE activities SET content=$1 WHERE id=$2 AND workspace_id=$3 AND content=$4', [`${String(r.content || '').split('\n')[0]}\n${url}`, r.activity_id, r.workspace_id, r.content]);
+      }
+      const res = await notetakerSafe(r.workspace_id, r.activity_id);
+      out.push({ id: r.id, status: res ? res.status : null });
+    } catch (err) {
+      console.error('Notetaker link watch:', err?.message || err);
+      out.push({ id: r.id, status: 'waiting_link' });
+    }
+  }
+  return out;
+}
+// Started once by server.js after initDb(), like the Engine's retry worker: a tick at once (catching up after a
+// restart), then every 20 seconds; a tick still running is not overlapped; unref'd, so it never holds the process.
+let ntLinkWatch = null;
+function startNotetakerLinkWatch({ intervalMs = 20000, log = console } = {}) {
+  if (ntLinkWatch) return ntLinkWatch;
+  let busy = false;
+  const tick = async () => {
+    if (busy) return;
+    busy = true;
+    try { await notetakerLinkTick(); }
+    catch (err) { log.error('Notetaker link watch:', err?.message || err); }
+    finally { busy = false; }
+  };
+  const timer = setInterval(tick, intervalMs);
+  if (typeof timer.unref === 'function') timer.unref();
+  ntLinkWatch = { tick, stop() { clearInterval(timer); ntLinkWatch = null; } };
+  tick();
+  return ntLinkWatch;
+}
+
+// Is the Notetaker there? (Part 3) Asked by the booking dialog before it offers the box (any member). The answer is
+// kept for 15 seconds, so opening dialogs does not hammer the Notetaker; ?fresh=1 ("Check again") asks at once.
+// { available: true } or { available: false, reason: unreachable | token | error }. Never fails.
+const NT_HEALTH_TTL_MS = 15000;
+let ntHealth = null;   // { at, result }
+router.get('/notetaker/health', requireAuth, async (req, res) => {
+  try {
+    if (req.query.fresh !== '1' && ntHealth && Date.now() - ntHealth.at < NT_HEALTH_TTL_MS) return res.json(ntHealth.result);
+    const result = await notetaker.health();
+    ntHealth = { at: Date.now(), result };
+    res.json(result);
+  } catch (err) {
+    console.error('Notetaker health error:', err);
+    res.json({ available: false, reason: 'error' });
+  }
 });
 
 router.post('/calcom/receive/:token', async (req, res) => {
@@ -678,6 +838,8 @@ router.post('/calcom/receive/:token', async (req, res) => {
         captured.rescheduled_from = b.rescheduleUid || b.uid;
         // the old uid still stood, so the move happened on Cal.com's page (the CRM's own move renames the row first)
         captured.told = await calTellAssignee(wid, null, { kind: 'moved', dealId: row.deal_id, contactId: row.contact_id, title: a.content, start: b.start, url: b.meetingUrl, location: b.location });
+        const nt = await notetakerSafe(wid, row.id);   // the bot gets the new time (and link), under the same external_id
+        if (nt) captured.notetaker = nt;
         await calLog(wid, 'success', body, captured, row.contact_id, row.deal_id, null);
         return res.json({ success: true, trigger: b.trigger, activity_id: row.id, contact_id: row.contact_id, deal_id: row.deal_id });
       }
@@ -704,6 +866,8 @@ router.post('/calcom/receive/:token', async (req, res) => {
     // a NEW row (xmax = 0: inserted, not updated) is a booking made on Cal.com's page; one the CRM
     // booked itself already told the assignee from /calcom/book and only gets its link filled in here
     if (row.inserted) captured.told = await calTellAssignee(wid, null, { kind: 'booked', dealId, contactId: contact.id, title: a.content, start: b.start, url: b.meetingUrl, location: b.location });
+    const nt = await notetakerSafe(wid, row.id);   // a Meet link that only arrives now sends the bot that was asked for at booking
+    if (nt) captured.notetaker = nt;
     await calLog(wid, 'success', body, captured, contact.id, dealId, null);
     res.json({ success: true, trigger: b.trigger, activity_id: row.id, contact_id: contact.id, deal_id: dealId, created_contact: createdContact, created_deal: !!createdDealId });
   } catch (err) {
@@ -793,6 +957,8 @@ router.post('/calcom/book', requireAuth, async (req, res, next) => {
       location = calcom.bookingLocationFor(type.locations, body.location);
       if (!location) return res.status(400).json({ error: 'Choose one of the event type\'s locations' });
     }
+    // the Notetaker records Google Meet meetings only; asked for anywhere else, nothing is booked
+    if (body.record === true && !isMeetLocation(location)) return res.status(400).json({ error: 'The Notetaker records Google Meet meetings only' });
     // the assignee of the deal (else of the contact) rides along as a guest: Cal.com sends them the
     // invitation with the meeting link, so it is in their calendar; not when they are the host (already
     // there), the attendee, or have no email
@@ -837,13 +1003,16 @@ router.post('/calcom/book', requireAuth, async (req, res, next) => {
       [wid, contact.id, deal?.id || null, a.content, req.userId, a.event_date, a.event_time, a.event_tz, booking.uid, type.id]
     );
     const told = await calTellAssignee(wid, req.userId, { kind: 'booked', dealId: deal?.id || null, contactId: contact.id, title: a.content, start: booking.start || start, url: booking.meetingUrl, location: booking.location });
+    // the box in the dialog: remembered with the meeting, the bot sent as soon as the Meet link is known
+    const notetakerResult = body.record === true ? await notetakerRequest(wid, act.id, req.userId, language) : null;
     const guests = guest && !guestDropped ? [{ name: guest.name, email: guest.email }] : [];
-    const captured = { trigger: 'BOOKED_FROM_CRM', uid: booking.uid, title: a.content, event_date: a.event_date, event_time: a.event_time, event_tz: a.event_tz, attendee: contact.email, contact_id: contact.id, deal_id: deal?.id || null, booked_by: req.userId, guest: guest ? guest.email : null, guest_dropped: guestDropped, told };
+    const captured = { trigger: 'BOOKED_FROM_CRM', uid: booking.uid, title: a.content, event_date: a.event_date, event_time: a.event_time, event_tz: a.event_tz, attendee: contact.email, contact_id: contact.id, deal_id: deal?.id || null, booked_by: req.userId, guest: guest ? guest.email : null, guest_dropped: guestDropped, told, ...(notetakerResult ? { notetaker: notetakerResult } : {}) };
     await calLog(wid, 'success', { booking, request: { start, event_type_id: type.id, deal_id: deal?.id || null, contact_id: contact.id } }, captured, contact.id, deal?.id || null, null);
     res.status(201).json({
       activity: { id: act.id, type: 'meeting', content: a.content, event_date: a.event_date, event_time: a.event_time, event_tz: a.event_tz, contact_id: contact.id, deal_id: deal?.id || null, calcom_uid: booking.uid, calcom_event_type_id: type.id, source: 'calcom', created_by: req.userId },
       booking: { uid: booking.uid, title: booking.title, start: booking.start, end: booking.end, status: booking.status, location: booking.location, meeting_url: booking.meetingUrl, guests },
       told,
+      notetaker: notetakerResult,
     });
   } catch (err) { next(err); }
 });
@@ -917,14 +1086,19 @@ router.post('/calcom/reschedule', requireAuth, async (req, res, next) => {
       [booking.uid, act.content, act.event_date, act.event_time, act.event_tz, booking.eventTypeId, a.id, wid]
     );
     const told = await calTellAssignee(wid, req.userId, { kind: 'moved', dealId: a.deal_id, contactId: a.contact_id, title: act.content, start: booking.start || start, url: booking.meetingUrl || calcom.meetingLinkOf(a.content), location: booking.location });
+    const notetakerResult = await notetakerSafe(wid, a.id);   // a recorded meeting tells the bot its new time (and link)
     await calLog(wid, 'success', { booking, request: { activity_id: a.id, start, reason: reason || null } }, { trigger: 'RESCHEDULED_FROM_CRM', uid: booking.uid, rescheduled_from: a.calcom_uid, title: act.content, event_date: act.event_date, event_time: act.event_time, event_tz: act.event_tz, rescheduled_by: req.userId, contact_id: a.contact_id, deal_id: a.deal_id, told }, a.contact_id, a.deal_id, null);
     res.json({
       success: true,
       activity: { id: a.id, type: 'meeting', content: act.content, event_date: act.event_date, event_time: act.event_time, event_tz: act.event_tz, contact_id: a.contact_id, deal_id: a.deal_id, calcom_uid: booking.uid, calcom_event_type_id: booking.eventTypeId || a.calcom_event_type_id, source: 'calcom', cancelled_at: null },
       booking: { uid: booking.uid, rescheduled_from: a.calcom_uid, title: booking.title, start: booking.start, end: booking.end, status: booking.status, location: booking.location, meeting_url: booking.meetingUrl },
       told,
+      notetaker: notetakerResult,
     });
   } catch (err) { next(err); }
 });
 
+// server.js starts the link watch; the suite drives a tick by hand
+router.notetakerLinkTick = notetakerLinkTick;
+router.startNotetakerLinkWatch = startNotetakerLinkWatch;
 module.exports = router;

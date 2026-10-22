@@ -24,7 +24,9 @@
      meaningful together with a workspace.
        login  → one membership  : straight in
               → several         : showWorkspacePicker() → selectWorkspace()
-       inside : switchWorkspace() → POST /api/auth/switch-workspace → reload
+       inside : switchWorkspace() → POST /api/auth/switch-workspace → the new workspace's
+                state in place (no reload); the chat's connection is closed and opened again,
+                because the server joins a connection to a workspace when it connects
 
    resetClientState() PUTS THE TAB BACK TO BOOT STATE — stops pollers and the
    socket, clears every workspace-scoped global and the per-workspace
@@ -347,9 +349,16 @@ async function switchWorkspace(workspaceId) {
   const data = await api.post('/api/auth/switch-workspace', { workspace_id: workspaceId });
   if (data.error) { alert(data.error); return; }
   currentWorkspace = data.workspace;
-  // Users are per-workspace rows, so both the id and the role change on switch.
+  // Users are per-workspace rows, so the id, the role and the notification preferences change on switch.
   if (currentUser && data.role)    currentUser.role = data.role;
   if (currentUser && data.user_id) currentUser.id   = data.user_id;
+  if (currentUser) currentUser.notification_prefs = data.notification_prefs || {};
+  // The chat's connection was joined to the old workspace when it connected (server.js reads the session at the
+  // handshake). Close it, start the chat over for this workspace, and connect again, now as the new workspace.
+  if (socket) { socket.disconnect(); socket = null; }
+  onlineUsers = []; chatOldestId = null; chatNewestId = null; chatPageOpen = false; chatLoadingMore = false;
+  initChatSocket();
+  refreshChatBadge();
   kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = data.workspace.contact_columns || [];
   objectColumns    = data.workspace.object_columns  || [];

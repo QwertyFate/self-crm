@@ -42,7 +42,10 @@ const pool = {
     state.calls.push({ sql: q, params });
     if (q.startsWith('SELECT * FROM workspace_calcom WHERE receive_token=$1')) return { rows: params[0] === TOKEN ? [CONN] : [] };
     if (q.startsWith('SELECT id, name FROM contacts WHERE id=$1 AND workspace_id=$2')) return { rows: state.contacts.filter(c => c.id === params[0] && c.workspace_id === params[1]) };
+    // like Postgres: "email=$2" compares exactly, "lower(email)=$2" ignores case (a contact saved by an edit before
+    // 2026-10-22 can hold capitals)
     if (q.startsWith('SELECT id, name FROM contacts WHERE workspace_id=$1 AND email=$2')) return { rows: state.contacts.filter(c => c.workspace_id === params[0] && c.email === params[1]) };
+    if (q.startsWith('SELECT id, name FROM contacts WHERE workspace_id=$1 AND lower(email)=$2')) return { rows: state.contacts.filter(c => c.workspace_id === params[0] && String(c.email || '').toLowerCase() === params[1]) };
     if (q.startsWith('SELECT pipeline_id, stage_id, default_assignee_id FROM workspace_webhook')) return { rows: state.webhook ? [state.webhook] : [] };
     if (q.startsWith('INSERT INTO contacts')) { const c = { id: state.nextId++, workspace_id: params[0], name: params[1], email: params[2], assigned_to: params[3] }; state.contacts.push(c); return { rows: [{ id: c.id, name: c.name }] }; }
     if (q.startsWith('SELECT id FROM pipelines WHERE workspace_id=$1')) return { rows: state.pipelines.filter(p => p.workspace_id === params[0]).slice(0, 1) };
@@ -169,10 +172,19 @@ describe('BOOKING_CREATED', () => {
     const [raw, h] = signed(withPayload({ metadata: { upgrads_contact_id: 5, upgrads_deal_id: 12 }, attendees: [{ email: 'other@example.de', name: 'Other' }] }));
     const r = await srv.post(TOKEN, raw, h);
     assert.equal(r.body.contact_id, 5); assert.equal(r.body.deal_id, 12); assert.equal(r.body.created_contact, false);
-    assert.equal(state.calls.filter(c => c.sql.startsWith('SELECT id, name FROM contacts WHERE workspace_id=$1 AND email=$2')).length, 0, 'no email lookup when our metadata says who');
+    assert.equal(state.calls.filter(c => /^SELECT id, name FROM contacts WHERE workspace_id=\$1 AND (lower\(email\)|email)=\$2/.test(c.sql)).length, 0, 'no email lookup when our metadata says who');
     state.calls.length = 0;
     const [raw2, h2] = signed(withPayload({ uid: 'u2', metadata: { upgrads_contact_id: 5, upgrads_deal_id: 999 } }));
     assert.equal((await srv.post(TOKEN, raw2, h2)).body.deal_id, null);
+  });
+  test('a known contact stored with capitals (an edit before 2026-10-22 kept them): still found; no second contact, no second deal', async () => {
+    state.contacts[0].email = 'Jana.Weber@Example.de';
+    const [raw, h] = signed(withPayload({ uid: 'u10', attendees: [{ email: 'jana.weber@example.de', name: 'Jana Weber' }] }));
+    const r = await srv.post(TOKEN, raw, h);
+    assert.equal(r.body.contact_id, 5);
+    assert.equal(r.body.created_contact, false); assert.equal(r.body.created_deal, false);
+    assert.equal(state.contacts.length, 1); assert.equal(state.deals.length, 1);
+    assert.ok(state.calls.some(c => c.sql.startsWith('SELECT id, name FROM contacts WHERE workspace_id=$1 AND lower(email)=$2')), 'the lookup ignores case');
   });
   test('an unknown attendee: the contact is created with the lead webhook\'s assignee, a deal in its pipeline and stage, the meeting on both, then logged', async () => {
     const [raw, h] = signed(withPayload({ uid: 'u3', attendees: [{ email: 'Neu@Example.de', name: 'Neue Kundin' }] }));
@@ -245,7 +257,7 @@ describe('server.js', () => {
     assert.ok(iRaw > 0 && iRaw < iJson, 'raw before json');
     assert.match(s, /const calcomTokenLimiter = rateLimit\(\{\s*windowMs: 60 \* 1000, max: 120,[\s\S]*?keyGenerator: \(req\) => req\.path \|\| 'unknown',\s*\}\);/);
     const iLim = s.indexOf("app.use('/api/integrations/calcom/receive', webhookIpLimiter, calcomTokenLimiter);");
-    const iMount = s.indexOf("app.use('/api/integrations',  require('./routes/integrations'));");
+    const iMount = s.indexOf("app.use('/api/integrations',  integrations);");   // the router is required at the top since NOTETAKER_CHANGES Part 4 (server.js starts its link watch)
     assert.ok(iLim > 0 && iLim < iMount, 'limited before the router is mounted');
   });
   test('GET /logs stays a lead log; GET /calcom/logs is the Cal.com log', () => {

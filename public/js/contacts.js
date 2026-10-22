@@ -308,6 +308,8 @@ function startInlineEdit(td, contactId, fieldKey, fieldType) {
 async function commitInlineEdit(contactId, fieldKey, fieldType, value) {
   const contact = contacts.find(c => c.id === contactId);
   if (!contact) return;
+  // What the row showed before, to put back when the server refuses the edit (e.g. an email another contact has).
+  const prev = { assigned_to: contact.assigned_to, assigned_to_name: contact.assigned_to_name, company: contact.company, email: contact.email, phone: contact.phone, custom_data: contact.custom_data };
   if (fieldType === 'assignee') {
     contact.assigned_to = value; const m = members.find(m => m.id === value);
     contact.assigned_to_name = m?.name || null;
@@ -316,11 +318,15 @@ async function commitInlineEdit(contactId, fieldKey, fieldType, value) {
   } else {
     contact.custom_data = { ...(contact.custom_data || {}), [fieldKey]: value };
   }
-  await api.put(`/api/contacts/${contactId}`, {
+  const res = await api.put(`/api/contacts/${contactId}`, {
     name: contact.name, company: contact.company, email: contact.email,
     phone: contact.phone, assigned_to: contact.assigned_to,
     custom_data: contact.custom_data || {}
   });
+  if (!res || res.error) {
+    Object.assign(contact, prev);   // the row shows what is really saved
+    ui.toast(t(res?.code === 'email_taken' ? 'cf_err_email_taken' : 'cf_err_save'));
+  }
   filterContacts();
   if (document.getElementById('page-deals').classList.contains('active')) renderDealsBoard();
 }

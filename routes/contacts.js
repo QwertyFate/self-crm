@@ -191,7 +191,7 @@ router.get('/:id', async (req, res, next) => {
              a.completed, a.source, a.cancelled_at, a.calcom_uid, a.calcom_event_type_id,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              a.deal_id, db.title AS deal_title,
-             COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' END) AS logged_by_name, u.email AS logged_by_email
+             COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' WHEN a.source = 'notetaker' THEN 'Notetaker' END) AS logged_by_name, u.email AS logged_by_email
       FROM activities a
       LEFT JOIN users u ON u.id = a.created_by
       LEFT JOIN deals db ON db.id = a.deal_id
@@ -216,7 +216,7 @@ router.post('/', async (req, res, next) => {
         'SELECT id FROM contacts WHERE workspace_id=$1 AND email=$2',
         [req.workspaceId, normalizedEmail]
       );
-      if (existing) return res.status(409).json({ error: 'Contact with this email already exists in this workspace' });
+      if (existing) return res.status(409).json({ error: 'Contact with this email already exists in this workspace', code: 'email_taken' });   // the dialog says it in the user's language
     }
 
     const { rows: [row] } = await pool.query(
@@ -243,14 +243,27 @@ router.put('/:id', async (req, res, next) => {
       'SELECT name, email, phone, company, contact_type FROM contacts WHERE id=$1 AND workspace_id=$2', [req.params.id, req.workspaceId]
     );
     if (!before) return res.status(404).json({ error: 'Not found' });
+    // The email: a new address is stored like on create (lowercased, trimmed: the lead webhook and the import match on
+    // that) and must not be another contact's (409 email_taken, as on create). Keeping the contact's own address, in
+    // any spelling, is neither checked nor rewritten, so contacts that already share one from before stay editable.
+    const typed = typeof email === 'string' ? email.toLowerCase().trim() : '';
+    const own   = (before.email || '').toLowerCase().trim();
+    let emailToStore = typed || null;
+    if (typed && typed === own) emailToStore = before.email;
+    else if (typed) {
+      const { rows: [taken] } = await pool.query(
+        'SELECT id FROM contacts WHERE workspace_id=$1 AND lower(email)=$2 AND id<>$3', [req.workspaceId, typed, req.params.id]
+      );
+      if (taken) return res.status(409).json({ error: 'Contact with this email already exists in this workspace', code: 'email_taken' });
+    }
     // The master data as written (assigned_to and custom_data are not master data to the Engine).
-    const after   = { name, email: email||null, phone: phone||null, company: company||null, contact_type: contact_type || before.contact_type };
+    const after   = { name, email: emailToStore, phone: phone||null, company: company||null, contact_type: contact_type || before.contact_type };
     const changed = masterDataChanges(before, after);
     // akte_version counts master-data changes from every side (briefing §5.4 "detect concurrent
     // changes"): a CRM edit bumps it too, so the Engine's next precondition fails and it re-reads.
     const result = await pool.query(
       'UPDATE contacts SET name=$1, email=$2, phone=$3, company=$4, assigned_to=$5, custom_data=$6, contact_type=COALESCE($7,contact_type), akte_version=akte_version+$10::int, updated_at=NOW() WHERE id=$8 AND workspace_id=$9',
-      [name, email||null, phone||null, company||null, assigned_to||null, JSON.stringify(custom_data||{}), contact_type||null, req.params.id, req.workspaceId, changed.length ? 1 : 0]
+      [name, emailToStore, phone||null, company||null, assigned_to||null, JSON.stringify(custom_data||{}), contact_type||null, req.params.id, req.workspaceId, changed.length ? 1 : 0]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     if (before.contact_type !== 'contact' && after.contact_type === 'contact') fireContactCreated(req, req.params.id);   // a supplier became a client: new to the Engine

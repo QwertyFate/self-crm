@@ -22,6 +22,7 @@
      deleteWebhook(key, id)                                   DELETE /v2/webhooks/:id
      getSlots(key, { eventTypeId, start, end, timeZone })      GET /v2/slots, cal-api-version 2024-09-04; free slots per day
      createBooking(key, { eventTypeId, start, attendee, … })   POST /v2/bookings, cal-api-version 2026-02-25 (Step 3)
+     getBooking(key, uid)                                      GET /v2/bookings/:uid; once the Google Meet exists its link is in `location`
      cancelBooking(key, uid, { reason })                       POST /v2/bookings/:uid/cancel
      rescheduleBooking(key, uid, { start, reason })             POST /v2/bookings/:uid/reschedule: a NEW booking, rescheduledFromUid = the old
    Every call sends Authorization: Bearer <key>, gives up after 10 s, and
@@ -238,7 +239,7 @@ function normaliseBooking(d, eventTypeId) {
     end:         isoOrNull(d.end),
     status:      str(d.status),
     location:    str(d.location),
-    meetingUrl:  urlOrNull(d.location) || urlOrNull(d.meetingUrl),   // Cal.com: `location` is the meeting place or link; meetingUrl is the older field
+    meetingUrl:  urlOrNull(d.location) || urlOrNull(d.meetingUrl) || urlOrNull(d.metadata?.videoCallUrl),   // Cal.com: `location` is the meeting place or link; meetingUrl is the older field
     eventTypeId: Number.isInteger(d.eventTypeId) ? d.eventTypeId : (Number.isInteger(eventTypeId) ? eventTypeId : null),
     duration:    Number.isFinite(d.duration) ? d.duration : null,
     rescheduledFromUid: str(d.rescheduledFromUid),
@@ -246,6 +247,16 @@ function normaliseBooking(d, eventTypeId) {
     hosts:       Array.isArray(d.hosts) ? d.hosts.map(h => ({ name: str(h?.name), email: lowerEmail(h?.email), timeZone: str(h?.timeZone) })) : [],
     attendees:   Array.isArray(d.attendees) ? d.attendees.map(a => ({ name: str(a?.name), email: lowerEmail(a?.email), timeZone: str(a?.timeZone) })) : [],
   };
+}
+
+// One booking as Cal.com knows it now (NOTETAKER_CHANGES Part 4). A Google Meet booking first names only the app
+// ('integrations:google:meet'); once Cal.com has created the calendar event, `location` holds the Meet link. A
+// recurring booking answers a list: its first is the one asked for.
+async function getBooking(apiKey, uid) {
+  const json = await calFetch(apiKey, '/bookings/' + encodeURIComponent(String(uid)), { version: VERSION_BOOKINGS });
+  const d = Array.isArray(json?.data) ? json.data[0] : json?.data;
+  if (!d || !str(d.uid)) throw new CalError(0, 'Cal.com answered without the booking');
+  return normaliseBooking(d, null);
 }
 
 // Cancel a booking. Cal.com tells the attendee as it does for any cancellation; the reason is
@@ -399,10 +410,18 @@ function wallClock(iso, timeZone) {
   return { date: `${g('year')}-${g('month')}-${g('day')}`, time: `${g('hour')}:${g('minute')}`, zone };
 }
 
-// The inverse of wallClock: a zone's wall clock ('YYYY-MM-DD', 'HH:MM') as a UTC instant, ISO.
+// A calendar day as 'YYYY-MM-DD'. The database hands a DATE column back as a JavaScript Date at LOCAL midnight
+// (node-postgres), so its local parts are the day; text passes through. (NOTETAKER_CHANGES Part 4: a meeting read
+// back from the table had no start time without this.)
+function dayText(date) {
+  if (date instanceof Date) return Number.isNaN(date.getTime()) ? '' : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return String(date || '');
+}
+
+// The inverse of wallClock: a zone's wall clock ('YYYY-MM-DD' or the database's Date, 'HH:MM') as a UTC instant, ISO.
 // Two corrections settle the zone's offset, DST edges included; a bad date or time is null.
 function utcFromWallClock(date, time, timeZone) {
-  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date || '')), t = /^(\d{2}):(\d{2})/.exec(String(time || '00:00'));
+  const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayText(date)), t = /^(\d{2}):(\d{2})/.exec(String(time || '00:00'));
   if (!d || !t) return null;
   const want = Date.UTC(+d[1], +d[2] - 1, +d[3], +t[1], +t[2]);
   if (Number.isNaN(want)) return null;
@@ -424,7 +443,7 @@ function bookingToActivity(b, fallbackZone) {
 }
 
 module.exports = {
-  CalError, isApiKeyShaped, apiUrl, calFetch, getMe, listEventTypes, createWebhook, deleteWebhook, getSlots, createBooking, cancelBooking, rescheduleBooking, normaliseBooking, sealKey, openKey,
+  CalError, isApiKeyShaped, apiUrl, calFetch, getMe, listEventTypes, createWebhook, deleteWebhook, getSlots, createBooking, getBooking, cancelBooking, rescheduleBooking, normaliseBooking, sealKey, openKey,
   normaliseLocations, bookingLocationFor,
   signBody, verifySignature, parseBooking, wallClock, utcFromWallClock, bookingToActivity,
   meetingApp, placeLabel, meetingLinkOf,

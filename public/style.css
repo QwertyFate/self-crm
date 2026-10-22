@@ -496,6 +496,7 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 .check input:indeterminate::after { content: ""; width: 8px; height: 2px; background: var(--on-primary); }
 .check input:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .check.round input { border-radius: 50%; width: 18px; height: 18px; }
+.check:has(input:disabled) { cursor: not-allowed; color: var(--text-3); } .check input:disabled { cursor: not-allowed; opacity: .5; }
 .seg { display: inline-flex; padding: 2px; background: var(--surface-3); border-radius: var(--r-md); gap: 2px; border: 1px solid var(--border); }
 .seg button { height: 28px; padding: 0 12px; border: 0; background: none; border-radius: 5px; color: var(--text-2); font-weight: 550; font-size: var(--fs-sm); display: inline-flex; align-items: center; gap: 6px; }
 .seg button:hover { color: var(--text); } .seg button[aria-pressed="true"], .seg button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }

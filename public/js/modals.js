@@ -26,6 +26,8 @@
 async function openContactModal(id) {
   await Promise.all([ensureFields(), ensureMembers()]);
   document.getElementById('contact-form').reset();
+  document.getElementById('cf-error').hidden = true;
+  document.getElementById('cf-email').removeAttribute('aria-invalid');
   document.getElementById('contact-id').value   = id || '';
   document.getElementById('cf-type').value       = currentContactType;
   const typeName = currentContactType === 'supplier' ? supplierWord(1) : t('lbl_contact');
@@ -78,7 +80,19 @@ async function saveContact(e) {
     contact_type: document.getElementById('cf-type').value || currentContactType,
     custom_data,
   };
-  if (id) await api.put(`/api/contacts/${id}`, payload); else await api.post('/api/contacts', payload);
+  // A refused save keeps the dialog open and says why: the email taken (the server's code) marks that field;
+  // anything else gets the general message. It used to close regardless, so a duplicate vanished without a word.
+  const saved = id ? await api.put(`/api/contacts/${id}`, payload) : await api.post('/api/contacts', payload);
+  const err = document.getElementById('cf-error'), email = document.getElementById('cf-email');
+  if (!saved || saved.error) {
+    const taken = saved?.code === 'email_taken';
+    err.textContent = t(taken ? 'cf_err_email_taken' : 'cf_err_save');
+    err.hidden = false;
+    if (taken) { email.setAttribute('aria-invalid', 'true'); email.focus(); } else email.removeAttribute('aria-invalid');
+    return;
+  }
+  err.hidden = true;
+  email.removeAttribute('aria-invalid');
   closeModal('contact-modal');
   invalidate();
   const page = document.querySelector('.page.active')?.id.replace('page-', '');

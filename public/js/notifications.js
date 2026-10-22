@@ -37,10 +37,12 @@ const NOTIF_ICONS = {
   meeting_booked:    '📅',   // a meeting on a deal or a contact of mine (Cal.com, Part 12)
   meeting_moved:     '🗓️',
   meeting_cancelled: '🚫',
+  notetaker_done:    '📝',   // the Notetaker's notes of a meeting I booked are on the deal (Notetaker Part 2)
+  notetaker_failed:  '⚠️',
   default:         '🔔',
 };
 // Kinds that carry a translated line above the title: the title itself is the meeting's own name.
-const NOTIF_KINDS = { meeting_booked: 'notif_meeting_booked', meeting_moved: 'notif_meeting_moved', meeting_cancelled: 'notif_meeting_cancelled' };
+const NOTIF_KINDS = { meeting_booked: 'notif_meeting_booked', meeting_moved: 'notif_meeting_moved', meeting_cancelled: 'notif_meeting_cancelled', notetaker_done: 'notif_notetaker_done', notetaker_failed: 'notif_notetaker_failed' };
 
 function notifIcon(type) { return NOTIF_ICONS[type] || NOTIF_ICONS.default; }
 function notifKind(type) { return NOTIF_KINDS[type] ? `<div class="notif-kind">${esc(t(NOTIF_KINDS[type]))}</div>` : ''; }

@@ -253,6 +253,14 @@ function dvJoinButton(a, cls = 'btn btn-secondary btn-sm') {
 function dvJoinRow(a) { const b = dvJoinButton(a); return b ? `<div class="dv-join-row">${b}</div>` : ''; }
 
 // reschedule: the live meeting entry to move (its booking keeps the type, the place and the attendee)
+// What the Notetaker answered, as one line: booked for the start, joining now, given the new time, already booked,
+// waiting for Cal.com's Meet link, or not booked and why (the server's reason).
+function dvNotetakerToast(n) {
+  if (!n || !n.status) return;
+  const key = { scheduled: 'cal_rec_scheduled', queued: 'cal_rec_queued', updated: 'cal_rec_updated', duplicate: 'cal_rec_duplicate', waiting_link: 'cal_rec_waiting' }[n.status];
+  ui.toast(key ? t(key) : tf('cal_rec_failed', { error: n.error || t('cal_err_generic') }));
+}
+
 async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule = null } = {}) {
   const status = await dvCalcomStatus();
   if (!dvCalcomReady(status) || !contact) { ui.toast(t('cal_status_none')); return; }
@@ -267,7 +275,7 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
   const zone = currentTimezone(), locale = currentLang === 'de' ? 'de-DE' : 'en-GB', todayIso = dvIsoDateIn(zone);
   // month: the month on the calendar ('YYYY-MM'); date: the chosen day; picked: the chosen slot's start (ISO);
   // conflicts: CRM entries at that time; loc: the chosen place among the type's locations
-  const B = { month: todayIso.slice(0, 7), typeId: (reschedule && reschedule.calcom_event_type_id) || cal.event_type.id, slots: null, loading: true, date: '', picked: null, conflicts: [], checking: false, note: '', err: '', busy: false, loc: 0 };
+  const B = { month: todayIso.slice(0, 7), typeId: (reschedule && reschedule.calcom_event_type_id) || cal.event_type.id, slots: null, loading: true, date: '', picked: null, conflicts: [], checking: false, note: '', err: '', busy: false, loc: 0, record: false, nt: 'idle', ntWhy: '' };
   const fmtTime = iso => new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: zone });
   // the same instant on a 12-hour clock, "2:00 PM", so nobody has to convert; shown beside the 24-hour time
   const fmtAmPm = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: zone });
@@ -290,6 +298,10 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
   const APPS = { 'cal-video': 'Cal Video', 'google-meet': 'Google Meet', zoom: 'Zoom', 'office365-video': 'Microsoft Teams', jitsi: 'Jitsi', 'webex-video': 'Webex', 'whereby-video': 'Whereby' };
   const placeLabel = l => l.type === 'integration' ? (APPS[l.integration] || l.integration) : l.type === 'address' ? (l.address ? tf('cal_loc_address', { address: l.address }) : t('cal_loc_address_plain')) : l.type === 'link' ? t('cal_loc_link') : t('cal_loc_phone');
   const placeOf = () => placesOf()[B.loc] || null;
+  // the Notetaker records Google Meet meetings: the box shows only for that place (utils/notetaker.js on the server)
+  const isMeet = l => !!l && l.type === 'integration' && l.integration === 'google-meet';
+  // ...and only once it said it is there (B.nt: idle → checking → ok | down); why not, by the server's reason
+  const NT_DOWN = { unreachable: 'cal_rec_down_unreachable', token: 'cal_rec_down_token', error: 'cal_rec_down_error' };
   const m = ui.modal({ title: tf(reschedule ? 'cal_resched_title' : 'cal_book_title', { name: contact.name }), size: 'md', body: '<div id="cal-book" class="cal-book"></div>',
     footer: `<button class="btn btn-secondary" data-close>${esc(t('btn_cancel'))}</button><button class="btn btn-primary" id="cal-book-go" disabled>${esc(t(reschedule ? 'cal_resched_submit' : 'cal_book_submit'))}</button>` });
   const host = m.el.querySelector('#cal-book'), go = m.el.querySelector('#cal-book-go');
@@ -303,6 +315,13 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
     const what = reschedule
       ? `<div class="cal-book-sec"><div class="field-row">${field('cal-book-type', 'cal_book_type', `<input type="text" id="cal-book-type" class="input" readonly value="${esc(typeOf().title || '')}">`)}<div class="field"><span class="label">${esc(t('cal_resched_current'))}</span><input type="text" class="input" readonly value="${esc(current ? `${fmtDay(current.date)}, ${current.time} (${ampmOf(current.time)})` : '')}"></div></div></div>`
       : `<div class="cal-book-sec"><div class="field-row">${typeSel}${whereSel}</div></div>`;
+    // the Notetaker: offered for a Google Meet booking only; a meeting being moved keeps its recording (the server tells the bot).
+    // Greyed out until the Notetaker said it is there; if it is not, the line says why and offers Check again.
+    const ntOk = B.nt === 'ok';
+    const ntLine = ntOk ? esc(t('cal_book_record_help'))
+      : B.nt === 'down' ? `${esc(t(NT_DOWN[B.ntWhy] || NT_DOWN.error))} <button type="button" class="btn btn-ghost btn-sm" id="cal-book-recheck">${esc(t('cal_rec_recheck'))}</button>`
+      : esc(t('cal_rec_checking'));
+    const rec = !reschedule && isMeet(place) ? `<div class="cal-book-sec"><label class="check"><input type="checkbox" id="cal-book-record"${ntOk && B.record ? ' checked' : ''}${ntOk ? '' : ' disabled'}><span>${esc(t('cal_book_record'))}</span></label><p class="help" aria-live="polite">${ntLine}</p></div>` : '';
     // when: the month with its arrows, the days (the free ones enabled), then the time, then where the clock is
     const loading = B.loading || !B.slots;
     const head = `<div class="cal-book-nav"><span class="cal-book-range">${esc(monthTitle(B.month))}</span><span class="cal-book-navbtns"><button type="button" class="btn btn-secondary btn-sm btn-icon" data-mnav="-1" aria-label="${esc(t('cal_book_month_prev'))}"${B.month <= todayIso.slice(0, 7) ? ' disabled' : ''}>${icon('chevron-left')}</button><button type="button" class="btn btn-secondary btn-sm btn-icon" data-mnav="1" aria-label="${esc(t('cal_book_month_next'))}">${icon('chevron-right')}</button></span></div>`;
@@ -319,10 +338,22 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
       : B.conflicts.length ? `<div class="cal-book-conflict" role="alert">${B.conflicts.map(c => `<p>${esc(tf('cal_book_conflict', { time: c.time, title: c.title, who: c.who }))}</p>`).join('')}<p>${esc(t('cal_book_conflict_hint'))}</p></div>` : '';
     const note = `<div class="cal-book-sec">${field('cal-book-note', reschedule ? 'cal_resched_reason' : 'cal_book_note', `<textarea class="textarea" id="cal-book-note" rows="2" placeholder="${esc(t(reschedule ? 'cal_resched_reason_ph' : 'cal_book_note_ph'))}">${esc(B.note)}</textarea>`)}</div>`;
     const slot = B.picked ? slotsOf(B.date).find(x => x.start === B.picked) || { start: B.picked } : null;
-    const summary = slot ? `<div class="cal-book-summary">${icon('calendar')}<div><b>${esc(fmtDay(B.date))}, ${esc(tf('cal_book_slot', { from: fmtTime(slot.start), to: fmtTime(slotEnd(slot)), ampm: fmtAmPm(slot.start) }))}</b><span>${esc([place ? placeLabel(place) : '', tf('cal_book_with', { name: contact.name })].filter(Boolean).join(', '))}</span></div></div>` : '';
-    host.innerHTML = `<p class="help">${esc(tf('cal_book_invite_to', { email: contact.email }))}</p>${what}${when}${conflict}${note}${summary}${B.err ? `<p class="cal-book-err" role="alert">${esc(B.err)}</p>` : ''}`;
+    const summary = slot ? `<div class="cal-book-summary">${icon('calendar')}<div><b>${esc(fmtDay(B.date))}, ${esc(tf('cal_book_slot', { from: fmtTime(slot.start), to: fmtTime(slotEnd(slot)), ampm: fmtAmPm(slot.start) }))}</b><span>${esc([place ? placeLabel(place) : '', !reschedule && B.record && B.nt === 'ok' && isMeet(place) ? t('cal_book_record_short') : '', tf('cal_book_with', { name: contact.name })].filter(Boolean).join(', '))}</span></div></div>` : '';
+    host.innerHTML = `<p class="help">${esc(tf('cal_book_invite_to', { email: contact.email }))}</p>${what}${rec}${when}${conflict}${note}${summary}${B.err ? `<p class="cal-book-err" role="alert">${esc(B.err)}</p>` : ''}`;
     go.disabled = !B.picked || B.busy || B.checking;
     go.textContent = B.busy ? t(reschedule ? 'cal_resched_busy' : 'cal_book_booking') : B.conflicts.length ? t('cal_book_anyway') : t(reschedule ? 'cal_resched_submit' : 'cal_book_submit');
+    // the first time Google Meet is the place, by whatever path (the dialog opening, a new type, a new place): ask
+    if (!reschedule && isMeet(place) && B.nt === 'idle') checkNotetaker(false);
+  }
+  // Is the Notetaker there? (GET /api/integrations/notetaker/health) Quietly: no loading bar, never a throw. The box
+  // stays greyed out while it asks; a dialog closed meanwhile is left alone; a no unticks the box.
+  async function checkNotetaker(fresh) {
+    B.nt = 'checking'; render();
+    const r = await apiFetchSilent('/api/integrations/notetaker/health' + (fresh ? '?fresh=1' : ''));
+    if (!host.isConnected) return;
+    B.nt = r && r.available === true ? 'ok' : 'down'; B.ntWhy = (r && r.reason) || 'error';
+    if (B.nt !== 'ok') B.record = false;
+    render();
   }
   // the whole month's free slots in one read; the first bookable day is preselected
   async function load() {
@@ -358,7 +389,9 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
     B.conflicts = found; B.checking = false; render();
   }
   on(host, 'change', '#cal-book-type', (e, el) => { B.typeId = Number(el.value); B.loc = 0; load(); });
-  on(host, 'change', '#cal-book-where', (e, el) => { B.loc = Number(el.value) || 0; });
+  on(host, 'change', '#cal-book-where', (e, el) => { B.loc = Number(el.value) || 0; render(); });
+  on(host, 'change', '#cal-book-record', (e, el) => { B.record = el.checked; render(); });
+  on(host, 'click', '#cal-book-recheck', () => checkNotetaker(true));
   on(host, 'click', '[data-mnav]', (e, el) => { B.month = addMonths(B.month, Number(el.dataset.mnav)); if (B.month < todayIso.slice(0, 7)) B.month = todayIso.slice(0, 7); load(); });
   on(host, 'click', '[data-day]', (e, el) => { if (!bookable(el.dataset.day)) return; B.date = el.dataset.day; B.picked = null; B.conflicts = []; B.err = ''; render(); host.querySelector('#cal-book-time')?.focus(); });
   on(host, 'change', '#cal-book-time', (e, el) => { B.picked = el.value || null; B.conflicts = []; B.err = ''; if (B.picked) checkConflicts(); else render(); });
@@ -369,12 +402,13 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
     const place = placeOf();
     const res = reschedule
       ? await api.post('/api/integrations/calcom/reschedule', { activity_id: reschedule.id, start: B.picked, reason: B.note })
-      : await api.post('/api/integrations/calcom/book', { deal_id: dealId, contact_id: contact.id, event_type_id: B.typeId, start: B.picked, note: B.note, language: currentLang, location: place ? (place.type === 'integration' ? { type: 'integration', integration: place.integration } : { type: place.type }) : null });
+      : await api.post('/api/integrations/calcom/book', { deal_id: dealId, contact_id: contact.id, event_type_id: B.typeId, start: B.picked, note: B.note, language: currentLang, location: place ? (place.type === 'integration' ? { type: 'integration', integration: place.integration } : { type: place.type }) : null, record: !!(B.record && B.nt === 'ok' && isMeet(place)) });
     B.busy = false;
     if (!res || res.error) { B.err = res?.error || t('cal_err_generic'); render(); return; }
     const when = `${fmtWhen(B.picked)} (${fmtAmPm(B.picked)})`;
     m.close();
     ui.toast(reschedule ? tf('cal_resched_done', { when, name: contact.name }) : tf('cal_book_done', { when }));
+    if (res.notetaker) dvNotetakerToast(res.notetaker);
     if (onBooked) await onBooked(res);
   });
   render(); load();
@@ -844,7 +878,7 @@ async function openContactDetail(id, opts = {}) {
   const payload = patch => ({ name: S.c.name, company: S.c.company, email: S.c.email, phone: S.c.phone, assigned_to: S.c.assigned_to, custom_data: S.c.custom_data || {}, contact_type: S.c.contact_type, ...patch });
   async function commit(patch, msg) {
     const prev = {}; Object.keys(patch).forEach(k => prev[k] = S.c[k]); Object.assign(S.c, patch);
-    const res = await api.put(`/api/contacts/${id}`, payload(patch)); if (res?.error) { Object.assign(S.c, prev); render(); return ui.toast(res.error); }
+    const res = await api.put(`/api/contacts/${id}`, payload(patch)); if (res?.error) { Object.assign(S.c, prev); render(); return ui.toast(t(res.code === 'email_taken' ? 'cf_err_email_taken' : 'cf_err_save')); }
     if ('assigned_to' in patch) S.c.assigned_to_name = members.find(x => x.id === patch.assigned_to)?.name || null;
     const row = contacts.find(x => x.id === id); if (row) Object.assign(row, patch, { assigned_to_name: S.c.assigned_to_name });
     dvRefreshContacts(); render(); if (msg) ui.toast(msg);

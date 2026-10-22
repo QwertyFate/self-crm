@@ -1,0 +1,238 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   LANDING PAGE TWO — public/landingpagetwo.html (LOGIN_LANDING_CHANGES Part 46, 2026-10-22)
+
+   "Bei anderen CRMs ein Zusatz. Bei Upgrads eingebaut." The comparison is the
+   first screen: a full-width split, grey for other CRM platforms, the logo's
+   navy for Upgrads. The type carries the argument: the grey half in a light
+   weight, the navy half in the heaviest. Four rows run across both halves;
+   a row opens its detail below.
+
+   Identity
+     page     cool white ground, near-black ink; Geologica (self-hosted, OFL)
+              for every word of the page, a face no earlier page used
+     other    a cool grey and its muted ink, nothing else uses them
+     upgrads  the logo's navy, its sky for what is built in
+     product  the screens use the app's tokens and its Inter, never its
+              component classes
+
+   Loaded after /style.css for its tokens and reset only. Prefix vs-, scoped
+   to html.vs-root / body.vs. Hex only as the page's named tokens. No
+   gradient. Spacing on the 4/8 px scale the suite audits.
+
+   Structure
+     01 face, tokens, ground   02 type, links, buttons   03 the top bar
+     04 the split              05 the rows               06 the intro
+     07 the detail             08 the screens            09 left out, every day
+     10 questions              11 the way in, the footer 12 motion
+     13 breakpoints            14 reduced motion
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 01 · face, tokens, ground ─────────────────────────────────────────── */
+@font-face { font-family: "Geologica"; font-style: normal; font-weight: 100 900; font-display: swap; src: url(/fonts/Geologica.woff2) format("woff2"); }
+html.vs-root {
+  --vs-ground: #F6F7F9;
+  --vs-paper: #FFFFFF;
+  --vs-ink: #111522;
+  --vs-mute: #4F5768;
+  --vs-line: #DADDE4;
+  --vs-o: #E3E6EC;
+  --vs-o-2: #D6DAE2;
+  --vs-o-ink: #59606F;
+  --vs-o-line: #CBD0D9;
+  --vs-u: var(--navy-900);
+  --vs-u-2: var(--navy-800);
+  --vs-u-line: var(--navy-700);
+  --vs-sky: var(--sky-400);
+  --vs-font: "Geologica", var(--font);
+  --vs-wrap: 1240px;
+  --vs-gutter: clamp(16px, 5vw, 64px);
+  --vs-edge: max(var(--vs-gutter), calc((100vw - var(--vs-wrap)) / 2 + var(--vs-gutter)));
+  --vs-sec: clamp(72px, 9vw, 128px);
+  background: var(--vs-ground);
+}
+@media (prefers-reduced-motion: no-preference) {
+  html.vs-root { scroll-behavior: smooth; }
+}
+body.vs {
+  font-family: var(--vs-font);
+  font-feature-settings: normal;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--vs-ink);
+  background: var(--vs-ground);
+}
+
+/* ── 02 · type, links, buttons ─────────────────────────────────────────── */
+.vs-wrap { max-width: var(--vs-wrap); margin: 0 auto; padding: 0 var(--vs-gutter); }
+.vs-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.vs-h2 { max-width: 20ch; font-size: clamp(32px, 4vw, 54px); font-weight: 800; line-height: 1.04; letter-spacing: -0.03em; color: var(--vs-ink); text-wrap: balance; }
+.vs-h2-next { margin-top: clamp(64px, 8vw, 96px); }
+.vs-h3 { font-size: 21px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; color: var(--vs-ink); }
+.vs-sub { max-width: 54ch; margin-top: 16px; font-size: 18px; color: var(--vs-mute); }
+.vs-a { color: var(--vs-ink); font-weight: 600; text-decoration: none; }
+.vs-a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.vs-a-line { text-decoration: underline; text-decoration-color: var(--vs-line); text-underline-offset: 3px; }
+.vs-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 0 22px; border-radius: 10px; background: var(--vs-ink); color: var(--vs-paper); font-family: var(--vs-font); font-size: 15.5px; font-weight: 700; text-decoration: none; transition: background .15s ease; }
+.vs-btn:hover { background: var(--navy-800); text-decoration: none; }
+.vs-btn:disabled { cursor: progress; opacity: .7; }
+.vs-btn-sm { min-height: 36px; padding: 0 16px; font-size: 14px; }
+.vs-btn-sky { background: var(--vs-sky); color: var(--navy-950); }
+.vs-btn-sky:hover { background: var(--sky-300); }
+.vs-link { padding: 4px 0; color: var(--vs-ink); font-family: var(--vs-font); font-size: 15px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── 03 · the top bar ──────────────────────────────────────────────────── */
+.vs-head { background: var(--vs-paper); }
+.vs-top { display: flex; align-items: center; gap: 32px; padding-top: 18px; padding-bottom: 18px; }
+.vs-brand { display: inline-flex; align-items: center; gap: 8px; color: var(--vs-ink); font-size: 15px; font-weight: 700; text-decoration: none; }
+.vs-brand img { width: auto; height: 26px; }
+.vs-top-links { display: flex; gap: 24px; font-size: 15px; }
+.vs-top-end { display: flex; align-items: center; gap: 16px; margin-left: auto; font-size: 15px; }
+.vs-lang { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--vs-line); border-radius: 999px; background: var(--vs-paper); }
+.vs-lang-btn { padding: 4px 10px; border-radius: 999px; color: var(--vs-mute); font-size: 13px; font-weight: 700; }
+.vs-lang-btn[aria-pressed="true"] { background: var(--vs-ink); color: var(--vs-paper); }
+
+/* ── 04 · the split: grey for the others, navy for Upgrads ─────────────── */
+.vs-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.vs-cell { display: grid; align-content: start; gap: 4px; }
+.vs-o { padding-left: var(--vs-edge); padding-right: 48px; background: var(--vs-o); color: var(--vs-o-ink); }
+.vs-u { padding-left: 48px; padding-right: var(--vs-edge); background: var(--vs-u); color: var(--n-0); }
+.vs-big-cell { padding-top: clamp(48px, 7vw, 96px); padding-bottom: 32px; }
+.vs-k { font-size: 16px; font-weight: 600; }
+.vs-u .vs-k { color: var(--vs-sky); }
+.vs-big { font-size: clamp(48px, 7vw, 108px); line-height: .95; letter-spacing: -0.04em; }
+.vs-o .vs-big { font-weight: 250; }
+.vs-u .vs-big { font-weight: 800; }
+.vs-end-cell { align-content: center; padding-top: 24px; padding-bottom: clamp(48px, 6vw, 80px); }
+.vs-hint { font-size: 14px; }
+
+/* ── 05 · the rows: one difference each, across both halves ────────────── */
+.vs-rows { display: grid; grid-column: 1 / -1; }
+.vs-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; color: inherit; text-align: left; cursor: pointer; }
+.vs-row .vs-cell { padding-top: 18px; padding-bottom: 18px; transition: background .15s ease; }
+.vs-row .vs-o { border-top: 1px solid var(--vs-o-line); }
+.vs-row .vs-u { border-top: 1px solid var(--vs-u-line); }
+.vs-topic { font-size: 13px; font-weight: 700; }
+.vs-u .vs-topic { color: var(--vs-sky); }
+.vs-what { font-size: 18px; line-height: 1.4; }
+.vs-u .vs-what { font-weight: 600; }
+.vs-yes { justify-self: start; margin-top: 6px; padding: 2px 10px; border-radius: 999px; background: var(--vs-sky); color: var(--navy-950); font-size: 12.5px; font-weight: 700; }
+.vs-row:hover .vs-o, .vs-row[aria-pressed="true"] .vs-o { background: var(--vs-o-2); }
+.vs-row:hover .vs-u, .vs-row[aria-pressed="true"] .vs-u { background: var(--vs-u-2); }
+.vs-row[aria-pressed="true"] .vs-u { box-shadow: inset 4px 0 0 var(--vs-sky); }
+.vs-row:focus-visible { outline: 3px solid var(--vs-sky); outline-offset: -3px; }
+
+/* ── 06 · the intro ────────────────────────────────────────────────────── */
+.vs-intro-in { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); align-items: end; gap: 48px; padding-top: 56px; padding-bottom: 56px; }
+.vs-lead { max-width: 40ch; font-size: 22px; line-height: 1.45; color: var(--vs-ink); }
+.vs-small { margin-top: 8px; color: var(--vs-mute); font-size: 14px; }
+
+/* ── 07 · the detail of the open row ───────────────────────────────────── */
+.vs-sec { padding: var(--vs-sec) 0; }
+.vs-band { background: var(--vs-paper); }
+.vs-panel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 24px; margin-top: 32px; animation: vs-in .3s ease both; }
+.vs-card { padding: 28px; border-radius: 20px; }
+.vs-card-o { background: var(--vs-o); color: var(--vs-o-ink); }
+.vs-card-u { background: var(--vs-u); color: var(--n-0); }
+.vs-card-h { font-size: 15px; font-weight: 700; }
+.vs-card-u .vs-card-h { color: var(--vs-sky); }
+.vs-list { display: grid; gap: 10px; margin-top: 12px; list-style: none; }
+.vs-list li { position: relative; padding-left: 24px; }
+.vs-card-o .vs-list li::before { content: "\2013"; position: absolute; left: 0; }
+.vs-card-u .vs-list li::before { content: "\2713"; position: absolute; left: 0; color: var(--vs-sky); font-weight: 700; }
+.vs-card-src { margin-top: 16px; font-size: 12.5px; }
+.vs-panel-next { grid-column: 1 / -1; text-align: right; }
+
+/* ── 08 · the screens (the app's tokens and its Inter) ─────────────────── */
+.vs-mini { min-width: 0; margin-top: 20px; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas); color: var(--ink); font-family: var(--font); font-feature-settings: "cv11", "ss01"; font-size: 13.5px; line-height: 1.45; }
+.vs-chrome { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--ink-muted); font-size: 12.5px; font-weight: 600; }
+.vs-dots { width: 10px; height: 10px; margin-right: 32px; border-radius: 50%; background: var(--line-strong); box-shadow: 16px 0 0 var(--line-strong), 32px 0 0 var(--line-strong); }
+.vs-mini-in { display: grid; gap: 6px; margin: 16px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.vs-log { display: grid; grid-template-columns: 8px auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line-soft); color: var(--ink-muted); }
+.vs-log:first-child { border-top: 0; }
+.vs-log b { color: var(--ink); font-weight: 600; }
+.vs-log time { font-variant-numeric: tabular-nums; }
+.vs-ok { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+.vs-log.is-bad { color: var(--danger); }
+.vs-log.is-bad .vs-ok { background: var(--danger); }
+.vs-note-h { display: flex; gap: 6px; color: var(--ink-muted); font-size: 12.5px; }
+.vs-note-h b { color: var(--ink); font-weight: 600; }
+.vs-strong { color: var(--ink); font-weight: 600; }
+.vs-gap { margin-top: 6px; }
+.vs-li::before { content: "\2022\00A0"; }
+.vs-lbl { color: var(--ink-muted); font-size: 11.5px; font-weight: 600; }
+.vs-field { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--line-soft); color: var(--ink-muted); }
+.vs-field b { color: var(--ink); font-weight: 600; }
+.vs-link-row { display: flex; align-items: center; gap: 8px; }
+.vs-status, .vs-badge { display: inline-flex; justify-self: start; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.vs-status { background: var(--info-bg); color: var(--info); }
+.vs-badge { background: var(--success-bg); color: var(--success); }
+.vs-onb { grid-template-columns: minmax(0, 1.2fr) auto auto; align-items: center; gap: 10px 12px; }
+.vs-th { color: var(--ink-muted); font-size: 11.5px; font-weight: 600; }
+
+/* ── 09 · left out on purpose, every day ───────────────────────────────── */
+.vs-no { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; margin-top: 40px; }
+.vs-no-i { display: grid; align-content: start; gap: 10px; padding-top: 20px; border-top: 2px solid var(--vs-ink); }
+.vs-no-i p { color: var(--vs-mute); font-size: 16px; }
+.vs-days { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 40px; margin-top: 32px; border-top: 1px solid var(--vs-line); list-style: none; }
+.vs-days li { padding: 18px 0; border-bottom: 1px solid var(--vs-line); font-size: 17px; }
+
+/* ── 10 · questions ────────────────────────────────────────────────────── */
+.vs-faq-in { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: start; gap: 48px; }
+.vs-faq { border-top: 1px solid var(--vs-line); }
+.vs-qa { border-bottom: 1px solid var(--vs-line); }
+.vs-qa summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0; color: var(--vs-ink); font-size: 18px; font-weight: 600; list-style: none; cursor: pointer; }
+.vs-qa summary::-webkit-details-marker { display: none; }
+.vs-qa summary::after { content: "+"; flex: none; color: var(--vs-mute); font-size: 24px; font-weight: 400; line-height: 1; }
+.vs-qa[open] summary::after { content: "\2212"; }
+.vs-qa p { max-width: 60ch; padding: 0 0 20px; color: var(--vs-mute); }
+
+/* ── 11 · the way in, the footer ───────────────────────────────────────── */
+.vs-close { padding: var(--vs-sec) 0; background: var(--vs-u); }
+.vs-close-in { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); align-items: center; gap: 48px; }
+.vs-close .vs-h2 { color: var(--n-0); }
+.vs-close .vs-sub { color: var(--navy-200); }
+.vs-ask { padding: 28px; border-radius: 16px; background: var(--vs-paper); }
+.vs-ask-form { display: grid; gap: 14px; }
+.vs-ask-f { display: grid; gap: 6px; color: var(--vs-ink); font-size: 14px; font-weight: 600; }
+.vs-ask .vs-ask-i { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--n-300); border-radius: 8px; background: var(--vs-paper); color: var(--vs-ink); box-shadow: none; font-family: var(--vs-font); font-size: 16px; }
+.vs-ask .vs-ask-i:focus { border-color: var(--navy-500); box-shadow: 0 0 0 3px var(--navy-100); outline: none; }
+.vs-trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.vs-err { color: var(--red-600); font-size: 14px; }
+.vs-ask-form .vs-btn { justify-self: start; }
+.vs-fine { color: var(--vs-mute); font-size: 13px; }
+.vs-ask-done { color: var(--vs-ink); font-size: 18px; font-weight: 600; }
+.vs-foot { padding: 32px 0; color: var(--vs-mute); font-size: 14px; }
+.vs-foot-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.vs-foot-note { font-size: 13px; }
+.vs-foot-nav { display: flex; flex-wrap: wrap; gap: 20px; }
+
+/* ── 12 · motion: the detail answering a row ───────────────────────────── */
+@keyframes vs-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ── 13 · breakpoints ──────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .vs-days { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .vs-top-links { display: none; }
+  .vs-split, .vs-row, .vs-panel, .vs-intro-in, .vs-no, .vs-faq-in, .vs-close-in { grid-template-columns: minmax(0, 1fr); }
+  .vs-o, .vs-u { padding-left: var(--vs-gutter); padding-right: var(--vs-gutter); }
+  .vs-big-cell { padding-top: 40px; padding-bottom: 24px; }
+  .vs-panel-next { text-align: left; }
+}
+@media (max-width: 600px) {
+  .vs-top-login { display: none; }
+  .vs-top { gap: 12px; }
+  .vs-days { grid-template-columns: minmax(0, 1fr); }
+  .vs-card, .vs-ask { padding: 20px; }
+}
+@media (max-width: 420px) {
+  .vs-brand span { display: none; }
+  .vs-top-end { gap: 8px; }
+}
+
+/* ── 14 · reduced motion ───────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .vs-panel { animation: none; }
+  .vs-btn, .vs-row .vs-cell { transition: none; }
+}

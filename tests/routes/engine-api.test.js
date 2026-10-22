@@ -34,7 +34,11 @@ before(async () => {
         if (/akte_version = akte_version \+ 1/.test(setClause)) c.akte_version = (Number(c.akte_version) || 0) + 1;
         c.updated_at = '2026-09-17T10:00:00.000Z';
         return { rows: [c] }; } },
-    { match: /^SELECT id FROM contacts WHERE workspace_id=\$1 AND email=\$2 AND id<>\$3/, reply: p => ({ rows: state.emailTaken === p[1] ? [{ id: 99 }] : [] }) },
+    // state.emailTaken: another contact's address AS STORED; the reply follows the SQL like Postgres would: exact for
+    // "email=$2", case-blind for "lower(email)=$2" (contacts saved by an edit before 2026-10-22 can hold capitals).
+    { match: /^SELECT id FROM contacts WHERE workspace_id=\$1 AND (lower\(email\)|email)=\$2 AND id<>\$3/, reply: (p, sql) => {
+        const stored = state.emailTaken; if (!stored) return { rows: [] };
+        return { rows: (/lower\(email\)/.test(sql) ? stored.toLowerCase() === p[1] : stored === p[1]) ? [{ id: 99 }] : [] }; } },
     { match: /^INSERT INTO activities \(workspace_id, contact_id, type, content, created_by, source, deal_id\)/, reply: (p, sql) => {
         const row = { id: 900 + state.engineNotes.length, type: 'note', content: p[2], source: 'engine', deal_id: p[3], event_date: null, event_time: null, created_at: '2026-10-09T12:00:00.000Z' };
         state.engineNotes.push({ sql, params: p, row }); return { rows: [row] }; } },
@@ -242,11 +246,19 @@ describe('PATCH /api/kunden/:id — master data the Engine identified: fill empt
     let r = await patch('/api/kunden/60', { email: 'Taken@Muster.de' }, H('e1'));
     assert.deepEqual(r.body.konflikte, [{ feld: 'email', crm: null, engine: 'taken@muster.de', grund: 'email_vergeben' }]);
     assert.equal(r.body.email, null); assert.equal(contactUpdates().length, 0);
-    const dup = pool.find(/^SELECT id FROM contacts WHERE workspace_id=\$1 AND email=\$2 AND id<>\$3/);
+    const dup = pool.find(/^SELECT id FROM contacts WHERE workspace_id=\$1 AND (lower\(email\)|email)=\$2 AND id<>\$3/);
     assert.deepEqual(dup.params, [7, 'taken@muster.de', 60], 'scoped to the workspace, excluding the contact itself');
     assert.match(notes[0].params[2], /E-Mail: Engine „taken@muster.de“ – gehört bereits einem anderen Kontakt/);
     r = await patch('/api/kunden/60', { email: 'Frei@Muster.de' }, H('e2'));
     assert.deepEqual(r.body.gesetzt, ['email']); assert.equal(r.body.email, 'frei@muster.de');
+  });
+  test('email: another contact stored with capitals (an edit before 2026-10-22 kept them) is still taken; the check ignores case', async () => {
+    contacts.set(60, { ...ROW, email: null });
+    state.emailTaken = 'Taken@Muster.de';
+    const r = await patch('/api/kunden/60', { email: 'taken@muster.de' }, H('e3'));
+    assert.deepEqual(r.body.konflikte, [{ feld: 'email', crm: null, engine: 'taken@muster.de', grund: 'email_vergeben' }]);
+    assert.equal(r.body.email, null); assert.equal(contactUpdates().length, 0);
+    assert.match(pool.find(/^SELECT id FROM contacts WHERE workspace_id=\$1 AND (lower\(email\)|email)=\$2 AND id<>\$3/).sql, /lower\(email\)=\$2/);
   });
   test('null and empty strings mean "nothing to add" — the Engine can never clear a field', async () => {
     const r = await patch('/api/kunden/60', { webseite: '', quelle: null, adresse: null }, H('n1'));

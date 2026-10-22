@@ -655,7 +655,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'user'`);
   try {
     await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_source_check`);
-    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine','calcom'))`);
+    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine','calcom','notetaker'))`);
   } catch (e) {
     if (e.code !== '42710') throw e;
   }
@@ -696,6 +696,36 @@ async function initDb() {
       PRIMARY KEY (workspace_id, user_id)
     )
   `);
+
+  // The Notetaker (routes/integrations.js, utils/notetaker.js): a meeting booked on Google Meet with
+  // "Mit Notetaker aufzeichnen" ticked. One row per meeting: the request, then what was last sent to the
+  // service (the link, the start with its offset) and what it answered (status, job id, HTTP status, error).
+  // status: waiting_link (no Meet link yet) | scheduled | queued | updated | duplicate | failed.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notetaker_recordings (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      activity_id  INTEGER NOT NULL UNIQUE REFERENCES activities(id) ON DELETE CASCADE,
+      requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      external_id  TEXT NOT NULL UNIQUE,
+      language     TEXT NOT NULL DEFAULT 'de',
+      meeting_url  TEXT,
+      join_at      TEXT,
+      status       TEXT NOT NULL DEFAULT 'waiting_link',
+      job_id       TEXT,
+      http_status  INTEGER,
+      error        TEXT,
+      sent_at      TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  // The way back (Part 2, routes/notetaker.js): the meeting's secret result link (sent as callback_url), the note
+  // written from the result, and when the result came. finished_at set = the result was handled; a redelivery
+  // writes nothing. Status after the result: completed | recording_failed.
+  await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS callback_token   TEXT UNIQUE`);
+  await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS note_activity_id INTEGER`);
+  await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS finished_at      TIMESTAMPTZ`);
 
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');
