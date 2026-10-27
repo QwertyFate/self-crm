@@ -1,235 +1,403 @@
 <!DOCTYPE html>
-<html lang="de" class="vs-root">
+<html lang="de" class="pi-root" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light">
-  <meta name="description" content="Upgrads ist das CRM für Vertriebsteams, in dem Anfragen, Termine, Gesprächsnotizen und das Onboarding nach dem Abschluss an einem Ort zusammenkommen.">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Upgrads ist das CRM für Vertriebsteams, das mit anpackt: Leads tragen sich selbst ein, Termine landen im Deal, Gesprächsnotizen kommen nach, nach dem Abschluss läuft das Onboarding weiter.">
   <title>Upgrads CRM</title>
   <link rel="icon" href="/images/logo.png" type="image/png">
-  <link rel="preload" href="/fonts/Geologica.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/Commissioner.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/landing-two.css">
   <script src="/js/landing-two.js" defer></script>
 </head>
-<body class="vs">
-<header class="vs-head">
-  <div class="vs-wrap vs-top">
-    <a class="vs-brand" href="#top"><img src="/images/logo.png" alt="Upgrads"><span data-i18n="vs_crm">CRM</span></a>
-    <nav class="vs-top-links" data-i18n-aria="vs_nav" aria-label="Seiten">
-      <a class="vs-a" href="#vs-detail" data-i18n="vs_nav_detail">Der Vergleich</a>
-      <a class="vs-a" href="#vs-faq" data-i18n="vs_nav_faq">Fragen</a>
+<body class="pi">
+<svg class="pi-sprite" aria-hidden="true" focusable="false">
+  <symbol id="pi-i-deals" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/></symbol>
+  <symbol id="pi-i-contacts" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.2-3.6 4-5.5 7-5.5s5.8 1.9 7 5.5"/></symbol>
+  <symbol id="pi-i-tasks" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 4.5-5"/></symbol>
+  <symbol id="pi-i-chat" viewBox="0 0 24 24"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3v-3H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></symbol>
+  <symbol id="pi-i-calendar" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+  <symbol id="pi-i-analytics" viewBox="0 0 24 24"><path d="M5 19v-8M12 19V5M19 19v-6"/></symbol>
+  <symbol id="pi-i-onboarding" viewBox="0 0 24 24"><path d="M6 21V4h11l-2 4 2 4H6"/></symbol>
+  <symbol id="pi-i-integrations" viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0V8zM12 16v5"/></symbol>
+  <symbol id="pi-i-list" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></symbol>
+  <symbol id="pi-i-bell" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15L6 16zM10 20a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="pi-i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></symbol>
+  <symbol id="pi-i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="pi-i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="pi-i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="pi-i-send" viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7-7-1z"/></symbol>
+  <symbol id="pi-g-form" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2.5"/><path d="M7 9h10M7 13h10M7 17h5"/></symbol>
+  <symbol id="pi-g-make" viewBox="0 0 24 24"><path d="M4 18 8 6l4 12 4-12 4 12"/></symbol>
+  <symbol id="pi-g-zapier" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4"/></symbol>
+  <symbol id="pi-g-n8n" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.5"/><circle cx="12" cy="7" r="2.5"/><circle cx="19" cy="12" r="2.5"/><circle cx="12" cy="17" r="2.5"/><path d="M7.2 10.8 9.8 8.3M14.2 8.3l2.6 2.5M7.2 13.2l2.6 2.5M14.2 15.7l2.6-2.5"/></symbol>
+  <symbol id="pi-g-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="12" cy="15" r="1.5"/></symbol>
+  <symbol id="pi-g-meet" viewBox="0 0 24 24"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="m15 11 6-3.5v9L15 13"/></symbol>
+  <symbol id="pi-g-csv" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/></symbol>
+</svg>
+<header class="pi-head">
+  <div class="pi-wrap pi-top">
+    <a class="pi-brand" href="#top"><img src="/images/logo.png" alt="Upgrads"><span data-i18n="pi_crm">CRM</span></a>
+    <nav class="pi-links" data-i18n-aria="pi_nav" aria-label="Seiten">
+      <a class="pi-a" href="#pi-jobs" data-i18n="pi_nav_jobs">Ablauf</a>
+      <a class="pi-a" href="#pi-day" data-i18n="pi_nav_day">Funktionen</a>
+      <a class="pi-a" href="#pi-faq" data-i18n="pi_nav_faq">Fragen</a>
     </nav>
-    <div class="vs-top-end">
-      <div class="vs-lang" role="group" data-i18n-aria="vs_lang" aria-label="Sprache">
-        <button type="button" class="vs-lang-btn" data-lang="de" aria-pressed="true">DE</button>
-        <button type="button" class="vs-lang-btn" data-lang="en" aria-pressed="false">EN</button>
+    <div class="pi-top-end">
+      <div class="pi-lang" role="group" data-i18n-aria="pi_lang" aria-label="Sprache">
+        <button type="button" class="pi-lang-btn" data-lang="de" aria-pressed="true">DE</button>
+        <button type="button" class="pi-lang-btn" data-lang="en" aria-pressed="false">EN</button>
       </div>
-      <a class="vs-a vs-top-login" href="/" data-i18n="vs_login">Anmelden</a>
-      <a class="vs-btn vs-btn-sm" href="#vs-ask" data-i18n="vs_request">Zugang anfragen</a>
+      <a class="pi-a pi-login" href="/" data-i18n="pi_login">Anmelden</a>
+      <a class="pi-btn pi-btn-sm" href="#pi-ask" data-i18n="pi_request">Zugang anfragen</a>
     </div>
   </div>
 </header>
 
 <main id="top">
-  <!-- The comparison as the first screen: grey for other CRM platforms, navy for Upgrads, four rows that open their detail. -->
-  <section aria-labelledby="vs-h1">
-    <h1 class="vs-sr" id="vs-h1" data-i18n="vs_h1">Bei anderen CRMs ein Zusatz, bei Upgrads eingebaut.</h1>
-    <div class="vs-split">
-      <div class="vs-cell vs-o vs-big-cell" aria-hidden="true"><p class="vs-k" data-i18n="vs_o_k">Bei anderen CRMs</p><p class="vs-big" data-i18n="vs_o_big">ein Zusatz.</p></div>
-      <div class="vs-cell vs-u vs-big-cell" aria-hidden="true"><p class="vs-k" data-i18n="vs_u_k">Bei Upgrads</p><p class="vs-big" data-i18n="vs_u_big">eingebaut.</p></div>
-      <div class="vs-rows" role="group" data-i18n-aria="vs_rows" aria-label="Vier Unterschiede">
-        <button type="button" class="vs-row" data-topic="leads" aria-pressed="true" aria-controls="vs-detail">
-          <span class="vs-cell vs-o"><span class="vs-topic" data-i18n="vs_t_leads">Anfragen</span> <span class="vs-what" data-i18n="vs_o_leads">Anbindung per Programmierung oder Profi-Paket</span></span>
-          <span class="vs-cell vs-u"><span class="vs-topic" data-i18n="vs_t_leads">Anfragen</span> <span class="vs-what" data-i18n="vs_u_leads">Eine Adresse pro Arbeitsbereich, mit Feldzuordnung und Protokoll</span> <span class="vs-yes" data-i18n="vs_yes">eingebaut</span></span>
-        </button>
-        <button type="button" class="vs-row" data-topic="notes" aria-pressed="false" aria-controls="vs-detail">
-          <span class="vs-cell vs-o"><span class="vs-topic" data-i18n="vs_t_notes">Gesprächsnotizen</span> <span class="vs-what" data-i18n="vs_o_notes">Notetaker im Bezahlpaket oder aus dem Marktplatz, oft nur auf Englisch</span></span>
-          <span class="vs-cell vs-u"><span class="vs-topic" data-i18n="vs_t_notes">Gesprächsnotizen</span> <span class="vs-what" data-i18n="vs_u_notes">Notizen in der Sprache des Gesprächs, direkt im Deal</span> <span class="vs-yes" data-i18n="vs_yes">eingebaut</span></span>
-        </button>
-        <button type="button" class="vs-row" data-topic="list" aria-pressed="false" aria-controls="vs-detail">
-          <span class="vs-cell vs-o"><span class="vs-topic" data-i18n="vs_t_list">Eigene Liste</span> <span class="vs-what" data-i18n="vs_o_list">Eigene Objekte oft erst im größten Paket</span></span>
-          <span class="vs-cell vs-u"><span class="vs-topic" data-i18n="vs_t_list">Eigene Liste</span> <span class="vs-what" data-i18n="vs_u_list">Eine eigene Liste mit eigenen Feldern, mit Deals verknüpft</span> <span class="vs-yes" data-i18n="vs_yes">eingebaut</span></span>
-        </button>
-        <button type="button" class="vs-row" data-topic="handover" aria-pressed="false" aria-controls="vs-detail">
-          <span class="vs-cell vs-o"><span class="vs-topic" data-i18n="vs_t_handover">Nach dem Abschluss</span> <span class="vs-what" data-i18n="vs_o_handover">Onboarding als Zusatzmodul oder zweites Werkzeug</span></span>
-          <span class="vs-cell vs-u"><span class="vs-topic" data-i18n="vs_t_handover">Nach dem Abschluss</span> <span class="vs-what" data-i18n="vs_u_handover">Übergabe an die Upgrads Engine, der Stand kommt zurück</span> <span class="vs-yes" data-i18n="vs_yes">eingebaut</span></span>
-        </button>
+  <section class="pi-hero" aria-labelledby="pi-h1">
+    <div class="pi-wrap">
+      <div class="pi-hero-top">
+        <h1 class="pi-h1" id="pi-h1" data-i18n="pi_h1">Das CRM, das mit anpackt.</h1>
+        <div class="pi-hero-copy">
+          <p class="pi-sub" data-i18n="pi_sub">Leads tragen sich selbst ein, Termine landen im Deal, Gesprächsnotizen kommen nach. Das Team verkauft.</p>
+          <div class="pi-cta">
+            <a class="pi-btn" href="#pi-ask" data-i18n="pi_request">Zugang anfragen</a>
+            <a class="pi-btn pi-btn-ghost" href="#pi-jobs" data-i18n="pi_try">Selbst ausprobieren</a>
+          </div>
+          <ul class="pi-for">
+            <li data-i18n="pi_for1">Für Vertriebsteams</li>
+            <li data-i18n="pi_for2">Deutsch und Englisch</li>
+            <li data-i18n="pi_for3">Nur auf Einladung</li>
+          </ul>
+        </div>
       </div>
-      <div class="vs-cell vs-o vs-end-cell"><p class="vs-hint" data-i18n="vs_hint">Eine Zeile antippen für die Einzelheiten.</p></div>
-      <div class="vs-cell vs-u vs-end-cell"><a class="vs-btn vs-btn-sky" href="#vs-ask" data-i18n="vs_request">Zugang anfragen</a></div>
-    </div>
-  </section>
 
-  <!-- What Upgrads is, and where the comparison comes from. -->
-  <section aria-label="Upgrads">
-    <div class="vs-wrap vs-intro-in">
-      <p class="vs-lead" data-i18n="vs_intro">Upgrads ist das CRM für Vertriebsteams, in dem Anfragen, Termine, Gesprächsnotizen und das Onboarding nach dem Abschluss an einem Ort zusammenkommen.</p>
-      <div><p class="vs-small" data-i18n="vs_note">Zugang nur auf Einladung, auf Deutsch und Englisch.</p><p class="vs-small" data-i18n="vs_source">Andere CRMs: nach den Hilfe- und Preisseiten großer Anbieter, Stand Oktober 2026.</p></div>
-    </div>
-  </section>
-
-  <!-- The open row in detail: what the others need, against what Upgrads does. -->
-  <section class="vs-sec vs-band" id="vs-detail" aria-labelledby="vs-detail-t">
-    <div class="vs-wrap">
-      <h2 class="vs-h2" id="vs-detail-t">Anfragen im Vergleich</h2>
-      <div class="vs-panel" data-panel="leads">
-        <div class="vs-card vs-card-o">
-          <p class="vs-card-h" data-i18n="vs_d_o">Übliche CRM-Plattformen</p>
-          <ul class="vs-list"><li data-i18n="vs_leads_o1">Eine Adresse für eingehende Anfragen fehlt oft, dann braucht es die Programmierschnittstelle.</li><li data-i18n="vs_leads_o2">Wo es sie gibt, steckt sie meist im Profi-Paket und nimmt nur Kontakte an, die es schon gibt.</li></ul>
-          <p class="vs-card-src" data-i18n="vs_source">Andere CRMs: nach den Hilfe- und Preisseiten großer Anbieter, Stand Oktober 2026.</p>
-        </div>
-        <div class="vs-card vs-card-u">
-          <p class="vs-card-h" data-i18n="vs_d_u">Upgrads</p>
-          <ul class="vs-list"><li data-i18n="vs_leads_u1">Jeder Arbeitsbereich hat eine eigene Adresse, beliefert von Make, Zapier, n8n oder dem eigenen Formular.</li><li data-i18n="vs_leads_u2">Neue Anfragen werden Kontakte, auf Wunsch gleich mit Deal. Eine bekannte E-Mail aktualisiert den Kontakt.</li><li data-i18n="vs_leads_u3">Das Protokoll zeigt, was ankam und welche Angaben fehlten.</li></ul>
-          <div class="vs-mini" aria-hidden="true">
-            <p class="vs-chrome"><span class="vs-dots"></span><span data-i18n="vs_app_recent">Letzte Leads</span></p>
-            <div class="vs-mini-in">
-              <p class="vs-log"><span class="vs-ok"></span><span data-i18n="vs_app_received">Lead empfangen</span><b>Mara Lindner</b><time data-i18n="vs_app_now">Gerade eben</time></p>
-              <p class="vs-log"><span class="vs-ok"></span><span data-i18n="vs_app_received">Lead empfangen</span><b>Kemal Kaya</b><time>09:12</time></p>
-              <p class="vs-log is-bad"><span class="vs-ok"></span><span data-i18n="vs_app_rejected">Abgelehnt</span><b></b><time>08:40</time></p>
+      <div class="pi-stage">
+        <div class="pi-window" id="pi-window" role="region" data-i18n-aria="pi_stage_aria" aria-label="Upgrads mit Beispieldaten: das Deals-Board zum Ausprobieren">
+          <div class="pi-side" aria-hidden="true">
+            <p class="pi-side-ws"><img src="/images/logo.png" alt=""><span>Nordlicht Vertrieb</span></p>
+            <p class="pi-side-g" data-i18n="pi_app_ws">Arbeitsbereich</p>
+            <p class="pi-side-i is-on"><svg class="pi-ic"><use href="#pi-i-deals"/></svg><span data-i18n="pi_app_deals">Deals</span></p>
+            <p class="pi-side-i"><svg class="pi-ic"><use href="#pi-i-contacts"/></svg><span data-i18n="pi_app_contacts">Kontakte</span></p>
+            <p class="pi-side-i"><svg class="pi-ic"><use href="#pi-i-tasks"/></svg><span data-i18n="pi_app_tasks">Aufgaben</span></p>
+            <p class="pi-side-g" data-i18n="pi_app_tools">Werkzeuge</p>
+            <p class="pi-side-i"><svg class="pi-ic"><use href="#pi-i-chat"/></svg><span data-i18n="pi_app_chat">Team-Chat</span></p>
+            <p class="pi-side-i"><svg class="pi-ic"><use href="#pi-i-calendar"/></svg><span data-i18n="pi_app_calendar">Kalender</span></p>
+            <p class="pi-side-i"><svg class="pi-ic"><use href="#pi-i-analytics"/></svg><span data-i18n="pi_app_analytics">Analysen</span></p>
+            <p class="pi-side-i"><svg class="pi-ic"><use href="#pi-i-onboarding"/></svg><span data-i18n="pi_app_onboarding">Onboarding</span></p>
+            <p class="pi-side-i"><svg class="pi-ic"><use href="#pi-i-integrations"/></svg><span data-i18n="pi_app_integrations">Integrationen</span></p>
+          </div>
+          <div class="pi-main">
+            <div class="pi-bar">
+              <span class="pi-crumb" data-i18n="pi_app_deals">Deals</span>
+              <span class="pi-search" aria-hidden="true"><svg class="pi-ic"><use href="#pi-i-search"/></svg><span data-i18n="pi_app_search">Zu einer Seite springen…</span><kbd class="pi-kbd">Strg K</kbd></span>
+              <span class="pi-new" aria-hidden="true"><svg class="pi-ic"><use href="#pi-i-plus"/></svg><span data-i18n="pi_app_new">Neu</span></span>
+              <span class="pi-bell" id="pi-bell" role="img" data-i18n-aria="pi_app_notifications" aria-label="Benachrichtigungen"><svg class="pi-ic"><use href="#pi-i-bell"/></svg><span class="pi-bell-n" id="pi-bell-n" hidden>0</span></span>
+              <div class="pi-bell-pop" id="pi-bell-pop" role="status" hidden><b id="pi-bell-k"></b><span id="pi-bell-d"></span></div>
+            </div>
+            <p class="pi-pipe"><b data-i18n="pi_s_pipe">Vertrieb</b></p>
+            <div class="pi-board" id="pi-board">
+              <section class="pi-col pi-st-0" data-col="0" aria-labelledby="pi-col-0"><header class="pi-col-h"><span class="pi-dot"></span><b id="pi-col-0" data-i18n="pi_s_st0">Neu</b><span class="pi-col-n">0</span></header><span class="pi-col-bar"></span><div class="pi-col-list"></div></section>
+              <section class="pi-col pi-st-1" data-col="1" aria-labelledby="pi-col-1"><header class="pi-col-h"><span class="pi-dot"></span><b id="pi-col-1" data-i18n="pi_s_st1">Kontaktiert</b><span class="pi-col-n">0</span></header><span class="pi-col-bar"></span><div class="pi-col-list"></div></section>
+              <section class="pi-col pi-st-2" data-col="2" aria-labelledby="pi-col-2"><header class="pi-col-h"><span class="pi-dot"></span><b id="pi-col-2" data-i18n="pi_s_st2">Angebot</b><span class="pi-col-n">0</span></header><span class="pi-col-bar"></span><div class="pi-col-list"></div></section>
+              <section class="pi-col pi-st-3" data-col="3" aria-labelledby="pi-col-3"><header class="pi-col-h"><span class="pi-dot"></span><b id="pi-col-3" data-i18n="pi_s_st3">Verhandlung</b><span class="pi-col-n">0</span></header><span class="pi-col-bar"></span><div class="pi-col-list"></div></section>
+              <section class="pi-col pi-st-4" data-col="4" aria-labelledby="pi-col-4"><header class="pi-col-h"><span class="pi-dot"></span><b id="pi-col-4" data-i18n="pi_s_st4">Gewonnen</b><span class="pi-col-n">0</span></header><span class="pi-col-bar"></span><div class="pi-col-list"></div></section>
             </div>
           </div>
-        </div>
-        <p class="vs-panel-next"><button type="button" class="vs-link" data-next data-i18n="vs_next">Nächster Unterschied</button></p>
-      </div>
-      <div class="vs-panel" data-panel="notes" hidden>
-        <div class="vs-card vs-card-o">
-          <p class="vs-card-h" data-i18n="vs_d_o">Übliche CRM-Plattformen</p>
-          <ul class="vs-list"><li data-i18n="vs_notes_o1">Der Notetaker steckt im Bezahlpaket oder kommt als App aus dem Marktplatz.</li><li data-i18n="vs_notes_o2">Abschriften gibt es oft nur auf Englisch.</li></ul>
-          <p class="vs-card-src" data-i18n="vs_source">Andere CRMs: nach den Hilfe- und Preisseiten großer Anbieter, Stand Oktober 2026.</p>
-        </div>
-        <div class="vs-card vs-card-u">
-          <p class="vs-card-h" data-i18n="vs_d_u">Upgrads</p>
-          <ul class="vs-list"><li data-i18n="vs_notes_u1">Beim Buchen ein Haken, und der Notetaker kommt mit ins Google Meet.</li><li data-i18n="vs_notes_u2">Er schreibt in der Sprache, in der gesprochen wurde.</li><li data-i18n="vs_notes_u3">Die Notiz steht danach im Deal: Zusammenfassung, Entscheidungen, Aufgaben, offene Fragen.</li></ul>
-          <div class="vs-mini" aria-hidden="true">
-            <p class="vs-chrome"><span class="vs-dots"></span><span data-i18n="vs_app_note">Notiz</span></p>
-            <div class="vs-mini-in">
-              <p class="vs-note-h"><b data-i18n="vs_app_note">Notiz</b><span data-i18n="vs_by_nt">von Notetaker</span></p>
-              <p class="vs-strong" data-i18n="vs_d_n_title">Erstgespräch Nordwerk</p>
-              <p data-i18n="vs_d_n_sum">Zwei Standorte, Start im Januar.</p>
-              <p class="vs-gap" data-i18n="vs_n_head">Aufgaben</p>
-              <p class="vs-li" data-i18n="vs_d_n_a1">Angebot schicken (Anna), bis Freitag</p>
-            </div>
+          <div class="pi-toasts" id="pi-board-toast" aria-live="polite"></div>
+          <div class="pi-move" id="pi-move" role="dialog" data-i18n-aria="pi_app_move" aria-label="In Phase verschieben" hidden>
+            <p class="pi-move-h"><span data-i18n="pi_app_move">In Phase verschieben</span><button type="button" class="pi-move-x" id="pi-move-x" data-i18n-aria="pi_close" aria-label="Schließen"><svg class="pi-ic"><use href="#pi-i-x"/></svg></button></p>
+            <div class="pi-move-list" id="pi-move-list"></div>
           </div>
         </div>
-        <p class="vs-panel-next"><button type="button" class="vs-link" data-next data-i18n="vs_next">Nächster Unterschied</button></p>
-      </div>
-      <div class="vs-panel" data-panel="list" hidden>
-        <div class="vs-card vs-card-o">
-          <p class="vs-card-h" data-i18n="vs_d_o">Übliche CRM-Plattformen</p>
-          <ul class="vs-list"><li data-i18n="vs_list_o1">Eigene Objekte gibt es oft erst im größten Paket.</li><li data-i18n="vs_list_o2">Manche Anbieter haben gar keine, dann bleibt nur ein Feld mehr am Deal.</li></ul>
-          <p class="vs-card-src" data-i18n="vs_source">Andere CRMs: nach den Hilfe- und Preisseiten großer Anbieter, Stand Oktober 2026.</p>
-        </div>
-        <div class="vs-card vs-card-u">
-          <p class="vs-card-h" data-i18n="vs_d_u">Upgrads</p>
-          <ul class="vs-list"><li data-i18n="vs_list_u1">Eine eigene Liste mit eigenem Namen, etwa Immobilien oder Fahrzeuge.</li><li data-i18n="vs_list_u2">Eigene Felder, verknüpft mit Deals und Kontakten.</li></ul>
-          <div class="vs-mini" aria-hidden="true">
-            <p class="vs-chrome"><span class="vs-dots"></span><span data-i18n="vs_d_list">Immobilien</span></p>
-            <div class="vs-mini-in">
-              <p class="vs-strong">Lindenstraße 12</p>
-              <p class="vs-field"><span data-i18n="vs_d_city">Ort</span><b>Köln</b></p>
-              <p class="vs-field"><span data-i18n="vs_d_rooms">Zimmer</span><b>4</b></p>
-              <p class="vs-gap vs-lbl" data-i18n="vs_app_deals">Deals</p>
-              <p class="vs-link-row"><b>Familie Kaya</b><span class="vs-badge" data-i18n="vs_app_linked">Verknüpft</span></p>
-            </div>
-          </div>
-        </div>
-        <p class="vs-panel-next"><button type="button" class="vs-link" data-next data-i18n="vs_next">Nächster Unterschied</button></p>
-      </div>
-      <div class="vs-panel" data-panel="handover" hidden>
-        <div class="vs-card vs-card-o">
-          <p class="vs-card-h" data-i18n="vs_d_o">Übliche CRM-Plattformen</p>
-          <ul class="vs-list"><li data-i18n="vs_handover_o1">Nach dem Abschluss braucht es oft ein Zusatzmodul oder ein zweites Werkzeug.</li><li data-i18n="vs_handover_o2">Der Stand des Onboardings steht dann meist woanders.</li></ul>
-          <p class="vs-card-src" data-i18n="vs_source">Andere CRMs: nach den Hilfe- und Preisseiten großer Anbieter, Stand Oktober 2026.</p>
-        </div>
-        <div class="vs-card vs-card-u">
-          <p class="vs-card-h" data-i18n="vs_d_u">Upgrads</p>
-          <ul class="vs-list"><li data-i18n="vs_handover_u1">Ein gewonnener Deal geht an die Upgrads Engine.</li><li data-i18n="vs_handover_u2">Den Stand meldet die Engine zurück, vom versendeten Formular bis zum fertigen Briefing.</li><li data-i18n="vs_handover_u3">Was das Team eingetragen hat, überschreibt sie nicht.</li></ul>
-          <div class="vs-mini" aria-hidden="true">
-            <p class="vs-chrome"><span class="vs-dots"></span><span data-i18n="vs_app_onboarding">Onboarding</span></p>
-            <div class="vs-mini-in vs-onb">
-              <span class="vs-th" data-i18n="vs_app_customer">Kunde</span><span class="vs-th" data-i18n="vs_app_status">Engine-Status</span><span class="vs-th" data-i18n="vs_app_delivery">Webhook</span>
-              <b>Nordwerk GmbH</b><span class="vs-status" data-i18n="vs_app_briefing">Briefing fertig</span><span class="vs-badge" data-i18n="vs_app_delivered">Zugestellt</span>
-              <b>Familie Kaya</b><span class="vs-status" data-i18n="vs_app_form_done">Formular ausgefüllt</span><span class="vs-badge" data-i18n="vs_app_delivered">Zugestellt</span>
-            </div>
-          </div>
-        </div>
-        <p class="vs-panel-next"><button type="button" class="vs-link" data-next data-i18n="vs_next">Nächster Unterschied</button></p>
+        <aside class="pi-feed" aria-labelledby="pi-feed-t">
+          <h2 class="pi-feed-t" id="pi-feed-t" data-i18n="pi_feed_t">Erledigt, ohne Abtippen</h2>
+          <p class="pi-feed-empty" id="pi-feed-empty" data-i18n="pi_feed_empty">Gleich kommt der erste Lead.</p>
+          <ol class="pi-feed-list" id="pi-feed-list" aria-live="polite"></ol>
+          <p class="pi-hint" data-i18n="pi_hint">Karten lassen sich ziehen. Gewonnen bleibt ein Zug des Teams.</p>
+        </aside>
       </div>
     </div>
   </section>
 
-  <!-- What Upgrads leaves out on purpose. -->
-  <section class="vs-sec" aria-labelledby="vs-no-t">
-    <div class="vs-wrap">
-      <h2 class="vs-h2" id="vs-no-t" data-i18n="vs_no_t">Was Upgrads bewusst weglässt.</h2>
-      <div class="vs-no">
-        <div class="vs-no-i"><h3 class="vs-h3" data-i18n="vs_no1_t">Keine Mails aus dem CRM</h3><p data-i18n="vs_no1_d">Telefon, Mail und WhatsApp öffnen sich in den eigenen Apps. Einladungen zu Terminen kommen von Cal.com.</p></div>
-        <div class="vs-no-i"><h3 class="vs-h3" data-i18n="vs_no2_t">Kein Marktplatz voller Apps</h3><p data-i18n="vs_no2_d">Die vier Dinge oben sind eingebaut, nicht nachgerüstet.</p></div>
-        <div class="vs-no-i"><h3 class="vs-h3" data-i18n="vs_no3_t">Keine offene Anmeldung</h3><p data-i18n="vs_no3_d">Jeder Arbeitsbereich wird eingerichtet, die Rollen kommen per Einladungscode.</p></div>
-      </div>
-      <h2 class="vs-h2 vs-h2-next" id="vs-x-t" data-i18n="vs_x_t">Und was jedes CRM können muss, kann Upgrads auch.</h2>
-      <ul class="vs-days" aria-labelledby="vs-x-t">
-        <li data-i18n="vs_x1">Board mit Wert pro Phase, und Rückgängig</li>
-        <li data-i18n="vs_x2">Termine im Deal buchen, mit Warnung bei Überschneidung</li>
-        <li data-i18n="vs_x3">Aufgaben mit Projekten, Unteraufgaben und Uhrzeit</li>
-        <li data-i18n="vs_x4">Ein Kalender fürs Team, jede Person auf der eigenen Uhr</li>
-        <li data-i18n="vs_x5">Analysen: Abschlussquote, gewonnener Wert, Funnel</li>
-        <li data-i18n="vs_x6">Import aus CSV, Team-Chat, mehrere Arbeitsbereiche</li>
+  <section class="pi-with" aria-labelledby="pi-with-t">
+    <div class="pi-wrap pi-with-in">
+      <h2 class="pi-with-t" id="pi-with-t" data-i18n="pi_with_t">Arbeitet mit</h2>
+      <ul class="pi-marks">
+        <li class="pi-mark"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-form"/></svg><span data-i18n="pi_src_form">Website-Formular</span></li>
+        <li class="pi-mark"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-make"/></svg><span data-i18n="pi_src_make">Make</span></li>
+        <li class="pi-mark"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-zapier"/></svg><span data-i18n="pi_src_zapier">Zapier</span></li>
+        <li class="pi-mark"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-n8n"/></svg><span data-i18n="pi_src_n8n">n8n</span></li>
+        <li class="pi-mark"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-cal"/></svg><span data-i18n="pi_src_cal">Cal.com</span></li>
+        <li class="pi-mark"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-meet"/></svg><span data-i18n="pi_src_meet">Google Meet</span></li>
+        <li class="pi-mark"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-csv"/></svg><span data-i18n="pi_src_csv">CSV-Import</span></li>
       </ul>
     </div>
   </section>
 
-  <!-- Questions about the comparison. -->
-  <section class="vs-sec vs-band" id="vs-faq" aria-labelledby="vs-q-t">
-    <div class="vs-wrap vs-faq-in">
-      <div>
-        <h2 class="vs-h2" id="vs-q-t" data-i18n="vs_q_t">Fragen zum Vergleich.</h2>
-        <p class="vs-sub"><span data-i18n="vs_q_d">Noch etwas offen? Das Team antwortet unter</span> <a class="vs-a vs-a-line" data-mail href="mailto:team@upgrads.de?subject=Anfrage%20zu%20Upgrads%20CRM">team@upgrads.de</a></p>
+  <section class="pi-jobs" id="pi-jobs" aria-labelledby="pi-jobs-t">
+    <div class="pi-wrap">
+      <div class="pi-jobs-head">
+        <h2 class="pi-h2" id="pi-jobs-t" data-i18n="pi_jobs_t">So packt Upgrads mit an.</h2>
+        <div class="pi-jobs-ctl">
+          <span class="pi-count" id="pi-count" aria-live="polite">0 von 5 ausprobiert</span>
+          <button type="button" class="pi-a pi-again" id="pi-again" data-i18n="pi_jobs_again" hidden>Von vorn</button>
+          <button type="button" class="pi-btn pi-btn-ghost pi-btn-sm" id="pi-play" data-i18n="pi_jobs_play">Alles zeigen</button>
+        </div>
       </div>
-      <div class="vs-faq">
-        <details class="vs-qa"><summary data-i18n="vs_q1_q">Woher stammen die Angaben zu anderen CRMs?</summary><p data-i18n="vs_q1_a">Aus den Hilfe- und Preisseiten großer CRM-Anbieter, Stand Oktober 2026. Pakete ändern sich, ein Blick in den eigenen Tarif lohnt sich.</p></details>
-        <details class="vs-qa"><summary data-i18n="vs_q2_q">Warum stehen keine Namen dabei?</summary><p data-i18n="vs_q2_a">Weil es um die Sache geht: was ein Vertriebsteam braucht und wo es das bekommt. Die Angaben gelten für große Anbieter, nicht für jeden einzelnen.</p></details>
-        <details class="vs-qa"><summary data-i18n="vs_q3_q">Sind Notetaker und Engine Teil des CRM?</summary><p data-i18n="vs_q3_a">Beide laufen als eigene Dienste neben dem CRM und sind fest angebunden. Der Notetaker zeichnet Termine in Google Meet auf, die Upgrads Engine führt das Onboarding nach dem Abschluss.</p></details>
-        <details class="vs-qa"><summary data-i18n="vs_q4_q">Für wen ist Upgrads gemacht?</summary><p data-i18n="vs_q4_a">Für Vertriebsteams, deren Anfragen über Formulare kommen, die Termine per Video führen und nach dem Abschluss ein Onboarding übergeben.</p></details>
-        <details class="vs-qa"><summary data-i18n="vs_q5_q">Wie kommt ein Team zu Upgrads?</summary><p data-i18n="vs_q5_a">Nur auf Einladung. Nach einer Anfrage richtet das Upgrads-Team den Arbeitsbereich ein, Einladungscodes legen die Rollen fest.</p></details>
+      <ol class="pi-row" id="pi-row">
+        <li class="pi-job pi-c-1 is-open" data-job="1">
+          <button type="button" class="pi-job-h" id="pi-jh-1" aria-expanded="true" aria-controls="pi-jb-1"><span class="pi-job-n" aria-hidden="true">1</span><span class="pi-job-t" data-i18n="pi_j1_t">Die Anfrage trägt sich ein.</span><svg class="pi-ic pi-job-ok" aria-hidden="true"><use href="#pi-i-check"/></svg></button>
+          <div class="pi-job-b" id="pi-jb-1" role="region" aria-labelledby="pi-jh-1">
+            <p class="pi-job-d" data-i18n="pi_j1_d">Aus dem Website-Formular oder über Make, Zapier und n8n. Kontakt und Deal liegen bereit.</p>
+            <div class="pi-inst pi-i1">
+              <div class="pi-srcs">
+                <p class="pi-i-label" id="pi-srcs-l" data-i18n="pi_j1_do">Eine Quelle antippen:</p>
+                <div class="pi-src-list" role="group" aria-labelledby="pi-srcs-l">
+                  <button type="button" class="pi-src" data-src="pi_src_form"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-form"/></svg><span data-i18n="pi_src_form">Website-Formular</span></button>
+                  <button type="button" class="pi-src" data-src="pi_src_make"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-make"/></svg><span data-i18n="pi_src_make">Make</span></button>
+                  <button type="button" class="pi-src" data-src="pi_src_zapier"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-zapier"/></svg><span data-i18n="pi_src_zapier">Zapier</span></button>
+                  <button type="button" class="pi-src" data-src="pi_src_n8n"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-n8n"/></svg><span data-i18n="pi_src_n8n">n8n</span></button>
+                </div>
+              </div>
+              <div class="pi-ui">
+                <p class="pi-ui-bar" data-i18n="pi_app_leads_t">Empfangene Leads</p>
+                <p class="pi-ui-empty" id="pi-log-empty" data-i18n="pi_log_empty">Noch keine Leads.</p>
+                <ol class="pi-log" id="pi-log" aria-live="polite"></ol>
+              </div>
+              <div class="pi-ui pi-col pi-st-0 pi-col-one">
+                <header class="pi-col-h"><span class="pi-dot"></span><b data-i18n="pi_s_st0">Neu</b><span class="pi-col-n" id="pi-new-n">0</span></header>
+                <div class="pi-col-list" id="pi-new"></div>
+              </div>
+            </div>
+          </div>
+        </li>
+        <li class="pi-job pi-c-2" data-job="2">
+          <button type="button" class="pi-job-h" id="pi-jh-2" aria-expanded="false" aria-controls="pi-jb-2"><span class="pi-job-n" aria-hidden="true">2</span><span class="pi-job-t" data-i18n="pi_j2_t">Der Termin wird im Deal gebucht.</span><svg class="pi-ic pi-job-ok" aria-hidden="true"><use href="#pi-i-check"/></svg></button>
+          <div class="pi-job-b" id="pi-jb-2" role="region" aria-labelledby="pi-jh-2" hidden>
+            <p class="pi-job-d" data-i18n="pi_j2_d">Nur offene Zeiten aus Cal.com, mit Blick in den Teamkalender. Die Einladung schickt Cal.com.</p>
+            <div class="pi-inst pi-i2">
+              <div class="pi-need" id="pi-need-2"><p data-i18n="pi_need_lead">Zuerst kommt der Lead.</p><button type="button" class="pi-btn pi-btn-ghost pi-btn-sm" data-goto="1">Zu Schritt 1</button></div>
+              <div class="pi-ui pi-book-ui" id="pi-book-ui" hidden>
+                <p class="pi-ui-bar"><b id="pi-book-title"></b></p>
+                <div class="pi-book-in">
+                  <p class="pi-book-to" id="pi-book-to"></p>
+                  <dl class="pi-book-meta">
+                    <div><dt data-i18n="pi_app_type">Terminart</dt><dd id="pi-book-type"></dd></div>
+                    <div><dt data-i18n="pi_app_where">Wo</dt><dd data-i18n="pi_src_meet">Google Meet</dd></div>
+                  </dl>
+                  <div class="pi-days" id="pi-days"></div>
+                  <div class="pi-slots" id="pi-slots"></div>
+                  <p class="pi-zone" id="pi-zone"></p>
+                  <div class="pi-clash" id="pi-clash" role="alert" hidden><p class="pi-clash-t" id="pi-clash-t"></p><p data-i18n="pi_app_conflict_hint">Cal.com kennt die Aufgaben und Einträge dieses CRM nicht. Trotzdem buchen oder eine andere Zeit wählen.</p></div>
+                  <label class="pi-rec" for="pi-rec"><input type="checkbox" id="pi-rec" disabled><span data-i18n="pi_app_record">Mit Notetaker aufzeichnen</span></label>
+                  <p class="pi-rec-s" id="pi-rec-s" data-i18n="pi_app_rec_checking">Es wird geprüft, ob Notetaker bereit ist …</p>
+                  <div class="pi-sum" id="pi-sum" hidden><svg class="pi-ic" aria-hidden="true"><use href="#pi-i-calendar"/></svg><p><b id="pi-sum-t"></b><span id="pi-sum-d"></span></p></div>
+                  <button type="button" class="pi-ui-btn" id="pi-book" disabled data-i18n="pi_app_submit">Buchen</button>
+                  <div class="pi-booked" id="pi-booked" role="status" hidden><p id="pi-booked-t"></p><p class="pi-booked-rec" id="pi-booked-rec" data-i18n="pi_app_rec_scheduled">Notetaker ist zum Start des Meetings eingeplant.</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </li>
+        <li class="pi-job pi-c-3" data-job="3">
+          <button type="button" class="pi-job-h" id="pi-jh-3" aria-expanded="false" aria-controls="pi-jb-3"><span class="pi-job-n" aria-hidden="true">3</span><span class="pi-job-t" data-i18n="pi_j3_t">Die Notizen kommen nach.</span><svg class="pi-ic pi-job-ok" aria-hidden="true"><use href="#pi-i-check"/></svg></button>
+          <div class="pi-job-b" id="pi-jb-3" role="region" aria-labelledby="pi-jh-3" hidden>
+            <p class="pi-job-d" data-i18n="pi_j3_d">Notetaker nimmt das Google Meet auf und legt die Notizen in den Deal.</p>
+            <div class="pi-inst pi-i3">
+              <div class="pi-need" id="pi-need-3"><p id="pi-need-3-t">Zuerst kommt der Lead.</p><button type="button" class="pi-btn pi-btn-ghost pi-btn-sm" id="pi-need-3-b" data-goto="1">Zu Schritt 1</button></div>
+              <div class="pi-ui pi-call" id="pi-call" hidden>
+                <p class="pi-call-top"><span class="pi-live"><span class="pi-live-dot"></span><span data-i18n="pi_j3_live">Aufnahme läuft</span></span><span class="pi-call-app"><svg class="pi-g" aria-hidden="true"><use href="#pi-g-meet"/></svg><span data-i18n="pi_src_meet">Google Meet</span></span></p>
+                <p class="pi-call-t" id="pi-call-t"></p>
+                <div class="pi-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                <button type="button" class="pi-ui-btn pi-ui-btn-end" id="pi-end" data-i18n="pi_j3_end">Gespräch beenden</button>
+              </div>
+              <div class="pi-ui pi-deal"><ol class="pi-tl" id="pi-tl" aria-live="polite"></ol></div>
+            </div>
+          </div>
+        </li>
+        <li class="pi-job pi-c-4" data-job="4">
+          <button type="button" class="pi-job-h" id="pi-jh-4" aria-expanded="false" aria-controls="pi-jb-4"><span class="pi-job-n" aria-hidden="true">4</span><span class="pi-job-t" data-i18n="pi_j4_t">Gewonnen ist ein Zug.</span><svg class="pi-ic pi-job-ok" aria-hidden="true"><use href="#pi-i-check"/></svg></button>
+          <div class="pi-job-b" id="pi-jb-4" role="region" aria-labelledby="pi-jh-4" hidden>
+            <p class="pi-job-d" data-i18n="pi_j4_d">Den macht das Team, auf dem Board oder im Deal. Rückgängig inklusive.</p>
+            <div class="pi-inst pi-i4">
+              <div class="pi-need" id="pi-need-4"><p data-i18n="pi_need_lead">Zuerst kommt der Lead.</p><button type="button" class="pi-btn pi-btn-ghost pi-btn-sm" data-goto="1">Zu Schritt 1</button></div>
+              <div class="pi-win-ui" id="pi-win-ui" hidden>
+                <ol class="pi-steps" id="pi-steps" data-i18n-aria="pi_app_stage" aria-label="Phase">
+                  <li><button type="button" class="pi-step pi-st-0" data-to="0" data-i18n="pi_s_st0">Neu</button></li>
+                  <li><button type="button" class="pi-step pi-st-1" data-to="1" data-i18n="pi_s_st1">Kontaktiert</button></li>
+                  <li><button type="button" class="pi-step pi-st-2" data-to="2" data-i18n="pi_s_st2">Angebot</button></li>
+                  <li><button type="button" class="pi-step pi-st-3" data-to="3" data-i18n="pi_s_st3">Verhandlung</button></li>
+                  <li><button type="button" class="pi-step pi-st-4" data-to="4" data-i18n="pi_s_st4">Gewonnen</button></li>
+                </ol>
+                <div class="pi-win" id="pi-win">
+                  <section class="pi-col pi-st-3" data-col="3" aria-labelledby="pi-win-3"><header class="pi-col-h"><span class="pi-dot"></span><b id="pi-win-3" data-i18n="pi_s_st3">Verhandlung</b></header><div class="pi-col-list"></div></section>
+                  <section class="pi-col pi-st-4" data-col="4" aria-labelledby="pi-win-4"><header class="pi-col-h"><span class="pi-dot"></span><b id="pi-win-4" data-i18n="pi_s_st4">Gewonnen</b></header><div class="pi-col-list"></div></section>
+                </div>
+                <button type="button" class="pi-btn pi-btn-sm" id="pi-win-btn" data-i18n="pi_j4_btn">Nach Gewonnen verschieben</button>
+                <div class="pi-toasts pi-toasts-in" id="pi-win-toast" aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+        </li>
+        <li class="pi-job pi-c-5" data-job="5">
+          <button type="button" class="pi-job-h" id="pi-jh-5" aria-expanded="false" aria-controls="pi-jb-5"><span class="pi-job-n" aria-hidden="true">5</span><span class="pi-job-t" data-i18n="pi_j5_t">Das Onboarding läuft weiter.</span><svg class="pi-ic pi-job-ok" aria-hidden="true"><use href="#pi-i-check"/></svg></button>
+          <div class="pi-job-b" id="pi-jb-5" role="region" aria-labelledby="pi-jh-5" hidden>
+            <p class="pi-job-d" data-i18n="pi_j5_d">Nach dem Abschluss übernimmt die Upgrads Engine und meldet jeden Schritt zurück.</p>
+            <div class="pi-inst pi-i5">
+              <div class="pi-need" id="pi-need-5"><p id="pi-need-5-t">Zuerst kommt der Lead.</p><button type="button" class="pi-btn pi-btn-ghost pi-btn-sm" id="pi-need-5-b" data-goto="1">Zu Schritt 1</button></div>
+              <div class="pi-onb-ui" id="pi-onb-ui" hidden>
+                <div class="pi-ui pi-onb">
+                  <p class="pi-ui-bar" data-i18n="pi_app_onboarding">Onboarding</p>
+                  <table class="pi-onb-t">
+                    <thead><tr><th data-i18n="pi_app_col_deal">Deal</th><th data-i18n="pi_app_col_customer">Kunde</th><th data-i18n="pi_app_col_status">Engine-Status</th><th data-i18n="pi_app_col_delivery">Webhook</th></tr></thead>
+                    <tbody><tr><td id="pi-onb-deal"></td><td id="pi-onb-kunde"></td><td><span class="pi-pill pi-pill-st" id="pi-onb-status"></span></td><td><span class="pi-pill pi-pill-del" id="pi-onb-del"></span></td></tr></tbody>
+                  </table>
+                </div>
+                <ol class="pi-ladder" id="pi-ladder">
+                  <li data-st="formular_versendet" data-i18n="pi_app_st_formular_versendet">Formular versendet</li>
+                  <li data-st="formular_ausgefuellt" data-i18n="pi_app_st_formular_ausgefuellt">Formular ausgefüllt</li>
+                  <li data-st="termin_gebucht" data-i18n="pi_app_st_termin_gebucht">Termin gebucht</li>
+                  <li data-st="call_erfolgt" data-i18n="pi_app_st_call_erfolgt">Call erfolgt</li>
+                  <li data-st="briefing_fertig" data-i18n="pi_app_st_briefing_fertig">Briefing fertig</li>
+                  <li data-st="onboarding_abgeschlossen" data-i18n="pi_app_st_onboarding_abgeschlossen">Abgeschlossen</li>
+                </ol>
+                <div class="pi-ui pi-deal"><ol class="pi-tl" id="pi-tl-5" aria-live="polite"></ol></div>
+              </div>
+            </div>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="pi-day" id="pi-day" aria-labelledby="pi-day-t">
+    <div class="pi-wrap">
+      <h2 class="pi-h2" id="pi-day-t" data-i18n="pi_day_t">Und der Rest vom Vertriebstag.</h2>
+      <div class="pi-tabs" id="pi-tabs" role="tablist" data-i18n-aria="pi_nav_day" aria-label="Funktionen">
+        <button type="button" class="pi-tab" role="tab" id="pi-tab-tasks" aria-controls="pi-panel-tasks" aria-selected="true" data-tab="tasks"><svg class="pi-ic" aria-hidden="true"><use href="#pi-i-tasks"/></svg><span data-i18n="pi_app_tasks">Aufgaben</span></button>
+        <button type="button" class="pi-tab" role="tab" id="pi-tab-cal" aria-controls="pi-panel-cal" aria-selected="false" tabindex="-1" data-tab="cal"><svg class="pi-ic" aria-hidden="true"><use href="#pi-i-calendar"/></svg><span data-i18n="pi_app_calendar">Kalender</span></button>
+        <button type="button" class="pi-tab" role="tab" id="pi-tab-chat" aria-controls="pi-panel-chat" aria-selected="false" tabindex="-1" data-tab="chat"><svg class="pi-ic" aria-hidden="true"><use href="#pi-i-chat"/></svg><span data-i18n="pi_app_chat">Team-Chat</span></button>
+        <button type="button" class="pi-tab" role="tab" id="pi-tab-an" aria-controls="pi-panel-an" aria-selected="false" tabindex="-1" data-tab="an"><svg class="pi-ic" aria-hidden="true"><use href="#pi-i-analytics"/></svg><span data-i18n="pi_app_analytics">Analysen</span></button>
+        <button type="button" class="pi-tab" role="tab" id="pi-tab-list" aria-controls="pi-panel-list" aria-selected="false" tabindex="-1" data-tab="list"><svg class="pi-ic" aria-hidden="true"><use href="#pi-i-list"/></svg><span data-i18n="pi_tab_list">Eigene Liste</span></button>
+      </div>
+
+      <div class="pi-panel" id="pi-panel-tasks" role="tabpanel" aria-labelledby="pi-tab-tasks" data-panel="tasks">
+        <p class="pi-panel-d" data-i18n="pi_day_tasks">Mit Uhrzeit im Kalender. Ein Haken, erledigt.</p>
+        <div class="pi-ui pi-mini">
+          <p class="pi-ui-bar pi-seg"><button type="button" class="pi-seg-b" id="pi-scope-all" aria-pressed="true" data-i18n="pi_app_tk_all">Alle Aufgaben</button><button type="button" class="pi-seg-b" id="pi-scope-mine" aria-pressed="false" data-i18n="pi_app_tk_mine">Meine Aufgaben</button></p>
+          <ul class="pi-tasks" id="pi-tasks"></ul>
+          <label class="pi-quick-l" for="pi-quick"><svg class="pi-ic" aria-hidden="true"><use href="#pi-i-plus"/></svg><input class="pi-quick" id="pi-quick" type="text" maxlength="120" autocomplete="off" data-i18n-ph="pi_app_tk_add" placeholder="Aufgabe hinzufügen"><span class="pi-quick-k" data-i18n="pi_app_tk_enter">Enter drücken zum Hinzufügen</span></label>
+          <div class="pi-toasts pi-toasts-in" id="pi-day-toast" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="pi-panel" id="pi-panel-cal" role="tabpanel" aria-labelledby="pi-tab-cal" data-panel="cal" hidden>
+        <p class="pi-panel-d" data-i18n="pi_day_cal">Gebuchte Termine und Aufgaben mit Uhrzeit, in einer Woche.</p>
+        <div class="pi-ui pi-mini">
+          <p class="pi-ui-bar" data-i18n="pi_app_week">Woche</p>
+          <div class="pi-week" id="pi-week">
+            <div class="pi-wday" data-wday="2026-10-26"><p class="pi-wday-h"></p><div class="pi-wday-b"></div></div>
+            <div class="pi-wday" data-wday="2026-10-27"><p class="pi-wday-h"></p><div class="pi-wday-b"></div></div>
+            <div class="pi-wday" data-wday="2026-10-28"><p class="pi-wday-h"></p><div class="pi-wday-b"></div></div>
+            <div class="pi-wday" data-wday="2026-10-29"><p class="pi-wday-h"></p><div class="pi-wday-b"></div></div>
+            <div class="pi-wday" data-wday="2026-10-30"><p class="pi-wday-h"></p><div class="pi-wday-b"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="pi-panel" id="pi-panel-chat" role="tabpanel" aria-labelledby="pi-tab-chat" data-panel="chat" hidden>
+        <p class="pi-panel-d" data-i18n="pi_day_chat">Ein Raum fürs ganze Team. Wer online ist, steht oben.</p>
+        <div class="pi-ui pi-mini pi-chat">
+          <p class="pi-ui-bar pi-online"><span data-i18n="pi_app_online">Online:</span><span class="pi-av pi-av-AW">AW</span><span class="pi-av pi-av-TK">TK</span><span class="pi-av pi-av-MS">MS</span></p>
+          <ol class="pi-msgs" id="pi-msgs" aria-live="polite"></ol>
+          <form class="pi-chat-f" id="pi-chat-form">
+            <input class="pi-chat-in" id="pi-chat-in" type="text" maxlength="2000" autocomplete="off" data-i18n-ph="pi_app_chat_ph" placeholder="Nachricht an dein Team…" data-i18n-aria="pi_app_chat" aria-label="Team-Chat">
+            <button type="submit" class="pi-ui-btn pi-send" data-i18n-aria="pi_send" aria-label="Senden"><svg class="pi-ic" aria-hidden="true"><use href="#pi-i-send"/></svg></button>
+          </form>
+        </div>
+      </div>
+      <div class="pi-panel" id="pi-panel-an" role="tabpanel" aria-labelledby="pi-tab-an" data-panel="an" hidden>
+        <p class="pi-panel-d" data-i18n="pi_day_an">Die Abschlussquote rechnet mit den eigenen Phasen.</p>
+        <div class="pi-ui pi-mini pi-an">
+          <div class="pi-kpi"><p class="pi-kpi-k" data-i18n="pi_app_an_open">Offene Pipeline</p><b class="pi-kpi-v" id="pi-an-open"></b><p class="pi-kpi-f" data-i18n="pi_app_an_snapshot">Aktueller Stand</p></div>
+          <div class="pi-kpi"><p class="pi-kpi-k" data-i18n="pi_app_an_won">Gewonnener Wert</p><b class="pi-kpi-v" id="pi-an-won"></b><p class="pi-kpi-f" data-i18n="pi_app_an_snapshot">Aktueller Stand</p></div>
+          <div class="pi-kpi pi-kpi-rate"><p class="pi-kpi-k" data-i18n="pi_app_an_rate">Abschlussquote</p><b class="pi-kpi-v" id="pi-an-rate"></b><span class="pi-gauge" id="pi-an-gauge" aria-hidden="true"></span><p class="pi-kpi-f" id="pi-an-wl"></p></div>
+          <div class="pi-kpi"><p class="pi-kpi-k" data-i18n="pi_app_an_new">Neue Deals</p><b class="pi-kpi-v" id="pi-an-new"></b></div>
+        </div>
+      </div>
+      <div class="pi-panel" id="pi-panel-list" role="tabpanel" aria-labelledby="pi-tab-list" data-panel="list" hidden>
+        <p class="pi-panel-d" data-i18n="pi_day_list">Die Liste heißt, wie das Team arbeitet.</p>
+        <div class="pi-list-demo">
+          <div class="pi-ui pi-mini pi-set">
+            <label class="pi-set-l" for="pi-list-in" data-i18n="pi_app_obj_name">Bezeichnung für Objekte</label>
+            <input class="pi-set-in" id="pi-list-in" type="text" maxlength="40" autocomplete="off" data-i18n-ph="pi_app_obj_default" placeholder="Objekte">
+            <p class="pi-presets"><button type="button" class="pi-preset" data-i18n="pi_s_l1" aria-pressed="false">Immobilien</button><button type="button" class="pi-preset" data-i18n="pi_s_l2" aria-pressed="false">Praxen</button><button type="button" class="pi-preset" data-i18n="pi_s_l3" aria-pressed="false">Fahrzeuge</button></p>
+          </div>
+          <div class="pi-ui pi-mini pi-list-app" aria-live="polite">
+            <div class="pi-side pi-side-mini" aria-hidden="true">
+              <p class="pi-side-g" data-i18n="pi_app_tools">Werkzeuge</p>
+              <p class="pi-side-i"><svg class="pi-ic"><use href="#pi-i-chat"/></svg><span data-i18n="pi_app_chat">Team-Chat</span></p>
+              <p class="pi-side-i"><svg class="pi-ic"><use href="#pi-i-calendar"/></svg><span data-i18n="pi_app_calendar">Kalender</span></p>
+              <p class="pi-side-i is-on"><svg class="pi-ic"><use href="#pi-i-list"/></svg><span id="pi-list-nav">Objekte</span></p>
+              <p class="pi-side-i"><svg class="pi-ic"><use href="#pi-i-analytics"/></svg><span data-i18n="pi_app_analytics">Analysen</span></p>
+            </div>
+            <div class="pi-list-main">
+              <p class="pi-list-top"><b class="pi-list-h" id="pi-list-h">Objekte</b><span class="pi-ui-btn" id="pi-list-add">Objekte hinzufügen</span></p>
+              <p class="pi-list-hint" id="pi-list-hint"></p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
-  <!-- The way in: a request into the team's CRM, or a mail. -->
-  <section class="vs-close" id="vs-ask" aria-labelledby="vs-c-t">
-    <div class="vs-wrap vs-close-in">
-      <div>
-        <h2 class="vs-h2" id="vs-c-t" data-i18n="vs_c_t">Selbst vergleichen, im eigenen Arbeitsbereich.</h2>
-        <p class="vs-sub" id="vs-c-d" data-i18n="vs_c_d_mail">Name und E-Mail genügen. Die Anfrage geht per Mail an das Upgrads-Team.</p>
+  <section class="pi-faq" id="pi-faq" aria-labelledby="pi-faq-t">
+    <div class="pi-wrap pi-faq-in">
+      <h2 class="pi-h2" id="pi-faq-t" data-i18n="pi_faq_t">Fragen</h2>
+      <div class="pi-qs">
+        <details class="pi-q"><summary class="pi-q-s" data-i18n="pi_q1">Wer bekommt Zugang?</summary><p class="pi-p" data-i18n="pi_a1">Eingeladene Teams. Das Upgrads-Team richtet den Arbeitsbereich ein, weitere Mitglieder kommen per Code dazu.</p></details>
+        <details class="pi-q"><summary class="pi-q-s" data-i18n="pi_q2">Muss noch etwas abgetippt werden?</summary><p class="pi-p" data-i18n="pi_a2">Anfragen, Cal.com-Buchungen und Notetaker-Notizen nicht. Bestehende Kontakte kommen per CSV-Datei herein.</p></details>
+        <details class="pi-q"><summary class="pi-q-s" data-i18n="pi_q3">Schreibt Upgrads den Kunden?</summary><p class="pi-p" data-i18n="pi_a3">Nein. Die Einladung schickt Cal.com, Anruf, E-Mail und WhatsApp öffnen die eigenen Apps.</p></details>
+        <details class="pi-q"><summary class="pi-q-s" data-i18n="pi_q4">Was sind Notetaker und die Upgrads Engine?</summary><p class="pi-p" data-i18n="pi_a4">Zwei Dienste von Upgrads. Notetaker nimmt Google-Meet-Termine auf, die Engine übernimmt das Onboarding nach dem Abschluss.</p></details>
       </div>
-      <div class="vs-ask">
-        <form class="vs-ask-form" id="vs-ask-form" novalidate data-i18n-aria="vs_request" aria-label="Zugang anfragen">
-          <label class="vs-ask-f" for="vs-ask-name"><span data-i18n="vs_f_name">Name</span><input class="vs-ask-i" id="vs-ask-name" name="name" type="text" autocomplete="name" maxlength="120" required aria-describedby="vs-ask-err"></label>
-          <label class="vs-ask-f" for="vs-ask-email"><span data-i18n="vs_f_email">E-Mail</span><input class="vs-ask-i" id="vs-ask-email" name="email" type="email" autocomplete="email" maxlength="254" required aria-describedby="vs-ask-err"></label>
-          <label class="vs-ask-f" for="vs-ask-company"><span data-i18n="vs_f_company">Firma (optional)</span><input class="vs-ask-i" id="vs-ask-company" name="company" type="text" autocomplete="organization" maxlength="120"></label>
-          <div class="vs-trap" aria-hidden="true"><label for="vs-website">Website</label><input id="vs-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
-          <p class="vs-err" id="vs-ask-err" data-i18n="vs_f_err" hidden>Bitte einen Namen und eine E-Mail-Adresse eintragen.</p>
-          <button type="submit" class="vs-btn" id="vs-ask-send" data-i18n="vs_f_send_mail">Per Mail senden</button>
-          <p class="vs-fine"><span data-i18n="vs_f_privacy">Die Angaben dienen nur dieser Anfrage.</span> <a class="vs-a vs-a-line" href="https://upgrads.de/datenschutz" target="_blank" rel="noopener" data-i18n="vs_privacy">Datenschutz</a></p>
-        </form>
-        <p class="vs-ask-done" id="vs-ask-done" tabindex="-1" aria-live="polite" hidden></p>
+    </div>
+  </section>
+
+  <section class="pi-close" id="pi-ask" aria-labelledby="pi-c-t">
+    <div class="pi-wrap">
+      <div class="pi-panel-ask">
+        <div class="pi-ask-copy">
+          <h2 class="pi-h2" id="pi-c-t" data-i18n="pi_c_t">Bereit für ein CRM, das mit anpackt?</h2>
+          <p class="pi-p" id="pi-c-d" data-i18n="pi_c_d_mail">Name und E-Mail genügen. Die Anfrage geht per Mail an das Upgrads-Team.</p>
+        </div>
+        <div class="pi-ask">
+          <form class="pi-ask-form" id="pi-ask-form" novalidate data-i18n-aria="pi_request" aria-label="Zugang anfragen">
+            <label class="pi-ask-f" for="pi-ask-name"><span data-i18n="pi_f_name">Name</span><input class="pi-ask-i" id="pi-ask-name" name="name" type="text" autocomplete="name" maxlength="120" required aria-describedby="pi-ask-err"></label>
+            <label class="pi-ask-f" for="pi-ask-email"><span data-i18n="pi_f_email">E-Mail</span><input class="pi-ask-i" id="pi-ask-email" name="email" type="email" autocomplete="email" maxlength="254" required aria-describedby="pi-ask-err"></label>
+            <label class="pi-ask-f" for="pi-ask-company"><span data-i18n="pi_f_company">Firma (optional)</span><input class="pi-ask-i" id="pi-ask-company" name="company" type="text" autocomplete="organization" maxlength="120"></label>
+            <div class="pi-trap" aria-hidden="true"><label for="pi-website">Website</label><input id="pi-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+            <p class="pi-err" id="pi-ask-err" hidden data-i18n="pi_f_err">Bitte einen Namen und eine E-Mail-Adresse eintragen.</p>
+            <button type="submit" class="pi-btn" id="pi-ask-send" data-i18n="pi_f_send_mail">Per Mail anfragen</button>
+            <p class="pi-fine"><span data-i18n="pi_f_privacy">Die Angaben dienen nur dieser Anfrage.</span> <a class="pi-a pi-a-line" href="https://upgrads.de/datenschutz" target="_blank" rel="noopener" data-i18n="pi_privacy">Datenschutz</a></p>
+          </form>
+          <p class="pi-done" id="pi-ask-done" tabindex="-1" aria-live="polite" hidden></p>
+        </div>
       </div>
     </div>
   </section>
 </main>
 
-<footer class="vs-foot">
-  <div class="vs-wrap vs-foot-in">
-    <span data-i18n="vs_foot">Upgrads CRM für Vertriebsteams</span>
-    <span class="vs-foot-note" data-i18n="vs_fiction">Namen und Zahlen in den Bildschirmen sind erfunden.</span>
-    <nav class="vs-foot-nav" data-i18n-aria="vs_legal" aria-label="Rechtliches">
-      <a class="vs-a" href="https://upgrads.de/datenschutz" data-i18n="vs_privacy">Datenschutz</a>
-      <a class="vs-a" href="https://upgrads.de/impressum" data-i18n="vs_imprint">Impressum</a>
-      <a class="vs-a" data-mail href="mailto:team@upgrads.de?subject=Anfrage%20zu%20Upgrads%20CRM">team@upgrads.de</a>
+<footer class="pi-foot">
+  <div class="pi-wrap pi-foot-in">
+    <span data-i18n="pi_foot">Upgrads CRM für Vertriebsteams</span>
+    <span class="pi-foot-note" data-i18n="pi_fiction">Namen und Zahlen in den Bildschirmen sind erfunden.</span>
+    <nav class="pi-foot-nav" data-i18n-aria="pi_legal" aria-label="Rechtliches">
+      <a class="pi-a" href="https://upgrads.de/datenschutz" data-i18n="pi_privacy">Datenschutz</a>
+      <a class="pi-a" href="https://upgrads.de/impressum" data-i18n="pi_imprint">Impressum</a>
+      <a class="pi-a" href="mailto:team@upgrads.de?subject=Anfrage%20zu%20Upgrads%20CRM">team@upgrads.de</a>
     </nav>
   </div>
 </footer>

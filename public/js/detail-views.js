@@ -255,6 +255,9 @@ function dvJoinRow(a) { const b = dvJoinButton(a); return b ? `<div class="dv-jo
 // reschedule: the live meeting entry to move (its booking keeps the type, the place and the attendee)
 // What the Notetaker answered, as one line: booked for the start, joining now, given the new time, already booked,
 // waiting for Cal.com's Meet link, or not booked and why (the server's reason).
+// The Notetaker is hidden for now (2026-10-26): no box in the booking dialog, no health check, so no booking asks for a
+// recording. Notes it already wrote stay on their deals. true brings the box back as it was.
+const DV_NOTETAKER_SHOWN = false;
 function dvNotetakerToast(n) {
   if (!n || !n.status) return;
   const key = { scheduled: 'cal_rec_scheduled', queued: 'cal_rec_queued', updated: 'cal_rec_updated', duplicate: 'cal_rec_duplicate', waiting_link: 'cal_rec_waiting' }[n.status];
@@ -321,7 +324,7 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
     const ntLine = ntOk ? esc(t('cal_book_record_help'))
       : B.nt === 'down' ? `${esc(t(NT_DOWN[B.ntWhy] || NT_DOWN.error))} <button type="button" class="btn btn-ghost btn-sm" id="cal-book-recheck">${esc(t('cal_rec_recheck'))}</button>`
       : esc(t('cal_rec_checking'));
-    const rec = !reschedule && isMeet(place) ? `<div class="cal-book-sec"><label class="check"><input type="checkbox" id="cal-book-record"${ntOk && B.record ? ' checked' : ''}${ntOk ? '' : ' disabled'}><span>${esc(t('cal_book_record'))}</span></label><p class="help" aria-live="polite">${ntLine}</p></div>` : '';
+    const rec = DV_NOTETAKER_SHOWN && !reschedule && isMeet(place) ? `<div class="cal-book-sec"><label class="check"><input type="checkbox" id="cal-book-record"${ntOk && B.record ? ' checked' : ''}${ntOk ? '' : ' disabled'}><span>${esc(t('cal_book_record'))}</span></label><p class="help" aria-live="polite">${ntLine}</p></div>` : '';
     // when: the month with its arrows, the days (the free ones enabled), then the time, then where the clock is
     const loading = B.loading || !B.slots;
     const head = `<div class="cal-book-nav"><span class="cal-book-range">${esc(monthTitle(B.month))}</span><span class="cal-book-navbtns"><button type="button" class="btn btn-secondary btn-sm btn-icon" data-mnav="-1" aria-label="${esc(t('cal_book_month_prev'))}"${B.month <= todayIso.slice(0, 7) ? ' disabled' : ''}>${icon('chevron-left')}</button><button type="button" class="btn btn-secondary btn-sm btn-icon" data-mnav="1" aria-label="${esc(t('cal_book_month_next'))}">${icon('chevron-right')}</button></span></div>`;
@@ -343,7 +346,7 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
     go.disabled = !B.picked || B.busy || B.checking;
     go.textContent = B.busy ? t(reschedule ? 'cal_resched_busy' : 'cal_book_booking') : B.conflicts.length ? t('cal_book_anyway') : t(reschedule ? 'cal_resched_submit' : 'cal_book_submit');
     // the first time Google Meet is the place, by whatever path (the dialog opening, a new type, a new place): ask
-    if (!reschedule && isMeet(place) && B.nt === 'idle') checkNotetaker(false);
+    if (DV_NOTETAKER_SHOWN && !reschedule && isMeet(place) && B.nt === 'idle') checkNotetaker(false);
   }
   // Is the Notetaker there? (GET /api/integrations/notetaker/health) Quietly: no loading bar, never a throw. The box
   // stays greyed out while it asks; a dialog closed meanwhile is left alone; a no unticks the box.

@@ -651,6 +651,10 @@ router.get('/calcom/logs', requireAuth, async (req, res, next) => {
 // sent again so the Notetaker's job learns it.
 const NOTETAKER_SENT = ['scheduled', 'queued', 'updated', 'duplicate'];
 const isMeetLocation = loc => !!loc && loc.type === 'integration' && /^google[-:]?meet$/i.test(String(loc.integration || ''));
+// The Notetaker is off for this branch (2026-10-27, NOTETAKER_CHANGES): no recording is stored or sent, a booking
+// moved or cancelled sends nothing, the link watch finds nothing, and the health check answers "not available".
+// Notes it already wrote stay on their deals. true brings it back (with server.js and db.js, see NOTETAKER_CHANGES).
+let NOTETAKER_ON = false;
 async function notetakerSync(wid, activityId) {
   const { rows: [r] } = await pool.query(
     `SELECT n.id, n.external_id, n.meeting_url, n.join_at, n.status, n.job_id, n.language, n.requested_by, n.callback_token, n.finished_at,
@@ -690,11 +694,13 @@ async function notetakerSync(wid, activityId) {
   return { status: result.status, job_id: result.job_id || r.job_id, error: result.error || null };
 }
 async function notetakerSafe(wid, activityId) {
+  if (!NOTETAKER_ON) return null;
   try { return await notetakerSync(wid, activityId); }
   catch (err) { console.error('Notetaker error:', err); return { status: 'failed', job_id: null, error: 'The Notetaker request could not be kept' }; }
 }
 // The box ticked at booking: remember it with the meeting and its result link, then send if the Meet link is already there.
 async function notetakerRequest(wid, activityId, userId, language) {
+  if (!NOTETAKER_ON) return null;
   try {
     await pool.query(
       'INSERT INTO notetaker_recordings (workspace_id, activity_id, requested_by, external_id, language, callback_token) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (activity_id) DO NOTHING',
@@ -715,6 +721,7 @@ async function notetakerRequest(wid, activityId, userId, language) {
 // meetings left alone. Never throws; answers what became of each request.
 const NT_LINK_LATE_MS = 30 * 60 * 1000;
 async function notetakerLinkTick({ now = Date.now(), limit = 20 } = {}) {
+  if (!NOTETAKER_ON) return [];
   const { rows } = await pool.query(
     `SELECT n.id, n.workspace_id, n.activity_id, n.status, a.content, a.calcom_uid, a.event_date, a.event_time, a.event_tz, c.api_key_sealed
        FROM notetaker_recordings n
@@ -784,6 +791,7 @@ function startNotetakerLinkWatch({ intervalMs = 20000, log = console } = {}) {
 const NT_HEALTH_TTL_MS = 15000;
 let ntHealth = null;   // { at, result }
 router.get('/notetaker/health', requireAuth, async (req, res) => {
+  if (!NOTETAKER_ON) return res.json({ available: false, reason: 'error' });
   try {
     if (req.query.fresh !== '1' && ntHealth && Date.now() - ntHealth.at < NT_HEALTH_TTL_MS) return res.json(ntHealth.result);
     const result = await notetaker.health();
@@ -1101,4 +1109,6 @@ router.post('/calcom/reschedule', requireAuth, async (req, res, next) => {
 // server.js starts the link watch; the suite drives a tick by hand
 router.notetakerLinkTick = notetakerLinkTick;
 router.startNotetakerLinkWatch = startNotetakerLinkWatch;
+// the suite turns the Notetaker on to keep testing the code that comes back after this branch
+router.setNotetakerOn = on => { NOTETAKER_ON = on === true; };
 module.exports = router;

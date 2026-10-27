@@ -27,7 +27,8 @@ describe('the markup', () => {
     assert.match(pane, /<div class="settings-card" id="cal-card">/); assert.equal((pane.match(/class="settings-card"/g) || []).length, 1, 'one card');
     assert.match(pane, /<span id="cal-status" class="badge" data-i18n="cal_status_none">/);
     assert.match(pane, /<p class="settings-hint hidden" id="cal-readonly-hint" data-i18n="cal_readonly_hint">/);
-    assert.match(pane, /<div class="intg-section hidden" id="cal-connect-section">[\s\S]*<input type="password" id="cal-key" class="intg-url-input" autocomplete="off" spellcheck="false" placeholder="cal_live_…" data-i18n-ph="cal_key_ph" \/>\s*<\/div>/, 'the key is typed into a password field');
+    assert.match(pane, /<div class="intg-section hidden" id="cal-connect-section">[\s\S]*<input type="text" id="cal-key" class="intg-url-input intg-secret-input" autocomplete="off" spellcheck="false" placeholder="cal_live_…" data-i18n-ph="cal_key_ph" \/>\s*<\/div>/, 'the key is typed into a masked text field, so the browser never offers to save it as a password');
+    assert.match(read('public/style.css'), /^\.intg-secret-input \{ -webkit-text-security: disc; \}$/m);
     assert.match(pane, /<p class="empty-inline hidden" id="cal-none" data-i18n="cal_none">/);
     assert.match(pane, /<div class="intg-section hidden" id="cal-account-section">[\s\S]*<div id="cal-facts"><\/div>/);
     assert.match(pane, /<div class="intg-section hidden" id="cal-type-section">[\s\S]*<select id="cal-event-type" class="form-control" onchange="saveCalcomEventType\(\)"><\/select>\s*<input type="text" id="cal-type-readonly" class="form-control hidden" readonly \/>/, 'members read the event type from a read-only field');
@@ -311,7 +312,7 @@ describe('the meeting link, one click away (Part 12)', () => {
 // ── Part 13: the setup guide, in the Platforms tab's clothes ─────────────────
 describe('the setup guide (Part 13)', () => {
   test('the panel sits in the card right after the key field; the script renders it like the Make guide (logo header, subtitle, numbered steps with markup, a note), open until connected, folded to its header after, with a button either way; every step in both languages, German impersonal, with the words that matter', () => {
-    assert.match(pane, /<input type="password" id="cal-key"[^>]*\/>\s*<\/div>\s*<\/div>\s*<div class="intg-section hidden" id="cal-guide-section">\s*<div class="intg-guide-panel" id="cal-guide-panel"><\/div>\s*<\/div>\s*<p class="empty-inline hidden" id="cal-none"/, 'the guide panel follows the key field, in the Platforms tab\'s panel');
+    assert.match(pane, /<input type="text" id="cal-key"[^>]*\/>\s*<\/div>\s*<\/div>\s*<div class="intg-section hidden" id="cal-guide-section">\s*<div class="intg-guide-panel" id="cal-guide-panel"><\/div>\s*<\/div>\s*<p class="empty-inline hidden" id="cal-none"/, 'the guide panel follows the key field, in the Platforms tab\'s panel');
     const cal = sliceCal();
     assert.match(cal, /^const CAL_GUIDE = \{\s*logo: `<svg viewBox="0 0 40 40"[^`]*>Cal<\/text><\/svg>`,\s*steps: \['cal_guide_step1', 'cal_guide_step2', 'cal_guide_step3', 'cal_guide_step4', 'cal_guide_step5', 'cal_guide_step6', 'cal_guide_step7'\],\s*note: 'cal_guide_note',\s*\};$/m, 'seven steps and a note, as dictionary keys; an inline mark, as the platform logos are');
     assert.match(cal, /^let calGuideOpen = null;/m);

@@ -697,6 +697,9 @@ async function initDb() {
     )
   `);
 
+  // The Notetaker is off for this branch (2026-10-27, NOTETAKER_CHANGES): its table is NOT created, so no database
+  // (production included) gets it now. The definition stays here, commented; remove the /* */ to create it again.
+  /*
   // The Notetaker (routes/integrations.js, utils/notetaker.js): a meeting booked on Google Meet with
   // "Mit Notetaker aufzeichnen" ticked. One row per meeting: the request, then what was last sent to the
   // service (the link, the start with its offset) and what it answered (status, job id, HTTP status, error).
@@ -726,6 +729,31 @@ async function initDb() {
   await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS callback_token   TEXT UNIQUE`);
   await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS note_activity_id INTEGER`);
   await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS finished_at      TIMESTAMPTZ`);
+  */
+  // Email sync is on hold (2026-10-27): its table is NOT created, so no database (production included) gets it
+  // until the feature is built. The definition stays here, commented; remove the /* */ to create it again
+  // (with EMAIL_SYNC_ON in server.js and MAILBOX_SHOWN in public/js/mailbox.js).
+  /*
+  // Email (routes/mailbox.js, utils/gmail.js; EMAIL_SYNC_CHANGES Part 1): ONE connected mailbox per person per
+  // workspace. The connection only, never the mail itself: the emails read from it get a table of their own,
+  // removed together with the mailbox. provider is 'google' for now; refresh_token_sealed is Google's refresh
+  // token under the Cal.com sealing (utils/calcom.js); scopes is what Google granted, space-separated.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS email_accounts (
+      id                   SERIAL PRIMARY KEY,
+      workspace_id         INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id              INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider             TEXT NOT NULL,
+      email_address        TEXT NOT NULL,
+      refresh_token_sealed TEXT NOT NULL,
+      scopes               TEXT,
+      connected_at         TIMESTAMPTZ DEFAULT NOW(),
+      updated_at           TIMESTAMPTZ DEFAULT NOW(),
+      last_error           TEXT,
+      UNIQUE (workspace_id, user_id)
+    )
+  `);
+  */
 
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');

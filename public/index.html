@@ -826,6 +826,12 @@
                 </div>
               </div>
 
+              <div class="settings-card hidden" id="mailbox-card">
+                <div class="settings-card-header"><h2 data-i18n="set_mailbox">Email</h2></div>
+                <p class="settings-hint" data-i18n="hint_mailbox">Connect your own mailbox. The CRM keeps only emails with your contacts, and the whole team sees them on the contact and the deal.</p>
+                <div class="settings-card-body" id="mailbox-body"></div>
+              </div>
+
             </div>
           </div>
 
@@ -1357,7 +1363,7 @@
                   <p class="intg-section-hint" data-i18n="cal_key_hint">In Cal.com under Settings, Developer, API keys. The key is stored encrypted and never shown again.</p>
                 </div>
                 <div class="intg-url-box">
-                  <input type="password" id="cal-key" class="intg-url-input" autocomplete="off" spellcheck="false" placeholder="cal_live_…" data-i18n-ph="cal_key_ph" />
+                  <input type="text" id="cal-key" class="intg-url-input intg-secret-input" autocomplete="off" spellcheck="false" placeholder="cal_live_…" data-i18n-ph="cal_key_ph" />
                 </div>
               </div>
               <div class="intg-section hidden" id="cal-guide-section">
@@ -1932,6 +1938,7 @@
   <script src="js/contacts.js"></script>
   <script src="js/objects.js"></script>
   <script src="js/settings.js"></script>
+  <script src="js/mailbox.js"></script>
   <script src="js/modals.js"></script>
   <script src="js/tasks.js"></script>
   <script src="js/notifications.js"></script>

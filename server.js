@@ -173,7 +173,8 @@ app.use('/api/contacts/import', express.json({ limit: '10mb' }));
 app.use('/api/integrations/calcom/receive', express.raw({ type: '*/*', limit: '1mb' }));
 // The Notetaker's result is signed over the raw body (X-Notetaker-Signature) and carries the whole transcript,
 // so this path keeps the bytes and allows more than json()'s 100kb.
-app.use('/api/notetaker/webhook', express.raw({ type: '*/*', limit: '5mb' }));
+// The Notetaker is off for this branch (2026-10-27, NOTETAKER_CHANGES): uncomment to bring it back.
+// app.use('/api/notetaker/webhook', express.raw({ type: '*/*', limit: '5mb' }));
 app.use(express.json());
 // Engine API paths: a malformed or oversized body is a body-parser error BEFORE the routers run.
 // Answer the Engine's { fehler } shape (400 / 413) instead of the browser's { error } — and never a crash.
@@ -243,8 +244,13 @@ app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations/calcom/receive', webhookIpLimiter, calcomTokenLimiter);
 app.use('/api/integrations',  integrations);
-app.use('/api/notetaker/webhook', webhookIpLimiter, notetakerLinkLimiter);
-app.use('/api/notetaker',     require('./routes/notetaker'));   // PUBLIC: the Notetaker's result for one meeting, by its secret link
+// Email sync is on hold (2026-10-27, EMAIL_SYNC_CHANGES): the mailbox routes are not mounted, so nobody can start a
+// Google connection. Part 1 stays in the code; true mounts it again (with MAILBOX_SHOWN in public/js/mailbox.js).
+const EMAIL_SYNC_ON = false;
+if (EMAIL_SYNC_ON) app.use('/api/mailbox', require('./routes/mailbox'));   // a person's own mailbox, connected with Google (EMAIL_SYNC_CHANGES Part 1)
+// The Notetaker is off for this branch (2026-10-27, NOTETAKER_CHANGES): its result route is not mounted. Uncomment both lines to bring it back.
+// app.use('/api/notetaker/webhook', webhookIpLimiter, notetakerLinkLimiter);
+// app.use('/api/notetaker',     require('./routes/notetaker'));   // PUBLIC: the Notetaker's result for one meeting, by its secret link
 app.use('/api/landing/ask', landingAskLimiter);
 app.use('/api/landing',       require('./routes/landing'));   // PUBLIC: the landing page's request form becomes a lead in the team's CRM
 app.use('/api/engine',        require('./routes/engine'));
@@ -376,6 +382,7 @@ initDb()
     if (process.env.ENGINE_RETRY_WORKER !== '0') engine.startRetryWorker();
     // Requests for the Notetaker whose Google Meet link has not come: asks Cal.com for it every 20 seconds
     // (routes/integrations.js, NOTETAKER_CHANGES Part 4), so a CRM that Cal.com's webhook cannot reach still sends the bot.
-    integrations.startNotetakerLinkWatch();
+    // The Notetaker is off for this branch (2026-10-27): the watch is not started. Uncomment to bring it back.
+    // integrations.startNotetakerLinkWatch();
   })
   .catch(err => { console.error('Database init failed:', err); process.exit(1); });

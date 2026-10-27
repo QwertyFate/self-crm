@@ -148,6 +148,7 @@ before(async () => {
   app.use('/api/integrations/calcom/receive', express.raw({ type: '*/*', limit: '1mb' }));
   app.use(express.json());
   integrations = loadRoute('integrations.js', { pool, user: { id: 2, workspaceId: WID, role: 'member', timezone: 'Europe/Berlin' } });
+  integrations.setNotetakerOn(true);   // off for this branch (NOTETAKER_CHANGES 2026-10-27); on here, so the code that comes back stays tested
   app.use('/api/integrations', integrations);
   app.use((err, _req, res, _next) => res.status(500).json({ error: 'Internal server error', detail: err.message }));
   server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });

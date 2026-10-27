@@ -410,3 +410,15 @@ describe('language: German first, English behind every key', () => {
     assert.equal(dict.de.au_headline, 'Vom ersten Lead bis zum unterschriebenen Vertrag – auf einem Board.');
   });
 });
+
+describe('the browser does not offer to save the password on later saves (2026-10-26)', () => {
+  test('showApp empties every password field of the door, which stays in the page hidden', () => {
+    const show = auth.slice(auth.indexOf('function showApp('), auth.indexOf('function showAuthView('));
+    const ids = (show.match(/for \(const id of \[([^\]]+)\]\) \{ const el = document\.getElementById\(id\); if \(el\) el\.value = ''; \}/) || [])[1];
+    assert.ok(ids, 'the loop that empties them');
+    const html = read('public/index.html');
+    const inDoor = [...html.matchAll(/<input[^>]*type="password"[^>]*id="([^"]+)"/g)].map(m => m[1]).filter(id => id !== 'admin-secret-input');
+    assert.deepEqual(ids.split(',').map(s => s.trim().replace(/'/g, '')), inDoor);
+    assert.ok(show.indexOf('el.value = \'\'') < show.indexOf("classList.add('hidden')"), 'before the door is hidden');
+  });
+});

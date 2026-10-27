@@ -18,6 +18,9 @@ const fnBody = name => { const i = dv.indexOf(`function ${name}(`); assert.ok(i 
 const book = fnBody('openCalcomBooking');
 
 describe('the box in the booking dialog', () => {
+  test('hidden for now (2026-10-26): the switch is off, so no box, no health check, and no booking asks for a recording', () => {
+    assert.match(read('public/js/detail-views.js'), /^const DV_NOTETAKER_SHOWN = false;$/m);
+  });
   test('starts unticked and not yet asked; Google Meet is the integration google-meet', () => {
     assert.match(book, /const B = \{[^}]*record: false, nt: 'idle', ntWhy: ''[^}]*\};/);
     assert.match(book, /const isMeet = l => !!l && l\.type === 'integration' && l\.integration === 'google-meet';/);
@@ -25,7 +28,7 @@ describe('the box in the booking dialog', () => {
   test('shown only for Google Meet and only when booking; tickable only once the Notetaker said yes; otherwise why, and Check again', () => {
     assert.match(book, /const ntOk = B\.nt === 'ok';/);
     assert.match(book, /const ntLine = ntOk \? esc\(t\('cal_book_record_help'\)\)\s*: B\.nt === 'down' \? `\$\{esc\(t\(NT_DOWN\[B\.ntWhy\] \|\| NT_DOWN\.error\)\)\} <button type="button" class="btn btn-ghost btn-sm" id="cal-book-recheck">\$\{esc\(t\('cal_rec_recheck'\)\)\}<\/button>`\s*: esc\(t\('cal_rec_checking'\)\);/);
-    assert.match(book, /const rec = !reschedule && isMeet\(place\) \? `<div class="cal-book-sec"><label class="check"><input type="checkbox" id="cal-book-record"\$\{ntOk && B\.record \? ' checked' : ''\}\$\{ntOk \? '' : ' disabled'\}><span>\$\{esc\(t\('cal_book_record'\)\)\}<\/span><\/label><p class="help" aria-live="polite">\$\{ntLine\}<\/p><\/div>` : '';/);
+    assert.match(book, /const rec = DV_NOTETAKER_SHOWN && !reschedule && isMeet\(place\) \? `<div class="cal-book-sec"><label class="check"><input type="checkbox" id="cal-book-record"\$\{ntOk && B\.record \? ' checked' : ''\}\$\{ntOk \? '' : ' disabled'\}><span>\$\{esc\(t\('cal_book_record'\)\)\}<\/span><\/label><p class="help" aria-live="polite">\$\{ntLine\}<\/p><\/div>` : '';/);
     assert.match(book, /host\.innerHTML = `[^`]*\$\{what\}\$\{rec\}\$\{when\}/, 'right under the type and the place');
     assert.match(book, /on\(host, 'change', '#cal-book-record', \(e, el\) => \{ B\.record = el\.checked; render\(\); \}\);/);
     assert.match(book, /on\(host, 'click', '#cal-book-recheck', \(\) => checkNotetaker\(true\)\);/);
@@ -37,7 +40,7 @@ describe('the box in the booking dialog', () => {
     assert.match(fn, /const r = await apiFetchSilent\('\/api\/integrations\/notetaker\/health' \+ \(fresh \? '\?fresh=1' : ''\)\);/, 'no loading bar, never a throw');
     assert.match(fn, /if \(!host\.isConnected\) return;/, 'a dialog closed meanwhile is left alone');
     assert.match(fn, /B\.nt = r && r\.available === true \? 'ok' : 'down'; B\.ntWhy = \(r && r\.reason\) \|\| 'error';\s*if \(B\.nt !== 'ok'\) B\.record = false;\s*render\(\);/);
-    assert.match(book, /if \(!reschedule && isMeet\(place\) && B\.nt === 'idle'\) checkNotetaker\(false\);\s*\}\n  \/\/ Is the Notetaker there\?/, 'at the end of render: the first time Google Meet is the place');
+    assert.match(book, /if \(DV_NOTETAKER_SHOWN && !reschedule && isMeet\(place\) && B\.nt === 'idle'\) checkNotetaker\(false\);\s*\}\n  \/\/ Is the Notetaker there\?/, 'at the end of render: the first time Google Meet is the place');
   });
   test('the summary says it; the request asks for it only on Google Meet', () => {
     assert.match(book, /!reschedule && B\.record && B\.nt === 'ok' && isMeet\(place\) \? t\('cal_book_record_short'\) : ''/);

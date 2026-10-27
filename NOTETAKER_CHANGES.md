@@ -300,3 +300,70 @@ fix covers both.
 - The cause of the missing webhooks (none since 2026-10-13): Cal.com must reach the CRM's public address
   (`BASE_URL`); on localhost it cannot. The watch makes the Notetaker independent of it; other webhook effects (bookings
   made on Cal.com's own page appearing in the CRM, moves and cancellations from there) still need it.
+
+## 2026-10-26: the Notetaker hidden in the CRM
+
+**Asked:** "can you hide the notetaker" (in the CRM, not on the landing page).
+
+**Change:** `public/js/detail-views.js` gets a switch, `const DV_NOTETAKER_SHOWN = false;`, placed just above
+`dvNotetakerToast`. While it is off:
+- the booking dialog shows no "Mit Notetaker aufzeichnen" box (`const rec = DV_NOTETAKER_SHOWN && …`);
+- the Notetaker health check never runs (`if (DV_NOTETAKER_SHOWN && … ) checkNotetaker(false)`);
+- `B.record` stays false, so the booking request sends `record: false` and the summary never says "mit Notetaker".
+
+What stays:
+- notes the Notetaker already wrote stay on their deals;
+- the server routes and the link watch are unchanged; with nothing booked for a recording, they have nothing to do;
+- setting the switch to `true` brings everything back as it was.
+
+**Tests:** `tests/client/notetaker-ui.test.js`.
+- A new test pins that the switch is off.
+- The two assertions on the box line and the health-check line now include the switch.
+- `npm test`: 1668 of 1668 pass.
+
+## 2026-10-27: the Notetaker switched off for this branch, server side too (commented out, not deleted)
+
+**Asked:** "yes i think we should off it for now do not delete it just comment it out if possible because after this
+branch we will bring it back". Hiding the box (2026-10-26) had left the server side running: the link watch queried
+`notetaker_recordings` every 20 seconds, and recordings booked before the hide could still be sent or moved.
+
+**Commented out:**
+- `server.js`
+  - line 177: the raw-body parser for `/api/notetaker/webhook`;
+  - lines 252–253: the result route's limiter and its mount;
+  - line 386: `integrations.startNotetakerLinkWatch();`.
+  - Each has a note above it saying how to bring it back.
+- `db.js` lines 700–732: the `notetaker_recordings` table and its three added columns sit inside `/* */`, so no
+  database (production included) gets the table now. Kept:
+  - the `'notetaker'` value in `activities_source_check`, because the notes the Notetaker already wrote need it;
+  - the "Notetaker" author label in `routes/activities.js`.
+
+**Switched off** (call sites in the Cal.com handlers would be fragile to comment out one by one):
+`routes/integrations.js` line 657, `let NOTETAKER_ON = false;`.
+- `notetakerSafe` (line 697) and `notetakerRequest` (line 703) answer `null`. Nothing is stored or sent at booking,
+  and a meeting booked, moved or cancelled through Cal.com or the CRM tells the Notetaker nothing.
+- `notetakerLinkTick` (line 724) asks nothing.
+- `GET /notetaker/health` (line 794) answers `{ available: false }` without asking the Notetaker.
+- `router.setNotetakerOn` (line 1113) lets the Notetaker's own suite turn it on.
+- Together with `DV_NOTETAKER_SHOWN = false` (public/js/detail-views.js) the CRM shows and does nothing for the
+  Notetaker. Notes it already wrote stay on their deals.
+
+**To bring it back:**
+1. remove the `/* */` in `db.js`;
+2. uncomment the four lines in `server.js`;
+3. set `NOTETAKER_ON = true` (routes/integrations.js) and `DV_NOTETAKER_SHOWN = true` (public/js/detail-views.js).
+`routes/notetaker.js` and `utils/notetaker.js` are untouched. The internal tools app (audio transcription) is separate
+and unchanged.
+
+**Tests:**
+- `tests/routes/notetaker-booking.test.js` line 151: turns the switch on, so the code that comes back stays tested.
+  Without it, 16 of its tests failed, which shows the switch takes effect.
+- `tests/routes/notetaker-off.test.js` (new, 65 lines, 6 tests):
+  - `initDb()` creates no `notetaker_recordings`, while the commented definition is complete;
+  - `server.js` has no live Notetaker line;
+  - the switch is off and guards both helpers;
+  - the link tick asks nothing;
+  - the health check answers "not available" and nothing leaves the machine;
+  - the dialog's switch is off.
+- `npm test`: 1675 of 1675 pass.
+- The server was not started.

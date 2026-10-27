@@ -1674,6 +1674,8 @@ input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
   font-family: 'SF Mono', ui-monospace, Menlo, monospace; font-size: var(--fs-xs);
 }
 .intg-url-box .intg-url-input { flex: 1; width: auto; min-width: 220px; }
+/* the Cal.com key: masked like a password, but a text field, so the browser never offers to save it as one */
+.intg-secret-input { -webkit-text-security: disc; }
 
 /* Inline code in hints, guide steps, notes and log entries */
 .intg-stack code {

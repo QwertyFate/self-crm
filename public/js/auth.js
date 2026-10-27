@@ -61,6 +61,7 @@ async function init() {
   startAppVersionWatch();   // core.js: the tab reloads itself when the app changes on the server
   const params     = new URLSearchParams(window.location.search);
   const resetToken = params.get('reset');
+  mailboxKeepReturn(params);   // mailbox.js: back from Google's consent screen, before showApp() clears the address
 
   if (params.has('admin')) {
     document.getElementById('admin-screen').classList.remove('hidden');
@@ -113,6 +114,9 @@ function showAuth() {
 }
 
 function showApp() {
+  // The door stays in the page, hidden. A password left in it makes Chrome take every later save in the app for a
+  // login and offer to store the password again, so the door's password fields are emptied once the app opens.
+  for (const id of ['login-password', 'su-password', 'reset-password', 'reset-confirm']) { const el = document.getElementById(id); if (el) el.value = ''; }
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   window.history.replaceState({}, '', window.location.pathname);

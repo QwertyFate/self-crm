@@ -18,7 +18,7 @@
      /defaults   platform_settings.default_contact_columns and
                  .default_pipelines — what EVERY new workspace is seeded with.
                  Changing them affects future workspaces only.
-     /features   platform_settings.features, e.g. { tourEnabled }.
+     /features   platform_settings.features: { tourEnabled }.
      /stats      global counts.
    One-shot tenant provisioning (/provision) is the OTHER router mounted at
    /api/admin — routes/admin-provision.js. requireAdmin is shared from
