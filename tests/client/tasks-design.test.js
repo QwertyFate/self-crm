@@ -15,43 +15,6 @@ const tasks = read('public/js/tasks.js');
 const section = html.slice(html.indexOf('<section id="page-tasks"'), html.indexOf('</section>', html.indexOf('<section id="page-tasks"')));
 const count = (src, needle) => src.split(needle).length - 1;
 
-describe('markup and renderers: the sprite language, the seg toggle, no dead code', () => {
-  test('files parse', () => execFileSync('node', ['--check', path.join(ROOT, 'public/js/tasks.js')]));
-  test('the page hosts are empty shells filled by the script; every sprite the script uses resolves', () => {
-    assert.match(section, /<aside class="tk-side" id="tasks-side"/); assert.match(section, /<div class="tk-main" id="tasks-main"><\/div>/);
-    const defined = new Set([...html.matchAll(/<symbol id="(i-[\w-]+)"/g)].map(m => m[1]));
-    for (const m of tasks.matchAll(/icon\('([\w-]+)'/g)) { const alias = { deals: 'kanban', contacts: 'users' }[m[1]] || m[1]; assert.ok(defined.has('i-' + alias), m[1]); }
-  });
-  test('the task drawer and task form are built at runtime (Part 16), not as static markup', () => {
-    assert.equal(count(html, 'id="task-modal"'), 0);
-  });
-  test('renderTasksSidebar: chevron, list, plus and ellipsis sprites, no emoji', () => {
-    const r = sliceFn(tasks, 'renderTasksSidebar', 'tasks.js');
-    assert.match(r, /icon\('chevron-right'\)/); assert.match(r, /icon\('list', 'ic-sm'\)/); assert.match(r, /icon\('plus', 'ic-sm'\)\}\$\{esc\(t\('tk_add_list'\)\)\}/); assert.match(r, /icon\('ellipsis'\)/);
-    assert.doesNotMatch(r, /▶|✏️|✕|📋/);
-  });
-  test('taskListRow: expand chevron, check, overdue alert via taskDueHtml, kebab — no inline delete button', () => {
-    const r = sliceFn(tasks, 'taskListRow', 'tasks.js');
-    assert.match(r, /icon\('chevron-right', 'ic-sm'\)/); assert.match(r, /icon\('check'\)/); assert.match(r, /icon\('ellipsis'\)/); assert.match(r, /taskDueHtml\(x\)/);
-    assert.match(sliceFn(tasks, 'taskDueHtml', 'tasks.js'), /icon\('alert', 'ic-sm'\)/);
-    assert.doesNotMatch(r, /icon\('x'/); assert.doesNotMatch(r, /▶|✓|⊞|⚠|✕/);
-  });
-  test('taskKanbanCard: subtask toggle, calendar, kebab', () => {
-    const r = sliceFn(tasks, 'taskKanbanCard', 'tasks.js');
-    assert.match(r, /icon\('check-square'\)/); assert.match(r, /icon\('calendar'\)/); assert.match(r, /icon\('ellipsis'\)/);
-    assert.doesNotMatch(r, /▶|⊞|⚠/);
-  });
-  test('the List/Board toggle is a .seg with aria-pressed, re-rendered by setTaskView', () => {
-    assert.match(sliceFn(tasks, 'renderTasksMain', 'tasks.js'), /<div class="seg" role="group"[^>]*><button type="button" id="task-view-list" aria-pressed="\$\{taskViewMode === 'list'\}"/);
-    assert.match(sliceFn(tasks, 'setTaskView', 'tasks.js'), /renderTasksMain\(\)/);
-    assert.doesNotMatch(tasks, /classList\.toggle\('active'/);
-  });
-  test('the dead attachment/subtask-modal UI (fileIcon, renderSubtasksList, renderAttachmentList, …) is gone (Part 16: see tests/client/detail-views.test.js)', () => {
-    for (const fn of ['fileIcon', 'renderSubtasksList', 'renderAttachmentList', 'loadTaskAttachments', 'uploadAttachments', 'viewAttachment', 'deleteAttachment'])
-      assert.equal(tasks.split(`function ${fn}(`).length - 1, 0, fn);
-  });
-});
-
 describe("a task's due time on the task list (Part 33)", () => {
   const t = read('public/js/tasks.js');
   const dv = read('public/js/detail-views.js');

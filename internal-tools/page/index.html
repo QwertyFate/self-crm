@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de" class="it-root">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Interne Tools</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="tools.css">
+  <script src="tools.js" defer></script>
+</head>
+<body class="it">
+<header class="it-bar">
+  <div class="it-wrap it-bar-in">
+    <span class="it-brand" data-i18n="it_title">Interne Tools</span>
+    <div class="it-row">
+      <div class="it-seg" role="group" data-i18n-aria="it_lang" aria-label="Sprache">
+        <button type="button" data-lang="de" aria-pressed="true">DE</button>
+        <button type="button" data-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <button type="button" class="it-btn it-btn-ghost it-btn-sm" id="it-lock" data-i18n="it_lock" hidden>Sperren</button>
+    </div>
+  </div>
+</header>
+
+<main class="it-wrap it-main">
+  <!-- Locked: the password (the ADMIN_SECRET's value) stays in this tab's memory and goes with every request. -->
+  <section class="it-card it-gate" id="it-gate" aria-labelledby="it-gate-t">
+    <form class="it-card-body it-form" id="it-gate-form" novalidate>
+      <h1 class="it-page-title" id="it-gate-t" data-i18n="it_title">Interne Tools</h1>
+      <p class="it-muted" data-i18n="it_gate_d">Nur für das Team. Das Passwort ist das Admin-Secret.</p>
+      <div class="it-field">
+        <label class="it-label" for="it-pass" data-i18n="it_pass">Passwort</label>
+        <input id="it-pass" name="secret" type="password" autocomplete="current-password" required aria-describedby="it-gate-err">
+      </div>
+      <p class="it-error" id="it-gate-err" role="alert" hidden></p>
+      <button type="submit" class="it-btn it-btn-primary" id="it-gate-go" data-i18n="it_unlock">Entsperren</button>
+    </form>
+  </section>
+
+  <!-- Unlocked: transcribe an audio file. -->
+  <section class="it-tools" id="it-tools" hidden>
+    <form class="it-card it-card-body it-form" id="it-tr-form" novalidate aria-labelledby="it-tr-t">
+      <h1 class="it-page-title" id="it-tr-t" data-i18n="it_tr_t">Audio transkribieren</h1>
+      <label class="it-drop" id="it-drop" for="it-file">
+        <input class="it-file" id="it-file" name="file" type="file" accept="audio/*,video/*">
+        <b class="it-drop-t" id="it-drop-t" data-i18n="it_drop">Audiodatei auswählen oder hierher ziehen</b>
+        <span class="it-help" data-i18n="it_drop_d">MP3, WAV, M4A, OGG, FLAC oder ein Video, bis etwa fünf Minuten.</span>
+      </label>
+      <div class="it-field it-narrow">
+        <label class="it-label" for="it-tr-lang" data-i18n="it_lang">Sprache</label>
+        <select id="it-tr-lang" name="language">
+          <option value="" data-i18n="it_lang_auto">Automatisch erkennen</option>
+          <option value="de" data-i18n="it_lang_de">Deutsch</option>
+          <option value="en" data-i18n="it_lang_en">Englisch</option>
+        </select>
+      </div>
+      <div class="it-row it-actions">
+        <button type="submit" class="it-btn it-btn-primary" id="it-tr-go" data-i18n="it_tr_go">Transkribieren starten</button>
+        <p class="it-status" id="it-tr-status" role="status" aria-live="polite"></p>
+      </div>
+    </form>
+
+    <section class="it-card" id="it-result" aria-labelledby="it-result-t" hidden>
+      <div class="it-card-head">
+        <div>
+          <h2 class="it-card-title" id="it-result-t" tabindex="-1"></h2>
+          <p class="it-help" id="it-result-meta"></p>
+        </div>
+        <div class="it-seg" role="group" data-i18n-aria="it_view" aria-label="Ansicht">
+          <button type="button" data-times="0" aria-pressed="true" data-i18n="it_plain">Nur Text</button>
+          <button type="button" data-times="1" aria-pressed="false" data-i18n="it_times">Mit Zeitmarken</button>
+        </div>
+      </div>
+      <pre class="it-card-body it-out" id="it-out" tabindex="0"></pre>
+      <div class="it-card-foot it-row it-actions">
+        <button type="button" class="it-btn it-btn-sm" id="it-copy" data-i18n="it_copy">Kopieren</button>
+        <button type="button" class="it-btn it-btn-sm" id="it-save" data-i18n="it_download">Als .txt herunterladen</button>
+        <p class="it-status" id="it-result-status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+  </section>
+</main>
+</body>
+</html>

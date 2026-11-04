@@ -156,11 +156,14 @@ function fmt(n) {
   return String(Math.round(n));
 }
 
+// The currency the workspace chose for Analytics ("Kennzahlen konfigurieren", analytics_config.currency); euros, as on
+// the deals board, until one is chosen. Money is written the page's language's way, compact from a thousand up.
+const AN_CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF'];
+function anCurrency() { const c = analyticsData?.config?.currency; return AN_CURRENCIES.includes(c) ? c : 'EUR'; }
 function fmtCurrency(n) {
   if (n == null) return '—';
-  if (n >= 1000000) return '$' + (n / 1000000).toFixed(2) + 'M';
-  if (n >= 1000)    return '$' + (n / 1000).toFixed(1) + 'K';
-  return '$' + n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  const big = Math.abs(n) >= 1000;
+  return new Intl.NumberFormat(anLocale(), { style: 'currency', currency: anCurrency(), currencyDisplay: 'narrowSymbol', notation: big ? 'compact' : 'standard', minimumFractionDigits: 0, maximumFractionDigits: big ? 1 : 0 }).format(n);
 }
 
 async function loadAnalytics() {
@@ -832,6 +835,8 @@ function openAnalyticsConfig() {
   ];
   document.getElementById('analytics-value-field').innerHTML =
     valueOptions.map(o => `<option value="${o.key}" ${valueField === o.key ? 'selected' : ''}>${o.label}</option>`).join('');
+  document.getElementById('analytics-currency').innerHTML =
+    AN_CURRENCIES.map(c => `<option value="${c}" ${anCurrency() === c ? 'selected' : ''}>${esc(t('an_cur_' + c.toLowerCase()))}</option>`).join('');
 
   const hasValue = analyticsData?.config?.value_field != null;
   document.getElementById('analytics-card-visibility').innerHTML =
@@ -875,7 +880,7 @@ async function saveAnalyticsConfig() {
     else statCardOrder.push({ id: cb.dataset.cardVis, hidden: !cb.checked });
   });
 
-  const res = await api.patch('/api/analytics/config', { won_stage_ids: wonIds, lost_stage_ids: lostIds, value_field: valueField });
+  const res = await api.patch('/api/analytics/config', { won_stage_ids: wonIds, lost_stage_ids: lostIds, value_field: valueField, currency: document.getElementById('analytics-currency').value });
   await api.patch('/api/analytics/layout', {
     stat_card_order:   statCardOrder.map(c => c.id),
     hidden_stat_cards: statCardOrder.filter(c => c.hidden).map(c => c.id),

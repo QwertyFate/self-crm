@@ -24,7 +24,9 @@
      meaningful together with a workspace.
        login  → one membership  : straight in
               → several         : showWorkspacePicker() → selectWorkspace()
-       inside : switchWorkspace() → POST /api/auth/switch-workspace → reload
+       inside : switchWorkspace() → POST /api/auth/switch-workspace → the new workspace's
+                state in place (no reload); the chat's connection is closed and opened again,
+                because the server joins a connection to a workspace when it connects
 
    resetClientState() PUTS THE TAB BACK TO BOOT STATE — stops pollers and the
    socket, clears every workspace-scoped global and the per-workspace
@@ -56,8 +58,10 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 async function init() {
+  startAppVersionWatch();   // core.js: the tab reloads itself when the app changes on the server
   const params     = new URLSearchParams(window.location.search);
   const resetToken = params.get('reset');
+  mailboxKeepReturn(params);   // mailbox.js: back from Google's consent screen, before showApp() clears the address
 
   if (params.has('admin')) {
     document.getElementById('admin-screen').classList.remove('hidden');
@@ -110,6 +114,9 @@ function showAuth() {
 }
 
 function showApp() {
+  // The door stays in the page, hidden. A password left in it makes Chrome take every later save in the app for a
+  // login and offer to store the password again, so the door's password fields are emptied once the app opens.
+  for (const id of ['login-password', 'su-password', 'reset-password', 'reset-confirm']) { const el = document.getElementById(id); if (el) el.value = ''; }
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   window.history.replaceState({}, '', window.location.pathname);
@@ -125,12 +132,13 @@ function showApp() {
   applyTranslations();
   loadColWidths();
   updateBoardNavVisibility();
+  updateOnboardingNav();
   updateObjectsNav();
   updateSuppliersNav();
   loadNotifPrefs();
   startNotifPolling();
   startClock();
-  switchPage('deals');   // every entry lands on a freshly loaded Deals page, never on whatever page the previous user left active
+  switchPage(appRestorePage() || 'deals');   // after a self-reload (core.js) the same page again; every other entry lands on a freshly loaded Deals page, never on whatever page the previous user left active
   initChatSocket();
   refreshChatBadge();
   setTimeout(maybeStartGuide, 800);
@@ -345,9 +353,16 @@ async function switchWorkspace(workspaceId) {
   const data = await api.post('/api/auth/switch-workspace', { workspace_id: workspaceId });
   if (data.error) { alert(data.error); return; }
   currentWorkspace = data.workspace;
-  // Users are per-workspace rows, so both the id and the role change on switch.
+  // Users are per-workspace rows, so the id, the role and the notification preferences change on switch.
   if (currentUser && data.role)    currentUser.role = data.role;
   if (currentUser && data.user_id) currentUser.id   = data.user_id;
+  if (currentUser) currentUser.notification_prefs = data.notification_prefs || {};
+  // The chat's connection was joined to the old workspace when it connected (server.js reads the session at the
+  // handshake). Close it, start the chat over for this workspace, and connect again, now as the new workspace.
+  if (socket) { socket.disconnect(); socket = null; }
+  onlineUsers = []; chatOldestId = null; chatNewestId = null; chatPageOpen = false; chatLoadingMore = false;
+  initChatSocket();
+  refreshChatBadge();
   kanbanFields     = data.workspace.kanban_fields   || ['company', 'email'];
   contactColumns   = data.workspace.contact_columns || [];
   objectColumns    = data.workspace.object_columns  || [];
@@ -535,6 +550,7 @@ async function switchPage(page) {
   if (page === 'tasks')      await loadTasks();
   if (page === 'board')        await loadBoard();
   if (page === 'analytics')    await loadAnalytics();
+  if (page === 'onboarding')   await loadOnboarding();
   if (page === 'integrations') await loadIntegrations();
   if (page === 'workspaces')   await loadWorkspacesPage();
   if (page === 'chat')         await loadChatPage();
@@ -559,7 +575,9 @@ function resetClientState() {
   objects = []; objectFields = []; objectColumns = []; objCurrentPage = 1;
   tasks = []; taskProjects = []; currentProjectId = null; currentListId = null; currentProject = null; taskFields = []; collapsedTasks = new Set(); resetTasksUI(); resetActivitiesUI();   // the Tasks and Activities pages clear their own scope, filters and drafts (tasks.js, objects.js)
   analyticsData = null; trendRawData = null; calEvents = [];
-  intgData = null; engineData = null; activeGuideId = null; activeCustomKeys = [];
+  intgData = null; engineData = null; engineApiKeys = []; activeGuideId = null; activeCustomKeys = [];
+  onboardingData = null; onboardingFilter = 'all';
+  document.getElementById('nav-onboarding-link')?.classList.add('hidden');
   currentSettingsTab = 'workspace'; currentIntgTab = 'webhook';
   currentContactType = 'contact'; filteredContacts = []; selectedContactIds = new Set(); selectionModeOn = false;
   currentPage = 1; sortKey = null; sortDir = 'asc'; activeFilters = {};

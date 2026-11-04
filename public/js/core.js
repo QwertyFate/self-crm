@@ -43,7 +43,7 @@
      ui          ui.popover, ui.menu, ui.select, uiOverlay, ui.modal, ui.drawer,
                  ui.confirm, ui.toast, ui.formData, ui.closePopover
      shell       setCrumbs, toggleRail, applyRailState, setSidebarWorkspace,
-                 openNewMenu, openHelpMenu, openUserMenu, openPalette,
+                 openNewMenu, openHelpMenu, openUserMenu, openPalette, openBreak,
                  showShortcuts
 
    GOTCHA  esc() escapes & < > " — it does NOT escape single quotes. Never put
@@ -94,6 +94,14 @@ const TRANSLATIONS = {
     topbar_search:'Go to a page…', topbar_new:'New', new_deal:'Deal', new_contact:'Contact', new_task:'Task',
     kbd_shortcuts:'Keyboard shortcuts', start_tour:'Start the product tour', btn_close:'Close',
     sc_search:'Search and jump to a page', sc_close:'Close dialog or menu', sc_move:'Move in menus and search', palette_none:'No page matches', palette_group_pages:'Go to',
+    // The break: the hidden falling-block game (js/break-game.js asks for these words; the landing page has the same)
+    brk_title:'Quick break', brk_close:'Close', brk_field:'Playing field', brk_hold:'Hold', brk_next:'Next up',
+    brk_score:'Score', brk_lines:'Lines', brk_level:'Level', brk_record:'High score',
+    brk_pause:'Pause', brk_resume:'Resume', brk_board:'High scores', brk_back:'Back to the game', brk_again:'Play again',
+    brk_over:'Game over. {n} points.', brk_place:'Place {n} on the board!', brk_name_label:'Name for the high scores', brk_name_default:'Guest', brk_save:'Save',
+    brk_board_empty:'No entries yet. First place is open.', brk_scope_browser:'Kept in this browser.', brk_scope_team:'The whole team\u2019s high scores.',
+    brk_help:'Arrow keys move and turn, space drops, C holds, P pauses.',
+    brk_pad:'Controls', brk_key_left:'Left', brk_key_right:'Right', brk_key_rotate:'Turn', brk_key_down:'Down', brk_key_drop:'Drop', brk_key_hold:'Hold piece',
     kbd_to_move:'to move', kbd_to_open:'to open', kbd_to_close:'to close',
     set_miro:'Miro Board', hint_miro:'Paste the embed URL from Miro → Share → Embed.',
     add_deal:'Add deal', lbl_deal_title:'Title', lbl_deal_value:'Value',
@@ -111,8 +119,8 @@ const TRANSLATIONS = {
     delete_activity:'Delete activity', activity_deleted:'Activity deleted', export_activities_csv:'Exported {n} activities',
     // Activities page, full port (compose card, Period chip, day groups, rail, kebab)
     chip_period:'Period', period_all:'All time', period_today:'Today', period_7d:'Last 7 days', period_30d:'Last 30 days',
-    act_verb_note:'Add note', act_verb_call:'Log call', act_verb_email:'Log email', act_verb_whatsapp:'Log message',
-    act_ph_note:'Write a note', act_ph_call:'What was discussed on the call?', act_ph_email:'Summarise the email or paste its key points', act_ph_whatsapp:'Message text or summary of the chat',
+    act_verb_note:'Add note', act_verb_call:'Log call', act_verb_email:'Log email', act_verb_whatsapp:'Log message', act_verb_meeting:'Log meeting',
+    act_ph_note:'Write a note', act_ph_call:'What was discussed on the call?', act_ph_email:'Summarise the email or paste its key points', act_ph_whatsapp:'Message text or summary of the chat', act_ph_meeting:'What was discussed in the meeting?',
     act_err_text:'Add a short description before saving.', act_err_link:'Link a deal or a contact so the entry can be found later.', act_err_save:'Could not save the entry. Try again.', act_logged:'{type} logged',
     act_compose_aria:'Log a new activity', opt_no_deal:'No deal', opt_no_contact:'No contact', one_activity:'1 activity', n_activities:'{n} activities',
     rail_aria:'Breakdown', rail_by_type:'By type', rail_by_person:'By person', rail_top_deals:'Most active deals', rail_no_deals:'No deal activity in this view',
@@ -147,10 +155,11 @@ const TRANSLATIONS = {
     col_name:'Name', col_company:'Company', col_email:'Email', col_phone:'Phone', col_stage:'Stage', col_assignee:'Assignee', col_created_at:'Date Added',
     search_ph:'Search name, company, email or phone', chip_last:'Last contact', last_today:'Today', last_week:'Last 7 days', last_month:'Last 30 days', last_older:'Older than 30 days', last_never:'Never contacted',
     add_filter:'Filter', remove_filter:'Remove filter', btn_select:'Select',
-    filter_contains_ph:'Type to filter…', click_to_edit:'Click to edit', edit_entry:'Edit entry', delete_entry:'Delete entry', entry_updated:'Entry updated', enter_saves_esc_cancels:'Enter saves · Esc cancels · Shift+Enter for a new line', no_contacts_match:'No {noun} match your filters', no_contacts_yet:'No {noun} yet', n_items:'{n} {noun}', n_of_items:'{a} of {b} {noun}',
+    filter_contains_ph:'Type to filter…', click_to_edit:'Click to edit', edit_entry:'Edit entry', delete_entry:'Delete entry', entry_updated:'Entry updated', ctrl_enter_saves_esc_cancels:'Ctrl+Enter saves · Esc cancels', no_contacts_match:'No {noun} match your filters', no_contacts_yet:'No {noun} yet', n_items:'{n} {noun}', n_of_items:'{a} of {b} {noun}',
     no_activities:'No activities yet.', no_fields:'No custom fields yet.',
     drop_here:'Drop contacts here', unassigned:'Unassigned',
-    act_note:'Note', act_call:'Call', act_email:'Email', act_whatsapp:'WhatsApp',
+    act_note:'Note', act_call:'Call', act_email:'Email', act_whatsapp:'WhatsApp', act_meeting:'Meeting', act_cancelled:'Cancelled', src_calcom:'Cal.com',
+    app_update_ready:'A new version of the app is ready.', app_update_reload:'Reload',
     logged_by:'by',
     tab_general:'General', tab_pipeline:'Pipeline', tab_contacts:'Contacts', tab_team:'Team',
     set_stages:'Pipeline stages', set_fields:'Custom fields', set_kanban:'Kanban card fields',
@@ -197,6 +206,33 @@ const TRANSLATIONS = {
     engine_confirm_regen_secret:'This will invalidate the current secret. The Engine must be updated with the new one. Continue?',
     engine_status_pending:'Pending', engine_status_success:'Delivered', engine_status_failed:'Failed',
     engine_attempt_one:'attempt', engine_attempts:'attempts', engine_view_payload:'View payload',
+    engine_btn_retry:'Retry', engine_retry_ok:'Delivered.', engine_retry_failed:'Still failing: {error}', engine_next_attempt:'Next attempt {when}',
+    // Documents tab on the contact detail (contracts / recordings for the Upgrads Engine) — detail-views.js
+    dv_tab_documents:'Documents', dv_doc_upload:'Upload document', dv_doc_uploading:'Uploading…', dv_doc_download:'Download',
+    dv_doc_type_aria:'Document type', dv_doc_type_vertrag:'Contract', dv_doc_type_aufnahme:'Recording', dv_doc_type_sonstiges:'Other',
+    dv_no_docs:'No documents yet', dv_docs_hint:'Contracts and call recordings for the Upgrads Engine live here. The Engine fetches them through its API.',
+    dv_one_doc:'1 document', n_docs:'{n} documents', dv_doc_uploaded:'Document uploaded', dv_doc_too_large:'File too large (max. 10 MB)',
+    dv_doc_delete_q:'Delete document?', dv_doc_delete_msg:'The file is removed from storage. This cannot be undone.', dv_doc_deleted:'Document deleted',
+    // API keys card (the Engine's credentials for /api/kunden)
+    engine_keys_title:'API keys', engine_keys_hint:'The Engine reads and writes customer data through /api/kunden with one of these keys (Authorization: Bearer). A key is shown once, when it is created.',
+    engine_keys_new_label:'New key', engine_keys_new_hint:'Name it after the system that will use it, for example "Engine production".', engine_keys_name_ph:'Engine production',
+    engine_keys_create:'Create key', engine_keys_name_required:'Give the key a name first.',
+    engine_keys_reveal_label:'Your new key', engine_keys_reveal_hint:'Copy it now and give it to the Engine team. It will not be shown again.', engine_keys_hide:'Done',
+    engine_keys_list_label:'Issued keys', engine_keys_none:'No keys yet.', engine_keys_col_name:'Name', engine_keys_col_key:'Key', engine_keys_col_created:'Created', engine_keys_col_last_used:'Last used', engine_keys_never:'never',
+    engine_keys_revoke:'Revoke', engine_keys_revoked:'Revoked', engine_keys_confirm_revoke:'Revoke the key "{name}"? The Engine stops working with it immediately.', engine_keys_revoked_toast:'Key revoked.',
+    engine_keys_openapi:'Download the API description (OpenAPI 3.1) for the Engine team',
+    // Onboarding monitor (Upgrads Engine) — public/js/onboarding.js
+    nav_onboarding:'Onboarding', onb_sub:'{running} in onboarding · {done} completed',
+    onb_inactive_hint:'The Upgrads Engine integration is switched off. Deals are listed, but nothing is sent until it is activated on the Integrations page.',
+    onb_filter_aria:'Filter deals', onb_filter_all:'All', onb_filter_not_started:'Not started', onb_filter_running:'In onboarding', onb_filter_done:'Completed',
+    onb_col_deal:'Deal', onb_col_customer:'Customer', onb_col_stage:'Stage', onb_col_status:'Engine status', onb_col_since:'Since', onb_col_delivery:'Webhook', onb_col_drive:'Drive', onb_col_actions:'Action',
+    onb_status_kein_onboarding:'No onboarding', onb_status_formular_versendet:'Form sent', onb_status_formular_ausgefuellt:'Form completed', onb_status_termin_gebucht:'Appointment booked',
+    onb_status_call_erfolgt:'Call done', onb_status_briefing_fertig:'Briefing ready', onb_status_onboarding_abgeschlossen:'Completed',
+    onb_stale:'{days}+ days unchanged', onb_delivery_none:'Not sent', onb_drive_link:'Open Drive folder',
+    onb_btn_start:'Start onboarding', onb_no_contact:'Link a customer to this deal first', onb_no_trigger_stage:'No trigger stage is configured for this pipeline (Integrations → Upgrads Engine)',
+    onb_confirm_title:'Start onboarding?', onb_confirm_body:'"{deal}" will be moved to the stage "{stage}". The deal then counts as won and the Upgrads Engine is notified.',
+    onb_started_toast:'Onboarding started for "{deal}"', onb_empty:'No deals yet', onb_empty_filter:'No deals match this filter',
+    onb_empty_hint:"Every deal of the workspace appears here with its customer's onboarding status.",
     // Settings (design ported from NewUIAI): rail tabs, section titles and one-line descriptions, cards
     tab_workspace:'Workspace', tab_preferences:'My preferences', tab_tasks:'Tasks', tab_integrations:'Integrations',
     hint_preferences:'These settings apply only to you, not to the whole workspace.',
@@ -214,6 +250,17 @@ const TRANSLATIONS = {
     set_timezone:'Time zone', hint_timezone:'Used by the sidebar clock, by the calendar for what counts as today, and for whether a task is overdue. Defaults to Berlin.',
     set_notifications:'Notifications', hint_notifications:'Choose which activity sends you a notification.',
     notif_contacts:'Contacts and suppliers', notif_deals:'Deals', notif_tasks:'Tasks', notif_objects:'Listings', notif_activities:'Activities',
+    // E-Mail card under My preferences (public/js/mailbox.js, EMAIL_SYNC_CHANGES Part 1)
+    set_mailbox:'Email', hint_mailbox:'Connect your own mailbox. The CRM keeps only emails with your contacts, and the whole team sees them on the contact and the deal.',
+    mb_connect_google:'Connect with Google', mb_connected_since:'Connected on {date}', mb_disconnect:'Disconnect', mb_disconnected:'Mailbox disconnected.',
+    mb_confirm_disconnect:'Disconnect {email}? The CRM stops reading this mailbox, and the emails it took from it are deleted from the CRM.',
+    mb_last_error:'Last problem: {error}', mb_sync_pending:'Reading the emails is the next step and is not switched on yet.',
+    mb_not_configured:'Google login is not set up on this server yet. It needs GOOGLE_MAIL_CLIENT_ID and GOOGLE_MAIL_CLIENT_SECRET.',
+    mb_ret_connected:'Mailbox connected.', mb_ret_denied:'Access was not allowed at Google.',
+    mb_ret_expired:'That took too long or came from another session. Please connect again.',
+    mb_ret_scopes:'Both permissions are needed: reading and sending emails. Please connect again and leave both ticked.',
+    mb_ret_taken:'Someone in this workspace has already connected this mailbox.', mb_ret_failed:'Google could not be reached or refused. Please try again.',
+    mb_ret_not_configured:'Google login is not set up on this server yet.',
     set_deal_cols:'Deal list columns', hint_deal_cols:'Columns of the deal list view. Drag to reorder. Title is always first.',
     set_object_fields:'Fields', hint_object_fields:'Extra properties on every item in this list.', set_object_cols:'Table columns',
     set_task_statuses:'Task statuses', hint_task_statuses:'Drag to reorder. Statuses are the columns of the task board.',
@@ -234,7 +281,7 @@ const TRANSLATIONS = {
     intg_mapping_title:'Field mapping', intg_mapping_hint:'Which key in the incoming JSON fills which contact field. Use dots for nested keys, for example data.email.',
     intg_builtin_fields:'Built-in fields', intg_custom_fields:'Custom fields', intg_add_field_ph:'Add a custom field…', intg_edit_key:'Edit key', intg_custom_tag:'Custom',
     intg_autodeal_title:'Auto-create a deal', intg_autodeal_hint:'Start a deal in your pipeline for every lead that arrives.', intg_autodeal_toggle:'Create a deal for every incoming lead',
-    intg_assignee_title:'Default assignee', intg_assignee_hint:'Who new contacts from this webhook are assigned to.', opt_assignee_self:'Not set (assigned to yourself)',
+    intg_assignee_title:'Default assignee', intg_assignee_hint:'Who new contacts from this webhook are assigned to.', opt_assignee_self:'Nobody (left unassigned)',
     lbl_pipeline:'Pipeline', intg_no_stages_in_pipeline:'No stages in this pipeline', msg_saved:'Saved', intg_autosaved:'Auto-saved',
     intg_confirm_regen_url:'This replaces your webhook URL. Every tool that sends leads to the old URL must be updated. Continue?',
     intg_platforms_title:'Setup guides', intg_platforms_hint:'Pick the tool you send leads from to see the setup steps and a sample payload.',
@@ -310,6 +357,8 @@ const TRANSLATIONS = {
     chat_online:'Online:', chat_err_load:'Could not load messages.', chat_empty:'No messages yet. Say hello to your team!',
     chat_err_loading:'Error loading messages.', chat_loading:'Loading…', chat_you:'You',
     chat_ago_m:'{n}m ago', notif_by:'By {name}', notif_caught_up:'You\'re all caught up!',
+    notif_meeting_booked:'Meeting booked', notif_meeting_moved:'Meeting moved', notif_meeting_cancelled:'Meeting cancelled',
+    notif_notetaker_done:'Notetaker notes are in', notif_notetaker_failed:'Notetaker could not record',
     notif_appear_here:'Notifications will appear here.',
     // Part 45 — German sweep: core
     core_network_error:'Network error', core_server_error:'Server error ({status})', core_confirm:'Confirm',
@@ -365,7 +414,7 @@ const TRANSLATIONS = {
     dv_no_open_tasks_for:'No open tasks for this {noun}.', dv_activity_details:'Activity details', dv_ph_note_about:'Write a note about {name}…',
     dv_ph_discussed:'What was discussed or agreed?', dv_activity_timeline:'Activity timeline', dv_filter_activity:'Filter activity',
     dv_filter_note:'Notes', dv_filter_call:'Calls', dv_filter_email:'Emails',
-    dv_filter_whatsapp:'WhatsApp messages', dv_no_activity_type:'No activity of this type', dv_choose_type_above:'Choose another type above.',
+    dv_filter_whatsapp:'WhatsApp messages', dv_filter_meeting:'Meetings', dv_no_activity_type:'No activity of this type', dv_choose_type_above:'Choose another type above.',
     dv_log_to_start_contact:'Log a note, call or email to start the timeline.', dv_one_deal:'1 deal', dv_total_value:'Total value',
     dv_deals_linked_here:'Deals linked to this {noun} will show up here.', dv_no_tasks_yet:'No tasks yet', dv_tasks_linked_here:'Tasks linked to this {noun} will show up here.',
     dv_one_deal_total:'1 deal in total', dv_n_deals_total:'{n} deals in total', dv_no_deals:'No deals',
@@ -432,7 +481,8 @@ const TRANSLATIONS = {
     html_add_column_title:'Add a new property (column) to every listing', html_task_projects:'Task projects', html_time_range:'Time range',
     html_configure_metrics:'Configure Metrics', html_drag_section:'Drag to reorder section', html_trends:'Trends',
     html_visible_cards:'Visible Metric Cards', html_visible_cards_hint:'Toggle which cards appear in the overview row.', html_deal_value_field:'Deal Value Field',
-    html_deal_value_field_hint:'Which field holds the deal price? Only numeric/currency fields appear here.', html_won_stages:'Won Stages', html_lost_stages:'Lost Stages',
+    html_deal_value_field_hint:'Which field holds the deal price? Only numeric/currency fields appear here.',
+    html_currency:'Currency', html_currency_hint:'How money is shown in Analytics.', an_cur_eur:'Euro (€)', an_cur_usd:'US dollar ($)', an_cur_gbp:'British pound (£)', an_cur_chf:'Swiss franc (CHF)', html_won_stages:'Won Stages', html_lost_stages:'Lost Stages',
     html_ph_suppliers:'Suppliers', html_ph_listings:'Listings', html_invite_role_aria:'Role for the new invite code',
     html_ws_sub:'Switch between your workspaces or create a new one.', html_new_workspace:'New Workspace', html_join_ws_title:'Join a Workspace',
     html_ws_invite_code:'Workspace Invite Code', html_ph_invite_code:'Paste invite code here', html_join_ws_btn:'Join Workspace',
@@ -471,7 +521,7 @@ const TRANSLATIONS = {
     ct_showing_range:'Showing {s}–{e} of {n}', ct_pagination_aria:'Pagination', ct_prev_page:'Previous page',
     ct_next_page:'Next page', ct_bulk_delete_one:'You are about to delete 1 contact. This action cannot be undone.', ct_bulk_delete_n:'You are about to delete {n} contacts. This action cannot be undone.',
     ct_bulk_confirm_number:'Please enter the correct number ({n}) to confirm deletion.', ct_bulk_delete_error:'Error deleting contacts: {error}', md_opt_select:'— Select —',
-    md_opt_no_deal:'— No deal —', md_delete_contact_q:'Delete this contact?', md_delete_contact_msg:'Their activities are deleted with them. This cannot be undone.',
+    md_opt_no_deal:'— No deal —', md_delete_contact_q:'Delete this contact?', cf_err_email_taken:'A contact with this email address already exists.', cf_err_save:'The contact was not saved. Try again.', md_delete_contact_msg:'Their activities are deleted with them. This cannot be undone.',
     stg_rename_pipeline:'Rename Pipeline', stg_new_pipeline:'New Pipeline', stg_delete_pipeline_confirm:'Delete this pipeline and all its deals?',
     stg_stage_name_prompt:'Stage name:', stg_delete_stage_confirm:'Delete this stage? Deals in it will become unsorted.', stg_edit_deal_field:'Edit Deal Field',
     stg_add_deal_field:'Add Deal Field', stg_delete_field_confirm:'Delete this field?', stg_delete_field_values_confirm:'Delete this field? Saved values will be lost.',
@@ -479,6 +529,46 @@ const TRANSLATIONS = {
     stg_copied_code:'Copied: {code}', stg_remove_member_confirm:'Remove {name} from this workspace? Their assigned contacts will become unassigned.', stg_delete_ws_confirm1:'Are you sure you want to delete this workspace? This action cannot be undone. All data will be permanently deleted.',
     stg_delete_ws_confirm2:'This will delete all contacts, deals, tasks, and messages. Confirm deletion?', stg_edit_status:'Edit Status', stg_add_status:'Add Status',
     stg_delete_status_confirm:'Delete this status? Tasks with this status will keep it but it won\'t appear in the kanban.', stg_edit_task_field:'Edit Task Field', stg_add_task_field:'Add Task Field',
+    // Cal.com (Integrations → Cal.com tab; routes/integrations.js /calcom)
+    intg_tab_calcom:'Cal.com', intg_pane_calcom:'Cal.com', intg_pane_calcom_hint:'One Cal.com account for the whole workspace: its bookings land on the calendar, and a meeting can be booked from a deal or a contact.',
+    cal_title:'Cal.com connection', cal_status_none:'Not connected', cal_status_connected:'Connected',
+    cal_hint:'Connect the Cal.com account whose bookings this workspace should see. Everyone in the workspace sees the account and its bookings; only owners and admins can change the connection.',
+    cal_readonly_hint:'Only owners and admins can connect or disconnect Cal.com.',
+    cal_key_label:'API key', cal_key_hint:'In Cal.com under Settings, Developer, API keys. The key is stored encrypted and never shown again.', cal_key_ph:'cal_live_…',
+    cal_btn_connect:'Connect', cal_key_required:'Paste the API key first.', cal_none:'No Cal.com account is connected yet.',
+    cal_guide_title:'How to connect Cal.com', cal_guide_show:'Show guide', cal_guide_hide:'Hide guide',
+    cal_guide_step1:'Log in to Cal.com with the account whose calendar the team will use. Every meeting booked from the CRM lands on this account.',
+    cal_guide_step2:'There, under <strong>Settings → Developer → API keys</strong>, click <strong>New</strong>: give it a name (Upgrads CRM, say), switch on <strong>Never expires</strong>, then <strong>Create</strong>.',
+    cal_guide_step3:'Copy the key right away: Cal.com shows it only this once. It starts with <code>cal_live_</code>.',
+    cal_guide_step4:'Paste the key above and press <strong>Connect</strong>. It is stored encrypted and never shown again; the booking webhook registers itself in the same step.',
+    cal_guide_step5:'Under <strong>Event type for bookings</strong>, pick the Cal.com event type the team books from a deal or a contact.',
+    cal_guide_step6:'For Google Meet or Zoom: connect the app in Cal.com under <strong>Apps</strong> (Google Meet needs Google Calendar) and add it to the event type under <strong>Location</strong>. Then press <strong>Refresh event types</strong>; the place is offered in the booking dialog.',
+    cal_guide_step7:'To check, the booking webhook under <strong>Connected account</strong> reads “registered”. If it reads “not registered”, the CRM must be reachable from the internet; then press <strong>Register webhook</strong>.',
+    cal_guide_note:'One account per workspace. Disconnecting removes the key; the meetings already on the deals stay.',
+    cal_account_label:'Connected account', cal_fact_account:'Account', cal_fact_username:'Username', cal_fact_timezone:'Time zone', cal_fact_connected_by:'Connected by', cal_connected_by_on:'{name}, {date}',
+    cal_event_type_label:'Event type for bookings', cal_event_type_hint:'The Cal.com event type a meeting booked from a deal or a contact uses.',
+    cal_minutes:'{n} min', cal_hidden_tag:'hidden in Cal.com', cal_no_event_types:'This account has no event types yet.',
+    cal_btn_refresh:'Refresh event types', cal_btn_disconnect:'Disconnect',
+    cal_confirm_disconnect:'Disconnect Cal.com? Bookings already on the calendar stay; new ones stop arriving until an account is connected again.',
+    cal_connected_ok:'Cal.com connected.', cal_disconnected_ok:'Cal.com disconnected.', cal_saved:'Saved.', cal_refreshed:'Event types refreshed.', cal_err_generic:'That did not work. Please try again.',
+    cal_fact_webhook:'Booking webhook', cal_webhook_on:'registered', cal_webhook_off:'not registered', cal_btn_register:'Register webhook', cal_registered_ok:'Webhook registered.',
+    cal_webhook_hint:'Cal.com reports every booking it hosts to this CRM, which must be reachable from the internet for that.',
+    cal_log_title:'Recent bookings', cal_log_hint:'Every booking Cal.com reported, and what became of it.', cal_log_none:'No booking has arrived yet.',
+    cal_log_BOOKING_CREATED:'Booked', cal_log_BOOKING_RESCHEDULED:'Rescheduled', cal_log_BOOKING_CANCELLED:'Cancelled', cal_log_new_contact:'new contact', cal_log_new_deal:'new deal', cal_log_BOOKED_FROM_CRM:'Booked from the CRM',
+    cal_book_btn:'Book meeting', cal_book_title:'Book a meeting with {name}', cal_book_type:'Event type', cal_book_zone:'Times in {zone}. Host: {host}.', cal_book_month_prev:'Previous month', cal_book_month_next:'Next month',
+    cal_book_loading:'Loading free times', cal_book_none_month:'Nothing is free this month.',
+    cal_book_note:'Note for the invitation (optional)', cal_book_note_ph:'For example: please bring the documents', cal_book_submit:'Book', cal_book_booking:'Booking', cal_book_pick_first:'Pick a time first.',
+    cal_book_done:'Booked: {when}. Cal.com sends the invitation.', cal_book_no_email:'The contact needs an email address for the invitation.', cal_book_open_contact:'Edit contact',
+    cal_book_date:'Date', cal_book_time:'Time', cal_book_time_ph:'Pick a time', cal_book_one_time:'1 free time', cal_book_n_times:'{n} free times',
+    cal_book_slot:'{from} to {to} ({ampm})', cal_book_where:'Where', cal_book_invite_to:'The invitation goes to {email}.', cal_book_with:'with {name}',
+    cal_book_record:'Record with Notetaker', cal_book_record_help:'The Notetaker bot joins the Google Meet at the start, records and transcribes it, and writes notes. It announces itself in the chat.', cal_book_record_short:'with Notetaker',
+    cal_rec_scheduled:'Notetaker is booked for the start of the meeting.', cal_rec_queued:'Notetaker is joining the meeting now.', cal_rec_updated:'Notetaker has the new time.', cal_rec_duplicate:'A Notetaker is already booked for this meeting.', cal_rec_waiting:'Notetaker joins as soon as Cal.com sends the Meet link.', cal_rec_failed:'Notetaker was not booked: {error}',
+    cal_rec_checking:'Checking whether Notetaker is ready…', cal_rec_down_unreachable:'Notetaker is not reachable right now, so this meeting cannot be recorded.', cal_rec_down_token:'Notetaker refused the CRM\'s access token. An admin can check NOTETAKER_CRM_TOKEN.', cal_rec_down_error:'Notetaker reported a problem, so this meeting cannot be recorded.', cal_rec_recheck:'Check again',
+    cal_resched_btn:'Reschedule', cal_resched_title:'Move the meeting with {name}', cal_resched_current:'Currently', cal_resched_submit:'Move', cal_resched_busy:'Moving', cal_resched_reason:'Reason (optional, {name} sees it)', cal_resched_reason_ph:'For example: something came up', cal_resched_done:'Moved to {when}. Cal.com informs {name}.',
+    cal_cancel_btn:'Cancel meeting', cal_cancel_q:'Cancel this meeting?', cal_cancel_msg:'The booking is cancelled in Cal.com and {name} is informed. The entry stays in the CRM, marked as cancelled.', cal_cancel_reason:'Reason (optional, the customer sees it)', cal_cancel_busy:'Cancelling', cal_cancel_done:'Meeting cancelled.',
+    cal_del_q:'Delete this meeting entry?', cal_del_msg:'This meeting is booked in Cal.com. Deleting the entry here does not cancel it there: the slot stays taken and the customer keeps the invitation.', cal_del_only:'Delete here only',
+    cal_log_CANCELLED_FROM_CRM:'Cancelled from the CRM', cal_log_RESCHEDULED_FROM_CRM:'Moved from the CRM', cal_loc_address:'In person: {address}', cal_loc_address_plain:'In person', cal_loc_link:'Link from the host', cal_loc_phone:'Phone call', cal_book_checking:'Checking the calendar', cal_book_conflict:'Conflict: {time} {title} ({who}) is already on the calendar.', cal_book_conflict_hint:'Cal.com does not see the tasks and entries of this CRM. Book anyway, or pick another time.', cal_book_anyway:'Book anyway',
+    cal_join:'Join {app}', cal_join_link:'Open the meeting link',
   },
   de: {
     nav_deals:'Deals', nav_contacts:'Kontakte', nav_activities:'Aktivitäten', nav_settings:'Einstellungen', nav_board:'Board',
@@ -487,6 +577,14 @@ const TRANSLATIONS = {
     topbar_search:'Zu einer Seite springen…', topbar_new:'Neu', new_deal:'Deal', new_contact:'Kontakt', new_task:'Aufgabe',
     kbd_shortcuts:'Tastenkürzel', start_tour:'Produkttour starten', btn_close:'Schließen',
     sc_search:'Suchen und zu einer Seite springen', sc_close:'Dialog oder Menü schließen', sc_move:'In Menüs und Suche bewegen', palette_none:'Keine Seite passt', palette_group_pages:'Gehe zu',
+    // Die Pause: das versteckte Spiel mit fallenden Blöcken (js/break-game.js fragt diese Wörter ab; die Landingpage hat dieselben)
+    brk_title:'Kurze Pause', brk_close:'Schließen', brk_field:'Spielfeld', brk_hold:'Gehalten', brk_next:'Als Nächstes',
+    brk_score:'Punkte', brk_lines:'Reihen', brk_level:'Stufe', brk_record:'Rekord',
+    brk_pause:'Pausieren', brk_resume:'Weiter', brk_board:'Bestenliste', brk_back:'Zurück zum Spiel', brk_again:'Nochmal',
+    brk_over:'Vorbei. {n} Punkte.', brk_place:'Platz {n} auf der Bestenliste!', brk_name_label:'Name für die Bestenliste', brk_name_default:'Gast', brk_save:'Eintragen',
+    brk_board_empty:'Noch keine Einträge. Platz eins ist frei.', brk_scope_browser:'Gespeichert in diesem Browser.', brk_scope_team:'Die Bestenliste des ganzen Teams.',
+    brk_help:'Pfeiltasten bewegen und drehen, Leertaste lässt fallen, C hält, P pausiert.',
+    brk_pad:'Steuerung', brk_key_left:'Links', brk_key_right:'Rechts', brk_key_rotate:'Drehen', brk_key_down:'Runter', brk_key_drop:'Fallen lassen', brk_key_hold:'Halten',
     kbd_to_move:'bewegen', kbd_to_open:'öffnen', kbd_to_close:'schließen',
     set_miro:'Miro-Board', hint_miro:'Embed-URL aus Miro → Teilen → Einbetten einfügen.',
     add_deal:'Deal hinzufügen', lbl_deal_title:'Titel', lbl_deal_value:'Wert',
@@ -504,8 +602,8 @@ const TRANSLATIONS = {
     delete_activity:'Aktivität löschen', activity_deleted:'Aktivität gelöscht', export_activities_csv:'{n} Aktivitäten exportiert',
     // Aktivitäten-Seite, vollständige Portierung (Erfassen-Karte, Zeitraum-Chip, Tagesgruppen, Seitenleiste, Menü)
     chip_period:'Zeitraum', period_all:'Gesamt', period_today:'Heute', period_7d:'Letzte 7 Tage', period_30d:'Letzte 30 Tage',
-    act_verb_note:'Notiz hinzufügen', act_verb_call:'Anruf erfassen', act_verb_email:'E-Mail erfassen', act_verb_whatsapp:'Nachricht erfassen',
-    act_ph_note:'Notiz schreiben', act_ph_call:'Was wurde im Gespräch besprochen?', act_ph_email:'E-Mail zusammenfassen oder die Kernpunkte einfügen', act_ph_whatsapp:'Nachrichtentext oder Zusammenfassung des Chats',
+    act_verb_note:'Notiz hinzufügen', act_verb_call:'Anruf erfassen', act_verb_email:'E-Mail erfassen', act_verb_whatsapp:'Nachricht erfassen', act_verb_meeting:'Termin erfassen',
+    act_ph_note:'Notiz schreiben', act_ph_call:'Was wurde im Gespräch besprochen?', act_ph_email:'E-Mail zusammenfassen oder die Kernpunkte einfügen', act_ph_whatsapp:'Nachrichtentext oder Zusammenfassung des Chats', act_ph_meeting:'Was wurde im Termin besprochen?',
     act_err_text:'Füge eine kurze Beschreibung hinzu, bevor du speicherst.', act_err_link:'Verknüpfe einen Deal oder einen Kontakt, damit der Eintrag später auffindbar ist.', act_err_save:'Der Eintrag konnte nicht gespeichert werden. Bitte erneut versuchen.', act_logged:'{type} erfasst',
     act_compose_aria:'Neue Aktivität erfassen', opt_no_deal:'Kein Deal', opt_no_contact:'Kein Kontakt', one_activity:'1 Aktivität', n_activities:'{n} Aktivitäten',
     rail_aria:'Aufschlüsselung', rail_by_type:'Nach Typ', rail_by_person:'Nach Person', rail_top_deals:'Aktivste Deals', rail_no_deals:'Keine Deal-Aktivität in dieser Ansicht',
@@ -540,10 +638,11 @@ const TRANSLATIONS = {
     col_name:'Name', col_company:'Unternehmen', col_email:'E-Mail', col_phone:'Telefon', col_stage:'Phase', col_assignee:'Zuständig', col_created_at:'Hinzugefügt am',
     search_ph:'Name, Unternehmen, E-Mail oder Telefon suchen', chip_last:'Letzter Kontakt', last_today:'Heute', last_week:'Letzte 7 Tage', last_month:'Letzte 30 Tage', last_older:'Älter als 30 Tage', last_never:'Nie kontaktiert',
     add_filter:'Filter', remove_filter:'Filter entfernen', btn_select:'Auswählen',
-    filter_contains_ph:'Tippen zum Filtern…', click_to_edit:'Zum Bearbeiten klicken', edit_entry:'Eintrag bearbeiten', delete_entry:'Eintrag löschen', entry_updated:'Eintrag aktualisiert', enter_saves_esc_cancels:'Enter speichert · Esc bricht ab · Shift+Enter für eine neue Zeile', no_contacts_match:'Keine {noun} passen zu deinen Filtern', no_contacts_yet:'Noch keine {noun}', n_items:'{n} {noun}', n_of_items:'{a} von {b} {noun}',
+    filter_contains_ph:'Tippen zum Filtern…', click_to_edit:'Zum Bearbeiten klicken', edit_entry:'Eintrag bearbeiten', delete_entry:'Eintrag löschen', entry_updated:'Eintrag aktualisiert', ctrl_enter_saves_esc_cancels:'Strg+Enter speichert · Esc bricht ab', no_contacts_match:'Keine {noun} passen zu deinen Filtern', no_contacts_yet:'Noch keine {noun}', n_items:'{n} {noun}', n_of_items:'{a} von {b} {noun}',
     no_activities:'Noch keine Aktivitäten.', no_fields:'Noch keine benutzerdefinierten Felder.',
     drop_here:'Kontakte hierher ziehen', unassigned:'Nicht zugewiesen',
-    act_note:'Notiz', act_call:'Anruf', act_email:'E-Mail', act_whatsapp:'WhatsApp',
+    act_note:'Notiz', act_call:'Anruf', act_email:'E-Mail', act_whatsapp:'WhatsApp', act_meeting:'Termin', act_cancelled:'Abgesagt', src_calcom:'Cal.com',
+    app_update_ready:'Eine neue Version der App ist da.', app_update_reload:'Neu laden',
     logged_by:'von',
     tab_general:'Allgemein', tab_pipeline:'Pipeline', tab_contacts:'Kontakte', tab_team:'Team',
     set_stages:'Pipeline-Phasen', set_fields:'Benutzerdefinierte Felder', set_kanban:'Kanban-Kartenfelder',
@@ -590,6 +689,33 @@ const TRANSLATIONS = {
     engine_confirm_regen_secret:'Das aktuelle Secret wird ungültig. Die Engine muss mit dem neuen Secret aktualisiert werden. Fortfahren?',
     engine_status_pending:'Ausstehend', engine_status_success:'Zugestellt', engine_status_failed:'Fehlgeschlagen',
     engine_attempt_one:'Versuch', engine_attempts:'Versuche', engine_view_payload:'Payload anzeigen',
+    engine_btn_retry:'Erneut senden', engine_retry_ok:'Zugestellt.', engine_retry_failed:'Weiterhin fehlgeschlagen: {error}', engine_next_attempt:'Nächster Versuch {when}',
+    // Dokumente-Reiter in der Kontaktansicht (Verträge / Aufnahmen für die Upgrads Engine) — detail-views.js
+    dv_tab_documents:'Dokumente', dv_doc_upload:'Dokument hochladen', dv_doc_uploading:'Wird hochgeladen…', dv_doc_download:'Herunterladen',
+    dv_doc_type_aria:'Dokumenttyp', dv_doc_type_vertrag:'Vertrag', dv_doc_type_aufnahme:'Aufnahme', dv_doc_type_sonstiges:'Sonstiges',
+    dv_no_docs:'Noch keine Dokumente', dv_docs_hint:'Verträge und Gesprächsaufnahmen für die Upgrads Engine liegen hier. Die Engine holt sie über ihre API ab.',
+    dv_one_doc:'1 Dokument', n_docs:'{n} Dokumente', dv_doc_uploaded:'Dokument hochgeladen', dv_doc_too_large:'Datei zu groß (max. 10 MB)',
+    dv_doc_delete_q:'Dokument löschen?', dv_doc_delete_msg:'Die Datei wird aus dem Speicher entfernt. Das kann nicht rückgängig gemacht werden.', dv_doc_deleted:'Dokument gelöscht',
+    // API-Schlüssel-Karte (Zugangsdaten der Engine für /api/kunden)
+    engine_keys_title:'API-Schlüssel', engine_keys_hint:'Die Engine liest und schreibt Kundendaten über /api/kunden mit einem dieser Schlüssel (Authorization: Bearer). Ein Schlüssel wird nur einmal angezeigt, direkt nach dem Erstellen.',
+    engine_keys_new_label:'Neuer Schlüssel', engine_keys_new_hint:'Benenne ihn nach dem System, das ihn verwendet, z. B. „Engine Produktion“.', engine_keys_name_ph:'Engine Produktion',
+    engine_keys_create:'Schlüssel erstellen', engine_keys_name_required:'Gib dem Schlüssel zuerst einen Namen.',
+    engine_keys_reveal_label:'Dein neuer Schlüssel', engine_keys_reveal_hint:'Jetzt kopieren und dem Engine-Team geben. Er wird nicht noch einmal angezeigt.', engine_keys_hide:'Fertig',
+    engine_keys_list_label:'Ausgestellte Schlüssel', engine_keys_none:'Noch keine Schlüssel.', engine_keys_col_name:'Name', engine_keys_col_key:'Schlüssel', engine_keys_col_created:'Erstellt', engine_keys_col_last_used:'Zuletzt verwendet', engine_keys_never:'nie',
+    engine_keys_revoke:'Widerrufen', engine_keys_revoked:'Widerrufen', engine_keys_confirm_revoke:'Schlüssel „{name}“ widerrufen? Die Engine kann damit sofort nicht mehr arbeiten.', engine_keys_revoked_toast:'Schlüssel widerrufen.',
+    engine_keys_openapi:'API-Beschreibung (OpenAPI 3.1) für das Engine-Team herunterladen',
+    // Onboarding-Monitor (Upgrads Engine) — public/js/onboarding.js
+    nav_onboarding:'Onboarding', onb_sub:'{running} im Onboarding · {done} abgeschlossen',
+    onb_inactive_hint:'Die Upgrads-Engine-Integration ist ausgeschaltet. Deals werden angezeigt, aber nichts wird gesendet, bis sie auf der Seite Integrationen aktiviert wird.',
+    onb_filter_aria:'Deals filtern', onb_filter_all:'Alle', onb_filter_not_started:'Nicht gestartet', onb_filter_running:'Im Onboarding', onb_filter_done:'Abgeschlossen',
+    onb_col_deal:'Deal', onb_col_customer:'Kunde', onb_col_stage:'Phase', onb_col_status:'Engine-Status', onb_col_since:'Seit', onb_col_delivery:'Webhook', onb_col_drive:'Drive', onb_col_actions:'Aktion',
+    onb_status_kein_onboarding:'Kein Onboarding', onb_status_formular_versendet:'Formular versendet', onb_status_formular_ausgefuellt:'Formular ausgefüllt', onb_status_termin_gebucht:'Termin gebucht',
+    onb_status_call_erfolgt:'Call erfolgt', onb_status_briefing_fertig:'Briefing fertig', onb_status_onboarding_abgeschlossen:'Abgeschlossen',
+    onb_stale:'{days}+ Tage unverändert', onb_delivery_none:'Nicht gesendet', onb_drive_link:'Drive-Ordner öffnen',
+    onb_btn_start:'Onboarding starten', onb_no_contact:'Zuerst einen Kunden mit diesem Deal verknüpfen', onb_no_trigger_stage:'Für diese Pipeline ist keine Trigger-Phase konfiguriert (Integrationen → Upgrads Engine)',
+    onb_confirm_title:'Onboarding starten?', onb_confirm_body:'„{deal}“ wird in die Phase „{stage}“ verschoben. Der Deal gilt dann als gewonnen und die Upgrads Engine wird benachrichtigt.',
+    onb_started_toast:'Onboarding für „{deal}“ gestartet', onb_empty:'Noch keine Deals', onb_empty_filter:'Keine Deals für diesen Filter',
+    onb_empty_hint:'Hier erscheint jeder Deal des Arbeitsbereichs mit dem Onboarding-Status seines Kunden.',
     // Einstellungen (Design von NewUIAI übernommen): Reiter, Abschnittstitel und Kurzbeschreibungen, Karten
     tab_workspace:'Arbeitsbereich', tab_preferences:'Meine Einstellungen', tab_tasks:'Aufgaben', tab_integrations:'Integrationen',
     hint_preferences:'Diese Einstellungen gelten nur für dich, nicht für den ganzen Arbeitsbereich.',
@@ -607,6 +733,17 @@ const TRANSLATIONS = {
     set_timezone:'Zeitzone', hint_timezone:'Wird von der Uhr in der Seitenleiste, vom Kalender für das heutige Datum und für die Überfälligkeit von Aufgaben verwendet. Standard ist Berlin.',
     set_notifications:'Benachrichtigungen', hint_notifications:'Wähle, welche Aktivitäten dich benachrichtigen.',
     notif_contacts:'Kontakte und Lieferanten', notif_deals:'Deals', notif_tasks:'Aufgaben', notif_objects:'Objekte', notif_activities:'Aktivitäten',
+    // E-Mail-Karte unter Meine Einstellungen (public/js/mailbox.js, EMAIL_SYNC_CHANGES Part 1)
+    set_mailbox:'E-Mail', hint_mailbox:'Das eigene Postfach verbinden. Das CRM übernimmt nur E-Mails mit Kontakten, und das ganze Team sieht sie am Kontakt und am Deal.',
+    mb_connect_google:'Mit Google verbinden', mb_connected_since:'Verbunden am {date}', mb_disconnect:'Trennen', mb_disconnected:'Postfach getrennt.',
+    mb_confirm_disconnect:'{email} trennen? Das CRM liest dieses Postfach nicht mehr, und die daraus übernommenen E-Mails werden im CRM gelöscht.',
+    mb_last_error:'Letztes Problem: {error}', mb_sync_pending:'Das Einlesen der E-Mails ist der nächste Schritt und noch nicht eingeschaltet.',
+    mb_not_configured:'Die Google-Anmeldung ist auf diesem Server noch nicht eingerichtet. Dafür werden GOOGLE_MAIL_CLIENT_ID und GOOGLE_MAIL_CLIENT_SECRET gebraucht.',
+    mb_ret_connected:'Postfach verbunden.', mb_ret_denied:'Der Zugriff wurde bei Google nicht erlaubt.',
+    mb_ret_expired:'Das hat zu lange gedauert oder kam aus einer anderen Sitzung. Bitte erneut verbinden.',
+    mb_ret_scopes:'Beide Berechtigungen werden gebraucht: E-Mails lesen und senden. Bitte erneut verbinden und beide Häkchen gesetzt lassen.',
+    mb_ret_taken:'Dieses Postfach ist in diesem Arbeitsbereich schon verbunden.', mb_ret_failed:'Google war nicht erreichbar oder hat abgelehnt. Bitte noch einmal versuchen.',
+    mb_ret_not_configured:'Die Google-Anmeldung ist auf diesem Server noch nicht eingerichtet.',
     set_deal_cols:'Spalten der Deal-Liste', hint_deal_cols:'Spalten der Deal-Listenansicht. Ziehen zum Sortieren. Titel steht immer zuerst.',
     set_object_fields:'Felder', hint_object_fields:'Zusätzliche Eigenschaften für jeden Eintrag dieser Liste.', set_object_cols:'Tabellenspalten',
     set_task_statuses:'Aufgabenstatus', hint_task_statuses:'Ziehen zum Sortieren. Status sind die Spalten des Aufgaben-Boards.',
@@ -627,7 +764,7 @@ const TRANSLATIONS = {
     intg_mapping_title:'Feldzuordnung', intg_mapping_hint:'Welcher Schlüssel im eingehenden JSON welches Kontaktfeld füllt. Für verschachtelte Schlüssel Punkte verwenden, z. B. data.email.',
     intg_builtin_fields:'Standardfelder', intg_custom_fields:'Eigene Felder', intg_add_field_ph:'Eigenes Feld hinzufügen…', intg_edit_key:'Schlüssel bearbeiten', intg_custom_tag:'Eigenes Feld',
     intg_autodeal_title:'Deal automatisch anlegen', intg_autodeal_hint:'Für jeden eingehenden Lead einen Deal in deiner Pipeline starten.', intg_autodeal_toggle:'Für jeden eingehenden Lead einen Deal anlegen',
-    intg_assignee_title:'Standard-Zuständigkeit', intg_assignee_hint:'Wem neue Kontakte aus diesem Webhook zugewiesen werden.', opt_assignee_self:'Nicht gesetzt (dir selbst zugewiesen)',
+    intg_assignee_title:'Standard-Zuständigkeit', intg_assignee_hint:'Wem neue Kontakte aus diesem Webhook zugewiesen werden.', opt_assignee_self:'Niemand (bleibt offen)',
     lbl_pipeline:'Pipeline', intg_no_stages_in_pipeline:'Keine Phasen in dieser Pipeline', msg_saved:'Gespeichert', intg_autosaved:'Automatisch gespeichert',
     intg_confirm_regen_url:'Deine Webhook-URL wird ersetzt. Jedes Tool, das Leads an die alte URL sendet, muss aktualisiert werden. Fortfahren?',
     intg_platforms_title:'Einrichtungsanleitungen', intg_platforms_hint:'Wähle das Tool, aus dem du Leads sendest, um die Einrichtungsschritte und ein Beispiel-Payload zu sehen.',
@@ -703,6 +840,8 @@ const TRANSLATIONS = {
     chat_online:'Online:', chat_err_load:'Nachrichten konnten nicht geladen werden.', chat_empty:'Noch keine Nachrichten. Sag deinem Team Hallo!',
     chat_err_loading:'Fehler beim Laden der Nachrichten.', chat_loading:'Lädt…', chat_you:'Du',
     chat_ago_m:'vor {n} Min.', notif_by:'Von {name}', notif_caught_up:'Alles auf dem neuesten Stand!',
+    notif_meeting_booked:'Termin gebucht', notif_meeting_moved:'Termin verschoben', notif_meeting_cancelled:'Termin abgesagt',
+    notif_notetaker_done:'Notetaker-Notizen sind da', notif_notetaker_failed:'Notetaker konnte nicht aufnehmen',
     notif_appear_here:'Benachrichtigungen erscheinen hier.',
     // Part 45 — German sweep: core
     core_network_error:'Netzwerkfehler', core_server_error:'Serverfehler ({status})', core_confirm:'Bestätigen',
@@ -758,7 +897,7 @@ const TRANSLATIONS = {
     dv_no_open_tasks_for:'Dieser {noun} hat keine offenen Aufgaben.', dv_activity_details:'Details zur Aktivität', dv_ph_note_about:'Notiz zu {name} schreiben…',
     dv_ph_discussed:'Was wurde besprochen oder vereinbart?', dv_activity_timeline:'Aktivitätsverlauf', dv_filter_activity:'Aktivitäten filtern',
     dv_filter_note:'Notizen', dv_filter_call:'Anrufe', dv_filter_email:'E-Mails',
-    dv_filter_whatsapp:'WhatsApp-Nachrichten', dv_no_activity_type:'Keine Aktivität dieses Typs', dv_choose_type_above:'Wähle oben einen anderen Typ.',
+    dv_filter_whatsapp:'WhatsApp-Nachrichten', dv_filter_meeting:'Termine', dv_no_activity_type:'Keine Aktivität dieses Typs', dv_choose_type_above:'Wähle oben einen anderen Typ.',
     dv_log_to_start_contact:'Erfasse eine Notiz, einen Anruf oder eine E-Mail, um den Verlauf zu beginnen.', dv_one_deal:'1 Deal', dv_total_value:'Gesamtwert',
     dv_deals_linked_here:'Verknüpfte Deals erscheinen hier.', dv_no_tasks_yet:'Noch keine Aufgaben', dv_tasks_linked_here:'Verknüpfte Aufgaben erscheinen hier.',
     dv_one_deal_total:'1 Deal insgesamt', dv_n_deals_total:'{n} Deals insgesamt', dv_no_deals:'Keine Deals',
@@ -825,7 +964,8 @@ const TRANSLATIONS = {
     html_add_column_title:'Neue Eigenschaft (Spalte) für jedes Objekt hinzufügen', html_task_projects:'Aufgabenprojekte', html_time_range:'Zeitraum',
     html_configure_metrics:'Kennzahlen konfigurieren', html_drag_section:'Ziehen, um den Abschnitt zu verschieben', html_trends:'Trends',
     html_visible_cards:'Sichtbare Kennzahlen-Karten', html_visible_cards_hint:'Wähle, welche Karten in der Übersichtszeile erscheinen.', html_deal_value_field:'Feld für den Deal-Wert',
-    html_deal_value_field_hint:'Welches Feld enthält den Deal-Preis? Nur Zahlen- und Währungsfelder erscheinen hier.', html_won_stages:'Gewonnen-Phasen', html_lost_stages:'Verloren-Phasen',
+    html_deal_value_field_hint:'Welches Feld enthält den Deal-Preis? Nur Zahlen- und Währungsfelder erscheinen hier.',
+    html_currency:'Währung', html_currency_hint:'So werden Beträge in den Analysen angezeigt.', an_cur_eur:'Euro (€)', an_cur_usd:'US-Dollar ($)', an_cur_gbp:'Britisches Pfund (£)', an_cur_chf:'Schweizer Franken (CHF)', html_won_stages:'Gewonnen-Phasen', html_lost_stages:'Verloren-Phasen',
     html_ph_suppliers:'Lieferanten', html_ph_listings:'Objekte', html_invite_role_aria:'Rolle für den neuen Einladungscode',
     html_ws_sub:'Wechsle zwischen deinen Arbeitsbereichen oder lege einen neuen an.', html_new_workspace:'Neuer Arbeitsbereich', html_join_ws_title:'Arbeitsbereich beitreten',
     html_ws_invite_code:'Einladungscode des Arbeitsbereichs', html_ph_invite_code:'Einladungscode hier einfügen', html_join_ws_btn:'Arbeitsbereich beitreten',
@@ -864,7 +1004,7 @@ const TRANSLATIONS = {
     ct_showing_range:'{s}–{e} von {n} angezeigt', ct_pagination_aria:'Seitennavigation', ct_prev_page:'Vorherige Seite',
     ct_next_page:'Nächste Seite', ct_bulk_delete_one:'Du bist dabei, 1 Kontakt zu löschen. Das lässt sich nicht rückgängig machen.', ct_bulk_delete_n:'Du bist dabei, {n} Kontakte zu löschen. Das lässt sich nicht rückgängig machen.',
     ct_bulk_confirm_number:'Bitte gib zur Bestätigung die richtige Zahl ({n}) ein.', ct_bulk_delete_error:'Fehler beim Löschen der Kontakte: {error}', md_opt_select:'— Auswählen —',
-    md_opt_no_deal:'— Kein Deal —', md_delete_contact_q:'Diesen Kontakt löschen?', md_delete_contact_msg:'Ihre Aktivitäten werden mit gelöscht. Das lässt sich nicht rückgängig machen.',
+    md_opt_no_deal:'— Kein Deal —', md_delete_contact_q:'Diesen Kontakt löschen?', cf_err_email_taken:'Ein Kontakt mit dieser E-Mail-Adresse existiert bereits.', cf_err_save:'Der Kontakt wurde nicht gespeichert. Bitte erneut versuchen.', md_delete_contact_msg:'Ihre Aktivitäten werden mit gelöscht. Das lässt sich nicht rückgängig machen.',
     stg_rename_pipeline:'Pipeline umbenennen', stg_new_pipeline:'Neue Pipeline', stg_delete_pipeline_confirm:'Diese Pipeline und alle ihre Deals löschen?',
     stg_stage_name_prompt:'Name der Phase:', stg_delete_stage_confirm:'Diese Phase löschen? Deals darin verlieren ihre Phase.', stg_edit_deal_field:'Deal-Feld bearbeiten',
     stg_add_deal_field:'Deal-Feld hinzufügen', stg_delete_field_confirm:'Dieses Feld löschen?', stg_delete_field_values_confirm:'Dieses Feld löschen? Gespeicherte Werte gehen verloren.',
@@ -872,6 +1012,46 @@ const TRANSLATIONS = {
     stg_copied_code:'Kopiert: {code}', stg_remove_member_confirm:'{name} aus diesem Arbeitsbereich entfernen? Zugewiesene Kontakte sind danach nicht mehr zugewiesen.', stg_delete_ws_confirm1:'Diesen Arbeitsbereich wirklich löschen? Das lässt sich nicht rückgängig machen. Alle Daten werden dauerhaft gelöscht.',
     stg_delete_ws_confirm2:'Alle Kontakte, Deals, Aufgaben und Nachrichten werden gelöscht. Löschen bestätigen?', stg_edit_status:'Status bearbeiten', stg_add_status:'Status hinzufügen',
     stg_delete_status_confirm:'Diesen Status löschen? Aufgaben behalten ihn, aber er erscheint nicht mehr im Kanban.', stg_edit_task_field:'Aufgabenfeld bearbeiten', stg_add_task_field:'Aufgabenfeld hinzufügen',
+    // Cal.com (Integrationen → Cal.com-Reiter; routes/integrations.js /calcom)
+    intg_tab_calcom:'Cal.com', intg_pane_calcom:'Cal.com', intg_pane_calcom_hint:'Ein Cal.com-Konto für den ganzen Arbeitsbereich: seine Buchungen landen im Kalender, und aus einem Deal oder Kontakt lässt sich ein Termin buchen.',
+    cal_title:'Cal.com-Verbindung', cal_status_none:'Nicht verbunden', cal_status_connected:'Verbunden',
+    cal_hint:'Das Cal.com-Konto verbinden, dessen Buchungen dieser Arbeitsbereich sehen soll. Alle im Arbeitsbereich sehen das Konto und seine Buchungen; nur Inhaber und Admins können die Verbindung ändern.',
+    cal_readonly_hint:'Nur Inhaber und Admins können Cal.com verbinden oder trennen.',
+    cal_key_label:'API-Schlüssel', cal_key_hint:'In Cal.com unter Einstellungen, Entwickler, API-Schlüssel. Der Schlüssel wird verschlüsselt gespeichert und nie wieder angezeigt.', cal_key_ph:'cal_live_…',
+    cal_btn_connect:'Verbinden', cal_key_required:'Zuerst den API-Schlüssel einfügen.', cal_none:'Noch kein Cal.com-Konto verbunden.',
+    cal_guide_title:'So wird Cal.com verbunden', cal_guide_show:'Anleitung anzeigen', cal_guide_hide:'Anleitung ausblenden',
+    cal_guide_step1:'In Cal.com mit dem Konto anmelden, dessen Kalender das Team nutzen soll. Jeder Termin aus dem CRM wird auf diesem Konto gebucht.',
+    cal_guide_step2:'Dort unter <strong>Einstellungen → Entwickler → API-Schlüssel</strong> auf <strong>Neu</strong> klicken: einen Namen vergeben (etwa Upgrads CRM), <strong>Läuft nie ab</strong> einschalten, dann <strong>Erstellen</strong>.',
+    cal_guide_step3:'Den Schlüssel sofort kopieren: Cal.com zeigt ihn nur dieses eine Mal. Er beginnt mit <code>cal_live_</code>.',
+    cal_guide_step4:'Den Schlüssel oben einfügen und <strong>Verbinden</strong> drücken. Er wird verschlüsselt gespeichert und nie wieder angezeigt; der Buchungs-Webhook wird im selben Schritt registriert.',
+    cal_guide_step5:'Unter <strong>Terminart für Buchungen</strong> die Cal.com-Terminart wählen, die das Team aus einem Deal oder Kontakt bucht.',
+    cal_guide_step6:'Für Google Meet oder Zoom: in Cal.com unter <strong>Apps</strong> die App verbinden (Google Meet braucht den Google-Kalender) und sie in der Terminart unter <strong>Ort</strong> hinzufügen. Danach <strong>Terminarten aktualisieren</strong> drücken; der Ort steht dann im Buchungsdialog zur Wahl.',
+    cal_guide_step7:'Zur Kontrolle steht unter <strong>Verbundenes Konto</strong> der Buchungs-Webhook auf „registriert“. Steht dort „nicht registriert“, muss das CRM aus dem Internet erreichbar sein; dann <strong>Webhook registrieren</strong> drücken.',
+    cal_guide_note:'Ein Konto je Arbeitsbereich. Trennen entfernt den Schlüssel; die Termine an den Deals bleiben.',
+    cal_account_label:'Verbundenes Konto', cal_fact_account:'Konto', cal_fact_username:'Benutzername', cal_fact_timezone:'Zeitzone', cal_fact_connected_by:'Verbunden von', cal_connected_by_on:'{name}, {date}',
+    cal_event_type_label:'Terminart für Buchungen', cal_event_type_hint:'Die Terminart (in Cal.com: Event Type), die ein aus einem Deal oder Kontakt gebuchter Termin verwendet.',
+    cal_minutes:'{n} Min.', cal_hidden_tag:'in Cal.com ausgeblendet', cal_no_event_types:'Dieses Konto hat noch keine Terminarten.',
+    cal_btn_refresh:'Terminarten aktualisieren', cal_btn_disconnect:'Trennen',
+    cal_confirm_disconnect:'Cal.com trennen? Buchungen, die schon im Kalender stehen, bleiben; neue kommen erst wieder an, wenn ein Konto verbunden ist.',
+    cal_connected_ok:'Cal.com verbunden.', cal_disconnected_ok:'Cal.com getrennt.', cal_saved:'Gespeichert.', cal_refreshed:'Terminarten aktualisiert.', cal_err_generic:'Das hat nicht geklappt. Bitte noch einmal versuchen.',
+    cal_fact_webhook:'Buchungs-Webhook', cal_webhook_on:'registriert', cal_webhook_off:'nicht registriert', cal_btn_register:'Webhook registrieren', cal_registered_ok:'Webhook registriert.',
+    cal_webhook_hint:'Cal.com meldet jede Buchung, die es ausrichtet, an dieses CRM; dafür muss das CRM aus dem Internet erreichbar sein.',
+    cal_log_title:'Letzte Buchungen', cal_log_hint:'Jede Buchung, die Cal.com gemeldet hat, und was daraus wurde.', cal_log_none:'Noch keine Buchung angekommen.',
+    cal_log_BOOKING_CREATED:'Gebucht', cal_log_BOOKING_RESCHEDULED:'Verschoben', cal_log_BOOKING_CANCELLED:'Abgesagt', cal_log_new_contact:'neuer Kontakt', cal_log_new_deal:'neuer Deal', cal_log_BOOKED_FROM_CRM:'Aus dem CRM gebucht',
+    cal_book_btn:'Termin buchen', cal_book_title:'Termin mit {name} buchen', cal_book_type:'Terminart', cal_book_zone:'Zeiten in {zone}. Gastgeber: {host}.', cal_book_month_prev:'Voriger Monat', cal_book_month_next:'Nächster Monat',
+    cal_book_loading:'Freie Zeiten werden geladen', cal_book_none_month:'In diesem Monat ist nichts frei.',
+    cal_book_note:'Notiz für die Einladung (optional)', cal_book_note_ph:'Zum Beispiel: bitte die Unterlagen mitbringen', cal_book_submit:'Buchen', cal_book_booking:'Wird gebucht', cal_book_pick_first:'Zuerst eine Zeit wählen.',
+    cal_book_done:'Gebucht: {when}. Cal.com schickt die Einladung.', cal_book_no_email:'Für die Einladung braucht der Kontakt eine E-Mail-Adresse.', cal_book_open_contact:'Kontakt bearbeiten',
+    cal_book_date:'Datum', cal_book_time:'Uhrzeit', cal_book_time_ph:'Uhrzeit wählen', cal_book_one_time:'1 freie Zeit', cal_book_n_times:'{n} freie Zeiten',
+    cal_book_slot:'{from} bis {to} ({ampm})', cal_book_where:'Wo', cal_book_invite_to:'Die Einladung geht an {email}.', cal_book_with:'mit {name}',
+    cal_book_record:'Mit Notetaker aufzeichnen', cal_book_record_help:'Der Notetaker-Bot tritt dem Google Meet zum Start bei, nimmt auf, transkribiert und schreibt Notizen. Im Chat kündigt er sich an.', cal_book_record_short:'mit Notetaker',
+    cal_rec_scheduled:'Notetaker ist zum Start des Meetings eingeplant.', cal_rec_queued:'Notetaker geht jetzt ins Meeting.', cal_rec_updated:'Notetaker hat die neue Zeit.', cal_rec_duplicate:'Für dieses Meeting ist schon ein Notetaker gebucht.', cal_rec_waiting:'Notetaker kommt dazu, sobald Cal.com den Meet-Link schickt.', cal_rec_failed:'Notetaker nicht eingeplant: {error}',
+    cal_rec_checking:'Es wird geprüft, ob Notetaker bereit ist …', cal_rec_down_unreachable:'Notetaker ist gerade nicht erreichbar, daher kann dieses Meeting nicht aufgezeichnet werden.', cal_rec_down_token:'Notetaker lehnt den Zugangsschlüssel des CRM ab. Ein Admin kann NOTETAKER_CRM_TOKEN prüfen.', cal_rec_down_error:'Notetaker meldet ein Problem, daher kann dieses Meeting nicht aufgezeichnet werden.', cal_rec_recheck:'Erneut prüfen',
+    cal_resched_btn:'Verschieben', cal_resched_title:'Termin mit {name} verschieben', cal_resched_current:'Bisher', cal_resched_submit:'Verschieben', cal_resched_busy:'Wird verschoben', cal_resched_reason:'Grund (optional, {name} sieht ihn)', cal_resched_reason_ph:'Zum Beispiel: etwas ist dazwischengekommen', cal_resched_done:'Verschoben auf {when}. Cal.com informiert {name}.',
+    cal_cancel_btn:'Termin absagen', cal_cancel_q:'Diesen Termin absagen?', cal_cancel_msg:'Die Buchung wird in Cal.com abgesagt und {name} wird informiert. Der Eintrag bleibt im CRM, als abgesagt markiert.', cal_cancel_reason:'Grund (optional, der Kunde sieht ihn)', cal_cancel_busy:'Wird abgesagt', cal_cancel_done:'Termin abgesagt.',
+    cal_del_q:'Diesen Termin-Eintrag löschen?', cal_del_msg:'Dieser Termin ist in Cal.com gebucht. Den Eintrag hier zu löschen sagt ihn dort nicht ab: der Slot bleibt belegt und der Kunde behält die Einladung.', cal_del_only:'Nur hier löschen',
+    cal_log_CANCELLED_FROM_CRM:'Aus dem CRM abgesagt', cal_log_RESCHEDULED_FROM_CRM:'Aus dem CRM verschoben', cal_loc_address:'Vor Ort: {address}', cal_loc_address_plain:'Vor Ort', cal_loc_link:'Link des Gastgebers', cal_loc_phone:'Telefonat', cal_book_checking:'Kalender wird geprüft', cal_book_conflict:'Konflikt: um {time} steht bereits {title} ({who}) im Kalender.', cal_book_conflict_hint:'Cal.com kennt die Aufgaben und Einträge dieses CRM nicht. Trotzdem buchen oder eine andere Zeit wählen.', cal_book_anyway:'Trotzdem buchen',
+    cal_join:'{app} beitreten', cal_join_link:'Link zum Termin öffnen',
   },
 };
 
@@ -1123,6 +1303,53 @@ async function apiFetchSilent(url, opts = {}) {
   } catch { return { error: t('core_network_error') }; }
 }
 
+/* ---------- a new version of the app ---------- */
+// The server fingerprints its client files (utils/app-version.js, GET /api/version). A tab learns
+// the fingerprint it was loaded with and checks again on every socket connect (chat.js), when it
+// comes back into view, and once a minute. A changed fingerprint reloads the tab by itself as soon
+// as nobody is typing, no dialog is open and no draft sits in a note or chat field; until then a
+// toast offers the reload with one click. The reload comes back to the page that was open.
+let appVersion = null, appVersionPending = false, appVersionToast = null;
+const APP_PAGES = ['deals', 'contacts', 'suppliers', 'activities', 'calendar', 'settings', 'objects', 'tasks', 'board', 'analytics', 'onboarding', 'integrations', 'workspaces', 'chat'];
+function appIsQuiet() {
+  const a = document.activeElement;
+  const typing = !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable);
+  const draft = Array.from(document.querySelectorAll('textarea, input.chat-input')).some(el => el.value && el.value.trim());
+  return !typing && !draft && !document.querySelector('.overlay');
+}
+// The page that is open, kept across the reload for five minutes (sessionStorage: this tab only).
+function appRememberPage() {
+  const page = document.querySelector('.sb-link[aria-current="page"]')?.dataset.page;
+  try { if (page) sessionStorage.setItem('crm_reload_page', JSON.stringify({ page, at: Date.now() })); } catch { /* storage blocked: Deals it is */ }
+}
+function appRestorePage() {
+  try {
+    const raw = sessionStorage.getItem('crm_reload_page'); if (!raw) return null;
+    sessionStorage.removeItem('crm_reload_page');
+    const { page, at } = JSON.parse(raw);
+    return APP_PAGES.includes(page) && Date.now() - at < 5 * 60 * 1000 ? page : null;
+  } catch { return null; }
+}
+function appReloadNow() { appRememberPage(); location.reload(); }
+function noteAppVersion(v) {
+  if (typeof v !== 'string' || !v) return;
+  if (appVersion === null) { appVersion = v; return; }
+  if (v !== appVersion && !appVersionPending) { appVersionPending = true; appReloadWhenQuiet(); }
+}
+async function checkAppVersion() {
+  try { const r = await fetch('/api/version', { cache: 'no-store' }); if (r.ok) noteAppVersion((await r.json()).version); } catch { /* offline: the next check will tell */ }
+}
+function appReloadWhenQuiet() {
+  if (document.visibilityState === 'visible' && appIsQuiet()) { appReloadNow(); return; }
+  if (!appVersionToast) appVersionToast = ui.toast(t('app_update_ready'), { ms: 24 * 60 * 60 * 1000, action: { label: t('app_update_reload'), onClick: appReloadNow } });
+  setTimeout(appReloadWhenQuiet, 10000);
+}
+function startAppVersionWatch() {
+  checkAppVersion();
+  setInterval(checkAppVersion, 60000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') return; if (appVersionPending) appReloadWhenQuiet(); else checkAppVersion(); });
+}
+
 const api = {
   get:   url      => apiFetch(url),
   post:  (url, d) => apiFetch(url, { method:'POST',   headers:{'Content-Type':'application/json'}, body:JSON.stringify(d) }),
@@ -1146,6 +1373,26 @@ document.addEventListener('submit', e => {
     if (btn) btn.disabled = false;
   }, 10000);
 }, true);
+
+// One press per second on a save button (2026-10-20). A second click on the same primary or submit
+// button within SAVE_LOCK_MS is swallowed here, before any handler sees it, so a double click cannot
+// save twice. Keyboard shortcuts that save by clicking the button (btn.click()) and a form's implicit
+// submission on Enter dispatch a click too, so they pass through the same lock. The lock is a class,
+// never `disabled`: the form guard above and handlers that disable their own button keep control.
+const SAVE_LOCK_MS = 1000;
+const SAVE_BUTTONS = 'button.btn-primary, button[type="submit"]';
+const saveLocks = new WeakSet();
+function lockSave(btn) {
+  saveLocks.add(btn); btn.classList.add('is-save-locked');
+  setTimeout(() => { saveLocks.delete(btn); btn.classList.remove('is-save-locked'); }, SAVE_LOCK_MS);
+}
+function saveLockClick(e) {
+  const btn = e.target && e.target.closest ? e.target.closest(SAVE_BUTTONS) : null;
+  if (!btn || btn.disabled) return;
+  if (saveLocks.has(btn)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
+  lockSave(btn);
+}
+document.addEventListener('click', saveLockClick, true);
 
 document.querySelectorAll('.modal-overlay').forEach(overlay => {
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.add('hidden'); });
@@ -1171,7 +1418,7 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const ICON_ALIAS = { deals: 'kanban', contacts: 'users', tasks: 'check-square', suppliers: 'truck', chat: 'message', activities: 'activity',
   listings: 'building', objects: 'building', analytics: 'bar-chart', integrations: 'plug', board: 'presentation', workspaces: 'building', logout: 'log-out', more: 'ellipsis',
   // activity/timeline entry types (shared by the Activities feed, the deal modal and contact panel timelines)
-  call: 'phone', email: 'mail', whatsapp: 'message-circle' };
+  call: 'phone', email: 'mail', whatsapp: 'message-circle', meeting: 'calendar' };
 function icon(name, cls = '') { return `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${ICON_ALIAS[name] || name}"/></svg>`; }
 
 /* ---------- people ---------- */
@@ -1354,7 +1601,7 @@ function openPalette() {
     const s = $('[aria-selected="true"]', box); s && s.scrollIntoView({ block: 'nearest' });
   };
   const close = () => { m.remove(); document.removeEventListener('keydown', key, true); };
-  const run = i => { const it = list[i]; if (!it) return; close(); switchPage(it.page); };
+  const run = i => { const it = list[i]; if (!it) return; close(); if (it.action) it.action(); else switchPage(it.page); };
   const key = e => {
     if (e.key === 'Escape') { e.stopPropagation(); close(); }
     else if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(list.length - 1, sel + 1); draw(); }
@@ -1362,9 +1609,33 @@ function openPalette() {
     else if (e.key === 'Enter') { e.preventDefault(); run(sel); }
   };
   document.addEventListener('keydown', key, true);
-  q.addEventListener('input', () => { const term = q.value.trim().toLowerCase(); list = term ? all.filter(x => x.label.toLowerCase().includes(term)) : all; sel = 0; draw(); });
+  q.addEventListener('input', () => {
+    const term = q.value.trim().toLowerCase();
+    list = term ? all.filter(x => x.label.toLowerCase().includes(term)) : all;
+    if (breakPaletteMatch(term)) list = list.concat([{ label: t('brk_title'), icon: 'keyboard', action: openBreak }]);   // the hidden way in
+    sel = 0; draw();
+  });
   on(m, 'click', '.palette-item', (e, el) => run(+el.dataset.i)); m.addEventListener('mousedown', e => { if (e.target === m) close(); });
   draw(); q.focus();
+}
+/* ---------- the break: the hidden game (js/break-game.js) and the team's board (/api/break-scores) ---------- */
+// Two ways in, both hidden: the faint four squares at the foot of the sidebar, and "Kurze Pause" in the palette, which
+// shows up only when one of these words is typed. The board belongs to the workspace (routes/break-scores.js); the
+// signed-in user plays under their own name, so a finished game is saved without asking.
+const BREAK_WORDS = ['pause', 'break', 'spiel', 'game', 'tetris', 'blocks', 'blöcke'];
+function breakPaletteMatch(term) {
+  const q = String(term || '').trim().toLowerCase();
+  return q.length >= 4 && BREAK_WORDS.some(w => w.startsWith(q) || q.includes(w));
+}
+const breakTeamStore = {
+  scope: 'team',
+  load: () => api.get('/api/break-scores').then(r => (Array.isArray(r) ? r : [])),
+  save: e => api.post('/api/break-scores', { score: e.score, lines: e.lines, level: e.level }).then(r => (Array.isArray(r) ? r : Promise.reject(r))),
+};
+function openBreak() {
+  if (typeof brkOpen !== 'function') return;
+  ui.closePopover();
+  brkOpen({ t: (k, v) => (v ? tf(k, v) : t(k)), player: (currentUser && currentUser.name) || '', store: breakTeamStore });
 }
 function showShortcuts() {
   const row = (k, txt) => `<div class="row-between" style="padding:8px 0;border-bottom:1px solid var(--divider)"><span>${esc(txt)}</span><span class="kbd">${esc(k)}</span></div>`;

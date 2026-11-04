@@ -579,7 +579,7 @@ function resetActivitiesUI() {
   activityDeals = []; activityDealList = []; activityContactList = [];
   activityCompose = { type: 'note', text: '', deal: '', contact: '', err: '' };
 }
-const ACT_TYPES = ['note', 'call', 'email', 'whatsapp'];
+const ACT_TYPES = ['note', 'call', 'email', 'whatsapp', 'meeting'];   // meeting: a Cal.com booking, or a meeting logged by hand (2026-10-13)
 const ACT_PERIODS = ['all', 'today', '7d', '30d'];
 
 function actLocale() { return currentLang === 'de' ? 'de-DE' : 'en-GB'; }
@@ -758,11 +758,11 @@ function renderActivitiesFeed() {
     const label = t('act_' + a.type);
     const full = new Date(a.created_at).toLocaleString(actLocale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     return `<div class="ac-row" data-aid="${a.id}"><span class="tl-ic ${a.type}" title="${esc(label)}">${icon(a.type)}</span>
-      <div style="min-width:0"><div class="ac-head"><b>${esc(label)}</b>
+      <div style="min-width:0"><div class="ac-head"><b>${esc(label)}</b>${a.cancelled_at ? `<span class="badge badge-danger">${esc(t('act_cancelled'))}</span>` : ''}${a.source === 'calcom' ? `<span class="badge badge-outline" title="${esc(t('src_calcom'))}">${esc(t('src_calcom'))}</span>` : ''}
         ${a.deal_id ? `<a href="#" class="ac-link" title="${esc(a.deal_title || '')}" onclick="event.preventDefault();openActivityDeal(${a.deal_id})">${icon('deals')}<span>${esc(a.deal_title || 'Deal')}</span></a>` : ''}
         ${a.contact_id ? `<a href="#" class="ac-link" title="${esc(actContactOf(a)?.company || '')}" onclick="event.preventDefault();openActivityContact(${a.contact_id})">${icon('users')}<span>${esc(a.contact_name || t('lbl_contact'))}</span></a>` : ''}
         <span class="ac-time" title="${esc(full)}">${esc(actAgo(a.created_at))}</span></div>
-        <div class="tl-text ac-text">${dvActHtml(a.content)}</div>
+        <div class="tl-text ac-text">${dvActHtml(a.content)}</div>${dvJoinRow(a)}
         <div class="ac-meta">${a.logged_by_name ? avatar(a.logged_by_name, 'sm') + `<span>${esc(a.logged_by_name)}</span><span class="ac-dot"></span>` : ''}<span>${esc(actTime(a.created_at))}</span></div></div>
       <button class="iconbtn kebab" type="button" onclick="openActivityKebab(this,${a.id})" aria-label="${esc(t('obj_actions_aria'))}" aria-haspopup="menu">${icon('ellipsis')}</button></div>`;
   };
@@ -811,18 +811,29 @@ function openActivityKebab(anchor, id) {
     items.push({ label, icon: 'users', onSelect: () => openActivityContact(a.contact_id) });
   }
   if (items.length) items.push({ sep: true });
+  if (dvIsLiveMeeting(a)) {
+    items.push({ label: t('cal_resched_btn'), icon: 'refresh', onSelect: () => openCalcomBooking({ reschedule: a, contact: actContactOf(a) || { id: a.contact_id, name: a.contact_name }, dealId: a.deal_id || null, onBooked: () => loadActivities() }) });
+    items.push({ label: t('cal_cancel_btn'), icon: 'x', danger: true, onSelect: () => cancelCalcomMeeting(a, a.contact_name, () => loadActivities()) });
+    items.push({ sep: true });
+  }
   items.push({ label: t('delete_activity'), icon: 'trash', danger: true, onSelect: () => deleteActivity(id) });
   ui.menu(anchor, items, { align: 'right' });
 }
 async function deleteActivity(id) {
-  const ok = await ui.confirm({ title: t('delete_activity_q'), message: t('delete_activity_msg'), confirmLabel: t('btn_delete'), danger: true });
-  if (!ok) return;
-  const res = await api.del(`/api/activities/${id}`);
-  if (res?.error) return ui.toast(res.error);
-  activities = activities.filter(a => a.id !== id);
-  if (!activitiesUI.deal) activityDeals = activityDealOptions();   // the chip must not offer a deal that no longer has a note
-  renderActivities();
-  ui.toast(t('activity_deleted'));
+  const a = activities.find(x => x.id === id);
+  const remove = async () => {
+    const res = await api.del(`/api/activities/${id}`);
+    if (res?.error) return ui.toast(res.error);
+    activities = activities.filter(x => x.id !== id);
+    if (!activitiesUI.deal) activityDeals = activityDealOptions();   // the chip must not offer a deal that no longer has a note
+    renderActivities();
+    ui.toast(t('activity_deleted'));
+  };
+  await dvDeleteActivityGuarded(a, a?.contact_name, {
+    plain: async () => { const ok = await ui.confirm({ title: t('delete_activity_q'), message: t('delete_activity_msg'), confirmLabel: t('btn_delete'), danger: true }); if (ok) await remove(); },
+    deleteOnly: remove, afterCancel: () => loadActivities(),
+  });
+  return;
 }
 
 function exportActivitiesCsv() {

@@ -424,15 +424,25 @@ router.get('/trend', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// The currencies Analytics can show money in (analytics_config.currency, chosen in "Kennzahlen konfigurieren").
+// No choice yet: the client shows euros, as the deals board does.
+const ANALYTICS_CURRENCIES = ['EUR', 'USD', 'GBP', 'CHF'];
 router.patch('/config', async (req, res, next) => {
   try {
     const { won_stage_ids = [], lost_stage_ids = [], value_field = null } = req.body;
     if (value_field && !safeValueField(value_field, await dealFieldKeys(req.workspaceId))) {
       return res.status(400).json({ error: 'Unknown value field for this workspace' });
     }
+    // a request without a currency leaves the saved one alone (the JSONB merge below does not touch the key)
+    const withCurrency = Object.prototype.hasOwnProperty.call(req.body, 'currency');
+    if (withCurrency && !ANALYTICS_CURRENCIES.includes(req.body.currency)) {
+      return res.status(400).json({ error: 'Unknown currency; use one of ' + ANALYTICS_CURRENCIES.join(', ') });
+    }
+    const patch = { won_stage_ids, lost_stage_ids, value_field };
+    if (withCurrency) patch.currency = req.body.currency;
     await pool.query(
       `UPDATE workspaces SET analytics_config = analytics_config || $1::jsonb WHERE id=$2`,
-      [JSON.stringify({ won_stage_ids, lost_stage_ids, value_field }), req.workspaceId]
+      [JSON.stringify(patch), req.workspaceId]
     );
     res.json({ success: true });
   } catch (err) { next(err); }

@@ -403,6 +403,42 @@ async function initDb() {
   await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS captured JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE workspace_webhook ADD COLUMN IF NOT EXISTS default_assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
 
+  // Cal.com (utils/calcom.js, routes/integrations.js /calcom): ONE connection per workspace, the
+  // sealed API key of a personal Cal.com account. receive_token names the public receiver for
+  // Cal.com's booking webhooks and webhook_secret signs them (both minted at connect, kept across
+  // reconnects); webhook_id is Cal.com's id for the webhook once it is registered. event_types is
+  // the account's list as last fetched; event_type_id the one bookings from a deal use.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_calcom (
+      id              SERIAL PRIMARY KEY,
+      workspace_id    INTEGER NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+      api_key_sealed  TEXT NOT NULL,
+      cal_user_id     INTEGER,
+      cal_username    TEXT,
+      cal_email       TEXT,
+      cal_name        TEXT,
+      cal_timezone    TEXT,
+      event_types     JSONB NOT NULL DEFAULT '[]',
+      event_type_id   INTEGER,
+      receive_token   TEXT NOT NULL UNIQUE,
+      webhook_secret  TEXT NOT NULL,
+      webhook_id      TEXT,
+      connected_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      connected_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ DEFAULT NOW(),
+      last_error      TEXT
+    )
+  `);
+  // A Cal.com booking is an activity of type 'meeting' with source 'calcom': calcom_uid is the
+  // booking's id (a reschedule or a cancellation finds its entry by it; one entry per booking per
+  // workspace), cancelled_at marks a cancelled booking that stays visible until someone deletes it.
+  // webhook_logs.source tells a Cal.com delivery from a lead.
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS calcom_uid   TEXT`);
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS calcom_event_type_id INTEGER`);   // the booking's event type: a reschedule asks for its slots
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_calcom_uid ON activities (workspace_id, calcom_uid) WHERE calcom_uid IS NOT NULL`);
+  await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'lead'`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_workspaces (
       user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
@@ -460,7 +496,7 @@ async function initDb() {
 
   try {
     await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_type_check`);
-    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp'))`);
+    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_type_check CHECK(type IN ('note','call','email','whatsapp','meeting'))`);
   } catch (e) {
     if (e.code !== '42710') throw e;
   }
@@ -499,6 +535,11 @@ async function initDb() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS engine_deliveries_ws_created_idx ON engine_deliveries (workspace_id, created_at DESC)`);
+  // Retry worker (utils/engine.js, briefing §5.1 "at least five attempts … ~24 hours"):
+  // when the last attempt ran, and a partial index over the rows the worker polls
+  // (pending, ordered by their due time). Additive; nothing is backfilled.
+  await pool.query(`ALTER TABLE engine_deliveries ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS engine_deliveries_due_idx ON engine_deliveries (next_attempt_at) WHERE status = 'pending'`);
 
   // Marks a workspace created by POST /api/admin/provision, so the admin console
   // can tell a provisioned tenant from a self-served signup. NULL for every row
@@ -519,6 +560,196 @@ async function initDb() {
   // contact; a bound note shows only on its deal. ON DELETE SET NULL: deleting the deal unbinds
   // the note, it never deletes it.
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS deal_id  INTEGER REFERENCES deals(id) ON DELETE SET NULL`);
+
+  // ---------------------------------------------------------------------------
+  // Onboarding Engine — client record fields and API tables (Developer Briefing
+  // §5.3 status values, §5.4 linkage fields, §5.2 master data, §8 idempotency).
+  // Everything here is additive (IF NOT EXISTS), so an existing database keeps
+  // every row and this block is safe to re-run. Contact master-data columns
+  // carry German names because they are the Engine's field names; the engine
+  // tables use English like the rest of the schema.
+  // ---------------------------------------------------------------------------
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS onboarding_status     TEXT NOT NULL DEFAULT 'kein_onboarding'`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS drive_ordner_id       TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS akte_version          INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS rechtsform            TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS ust_id                TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS handelsregisternummer TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS webseite              TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS quelle                TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS strasse               TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS plz                   TEXT`);
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS ort                   TEXT`);
+  // Re-declared the same way as activities_type_check so the list can grow.
+  // Existing rows already hold the default, so validation passes on a populated table.
+  try {
+    await pool.query(`ALTER TABLE contacts DROP CONSTRAINT IF EXISTS contacts_onboarding_status_check`);
+    await pool.query(`ALTER TABLE contacts ADD CONSTRAINT contacts_onboarding_status_check CHECK(onboarding_status IN (
+      'kein_onboarding','formular_versendet','formular_ausgefuellt','termin_gebucht',
+      'call_erfolgt','briefing_fertig','onboarding_abgeschlossen'))`);
+  } catch (e) {
+    if (e.code !== '42710') throw e;
+  }
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_contacts_onboarding_status ON contacts (workspace_id, onboarding_status)`);
+
+  // Engine API authentication (middleware/engine-auth.js). The plain key is shown
+  // once at creation and only its SHA-256 hash is stored; key_prefix (first
+  // characters) is for display in the Integrations card.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      key_prefix   TEXT NOT NULL,
+      key_hash     TEXT NOT NULL UNIQUE,
+      scopes       JSONB NOT NULL DEFAULT '[]',
+      created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      last_used_at TIMESTAMPTZ,
+      expires_at   TIMESTAMPTZ,
+      revoked_at   TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  // Request idempotency for the Engine's write endpoints (utils/idempotency.js):
+  // the same (workspace, Idempotency-Key) replays the stored response for 24 h.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS idempotency_keys (
+      id              SERIAL PRIMARY KEY,
+      workspace_id    INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      key             TEXT NOT NULL,
+      request_hash    TEXT NOT NULL,
+      response_status INTEGER,
+      response_body   JSONB,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      expires_at      TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '24 hours',
+      UNIQUE (workspace_id, key)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_idempotency_keys_expires ON idempotency_keys (expires_at)`);
+
+  // Documents on a CUSTOMER (briefing §5.2 "dokumente", §5.1 dokument.hinzugefuegt):
+  // contracts, call recordings, anything else — stored in a PRIVATE Supabase bucket
+  // (storage.js) and reached only through time-limited signed URLs. deal_id links a
+  // contract to the deal it belongs to (ON DELETE SET NULL keeps the file).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS contact_documents (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      contact_id   INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      deal_id      INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+      typ          TEXT NOT NULL DEFAULT 'sonstiges' CHECK(typ IN ('vertrag','aufnahme','sonstiges')),
+      file_name    TEXT NOT NULL,
+      file_size    INTEGER NOT NULL,
+      file_type    TEXT NOT NULL DEFAULT '',
+      storage_path TEXT NOT NULL,
+      uploaded_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS contact_documents_contact_idx ON contact_documents (workspace_id, contact_id, created_at DESC)`);
+
+  // Who wrote an activity: a user ('user', created_by set) or the Upgrads Engine
+  // ('engine', created_by NULL — POST /api/kunden/:id/notizen and the conflict
+  // notes of PATCH /api/kunden/:id). Rows from before this column are users'.
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'user'`);
+  try {
+    await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_source_check`);
+    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine','calcom','notetaker'))`);
+  } catch (e) {
+    if (e.code !== '42710') throw e;
+  }
+
+  // Request log of the Engine API (middleware/engine-request-log.js): one row per call
+  // to /api/kunden and /api/dokumente — who (workspace, key), what (method, path), how
+  // it went (status, fehler code, duration). No bodies. Read by the admin console's
+  // Engine Monitor; rows older than 30 days are pruned when the monitor is opened.
+  // workspace_id / api_key_id are NULL for calls that never authenticated.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS engine_api_requests (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+      api_key_id   INTEGER REFERENCES api_keys(id) ON DELETE SET NULL,
+      method       TEXT NOT NULL,
+      path         TEXT NOT NULL,
+      status       INTEGER NOT NULL,
+      duration_ms  INTEGER,
+      fehler_code  TEXT,
+      ip           TEXT,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS engine_api_requests_created_idx ON engine_api_requests (created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS engine_api_requests_ws_idx ON engine_api_requests (workspace_id, created_at DESC)`);
+
+  // The break's team board (routes/break-scores.js, public/js/break-game.js): one row per person and
+  // workspace, their best game. Client-reported, checked and capped by the route; the board shows the
+  // ten best of the workspace's current members.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS break_scores (
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
+      score        INTEGER NOT NULL CHECK (score >= 0),
+      lines        INTEGER NOT NULL DEFAULT 0,
+      level        INTEGER NOT NULL DEFAULT 1,
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (workspace_id, user_id)
+    )
+  `);
+
+  // The Notetaker (routes/integrations.js, utils/notetaker.js): a meeting booked on Google Meet with
+  // "Mit Notetaker aufzeichnen" ticked. One row per meeting: the request, then what was last sent to the
+  // service (the link, the start with its offset) and what it answered (status, job id, HTTP status, error).
+  // status: waiting_link (no Meet link yet) | scheduled | queued | updated | duplicate | failed.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notetaker_recordings (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      activity_id  INTEGER NOT NULL UNIQUE REFERENCES activities(id) ON DELETE CASCADE,
+      requested_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      external_id  TEXT NOT NULL UNIQUE,
+      language     TEXT NOT NULL DEFAULT 'de',
+      meeting_url  TEXT,
+      join_at      TEXT,
+      status       TEXT NOT NULL DEFAULT 'waiting_link',
+      job_id       TEXT,
+      http_status  INTEGER,
+      error        TEXT,
+      sent_at      TIMESTAMPTZ,
+      created_at   TIMESTAMPTZ DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  // The way back (Part 2, routes/notetaker.js): the meeting's secret result link (sent as callback_url), the note
+  // written from the result, and when the result came. finished_at set = the result was handled; a redelivery
+  // writes nothing. Status after the result: completed | recording_failed.
+  await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS callback_token   TEXT UNIQUE`);
+  await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS note_activity_id INTEGER`);
+  await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS finished_at      TIMESTAMPTZ`);
+  // Email sync is on hold (2026-10-27): its table is NOT created, so no database (production included) gets it
+  // until the feature is built. The definition stays here, commented; remove the /* */ to create it again
+  // (with EMAIL_SYNC_ON in server.js and MAILBOX_SHOWN in public/js/mailbox.js).
+  /*
+  // Email (routes/mailbox.js, utils/gmail.js; EMAIL_SYNC_CHANGES Part 1): ONE connected mailbox per person per
+  // workspace. The connection only, never the mail itself: the emails read from it get a table of their own,
+  // removed together with the mailbox. provider is 'google' for now; refresh_token_sealed is Google's refresh
+  // token under the Cal.com sealing (utils/calcom.js); scopes is what Google granted, space-separated.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS email_accounts (
+      id                   SERIAL PRIMARY KEY,
+      workspace_id         INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id              INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      provider             TEXT NOT NULL,
+      email_address        TEXT NOT NULL,
+      refresh_token_sealed TEXT NOT NULL,
+      scopes               TEXT,
+      connected_at         TIMESTAMPTZ DEFAULT NOW(),
+      updated_at           TIMESTAMPTZ DEFAULT NOW(),
+      last_error           TEXT,
+      UNIQUE (workspace_id, user_id)
+    )
+  `);
+  */
 
   const { rows: [{ n: wsCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM workspaces');
   const { rows: [{ n: piCount }] } = await pool.query('SELECT COUNT(*)::int AS n FROM platform_invites');

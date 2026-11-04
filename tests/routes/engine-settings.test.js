@@ -7,7 +7,9 @@ const assert = require('node:assert/strict');
 const path   = require('path');
 const { loadRoute, serve, ROOT } = require('../helpers/load-route');
 
-const state = { row: null, calls: [], insertConflict: false };
+const state = { row: null, calls: [], insertConflict: false, keys: new Map(), keyHashes: new Map(), nextKeyId: 1 };
+const KEY_COLS = ['id', 'name', 'key_prefix', 'created_at', 'last_used_at', 'expires_at', 'revoked_at'];   // what RETURNING / SELECT hand back — never key_hash
+const keyView = k => Object.fromEntries(KEY_COLS.map(c => [c, k[c] ?? null]));
 const STAGES = [
   { id: 4, name: 'Won',             color: '#2a2', pipeline_id: 1, pipeline_name: 'Sales' },
   { id: 5, name: 'Contract Signed', color: '#22a', pipeline_id: 1, pipeline_name: 'Sales' },
@@ -16,6 +18,21 @@ const pool = {
   query: async (sql, params) => {
     state.calls.push({ sql, params });
     if (/FROM workspace_engine WHERE workspace_id/.test(sql))   return { rows: state.row ? [state.row] : [] };
+    if (/^SELECT id, name, key_prefix, created_at, last_used_at, expires_at, revoked_at FROM api_keys WHERE workspace_id=\$1/.test(sql)) {
+      return { rows: [...state.keys.values()].filter(k => k.workspace_id === params[0]).map(keyView) };
+    }
+    if (sql.startsWith('INSERT INTO api_keys')) {
+      const id = state.nextKeyId++;
+      const k = { id, workspace_id: params[0], name: params[1], key_prefix: params[2], created_by: params[4], created_at: '2026-10-09T10:00:00.000Z', last_used_at: null, expires_at: null, revoked_at: null };
+      state.keys.set(id, k); state.keyHashes.set(id, params[3]);
+      return { rows: [keyView(k)] };
+    }
+    if (sql.startsWith('UPDATE api_keys SET revoked_at=NOW()')) {
+      const k = state.keys.get(params[0]);
+      if (!k || k.workspace_id !== params[1] || k.revoked_at) return { rowCount: 0, rows: [] };
+      k.revoked_at = '2026-10-09T11:00:00.000Z';
+      return { rowCount: 1, rows: [] };
+    }
     if (sql.includes('SELECT analytics_config'))               return { rows: [{ analytics_config: { won_stage_ids: [4, '5'], lost_stage_ids: [6] } }] };
     if (sql.includes('INSERT INTO workspace_engine')) {
       if (state.insertConflict) {
@@ -35,6 +52,9 @@ const pool = {
       if (sql.includes('webhook_secret=')) state.row = { ...state.row, webhook_secret: params[0] };
       else state.row = { ...state.row, engine_url: params[0], active: params[1], trigger_stage_ids: params[2] === null ? state.row.trigger_stage_ids : JSON.parse(params[2]) };
       return { rowCount: 1, rows: [state.row] };
+    }
+    if (/^SELECT id, event, status, attempts, raw_body, payload FROM engine_deliveries WHERE id=\$1 AND workspace_id=\$2/.test(sql)) {
+      return { rows: state.delivery && state.delivery.id === params[0] && params[1] === 7 ? [state.delivery] : [] };
     }
     if (sql.includes('FROM engine_deliveries'))                return { rows: [{ id: 9, event: 'vertrag.unterschrieben', status: 'success' }] };
     if (sql.includes('INSERT INTO engine_deliveries'))         return { rows: [{ id: 10 }] };
@@ -228,5 +248,149 @@ describe('POST /api/engine/test-event', () => {
     assert.equal(r.body.delivery.last_status_code, 503);
     assert.match(r.body.delivery.last_error, /HTTP 503/);
     assert.equal(r.body.delivery.attempts, 1);
+    assert.equal(r.body.delivery.next_attempt_at, null, 'a test ping is never handed to the retry worker');
+  });
+});
+
+describe('POST /api/engine/deliveries/:id/retry', () => {
+  const FAILED = { id: 9, event: 'vertrag.unterschrieben', status: 'failed', attempts: 7, raw_body: '{"event":"vertrag.unterschrieben","kunde_id":42}', payload: { event: 'vertrag.unterschrieben', kunde_id: 42 } };
+  let calls;
+  beforeEach(async () => {
+    await owner.request('GET', '/api/engine/settings');
+    state.row = { ...state.row, engine_url: 'https://engine.example/hook' };
+    state.delivery = { ...FAILED };
+    state.calls.length = 0;
+    calls = [];
+    engine.configure({ fetch: async (url, init) => { calls.push({ url, init }); return { status: 200, text: async () => '' }; } });
+  });
+  test('member: 403, nothing read or sent', async () => {
+    const r = await member.request('POST', '/api/engine/deliveries/9/retry', {});
+    assert.equal(r.status, 403);
+    assert.equal(calls.length, 0);
+    assert.equal(state.calls.some(c => c.sql.includes('engine_deliveries')), false);
+  });
+  test('bad id: 400; unknown or other-workspace id: 404 (the lookup is scoped)', async () => {
+    assert.equal((await owner.request('POST', '/api/engine/deliveries/abc/retry', {})).status, 400);
+    const r = await owner.request('POST', '/api/engine/deliveries/12/retry', {});
+    assert.equal(r.status, 404);
+    const q = state.calls.find(c => /FROM engine_deliveries WHERE id=\$1 AND workspace_id=\$2/.test(c.sql));
+    assert.deepEqual(q.params, [12, 7]);
+    assert.equal(calls.length, 0);
+  });
+  test('already delivered: 409', async () => {
+    state.delivery.status = 'success';
+    const r = await owner.request('POST', '/api/engine/deliveries/9/retry', {});
+    assert.equal(r.status, 409);
+    assert.equal(calls.length, 0);
+  });
+  test('a contract event without kunde_id: 409 with the reason, nothing sent', async () => {
+    state.delivery.payload = { event: 'vertrag.unterschrieben', kunde_id: null };
+    const r = await owner.request('POST', '/api/engine/deliveries/9/retry', {});
+    assert.equal(r.status, 409);
+    assert.match(r.body.error, /kunde_id/);
+    assert.equal(calls.length, 0);
+  });
+  test('no Engine URL: 400', async () => {
+    state.row = { ...state.row, engine_url: null };
+    const r = await owner.request('POST', '/api/engine/deliveries/9/retry', {});
+    assert.equal(r.status, 400);
+    assert.equal(calls.length, 0);
+  });
+  test('success: the lease is taken, the stored bytes are sent once with a valid signature, the outcome is returned', async () => {
+    const r = await owner.request('POST', '/api/engine/deliveries/9/retry', {});
+    assert.equal(r.status, 200);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://engine.example/hook');
+    assert.equal(calls[0].init.body, FAILED.raw_body);
+    assert.deepEqual(engine.verify(state.row.webhook_secret, calls[0].init.body, calls[0].init.headers['X-Upgrads-Signature']), { ok: true });
+    assert.ok(state.calls.some(c => /SET status='pending', next_attempt_at = NOW\(\) \+ make_interval/.test(c.sql)), 'lease taken first');
+    assert.deepEqual(r.body.delivery, { id: 9, status: 'success', attempts: 8, last_status_code: 200, last_error: null, next_attempt_at: null });
+  });
+  test('a 503 past the schedule: failed and final; with attempts left: pending with the next attempt scheduled', async () => {
+    engine.configure({ fetch: async () => ({ status: 503, text: async () => 'down' }) });
+    let r = await owner.request('POST', '/api/engine/deliveries/9/retry', {});
+    assert.equal(r.status, 200);
+    assert.equal(r.body.delivery.status, 'failed');
+    assert.equal(r.body.delivery.next_attempt_at, null);
+    assert.match(r.body.delivery.last_error, /HTTP 503/);
+    state.delivery = { ...FAILED, attempts: 2 };
+    r = await owner.request('POST', '/api/engine/deliveries/9/retry', {});
+    assert.equal(r.body.delivery.status, 'pending');
+    assert.equal(r.body.delivery.attempts, 3);
+    assert.ok(new Date(r.body.delivery.next_attempt_at).getTime() - Date.now() > 1_700_000, '≈ +30 min');
+  });
+});
+
+describe('GET /api/engine/openapi.json (download for the Engine team)', () => {
+  test('any member gets the document as an attachment', async () => {
+    const r = await fetch(member.base + '/api/engine/openapi.json');
+    assert.equal(r.status, 200);
+    assert.equal(r.headers.get('content-disposition'), 'attachment; filename="upgrads-crm-engine-api.openapi.json"');
+    const body = await r.json();
+    assert.match(body.openapi, /^3\.1\./);
+  });
+});
+
+describe('API keys (/api/engine/api-keys) — the Engine\'s credentials for /api/kunden', () => {
+  const crypto = require('crypto');
+  const { hashKey } = require(path.join(ROOT, 'middleware', 'engine-auth.js'));
+  beforeEach(() => { state.keys.clear(); state.keyHashes.clear(); state.nextKeyId = 1; });
+
+  test('member: 403 on list, create and revoke; no api_keys statement runs', async () => {
+    for (const [m, p, b] of [['GET', '/api/engine/api-keys'], ['POST', '/api/engine/api-keys', { name: 'x' }], ['DELETE', '/api/engine/api-keys/1']]) {
+      assert.equal((await member.request(m, p, b)).status, 403, `${m} ${p}`);
+    }
+    assert.equal(state.calls.some(c => c.sql.includes('api_keys')), false);
+  });
+  test('POST: upg_live_<32 hex>, returned exactly once; only its SHA-256 and a 12-char prefix are stored; the Engine API lookup would accept it', async () => {
+    const r = await owner.request('POST', '/api/engine/api-keys', { name: '  Engine production  ' });
+    assert.equal(r.status, 201);
+    assert.match(r.body.key, /^upg_live_[0-9a-f]{32}$/);
+    assert.equal(r.body.name, 'Engine production', 'trimmed');
+    assert.equal(r.body.key_prefix, r.body.key.slice(0, 12));
+    assert.equal('key_hash' in r.body, false);
+    const ins = state.calls.find(c => c.sql.startsWith('INSERT INTO api_keys'));
+    assert.deepEqual(ins.params, [7, 'Engine production', r.body.key.slice(0, 12), hashKey(r.body.key), 1]);
+    assert.equal(ins.params[3], crypto.createHash('sha256').update(r.body.key, 'utf8').digest('hex'));
+    assert.equal(state.calls.some(c => (c.params || []).includes(r.body.key)), false, 'the plain key never reaches the database');
+    assert.match(ins.sql, /RETURNING id, name, key_prefix, created_at, last_used_at, expires_at, revoked_at$/, 'RETURNING never includes key_hash');
+
+    const g = await owner.request('GET', '/api/engine/api-keys');
+    assert.equal(g.status, 200);
+    assert.equal(g.body.api_keys.length, 1);
+    const k = g.body.api_keys[0];
+    assert.equal(k.key, undefined); assert.equal(k.key_hash, undefined);
+    assert.equal(k.key_prefix, r.body.key.slice(0, 12));
+    assert.equal(k.revoked_at, null);
+    const list = state.calls.find(c => /FROM api_keys WHERE workspace_id=\$1/.test(c.sql));
+    assert.deepEqual(list.params, [7]);
+    assert.doesNotMatch(list.sql, /key_hash/);
+  });
+  test('two keys never share a hash or a prefix-visible value; the name is capped at 100 characters', async () => {
+    const a = await owner.request('POST', '/api/engine/api-keys', { name: 'a'.repeat(150) });
+    const b = await owner.request('POST', '/api/engine/api-keys', { name: 'b' });
+    assert.notEqual(a.body.key, b.body.key);
+    assert.notEqual(state.keyHashes.get(1), state.keyHashes.get(2));
+    assert.equal(a.body.name.length, 100);
+  });
+  test('missing or blank name → 400, nothing inserted', async () => {
+    for (const body of [{}, { name: '' }, { name: '   ' }, { name: 42 }]) {
+      assert.equal((await owner.request('POST', '/api/engine/api-keys', body)).status, 400, JSON.stringify(body));
+    }
+    assert.equal(state.calls.some(c => c.sql.startsWith('INSERT INTO api_keys')), false);
+  });
+  test('DELETE revokes once (scoped to the workspace): 200, then 404; unknown id 404; bad id 400', async () => {
+    const r = await owner.request('POST', '/api/engine/api-keys', { name: 'k' });
+    const del = await owner.request('DELETE', `/api/engine/api-keys/${r.body.id}`);
+    assert.equal(del.status, 200);
+    const q = state.calls.find(c => c.sql.startsWith('UPDATE api_keys SET revoked_at=NOW()'));
+    assert.match(q.sql, /WHERE id=\$1 AND workspace_id=\$2 AND revoked_at IS NULL/);
+    assert.deepEqual(q.params, [r.body.id, 7]);
+    assert.ok(state.keys.get(r.body.id).revoked_at);
+    assert.equal((await owner.request('DELETE', `/api/engine/api-keys/${r.body.id}`)).status, 404, 'already revoked');
+    assert.equal((await owner.request('DELETE', '/api/engine/api-keys/999')).status, 404);
+    assert.equal((await owner.request('DELETE', '/api/engine/api-keys/abc')).status, 400);
+    const g = await owner.request('GET', '/api/engine/api-keys');
+    assert.ok(g.body.api_keys[0].revoked_at, 'revoked keys stay in the list, marked');
   });
 });

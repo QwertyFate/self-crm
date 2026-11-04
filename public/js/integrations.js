@@ -39,7 +39,15 @@
                renderEngineStages, getEngineTriggerIds, maskSecret,
                copyEngineSecret, regenerateEngineSecret, sendEngineTestEvent,
                loadEngineDeliveries, engineDeliveryHtml, showEngineMsg
+     calcom    loadCalcomSettings, renderCalcom, calTypeLabel, connectCalcom,
+               saveCalcomEventType, refreshCalcomEventTypes, registerCalcomWebhook,
+               disconnectCalcom, loadCalcomLogs, showCalMsg
      clipboard copyIntgText, copyIntgJson, fallbackCopy
+
+   3. CAL.COM ("calcom" tab) — one account per workspace. The server says
+      can_manage; connect, the event type, refresh and disconnect are shown to
+      owners/admins only, members get the account and the event type read-only.
+      The key is sent once (POST /calcom/connect) and never comes back.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 let intgData = null;
@@ -244,6 +252,7 @@ function showIntgGuide(id) {
 async function loadIntegrations() {
   loadEngineSettings();
   switchIntgTab(currentIntgTab);
+  loadCalcomSettings();
   const intgFieldMap = document.getElementById('intg-field-map');
   if (intgFieldMap) intgFieldMap.innerHTML = '';
 
@@ -570,6 +579,7 @@ async function loadEngineSettings() {
   const stagesEl = document.getElementById('engine-stages'); if (stagesEl) stagesEl.innerHTML = renderEngineStages(data.stages || [], e.trigger_stage_ids || []);
   setEngineReadOnly(!data.can_manage);
   loadEngineDeliveries();
+  loadEngineApiKeys();
 }
 
 // Only the last four characters are ever shown; the full value stays in engineData.
@@ -583,6 +593,86 @@ function setEngineReadOnly(readOnly) {
   card.querySelectorAll('.engine-manage-input, #engine-stages input').forEach(el => { el.disabled = readOnly; });
   card.querySelectorAll('.engine-manage').forEach(el => el.classList.toggle('hidden', readOnly));
   const hint = document.getElementById('engine-readonly-hint'); if (hint) hint.classList.toggle('hidden', !readOnly);
+  document.getElementById('engine-keys-card')?.classList.toggle('hidden', readOnly);   // API keys are a manager's concern only
+}
+
+// ── API keys (the Engine's credentials for /api/kunden) ───────────────────────
+let engineApiKeys = [];
+
+async function loadEngineApiKeys() {
+  const el = document.getElementById('engine-keys'); if (!el) return;
+  if (!engineData?.can_manage) return;                      // the card is hidden for members; never fetch the list for them
+  const data = await api.get('/api/engine/api-keys');
+  engineApiKeys = data && !data.error ? (data.api_keys || []) : [];
+  el.innerHTML = renderEngineApiKeys(engineApiKeys, true);
+}
+
+// One table row per key. Only the prefix is ever shown — the CRM does not have the key either.
+function renderEngineApiKeys(keys, canManage) {
+  if (!keys || !keys.length) return `<p class="empty-inline">${esc(t('engine_keys_none'))}</p>`;
+  const locale = currentLang === 'de' ? 'de-DE' : 'en-GB';
+  const when = v => (v ? new Date(v).toLocaleString(locale) : t('engine_keys_never'));
+  const head = ['engine_keys_col_name', 'engine_keys_col_key', 'engine_keys_col_created', 'engine_keys_col_last_used'].map(k => `<th>${esc(t(k))}</th>`).join('') + '<th></th>';
+  const rows = keys.map(k => {
+    const revoked = !!k.revoked_at;
+    const action  = canManage && !revoked
+      ? `<button type="button" class="btn btn-sm btn-danger" onclick="revokeEngineApiKey(${Number(k.id)})">${esc(t('engine_keys_revoke'))}</button>`
+      : '';
+    return `<tr${revoked ? ' class="engine-key-revoked"' : ''}>
+      <td class="strong">${esc(k.name)}</td>
+      <td><code class="engine-key-prefix">${esc(k.key_prefix)}…</code></td>
+      <td>${esc(when(k.created_at))}</td>
+      <td>${revoked ? `<span class="badge">${esc(t('engine_keys_revoked'))}</span>` : esc(when(k.last_used_at))}</td>
+      <td class="engine-key-actions">${action}</td>
+    </tr>`;
+  }).join('');
+  return `<table class="table compact engine-keys-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// POST creates the key; the plain value appears once in the reveal box and nowhere else.
+async function createEngineApiKey(btn) {
+  const input = document.getElementById('engine-key-name');
+  const name  = input ? input.value.trim() : '';
+  if (!name) { ui.toast(t('engine_keys_name_required')); input?.focus(); return; }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.post('/api/engine/api-keys', { name });
+    if (res.error) { ui.toast(res.error); return; }
+    if (input) input.value = '';
+    const val = document.getElementById('engine-key-value'); if (val) val.value = res.key || '';
+    document.getElementById('engine-key-reveal')?.classList.remove('hidden');
+    loadEngineApiKeys();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function copyEngineApiKey(btn) {
+  const key = document.getElementById('engine-key-value')?.value;
+  if (!key) return;
+  const done = () => { const o = btn.textContent; btn.textContent = t('copied'); setTimeout(() => btn.textContent = o, 1500); };
+  if (navigator.clipboard) navigator.clipboard.writeText(key).then(done).catch(() => fallbackCopy(key, done));
+  else fallbackCopy(key, done);
+}
+
+// "Done": the key leaves the page. It cannot be shown again.
+function hideEngineApiKey() {
+  const val = document.getElementById('engine-key-value'); if (val) val.value = '';
+  document.getElementById('engine-key-reveal')?.classList.add('hidden');
+}
+
+async function revokeEngineApiKey(id) {
+  const k = engineApiKeys.find(x => x.id === id);
+  const ok = await ui.confirm({
+    title: t('engine_keys_revoke'),
+    message: tf('engine_keys_confirm_revoke', { name: k?.name || '' }),
+    confirmLabel: t('engine_keys_revoke'), danger: true,
+  });
+  if (!ok) return;
+  const res = await api.del(`/api/engine/api-keys/${id}`);
+  if (res.error) { ui.toast(res.error); return; }
+  ui.toast(t('engine_keys_revoked_toast'));
+  loadEngineApiKeys();
 }
 
 // Same chip markup as the Analytics won/lost pickers, grouped by pipeline.
@@ -629,6 +719,7 @@ async function saveEngineSettings(silent = false) {
   }
   if (engineData) engineData.engine = { ...engineData.engine, ...res.engine, webhook_secret: engineData.engine.webhook_secret };
   if (!silent) showEngineMsg(t('engine_saved'), true);
+  updateOnboardingNav();   // the Onboarding monitor link follows the Active switch (onboarding.js)
 }
 
 function copyEngineSecret(btn) {
@@ -661,6 +752,20 @@ async function sendEngineTestEvent(btn) {
   }
 }
 
+// One counted attempt now (POST /api/engine/deliveries/:id/retry); the list reloads either way.
+async function retryEngineDelivery(id, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.post(`/api/engine/deliveries/${id}/retry`, {});
+    if (res.error) { ui.toast(res.error); return; }
+    const d = res.delivery || {};
+    ui.toast(d.status === 'success' ? t('engine_retry_ok') : tf('engine_retry_failed', { error: d.last_error || '' }));
+    loadEngineDeliveries();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function loadEngineDeliveries() {
   const el = document.getElementById('engine-deliveries'); if (!el) return;
   const data = await api.get('/api/engine/deliveries');
@@ -672,20 +777,221 @@ async function loadEngineDeliveries() {
 function engineDeliveryHtml(d) {
   const status = ['success', 'failed', 'pending'].includes(d.status) ? d.status : 'pending';
   const label  = d.deal_title || d.event || '';
+  const locale = currentLang === 'de' ? 'de-DE' : 'en-GB';
   const meta   = [
     `${Number(d.attempts) || 0} ${t(Number(d.attempts) === 1 ? 'engine_attempt_one' : 'engine_attempts')}`,
     d.last_status_code ? `HTTP ${Number(d.last_status_code)}` : '',
+    status === 'pending' && d.next_attempt_at ? tf('engine_next_attempt', { when: new Date(d.next_attempt_at).toLocaleString(locale) }) : '',
     d.contact_name || '',
   ].filter(Boolean).map(m => `<span>${esc(m)}</span>`).join('');
+  // Retry: managers only; never for a delivered row, a test ping, or a contract event
+  // without kunde_id (there is nothing the Engine could do with it).
+  const noContact = d.event === 'vertrag.unterschrieben' && (!d.payload || d.payload.kunde_id == null);
+  const retry = engineData?.can_manage && status !== 'success' && d.event !== 'test.ping' && !noContact
+    ? `<button type="button" class="btn btn-secondary btn-sm engine-retry" onclick="retryEngineDelivery(${Number(d.id)}, this)">${esc(t('engine_btn_retry'))}</button>`
+    : '';
   return `<div class="intg-log-entry${status === 'failed' ? ' error' : ''}">
     <div class="intg-log-entry-header">
       <span class="intg-log-badge ${status}">${esc(t('engine_status_' + status))}</span>
-      <span class="intg-log-time">${esc(new Date(d.created_at).toLocaleString(currentLang === 'de' ? 'de-DE' : 'en-GB'))}</span>
+      <span class="intg-log-time">${esc(new Date(d.created_at).toLocaleString(locale))}</span>
       <span class="intg-log-contact">${esc(label)}</span>
-      <span class="engine-delivery-meta">${meta}</span>
+      <span class="engine-delivery-meta">${meta}</span>${retry}
     </div>
     ${d.last_error ? `<div class="intg-log-skipped">${esc(d.last_error)}</div>` : ''}
     <div class="intg-log-raw-toggle" onclick="this.nextElementSibling.classList.toggle('hidden')">${esc(t('engine_view_payload'))}</div>
     <pre class="intg-log-raw hidden">${esc(JSON.stringify(d.payload || {}, null, 2))}</pre>
   </div>`;
+}
+
+// ── Cal.com (the "calcom" tab): one account per workspace ─────────────────────
+let calcomData = null;
+
+async function loadCalcomSettings() {
+  const data = await api.get('/api/integrations/calcom');
+  if (!data || data.error) return;
+  calcomData = data;
+  renderCalcom();
+}
+
+// "30 Minuten (30 Min.)" and, when Cal.com hides the type from its booking page, a tag.
+function calTypeLabel(x) {
+  let s = x.title || x.slug || String(x.id);
+  if (x.lengthInMinutes) s += ` (${tf('cal_minutes', { n: x.lengthInMinutes })})`;
+  if (x.hidden) s += ` [${t('cal_hidden_tag')}]`;
+  return s;
+}
+
+// Everything is decided by two flags from the server: connected and can_manage.
+// The disabling here is cosmetic — the routes are the real gate.
+// ── the setup guide, in the Platforms tab's clothes (Part 13) ─────────────────
+// The same panel the Make / Zapier / n8n guides use: a logo header, "Einrichtungsanleitung",
+// numbered steps whose strings carry <strong>/<code> markup (inserted as-is, like theirs), and a
+// closing note. Open while nothing is connected; folded to its header once connected, with a button
+// that opens it again (the event-type, Google Meet and webhook steps matter after connecting too).
+// Cal.com's own menu labels are quoted in the page's language, because Cal.com's UI is localised.
+const CAL_GUIDE = {
+  logo: `<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="40" height="40" rx="9" fill="#111111"/><text x="20" y="25.5" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-size="15" font-weight="700" letter-spacing="-0.5" fill="#ffffff">Cal</text></svg>`,
+  steps: ['cal_guide_step1', 'cal_guide_step2', 'cal_guide_step3', 'cal_guide_step4', 'cal_guide_step5', 'cal_guide_step6', 'cal_guide_step7'],
+  note: 'cal_guide_note',
+};
+let calGuideOpen = null;   // null: open while not connected, folded once connected; a click decides from then on
+function renderCalcomGuide(connected) {
+  const panel = document.getElementById('cal-guide-panel'); if (!panel) return;
+  const open = calGuideOpen === null ? !connected : calGuideOpen;
+  const steps = CAL_GUIDE.steps.map(k => `<li>${t(k)}</li>`).join('');   // dictionary strings with markup — inserted as-is, as the Platforms guides are
+  panel.innerHTML = `
+    <div class="intg-guide-header">
+      <div class="intg-guide-logo-sm">${CAL_GUIDE.logo}</div>
+      <div>
+        <div class="intg-guide-title-text">${esc(t('cal_guide_title'))}</div>
+        <div class="intg-guide-subtitle">${esc(t('intg_setup_guide'))}</div>
+      </div>
+      <button type="button" class="btn btn-sm intg-guide-toggle" onclick="toggleCalcomGuide()" aria-expanded="${open}" aria-controls="cal-guide-steps">${esc(open ? t('cal_guide_hide') : t('cal_guide_show'))}</button>
+    </div>
+    ${open ? `<ol class="intg-guide-steps" id="cal-guide-steps">${steps}</ol><div class="intg-guide-note">${t(CAL_GUIDE.note)}</div>` : ''}`;
+}
+function toggleCalcomGuide() {
+  const connected = !!calcomData?.connected && !!calcomData?.calcom;
+  calGuideOpen = !(calGuideOpen === null ? !connected : calGuideOpen);
+  renderCalcomGuide(connected);
+}
+
+function renderCalcom() {
+  const d = calcomData;
+  const card = document.getElementById('cal-card'); if (!d || !card) return;
+  const c = d.calcom, manage = !!d.can_manage, connected = !!d.connected && !!c;
+  const show = (id, on) => document.getElementById(id)?.classList.toggle('hidden', !on);
+  const status = document.getElementById('cal-status');
+  if (status) { status.textContent = connected ? t('cal_status_connected') : t('cal_status_none'); status.className = 'badge' + (connected ? ' badge-success' : ''); }
+  show('cal-readonly-hint', !manage);
+  show('cal-connect-section', manage && !connected);
+  show('cal-none', !manage && !connected);
+  show('cal-account-section', connected);
+  show('cal-type-section', connected);
+  show('cal-actions', manage);
+  show('cal-connect-btn', manage && !connected);
+  show('cal-refresh-btn', manage && connected);
+  show('cal-register-btn', manage && connected && !c?.webhook_registered);
+  show('cal-disconnect-btn', manage && connected);
+  show('cal-log-section', connected);
+  show('cal-guide-section', manage);   // the guide is for whoever can connect; open until connected, folded after
+  renderCalcomGuide(connected);
+  if (!connected) return;
+  loadCalcomLogs();
+  const locale = currentLang === 'de' ? 'de-DE' : 'en-GB';
+  const when = c.connected_at ? new Date(c.connected_at).toLocaleString(locale) : '';
+  const facts = [
+    [t('cal_fact_account'),      [c.cal_name, c.cal_email].filter(Boolean).join(', ')],
+    [t('cal_fact_username'),     c.cal_username || ''],
+    [t('cal_fact_timezone'),     c.cal_timezone || ''],
+    [t('cal_fact_connected_by'), c.connected_by_name ? tf('cal_connected_by_on', { name: c.connected_by_name, date: when }) : when],
+    [t('cal_fact_webhook'),      c.webhook_registered ? t('cal_webhook_on') : t('cal_webhook_off') + (c.last_error ? ', ' + c.last_error : '') + '. ' + t('cal_webhook_hint')],
+  ];
+  const facts_el = document.getElementById('cal-facts');
+  if (facts_el) facts_el.innerHTML = `<table class="table compact"><tbody>${facts.map(([k, v]) => `<tr><td class="strong">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>`;
+  const sel = document.getElementById('cal-event-type'), ro = document.getElementById('cal-type-readonly');
+  if (!sel || !ro) return;
+  if (manage) {
+    const types = Array.isArray(c.event_types) ? c.event_types : [];
+    sel.innerHTML = types.length
+      ? types.map(x => `<option value="${Number(x.id)}"${c.event_type && c.event_type.id === x.id ? ' selected' : ''}>${esc(calTypeLabel(x))}</option>`).join('')
+      : `<option value="">${esc(t('cal_no_event_types'))}</option>`;
+    sel.disabled = !types.length;
+    sel.classList.remove('hidden'); ro.classList.add('hidden');
+  } else {
+    sel.classList.add('hidden'); ro.classList.remove('hidden');
+    ro.value = c.event_type ? calTypeLabel(c.event_type) : t('cal_no_event_types');
+  }
+}
+
+function showCalMsg(text, ok) {
+  const el = document.getElementById('cal-msg'); if (!el) return;
+  el.textContent = text;
+  el.className   = 'workspace-name-msg ' + (ok ? 'success' : 'error');
+  setTimeout(() => el.classList.add('hidden'), ok ? 2500 : 8000);
+}
+
+// The key goes to the server once; the field is emptied whatever the outcome of the request.
+async function connectCalcom(btn) {
+  const input = document.getElementById('cal-key');
+  const api_key = input ? input.value.trim() : '';
+  if (!api_key) { showCalMsg(t('cal_key_required'), false); input?.focus(); return; }
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.post('/api/integrations/calcom/connect', { api_key });
+    if (input) input.value = '';
+    if (!res || res.error) { showCalMsg(res?.error || t('cal_err_generic'), false); return; }
+    calcomData = res; renderCalcom();
+    showCalMsg(t('cal_connected_ok'), true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function saveCalcomEventType() {
+  const sel = document.getElementById('cal-event-type');
+  const id = Number(sel?.value);
+  if (!id) return;
+  const res = await api.patch('/api/integrations/calcom', { event_type_id: id });
+  if (!res || res.error) { showCalMsg(res?.error || t('cal_err_generic'), false); renderCalcom(); return; }
+  calcomData = res; renderCalcom();
+  showCalMsg(t('cal_saved'), true);
+}
+
+async function refreshCalcomEventTypes(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.post('/api/integrations/calcom/refresh', {});
+    if (!res || res.error) { showCalMsg(res?.error || t('cal_err_generic'), false); return; }
+    calcomData = res; renderCalcom();
+    showCalMsg(t('cal_refreshed'), true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Retry the booking webhook at Cal.com; the server answers the card's state either way.
+async function registerCalcomWebhook(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.post('/api/integrations/calcom/register-webhook', {});
+    if (!res) { showCalMsg(t('cal_err_generic'), false); return; }
+    if (res.calcom !== undefined) { calcomData = { connected: res.connected, calcom: res.calcom, can_manage: res.can_manage }; renderCalcom(); }
+    if (res.error) { showCalMsg(res.error, false); return; }
+    showCalMsg(t('cal_registered_ok'), true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// The last 30 deliveries from Cal.com: what was booked, moved or cancelled, and what became of it.
+async function loadCalcomLogs() {
+  const el = document.getElementById('cal-log'); if (!el) return;
+  const data = await api.get('/api/integrations/calcom/logs');
+  const logs = data && !data.error ? (data.logs || []) : [];
+  if (!logs.length) { el.innerHTML = `<p class="empty-inline">${esc(t('cal_log_none'))}</p>`; return; }
+  const locale = currentLang === 'de' ? 'de-DE' : 'en-GB';
+  el.innerHTML = logs.map(l => {
+    const c = l.captured || {};
+    const what = c.trigger && TRANSLATIONS[currentLang]?.['cal_log_' + c.trigger] ? t('cal_log_' + c.trigger) : (c.trigger || '');
+    const when = [c.event_date, c.event_time].filter(Boolean).join(' ');
+    const notes = [c.created_contact ? t('cal_log_new_contact') : '', c.created_deal ? t('cal_log_new_deal') : ''].filter(Boolean).join(', ');
+    return `<div class="intg-log-entry${l.status === 'error' ? ' error' : ''}">
+      <div class="intg-log-entry-header">
+        <span class="intg-log-badge ${l.status}">${esc(t('intg_log_' + l.status))}</span>
+        <span class="intg-log-time">${esc(new Date(l.created_at).toLocaleString(locale))}</span>
+        <span class="intg-log-contact">${esc([what, l.contact_name].filter(Boolean).join(': ') || l.error || '')}</span>
+      </div>
+      ${l.status === 'success' ? `<div class="intg-log-fields">${[c.title ? `<span class="intg-log-field">${esc(c.title)}</span>` : '', when ? `<span class="intg-log-field">${esc(when)}</span>` : '', notes ? `<span class="intg-log-field">${esc(notes)}</span>` : ''].join('')}</div>` : (l.error ? `<div class="intg-log-fields"><span class="intg-log-field">${esc(l.error)}</span></div>` : '')}
+    </div>`;
+  }).join('');
+}
+
+async function disconnectCalcom() {
+  const ok = await ui.confirm({ title: t('cal_btn_disconnect'), message: t('cal_confirm_disconnect'), confirmLabel: t('cal_btn_disconnect'), danger: true });
+  if (!ok) return;
+  const res = await api.del('/api/integrations/calcom');
+  if (!res || res.error) { showCalMsg(res?.error || t('cal_err_generic'), false); return; }
+  calcomData = res; renderCalcom();
+  showCalMsg(t('cal_disconnected_ok'), true);
 }

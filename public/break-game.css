@@ -1,0 +1,92 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE BREAK — public/break-game.css  (Part 40, 2026-10-20)
+
+   The falling-block game's dialog, shared by the landing page and the app
+   (public/js/break-game.js builds the markup). Tokens only, from /style.css,
+   so it follows each page's theme, light or dark. Prefix brk-. The dialog
+   itself never gets a display value: the browser keeps a closed dialog
+   hidden. The layer over the field has its own display, so it carries its
+   own [hidden] rule.
+
+   Structure
+     01 the dialog      02 the field and its layer   03 the side
+     04 buttons, keys   05 the board of high scores  06 small screens, fingers
+     07 reduced motion
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 01 · the dialog ───────────────────────────────────────────────────── */
+.brk { width: min(600px, 100% - 32px); max-height: calc(100% - 32px); margin: auto; padding: 0; border: 1px solid var(--line-strong); border-radius: 24px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-xl); overflow: auto; font-family: var(--font); font-size: 14px; line-height: 1.45; }
+.brk::backdrop { background: var(--scrim); }
+.brk-in { padding: 20px; }
+.brk-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brk-title { font-size: 20px; font-weight: 750; letter-spacing: -.01em; color: var(--ink); }
+.brk-x { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: var(--ink-muted); }
+.brk-x:hover { background: var(--surface-hover); color: var(--ink); }
+.brk-ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── 02 · the field and its layer ──────────────────────────────────────── */
+.brk-body { display: grid; grid-template-columns: minmax(0, 1fr) 176px; gap: 20px; align-items: start; margin-top: 16px; }
+.brk-stage { position: relative; width: 100%; max-width: 260px; aspect-ratio: 1 / 2; justify-self: center; }
+.brk-canvas { display: block; width: 100%; height: 100%; border-radius: 12px; background: var(--surface-sunken); }
+.brk-layer { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; gap: 12px; padding: 16px; border-radius: 12px; background: color-mix(in srgb, var(--surface) 94%, transparent); overflow: auto; }
+.brk-layer[hidden] { display: none; }
+.brk-sheet-t { font-size: 17px; font-weight: 700; text-align: center; }
+.brk-place { font-weight: 700; text-align: center; color: var(--success); }
+
+/* ── 03 · the side ─────────────────────────────────────────────────────── */
+.brk-side { display: flex; flex-direction: column; gap: 12px; font-size: 13px; }
+.brk-minis { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.brk-mini { min-width: 0; }
+.brk-label { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 600; color: var(--ink-muted); }
+.brk-mini-canvas { display: block; width: 100%; aspect-ratio: 3 / 2; border-radius: 10px; background: var(--surface-sunken); }
+.brk-stats { display: grid; grid-template-columns: auto auto; gap: 4px 12px; }
+.brk-stats dt { color: var(--ink-muted); }
+.brk-stats dd { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+/* "+800" after a clear: rises and fades once. */
+.brk-pop { height: 20px; font-weight: 800; text-align: right; color: var(--success); opacity: 0; }
+.brk-pop.is-on { animation: brk-pop .9s var(--ease-out) both; }
+@keyframes brk-pop { 0% { opacity: 0; transform: translateY(6px); } 20% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-8px); } }
+.brk-help { font-size: 12px; line-height: 1.45; color: var(--ink-muted); }
+
+/* ── 04 · buttons, keys ────────────────────────────────────────────────── */
+.brk-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.brk-btn { display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-raised); color: var(--ink); font-family: var(--font); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background var(--dur-fast), border-color var(--dur-fast); }
+.brk-btn:hover { background: var(--surface-hover); }
+.brk-btn:disabled { opacity: .5; cursor: default; }
+.brk-btn-primary { background: var(--brand); border-color: var(--brand); color: var(--on-primary); }
+.brk-btn-primary:hover { background: var(--brand-hover); border-color: var(--brand-hover); }
+.brk-pad { display: none; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-top: 16px; }
+.brk-key { display: inline-grid; place-items: center; height: 52px; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--surface-raised); color: var(--ink); touch-action: manipulation; }
+.brk-key:active { background: var(--surface-active); }
+.brk-x:focus-visible, .brk-canvas:focus-visible, .brk-btn:focus-visible, .brk-key:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* ── 05 · the board of high scores ─────────────────────────────────────── */
+.brk-form { display: flex; flex-direction: column; gap: 4px; }
+.brk-form-row { display: flex; gap: 6px; }
+.brk-input { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-sunken); color: var(--ink); font-family: var(--font); font-size: 14px; }
+.brk-input:focus { outline: none; border-color: var(--brand); box-shadow: var(--focus-ring); }
+.brk-list { display: flex; flex-direction: column; gap: 2px; list-style: none; font-size: 13px; }
+.brk-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 4px 8px; border-radius: 6px; }
+.brk-row.is-me { background: var(--brand-subtle); font-weight: 700; }
+.brk-rank { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.brk-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brk-pts { font-weight: 700; font-variant-numeric: tabular-nums; }
+.brk-empty, .brk-scope { font-size: 12.5px; text-align: center; color: var(--ink-muted); }
+
+/* ── 06 · small screens, fingers ───────────────────────────────────────── */
+/* A finger gets the six buttons; a keyboard gets the one line of keys. */
+@media (pointer: coarse) {
+  .brk-pad { display: grid; }
+  .brk-help { display: none; }
+}
+@media (max-width: 480px) {
+  .brk-in { padding: 16px; }
+  .brk-body { grid-template-columns: minmax(0, 1fr) 120px; gap: 12px; }
+  .brk-minis { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ── 07 · reduced motion, last ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .brk-pop.is-on { animation: none; opacity: 1; }
+  .brk-btn { transition: none; }
+}

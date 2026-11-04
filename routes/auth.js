@@ -64,10 +64,11 @@ router.get('/me', async (req, res, next) => {
     if (!req.session?.userId) return res.json({ user: null });
 
     const { rows: [user] } = await pool.query(
-      'SELECT id, name, email, role, workspace_id, column_widths, deal_columns, analytics_layout, timezone FROM users WHERE id = $1',
+      'SELECT id, name, email, role, workspace_id, column_widths, deal_columns, analytics_layout, timezone, notification_prefs FROM users WHERE id = $1',
       [req.session.userId]
     );
-    if (user) { user.column_widths = user.column_widths || {}; user.deal_columns = user.deal_columns || []; user.timezone = user.timezone || 'Europe/Berlin'; }
+    // notification_prefs: the settings screen ticks its boxes from these; without them every box showed as on
+    if (user) { user.column_widths = user.column_widths || {}; user.deal_columns = user.deal_columns || []; user.timezone = user.timezone || 'Europe/Berlin'; user.notification_prefs = user.notification_prefs || {}; }
     const { rows: [workspace] } = await pool.query(
       'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id = $1',
       [req.session.workspaceId]
@@ -137,7 +138,7 @@ router.post('/login', async (req, res, next) => {
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
     workspace.contact_columns = workspace.contact_columns || [];
-    res.json({ user: { id: user.id, name: user.name, email: user.email, role: memberships[0].role, column_widths: user.column_widths || {}, deal_columns: user.deal_columns || [], analytics_layout: user.analytics_layout || {} }, workspace });
+    res.json({ user: { id: user.id, name: user.name, email: user.email, role: memberships[0].role, column_widths: user.column_widths || {}, deal_columns: user.deal_columns || [], analytics_layout: user.analytics_layout || {}, notification_prefs: user.notification_prefs || {} }, workspace });
   } catch (e) { next(e); }
 });
 
@@ -153,7 +154,7 @@ router.post('/select-workspace', async (req, res, next) => {
     if (!currentUser) return res.status(401).json({ error: 'User not found' });
 
     const { rows: [user] } = await pool.query(
-      'SELECT id, name, email, column_widths, deal_columns, analytics_layout, role FROM users WHERE email=$1 AND workspace_id=$2',
+      'SELECT id, name, email, column_widths, deal_columns, analytics_layout, role, notification_prefs FROM users WHERE email=$1 AND workspace_id=$2',
       [currentUser.email, workspace_id]
     );
     if (!user) return res.status(403).json({ error: 'Not a member of this workspace' });
@@ -168,7 +169,7 @@ router.post('/select-workspace', async (req, res, next) => {
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
     workspace.contact_columns = workspace.contact_columns || [];
-    res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, column_widths: user.column_widths || {}, deal_columns: user.deal_columns || [], analytics_layout: user.analytics_layout || {} }, workspace });
+    res.json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, column_widths: user.column_widths || {}, deal_columns: user.deal_columns || [], analytics_layout: user.analytics_layout || {}, notification_prefs: user.notification_prefs || {} }, workspace });
   } catch (e) { next(e); }
 });
 
@@ -184,7 +185,7 @@ router.post('/switch-workspace', async (req, res, next) => {
     if (!currentUser) return res.status(401).json({ error: 'User not found' });
 
     const { rows: [targetUser] } = await pool.query(
-      'SELECT id, role FROM users WHERE email=$1 AND workspace_id=$2',
+      'SELECT id, role, notification_prefs FROM users WHERE email=$1 AND workspace_id=$2',
       [currentUser.email, workspace_id]
     );
     if (!targetUser) return res.status(403).json({ error: 'Not a member of this workspace' });
@@ -199,7 +200,8 @@ router.post('/switch-workspace', async (req, res, next) => {
     );
     workspace.kanban_fields   = workspace.kanban_fields   || ['company', 'email'];
     workspace.contact_columns = workspace.contact_columns || [];
-    res.json({ workspace, role: targetUser.role, user_id: targetUser.id });
+    // the new workspace's row has its own notification preferences (one users row per workspace)
+    res.json({ workspace, role: targetUser.role, user_id: targetUser.id, notification_prefs: targetUser.notification_prefs || {} });
   } catch (e) { next(e); }
 });
 

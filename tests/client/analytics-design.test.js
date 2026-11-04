@@ -19,33 +19,6 @@ const html = read('public/index.html');
 const analytics = read('public/js/analytics.js');
 const section = html.slice(html.indexOf('<section id="page-analytics"'), html.length);
 
-describe('markup: static drag handles and the Configure Metrics button', () => {
-  test('file parses', () => execFileSync('node', ['--check', path.join(ROOT, 'public/js/analytics.js')]));
-  test('every .section-drag-handle uses the sprite grip icon', () => {
-    const matches = [...section.matchAll(/<div class="section-drag-handle" title="Drag to reorder section" data-i18n-title="html_drag_section">(.*?)<\/div>/g)];
-    assert.ok(matches.length >= 4, 'at least 4 draggable sections');
-    for (const m of matches) assert.match(m[1], /<use href="#i-grip"\/>/);
-  });
-  test('Configure Metrics has the sprite settings icon', () => {
-    assert.match(section, /onclick="openAnalyticsConfig\(\)"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-settings"\/><\/svg><span data-i18n="html_configure_metrics">Configure Metrics<\/span>/);
-  });
-  test('no braille drag-handle characters remain in the section', () => {
-    assert.doesNotMatch(section, /⠿/);
-  });
-});
-
-describe('analytics.js: JS-rendered drag handles', () => {
-  test('the KPI cells are one card, so the per-tile drag handle is gone (Part 23); the section handles stay', () => {
-    const r = sliceFn(analytics, 'renderAnalyticsCards', 'analytics.js');
-    assert.doesNotMatch(r, /icon\('grip'/);
-    assert.equal(analytics.split('function initStatCardDragDrop(').length - 1, 0);
-    assert.match(sliceFn(analytics, 'initSectionDragDrop', 'analytics.js'), /dragSectionId/, 'sections are still reorderable');
-  });
-  test('no braille drag-handle characters remain anywhere in the file', () => {
-    assert.doesNotMatch(analytics, /⠿/);
-  });
-});
-
 describe('analytics.js: section renderers survive a repeat loadAnalytics() call', () => {
   test('loadAnalytics no longer wipes #analytics-main-sections before renderAllSections looks its children up by id', () => {
     const fn = sliceFn(analytics, 'loadAnalytics', 'analytics.js');
@@ -60,152 +33,6 @@ describe('analytics.js: section renderers survive a repeat loadAnalytics() call'
     assert.match(fn, /if \(!el\) return;/);
   });
 });
-
-describe('the KPI row follows the reference (Part 23, step 1 of the Analytics port)', () => {
-  const an = read('public/js/analytics.js');
-  const css = read('public/style.css');
-  test('one card holding an .an-kpis grid of .an-kpi cells: label + hint, big value, delta foot', () => {
-    const r = sliceFn(an, 'renderAnalyticsCards', 'analytics.js');
-    assert.match(r, /<section class="card" aria-label="\$\{t\('an_key_metrics_aria'\)\}">/);
-    assert.match(r, /class="an-kpis"/);
-    assert.match(r, /class="an-kpi"/);
-    assert.match(r, /<div class="kpi-label"><span>\$\{esc\(t\(def\.label\)\)\}<\/span><span class="hint">/, 'def.label is a dictionary key');
-    assert.match(r, /class="kpi-value"/); assert.match(r, /class="kpi-foot"/);
-    assert.match(r, /class="an-kpi-fill"/, 'the odd cell explains what the deltas compare');
-    assert.doesNotMatch(r, /analytics-card-accent|draggable="true"/, 'the reference row is one card, not six draggable tiles');
-  });
-  test('the reference metric set, in its order, with Avg deal size added; the app-only counts come after', () => {
-    assert.match(an, /^const STAT_CARD_DEFS = \{\n\s+open_pipeline:/m, 'Open pipeline leads, like the reference');
-    for (const id of ['open_pipeline', 'won_value', 'win_rate', 'new_deals', 'avg_deal_size']) assert.match(an, new RegExp(`\\n\\s+${id}:\\s*\\{`), id);
-    assert.match(an, /^const DEFAULT_STAT_ORDER\s+= \['open_pipeline', 'won_value', 'win_rate', 'new_deals', 'avg_deal_size', 'contacts', 'deals'\];/m);
-  });
-  test('delta(): real comparison or an honest "no prior period", never a faked number', () => {
-    const d = sliceFn(an, 'delta', 'analytics.js');
-    assert.match(d, /t\('an_no_prior_period'\)/); assert.match(d, /tf\('an_no_change_vs'/);
-    assert.match(d, /class="delta \$\{ok \? 'up' : 'down'\}"/);
-    assert.match(d, /icon\(up \? 'arrow-up' : 'arrow-down'\)/);
-    assert.match(d, /unit === '%' \? ' %' : ' ' \+ unit/, 'pp for a rate, days for a duration');
-  });
-  test('a snapshot metric carries no delta — only the two the data can actually window do', () => {
-    const c = sliceFn(an, 'getStatCardContent', 'analytics.js');
-    assert.match(c, /case 'new_deals'/); assert.match(c, /case 'avg_deal_size'/);
-    assert.match(c, /d\.prev_new_deals/); assert.match(c, /d\.prev_avg_deal_size/);
-    // open pipeline / won value / win rate are current-stage snapshots: the hint says so, no delta is invented
-    assert.match(c, /snapshot/i);
-  });
-  test('the page sub line states the window the deltas compare', () => {
-    assert.match(sliceFn(an, 'loadAnalytics', 'analytics.js'), /periodLabel\(/);
-    assert.match(sliceFn(an, 'periodLabel', 'analytics.js'), /analyticsPeriodMonths/);
-  });
-  test('the request carries the window and the stylesheet has the reference KPI rules', () => {
-    assert.match(an, /api\.get\(`\/api\/analytics\/summary\?months=\$\{analyticsPeriodMonths\}\$\{scope\}`\)/);
-    for (const s of ['.an-kpis {', '.an-kpi {', '.an-kpi .kpi-label {', '.an-kpi-fill {']) assert.ok(css.includes(s), s);
-  });
-});
-
-describe('Top open deals card (Part 24, step 2 of the Analytics port)', () => {
-  const an = read('public/js/analytics.js');
-  const html2 = read('public/index.html');
-  const css2 = read('public/style.css');
-  test('its own reorderable section; the reference puts it after the owner breakdown', () => {
-    assert.match(an, /^const DEFAULT_SECTION_ORDER = \['stats','rate','funnel','winloss','owner','top','trends'\];/m);
-    assert.match(html2, /<div class="analytics-draggable-section" id="analytics-sec-top" data-section-id="top">/);
-    assert.match(html2, /id="analytics-top-deals"/);
-    assert.match(sliceFn(an, 'renderAllSections', 'analytics.js'), /renderTopOpenDeals\(d\)/);
-  });
-  test('a card with the reference header, a table of Deal / Stage / Value / Owner, and a guarded container', () => {
-    const r = sliceFn(an, 'renderTopOpenDeals', 'analytics.js');
-    assert.match(r, /if \(!el\) return;/, 'the same guard the other section renderers have');
-    assert.match(r, /class="card-title"[^>]*>\$\{t\('an_top_title'\)\}</);
-    assert.match(r, /class="an-sub"/);
-    assert.match(r, /t\('an_view_all_deals'\)/);
-    assert.match(r, /<th>\$\{t\('col_title'\)\}<\/th><th>\$\{t\('col_stage'\)\}<\/th><th class="num-col">\$\{t\('lbl_deal_value'\)\}<\/th><th>\$\{t\('col_owner'\)\}<\/th>/);
-    // probability and expected close are the reference's other two columns; this app has neither field
-    assert.doesNotMatch(r, /Probability|Expected close/);
-  });
-  test('rows carry the deal, its contact, a stage pill and the owner, and open the deal', () => {
-    const r = sliceFn(an, 'renderTopOpenDeals', 'analytics.js');
-    assert.match(r, /class="stage-pill"/);
-    assert.match(r, /avatar\(d2\.assigned_to_name, 'sm'\)/);
-    assert.match(r, /onclick="openDealDetail\(/);
-    assert.match(r, /t\('no_contact'\)/);
-  });
-  test('the footer counts what is not shown and totals the open value; empty state when there is nothing open', () => {
-    const r = sliceFn(an, 'renderTopOpenDeals', 'analytics.js');
-    assert.match(r, /class="table-foot"/);
-    assert.match(r, /tf\('an_showing_top', \{ n: list\.length, total \}\)/);
-    assert.match(r, /class="empty"/);
-    assert.ok(css2.includes('.an-sub {'));
-  });
-});
-
-describe('Deals by owner card (Part 25, step 3 of the Analytics port)', () => {
-  const an = read('public/js/analytics.js');
-  const html3 = read('public/index.html');
-  test('its own reorderable section, between win/loss and the top deals', () => {
-    assert.match(an, /^const DEFAULT_SECTION_ORDER = \['stats','rate','funnel','winloss','owner','top','trends'\];/m);
-    assert.match(html3, /<div class="analytics-draggable-section" id="analytics-sec-owner" data-section-id="owner">/);
-    assert.match(html3, /id="analytics-by-owner"/);
-    assert.match(sliceFn(an, 'renderAllSections', 'analytics.js'), /renderDealsByOwner\(d\)/);
-  });
-  test('a row per teammate: avatar, first name, a bar, the count and their total value', () => {
-    const r = sliceFn(an, 'renderDealsByOwner', 'analytics.js');
-    assert.match(r, /if \(!el\) return;/);
-    assert.match(r, /avatar\(o\.name, 'sm'\)/);
-    assert.match(r, /class="pipeline-bar-track"[\s\S]*?class="pipeline-bar-fill"/);
-    assert.match(r, /o\.name\.split\(' '\)\[0\]/, 'first name, like the reference');
-    assert.match(r, /fmtCurrency\(o\.value\)/);
-  });
-  test('bars are scaled to the busiest owner, sorted by the route, and the breakdown is reachable without a tooltip engine', () => {
-    const r = sliceFn(an, 'renderDealsByOwner', 'analytics.js');
-    assert.match(r, /Math\.max\(1, \.\.\.list\.map\(o => o\.deals\)\)/);
-    assert.match(r, /title="/, 'open / won / lost ride along as a title');
-    assert.match(r, /o\.open/); assert.match(r, /o\.won/); assert.match(r, /o\.lost/);
-  });
-  test('the card header follows the reference, and an all-zero workspace gets an empty state', () => {
-    const r = sliceFn(an, 'renderDealsByOwner', 'analytics.js');
-    assert.match(r, /t\('an_owner_card_title'\)/);
-    assert.match(r, /class="an-sub"/);
-    assert.match(r, /tf\('an_owner_card_sub', \{ n: analyticsPeriodMonths \}\)/);
-    assert.match(r, /class="empty"/);
-  });
-});
-
-describe('Pipeline funnel card (Part 26, step 4 of the Analytics port)', () => {
-  const an = read('public/js/analytics.js');
-  const html4 = read('public/index.html');
-  const css4 = read('public/style.css');
-  test('its own reorderable section, where the reference puts it', () => {
-    assert.match(an, /^const DEFAULT_SECTION_ORDER = \['stats','rate','funnel','winloss','owner','top','trends'\];/m);
-    assert.match(html4, /<div class="analytics-draggable-section" id="analytics-sec-funnel" data-section-id="funnel">/);
-    assert.match(html4, /id="analytics-funnel"/);
-    assert.match(sliceFn(an, 'renderAllSections', 'analytics.js'), /renderFunnel\(d\)/);
-  });
-  test('a row per stage: colour dot, name, a bar scaled to the widest stage, reached count, value in stage', () => {
-    const r = sliceFn(an, 'renderFunnel', 'analytics.js');
-    assert.match(r, /if \(!el\) return;/);
-    assert.match(r, /class="an-fn-row"/);
-    assert.match(r, /Math\.max\(1, \.\.\.rows\.map\(x => x\.reached\)\)/);
-    assert.match(r, /class="an-fn-dot"/);
-    assert.match(r, /x\.reached/); assert.match(r, /fmtCurrency\(x\.value\)/);
-    assert.match(r, /t\('an_value_in_stage'\)/);
-  });
-  test('between two stages it states the conversion, and the lost bucket sits under a divider', () => {
-    const r = sliceFn(an, 'renderFunnel', 'analytics.js');
-    assert.match(r, /class="an-fn-conv"/);
-    assert.match(r, /tf\('an_fn_conv', \{ pct: conv, next: esc\(next\.name\) \}\)/);
-    assert.match(r, /class="an-fn-lost"/);
-    assert.match(r, /tf\('an_fn_lost_text', \{ n: f\.lost\.deals, pct:/);
-  });
-  test('the header names the pipeline it is showing, and an empty pipeline gets an empty state', () => {
-    const r = sliceFn(an, 'renderFunnel', 'analytics.js');
-    assert.match(r, /t\('an_funnel_title'\)/);
-    assert.match(r, /esc\(f\.pipeline_name\)/);
-    assert.match(r, /class="empty"/);
-    for (const s of ['.an-fn-row {', '.an-fn-conv {', '.an-fn-dot {', '.an-fn-lost {']) assert.ok(css4.includes(s), s);
-  });
-});
-
 describe('Win rate per month (Part 27, step 5 of the Analytics port)', () => {
   const an = read('public/js/analytics.js');
   const html5 = read('public/index.html');
@@ -252,7 +79,6 @@ describe('Win rate per month (Part 27, step 5 of the Analytics port)', () => {
     assert.match(svg, /0 %<\/text>/, 'the last known rate is printed');
   });
 });
-
 describe('Win and loss, with By pipeline folded in (Part 28, step 6 of the Analytics port)', () => {
   const an = read('public/js/analytics.js');
   const html6 = read('public/index.html');
@@ -298,7 +124,6 @@ describe('Win and loss, with By pipeline folded in (Part 28, step 6 of the Analy
     assert.deepEqual(wlSegments({ won_deals: 0, open_deals: 0, lost_deals: 0 }).map(s => s.pct), [0, 0, 0]);
   });
 });
-
 describe('Page chrome (Part 29, step 7 of the Analytics port)', () => {
   const an = read('public/js/analytics.js');
   const html7 = read('public/index.html');

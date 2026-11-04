@@ -43,6 +43,7 @@ const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
 const { notify }  = require('../notifications');
 const engine      = require('../utils/engine');
+const baseUrl     = require('../utils/base-url');
 
 router.use(requireAuth);
 
@@ -54,10 +55,13 @@ function clampUrgency(v) {
 
 // Tell the Upgrads Engine when a deal lands in a trigger stage. Fire-and-forget:
 // the dispatcher checks the workspace settings itself and never throws into the route.
+// The acting user's timezone dates the signature (`unterschrieben_am`) the way they saw it.
 function fireEngine(req, { dealId, contactId, title, stageId }) {
   engine.dispatchContractSigned({
     workspaceId: req.workspaceId, dealId: Number(dealId),
     contactId: contactId ? Number(contactId) : null, title, stageId,
+    timezone: req.userTimezone,
+    baseUrl:  baseUrl(req),   // makes dokument_url absolute when a contract document exists
   }).catch(() => {});
 }
 

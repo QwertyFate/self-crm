@@ -79,7 +79,7 @@ async function loadSettings() {
   // Every request the page needs starts at once: the global loader counts them as one
   // batch (one bar, one paint) instead of a blink per card. `/api/auth/me` is fetched once
   // and reused for the Tasks statuses and the delete-workspace check.
-  const [fieldRows, objectFieldRows, pipelineRows, dealFieldRows, taskFieldRows, me, memberRows, inviteRows] = await Promise.all([
+  const [fieldRows, objectFieldRows, pipelineRows, dealFieldRows, taskFieldRows, me, memberRows, inviteRows, mailboxRow] = await Promise.all([
     api.get('/api/fields'),
     api.get('/api/object-fields'),
     api.get('/api/pipelines'),
@@ -88,6 +88,7 @@ async function loadSettings() {
     api.get('/api/auth/me'),
     api.get('/api/workspace/members'),
     canManageInvites ? api.get('/api/invites') : null,
+    MAILBOX_SHOWN ? api.get('/api/mailbox') : null,
   ]);
   fields = fieldRows;
 
@@ -111,6 +112,7 @@ async function loadSettings() {
   renderPipelinesSettings(); renderDealFieldsList(); renderDealColumnSettings();
   loadTaskSettings(me, taskFieldRows);
   loadNotifPrefs();
+  if (MAILBOX_SHOWN) loadMailboxCard(mailboxRow);   // mailbox.js: the E-Mail card under My preferences (on hold: hidden)
   switchSettingsTab(currentSettingsTab);
   document.getElementById('invites-card')?.classList.toggle('hidden', !canManageInvites);
   const inviteRoleSelect = document.getElementById('invite-role-select');
