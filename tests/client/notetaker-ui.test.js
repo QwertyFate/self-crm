@@ -18,8 +18,8 @@ const fnBody = name => { const i = dv.indexOf(`function ${name}(`); assert.ok(i 
 const book = fnBody('openCalcomBooking');
 
 describe('the box in the booking dialog', () => {
-  test('hidden for now (2026-10-26): the switch is off, so no box, no health check, and no booking asks for a recording', () => {
-    assert.match(read('public/js/detail-views.js'), /^const DV_NOTETAKER_SHOWN = false;$/m);
+  test('shown again (2026-10-27; hidden 2026-10-26): the switch is on, so the box and its health check are back', () => {
+    assert.match(read('public/js/detail-views.js'), /^const DV_NOTETAKER_SHOWN = true;$/m);
   });
   test('starts unticked and not yet asked; Google Meet is the integration google-meet', () => {
     assert.match(book, /const B = \{[^}]*record: false, nt: 'idle', ntWhy: ''[^}]*\};/);

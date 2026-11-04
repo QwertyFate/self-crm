@@ -48,6 +48,12 @@ describe('every key the code uses exists in both languages', () => {
     for (const m of html.matchAll(/data-i18n(?:-ph|-title|-aria|-alt)?="([^"]*)"/g)) if (!(m[1] in dict.en) || !(m[1] in dict.de)) bad.push(m[1]);
     assert.deepEqual(bad, []);
   });
+  // the contact's activity filter builds its labels at run time: t('dv_filter_' + type.id), detail-views.js:925
+  test("every activity type has its filter label (dv_filter_<id>) in both languages", () => {
+    const ids = [...sliceConst('public/js/detail-views.js', 'DV_ACT_TYPES').matchAll(/\bid:\s*'([a-z]+)'/g)].map(m => m[1]);
+    assert.ok(ids.includes('meeting'), 'the Cal.com meeting type is one of them');
+    assert.deepEqual(ids.filter(id => !(`dv_filter_${id}` in dict.en) || !(`dv_filter_${id}` in dict.de)), []);
+  });
   test('applyTranslations applies all five attribute kinds', () => {
     const fn = sliceFn(read('public/js/core.js'), 'applyTranslations', 'core.js');
     assert.match(fn, /\[data-i18n\]'\)\.forEach\(el => \{ el\.textContent = t\(el\.dataset\.i18n\)/);

@@ -61,3 +61,12 @@ LOGIN_LANDING_CHANGES.md
 
 # loading states + light-mode text log (2026-10-07)
 LOADING_UI_CHANGES.md
+
+# every markdown file Claude writes stays out of git (2026-11-04): the change logs, the notes it writes from
+# reading the code, and the landing page tools' notes
+*_CHANGES.md
+DATA_INFRASTRUCTURE.md
+tools/**/*.md
+
+# the test guide Claude wrote for the team (2026-11-04)
+TEST_GUIDE.md

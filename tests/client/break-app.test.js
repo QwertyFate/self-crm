@@ -1,5 +1,5 @@
 // CLIENT (static + pure-function) tests for the break inside the CRM (BREAK_GAME_CHANGES.md Part 2, 2026-10-20).
-// The same game as the landing page (public/js/break-game.js + public/break-game.css), opened from two hidden places:
+// The game (public/js/break-game.js + public/break-game.css; once also on the old landing page), opened from two hidden places:
 // the faint four squares at the foot of the sidebar, and "Kurze Pause" in the Ctrl+K palette, which shows up only when
 // one of a few words is typed. The board is the workspace's (/api/break-scores); the signed-in user plays under their
 // own name. Pinned: the files loaded and fingerprinted, the sidebar button, the palette's hidden entry and its words,
@@ -14,7 +14,6 @@ const core  = read('public/js/core.js');
 const game  = read('public/js/break-game.js');
 const style = read('public/style.css');
 const app   = new Function(sliceConst('public/js/core.js', 'TRANSLATIONS').replace(/^[^{]*/, 'return '))();
-const land  = new Function(sliceConst('public/js/landing.js', 'MO_I18N').replace(/^[^{]*/, 'return '))();
 const fnBody = (src, name) => { const i = src.indexOf(`function ${name}(`); assert.ok(i >= 0, name); const s = src.indexOf('{', i); let d = 0; for (let j = s; j < src.length; j++) { if (src[j] === '{') d++; else if (src[j] === '}' && !--d) return src.slice(s, j + 1); } return ''; };
 
 describe('the files', () => {
@@ -61,13 +60,11 @@ describe('the opener and the team board', () => {
     assert.match(o, /if \(typeof brkOpen !== 'function'\) return;/);
     assert.match(o, /brkOpen\(\{ t: \(k, v\) => \(v \? tf\(k, v\) : t\(k\)\), player: \(currentUser && currentUser\.name\) \|\| '', store: breakTeamStore \}\);/);
   });
-  test('every word the game asks for is in the app\'s dictionary, German and English, the same as on the landing page', () => {
+  // (LOGIN_LANDING_CHANGES Part 50) the Monday-wipe landing page that also carried the game is gone; the app is its only home
+  test('every word the game asks for is in the app\'s dictionary, German and English', () => {
     const asked = [...new Set([...game.matchAll(/'(brk_[a-z0-9_]+)'/g)].map(m => m[1]))];
     assert.ok(asked.length >= 25);
-    for (const k of asked) for (const lang of ['de', 'en']) {
-      assert.ok(typeof app[lang][k] === 'string' && app[lang][k], `${lang} ${k} in TRANSLATIONS`);
-      assert.equal(app[lang][k], land[lang][k], `${lang} ${k}: one voice on both pages`);
-    }
+    for (const k of asked) for (const lang of ['de', 'en']) assert.ok(typeof app[lang][k] === 'string' && app[lang][k], `${lang} ${k} in TRANSLATIONS`);
     assert.equal(app.de.brk_scope_team, 'Die Bestenliste des ganzen Teams.');
   });
   test('while the game is open it keeps its keys to itself: the app\'s Ctrl+K and / stay quiet behind it', () => {

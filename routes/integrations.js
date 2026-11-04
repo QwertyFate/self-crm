@@ -243,11 +243,16 @@ router.post('/receive/:key', async (req, res) => {
       );
 
       if (existing) {
-        const changed = masterDataChanges(existing, { name: name || existing.name, phone, company });
+        // A known email never empties what the contact already has: a field the enquiry leaves out keeps its
+        // value, and only a non-empty incoming value replaces it. Custom fields merge (jsonb ||); customData
+        // holds non-empty values only, so a key the form does not send stays as it was.
+        const keptPhone   = phone   || existing.phone;
+        const keptCompany = company || existing.company;
+        const changed = masterDataChanges(existing, { name: name || existing.name, phone: keptPhone, company: keptCompany });
         const { rows: [updated] } = await pool.query(
-          `UPDATE contacts SET name=$1, phone=$2, company=$3, custom_data=$4, akte_version=akte_version+$7::int, updated_at=NOW()
+          `UPDATE contacts SET name=$1, phone=$2, company=$3, custom_data=custom_data || $4::jsonb, akte_version=akte_version+$7::int, updated_at=NOW()
            WHERE id=$5 AND workspace_id=$6 RETURNING id, name`,
-          [name || existing.name, phone, company, JSON.stringify(customData), existing.id, wid, changed.length ? 1 : 0]
+          [name || existing.name, keptPhone, keptCompany, JSON.stringify(customData), existing.id, wid, changed.length ? 1 : 0]
         );
         contact = updated;
         if (changed.length) fireEngine('dispatchContactUpdated', { contactId: existing.id, changed });
@@ -651,10 +656,10 @@ router.get('/calcom/logs', requireAuth, async (req, res, next) => {
 // sent again so the Notetaker's job learns it.
 const NOTETAKER_SENT = ['scheduled', 'queued', 'updated', 'duplicate'];
 const isMeetLocation = loc => !!loc && loc.type === 'integration' && /^google[-:]?meet$/i.test(String(loc.integration || ''));
-// The Notetaker is off for this branch (2026-10-27, NOTETAKER_CHANGES): no recording is stored or sent, a booking
-// moved or cancelled sends nothing, the link watch finds nothing, and the health check answers "not available".
-// Notes it already wrote stay on their deals. true brings it back (with server.js and db.js, see NOTETAKER_CHANGES).
-let NOTETAKER_ON = false;
+// The Notetaker's server switch (NOTETAKER_CHANGES 2026-10-27: off for a branch, then on again). false stops it: no
+// recording is stored or sent, a booking moved or cancelled sends nothing, the link watch finds nothing, the health
+// check answers "not available"; switching it off for good also comments out its lines in server.js and its table in db.js.
+let NOTETAKER_ON = true;
 async function notetakerSync(wid, activityId) {
   const { rows: [r] } = await pool.query(
     `SELECT n.id, n.external_id, n.meeting_url, n.join_at, n.status, n.job_id, n.language, n.requested_by, n.callback_token, n.finished_at,
@@ -1109,6 +1114,6 @@ router.post('/calcom/reschedule', requireAuth, async (req, res, next) => {
 // server.js starts the link watch; the suite drives a tick by hand
 router.notetakerLinkTick = notetakerLinkTick;
 router.startNotetakerLinkWatch = startNotetakerLinkWatch;
-// the suite turns the Notetaker on to keep testing the code that comes back after this branch
+// the suites set the switch themselves, so they test the Notetaker whatever its default
 router.setNotetakerOn = on => { NOTETAKER_ON = on === true; };
 module.exports = router;

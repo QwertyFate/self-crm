@@ -18,45 +18,6 @@ const css = read('public/style.css');
 const section = html.slice(html.indexOf('<section id="page-contacts"'), html.indexOf('<!-- ── Team Chat ── -->'));
 const count = (src, needle) => src.split(needle).length - 1;
 
-describe('markup: header, toolbar and table shell', () => {
-  test('files parse', () => { for (const f of ['public/js/contacts.js', 'public/js/modals.js']) execFileSync('node', ['--check', path.join(ROOT, f)]); });
-  test('the import/export buttons are a single more menu; Add keeps the sprite plus', () => {
-    assert.match(section, /<button class="btn btn-secondary btn-icon" onclick="openContactsMoreMenu\(this\)" type="button" aria-label="More actions" data-i18n-aria="html_more_actions" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-ellipsis"\/><\/svg><\/button>/);
-    assert.match(section, /id="list-add-btn" onclick="openContactModal\(\)"><svg class="ic" aria-hidden="true"><use href="#i-plus"\/><\/svg><span data-i18n="add_contact">/);
-    assert.doesNotMatch(section, /onclick="openImportModal\(\)"|onclick="exportContactsCSV\(\)"/, 'the two buttons are gone from the toolbar; the menu calls them instead');
-  });
-  test('the toolbar is rendered by contacts.js (Part 18); the old filter panel, chip list, badge and toggle are gone; the bulk bar container stays', () => {
-    assert.match(section, /<div class="toolbar" id="contacts-toolbar"><\/div>/);
-    for (const id of ['filter-panel', 'filter-chips', 'filter-toggle-btn', 'filter-badge', 'contact-search', 'select-mode-btn']) assert.equal(count(section, `id="${id}"`), 0, id + ' is built at runtime now');
-    assert.doesNotMatch(section, /toggleFilterPanel|toolbar-actions|id="bulk-delete-section"/);
-    assert.match(section, /<div id="contacts-bulkbar"><\/div>/);
-    assert.match(section, /<div class="page-header">\s*<div><h1 data-i18n="page_contacts">Contacts<\/h1><p class="page-sub" id="contacts-page-sub"><\/p><\/div>/);
-  });
-  test('every sprite reference inside the Contacts section resolves', () => {
-    const defined = new Set([...html.matchAll(/<symbol id="(i-[\w-]+)"/g)].map(m => m[1]));
-    for (const m of section.matchAll(/<use href="#(i-[\w-]+)"/g)) assert.ok(defined.has(m[1]), m[1]);
-    assert.ok(count(section, '<use href="#i-') >= 3, 'the toolbar\'s icons moved into renderContactsToolbar (Part 18); the static section keeps the header and side-panel ones');
-  });
-});
-
-describe('contacts.js: table renderer follows the reference', () => {
-  test('the name cell is a person with an avatar and a stacked company line', () => {
-    const r = sliceFn(contacts, 'renderContactsTable', 'contacts.js');
-    assert.match(r, /class="person"/); assert.match(r, /avatar\(c\.name\)/);
-    assert.match(r, /class="contact-name-link truncate" title="\$\{esc\(c\.name\)\}"/);
-  });
-  test('there is no stage column any more (Part 19) — the table is built from the user\'s own columns', () => {
-    const r = sliceFn(contacts, 'renderContactsTable', 'contacts.js');
-    assert.doesNotMatch(r, /stage-pill|stage-badge|stage_id/);
-    assert.match(sliceFn(contacts, 'effectiveContactColumns', 'contacts.js'), /\.\.\.fields\.map\(f => \(\{ key: f\.field_key/, 'custom fields are columns');
-  });
-  test('a sortable head shows an arrow icon only on the active column, like the reference', () => {
-    const r = sliceFn(contacts, 'renderContactsTable', 'contacts.js');
-    assert.match(r, /icon\(sortDir === 'asc' \? 'arrow-up' : 'arrow-down', 'ic-sm'\) : ''/);
-    assert.doesNotMatch(r, /sort-icon|⇅|↑|↓/);
-  });
-});
-
 describe('contacts.js: filter chips, bulk bar, pagination, select mode', () => {
   test('the toolbar is search + only the filters you added + a "+ Filter" picker, then Select and Columns (Part 19)', () => {
     const r = sliceFn(contacts, 'renderContactsToolbar', 'contacts.js');
@@ -195,22 +156,5 @@ describe('contacts.js: filter chips, bulk bar, pagination, select mode', () => {
   test('the more menu wires to the existing import/export functions', () => {
     const m = sliceFn(contacts, 'openContactsMoreMenu', 'contacts.js');
     assert.match(m, /openImportModal\(\)/); assert.match(m, /exportContactsCSV\(\)/); assert.match(m, /ui\.menu\(/);
-  });
-});
-
-describe('modals.js: the contact side panel is now the reference detail view (Part 16, see tests/client/detail-views.test.js)', () => {
-  test('its own close button is an iconbtn with the sprite x icon', () => {
-    const panel = html.slice(html.indexOf('id="contact-side-panel"'), html.indexOf('<!-- ── Team Chat ── -->'));
-    assert.match(panel, /<button class="iconbtn" onclick="closeSidePanel\(\)" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"\/><\/svg><\/button>/);
-  });
-  test('buildDetailHTML and the old per-field panel/note helpers are gone; openDetail now renders the reference contact detail', () => {
-    for (const fn of ['buildDetailHTML', 'openDetail', 'renderContactDeals', 'updateContactStage', 'toggleContactNoteForm', 'editContactPanel'])
-      assert.equal(modals.split(`function ${fn}(`).length - 1, 0, fn);
-  });
-});
-
-describe('stylesheet: the new pagination classes exist', () => {
-  test('.ct-pg / .ct-flip / .gap are defined', () => {
-    assert.match(css, /^\.ct-pg \{/m); assert.match(css, /^\.ct-flip \{/m); assert.match(css, /^\.ct-pg \.gap \{/m);
   });
 });

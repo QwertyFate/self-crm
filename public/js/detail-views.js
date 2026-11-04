@@ -252,12 +252,12 @@ function dvJoinButton(a, cls = 'btn btn-secondary btn-sm') {
 // The button under an entry's text, in its own row; empty when there is no button.
 function dvJoinRow(a) { const b = dvJoinButton(a); return b ? `<div class="dv-join-row">${b}</div>` : ''; }
 
+// The Notetaker's box in the booking dialog and its health check (hidden 2026-10-26, shown again 2026-10-27). false hides
+// both, so no booking asks for a recording; notes it already wrote stay on their deals.
+const DV_NOTETAKER_SHOWN = true;
 // reschedule: the live meeting entry to move (its booking keeps the type, the place and the attendee)
 // What the Notetaker answered, as one line: booked for the start, joining now, given the new time, already booked,
 // waiting for Cal.com's Meet link, or not booked and why (the server's reason).
-// The Notetaker is hidden for now (2026-10-26): no box in the booking dialog, no health check, so no booking asks for a
-// recording. Notes it already wrote stay on their deals. true brings the box back as it was.
-const DV_NOTETAKER_SHOWN = false;
 function dvNotetakerToast(n) {
   if (!n || !n.status) return;
   const key = { scheduled: 'cal_rec_scheduled', queued: 'cal_rec_queued', updated: 'cal_rec_updated', duplicate: 'cal_rec_duplicate', waiting_link: 'cal_rec_waiting' }[n.status];

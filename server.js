@@ -21,8 +21,7 @@
                           visible on reload; other assets cache for an hour.
    6. routes              every /api/* mount, one line each. The ONLY place
                           that knows the full URL map.
-   7. /adminconsole       serves public/admin.html; /landingpage serves public/landingpage.html;
-      /landingpagetwo serves public/landingpagetwo.html, a second design to compare (Part 41).
+   7. /adminconsole       serves public/admin.html; /landingpage serves public/landingpage.html.
       INTERNAL_TOOLS_PATH (a fixed secret path) mounts internal-tools/, the team's separate tools.
    8. catch-all GET *     serves public/index.html, which is why the client can
                           have "pages" without any URL routing.
@@ -173,8 +172,7 @@ app.use('/api/contacts/import', express.json({ limit: '10mb' }));
 app.use('/api/integrations/calcom/receive', express.raw({ type: '*/*', limit: '1mb' }));
 // The Notetaker's result is signed over the raw body (X-Notetaker-Signature) and carries the whole transcript,
 // so this path keeps the bytes and allows more than json()'s 100kb.
-// The Notetaker is off for this branch (2026-10-27, NOTETAKER_CHANGES): uncomment to bring it back.
-// app.use('/api/notetaker/webhook', express.raw({ type: '*/*', limit: '5mb' }));
+app.use('/api/notetaker/webhook', express.raw({ type: '*/*', limit: '5mb' }));
 app.use(express.json());
 // Engine API paths: a malformed or oversized body is a body-parser error BEFORE the routers run.
 // Answer the Engine's { fehler } shape (400 / 413) instead of the browser's { error } — and never a crash.
@@ -248,9 +246,8 @@ app.use('/api/integrations',  integrations);
 // Google connection. Part 1 stays in the code; true mounts it again (with MAILBOX_SHOWN in public/js/mailbox.js).
 const EMAIL_SYNC_ON = false;
 if (EMAIL_SYNC_ON) app.use('/api/mailbox', require('./routes/mailbox'));   // a person's own mailbox, connected with Google (EMAIL_SYNC_CHANGES Part 1)
-// The Notetaker is off for this branch (2026-10-27, NOTETAKER_CHANGES): its result route is not mounted. Uncomment both lines to bring it back.
-// app.use('/api/notetaker/webhook', webhookIpLimiter, notetakerLinkLimiter);
-// app.use('/api/notetaker',     require('./routes/notetaker'));   // PUBLIC: the Notetaker's result for one meeting, by its secret link
+app.use('/api/notetaker/webhook', webhookIpLimiter, notetakerLinkLimiter);
+app.use('/api/notetaker',     require('./routes/notetaker'));   // PUBLIC: the Notetaker's result for one meeting, by its secret link
 app.use('/api/landing/ask', landingAskLimiter);
 app.use('/api/landing',       require('./routes/landing'));   // PUBLIC: the landing page's request form becomes a lead in the team's CRM
 app.use('/api/engine',        require('./routes/engine'));
@@ -265,10 +262,8 @@ app.use('/api/dokumente',     engineGate);
 app.use('/api/dokumente',     require('./routes/engine-dokumente'));   // GET /:id/download → signed link (API key)
 
 app.get('/adminconsole', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
-// The public landing page: a standalone document (landingpage.html + landing.css + js/landing.js), no session.
+// The public landing page: a standalone document (landingpage.html + landing.css + js/landing-ui.js + js/landing.js), no session.
 app.get('/landingpage', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landingpage.html')));
-// A second landing page to compare with the first (landingpagetwo.html + landing-two.css + js/landing-two.js), no session.
-app.get('/landingpagetwo', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landingpagetwo.html')));
 
 // The client files' fingerprint. Every open tab asks for it (and hears it on each socket connect)
 // and reloads itself when it changes, so a deploy reaches people without a manual refresh.
@@ -382,7 +377,6 @@ initDb()
     if (process.env.ENGINE_RETRY_WORKER !== '0') engine.startRetryWorker();
     // Requests for the Notetaker whose Google Meet link has not come: asks Cal.com for it every 20 seconds
     // (routes/integrations.js, NOTETAKER_CHANGES Part 4), so a CRM that Cal.com's webhook cannot reach still sends the bot.
-    // The Notetaker is off for this branch (2026-10-27): the watch is not started. Uncomment to bring it back.
-    // integrations.startNotetakerLinkWatch();
+    integrations.startNotetakerLinkWatch();
   })
   .catch(err => { console.error('Database init failed:', err); process.exit(1); });

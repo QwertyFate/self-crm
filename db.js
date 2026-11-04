@@ -697,9 +697,6 @@ async function initDb() {
     )
   `);
 
-  // The Notetaker is off for this branch (2026-10-27, NOTETAKER_CHANGES): its table is NOT created, so no database
-  // (production included) gets it now. The definition stays here, commented; remove the /* */ to create it again.
-  /*
   // The Notetaker (routes/integrations.js, utils/notetaker.js): a meeting booked on Google Meet with
   // "Mit Notetaker aufzeichnen" ticked. One row per meeting: the request, then what was last sent to the
   // service (the link, the start with its offset) and what it answered (status, job id, HTTP status, error).
@@ -729,7 +726,6 @@ async function initDb() {
   await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS callback_token   TEXT UNIQUE`);
   await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS note_activity_id INTEGER`);
   await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS finished_at      TIMESTAMPTZ`);
-  */
   // Email sync is on hold (2026-10-27): its table is NOT created, so no database (production included) gets it
   // until the feature is built. The definition stays here, commented; remove the /* */ to create it again
   // (with EMAIL_SYNC_ON in server.js and MAILBOX_SHOWN in public/js/mailbox.js).

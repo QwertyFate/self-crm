@@ -209,6 +209,19 @@ describe('POST /api/integrations/receive/:key (a lead comes in)', () => {
     assert.equal(fetchCalls.length, 0);
     assert.equal(state.calls.find(c => c.sql.startsWith('UPDATE contacts')).params[6], 0, 'an unchanged lead does not bump akte_version');
   });
+  test('known email, enquiry without phone, company or a custom field: nothing already there is emptied', async () => {
+    state.existing = { id: 60, name: 'Erika Muster', email: 'erika@muster.de', phone: '+49 30 1', company: 'Muster GmbH', contact_type: 'contact' };
+    state.contacts.set(60, { ...CONTACT, id: 60 });
+    const r = await integrations.request('POST', '/api/integrations/receive/k1', { name: 'Erika Muster', email: 'erika@muster.de' });
+    assert.equal(r.status, 200);
+    await engine.drain();
+    const upd = state.calls.find(c => c.sql.startsWith('UPDATE contacts'));
+    assert.equal(upd.params[1], '+49 30 1', 'the phone the enquiry did not send is kept');
+    assert.equal(upd.params[2], 'Muster GmbH', 'the company the enquiry did not send is kept');
+    assert.match(upd.sql, /custom_data=custom_data \|\| \$4::jsonb/, 'custom fields merge instead of being replaced');
+    assert.equal(upd.params[6], 0, 'nothing changed, so akte_version stays');
+    assert.equal(fetchCalls.length, 0, 'and the Engine hears of no change');
+  });
   test('known email that is a supplier: updated in the CRM, nothing to the Engine', async () => {
     state.existing = { id: 60, name: 'Lieferant', email: 'l@x.de', phone: null, company: null, contact_type: 'supplier' };
     state.contacts.set(60, { ...CONTACT, id: 60, contact_type: 'supplier' });
