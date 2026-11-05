@@ -76,9 +76,9 @@ describe('dvActHtml: stored note → safe HTML, same picture for every stored sh
 });
 
 describe('the Activities page', () => {
-  test('the feed renders notes through dvActHtml, never esc(a.content)', () => {
+  test('the feed renders notes through dvActPreviewHtml (dvActHtml\'s safety, a long note cut to its preview; NOTETAKER_AI Part 9), never esc(a.content)', () => {
     const f = sliceFn(objects, 'renderActivitiesFeed', 'objects.js');
-    assert.match(f, /<div class="tl-text ac-text">\$\{dvActHtml\(a\.content\)\}<\/div>/);
+    assert.match(f, /<div class="tl-text ac-text">\$\{dvActPreviewHtml\(a\.content\)\}<\/div>\$\{dvNoteMoreHtml\(a, 'openActivityNote'\)\}/);
     assert.doesNotMatch(f, /esc\(a\.content\)/);
   });
   test('search matches the VISIBLE text of a note, not its stored <br> and entities', () => {

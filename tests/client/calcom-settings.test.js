@@ -13,13 +13,13 @@ const { read, sliceFn, sliceConst, loadFns } = require('../helpers/client-fn');
 const html = read('public/index.html');
 const js   = read('public/js/integrations.js');
 const dict = new Function(sliceConst('public/js/core.js', 'TRANSLATIONS').replace(/^[^{]*/, 'return '))();
-const pane = html.slice(html.indexOf('<div id="intg-pane-calcom"'), html.indexOf('<!-- ── Workspaces page ── -->'));
+const pane = html.slice(html.indexOf('<div id="intg-pane-calcom"'), html.indexOf('<!-- ── Notetaker: the summary AI'));   // the Notetaker's pane follows (NOTETAKER_AI_CHANGES Part 5)
 const pageStart = html.indexOf('<section id="page-integrations"');
 const rail = html.slice(pageStart, html.indexOf('<div class="settings-tab-body">', pageStart));   // the Settings page has a tab body of its own, earlier in the file
 
 describe('the markup', () => {
   test('the rail: a separator and the Cal.com tab after Deliveries', () => {
-    assert.match(rail, /data-tab="deliveries"[^\n]*\n\s*<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="calcom"\s+onclick="switchIntgTab\('calcom'\)"\s+data-i18n="intg_tab_calcom">Cal\.com<\/button>\n\s*<\/nav>/);
+    assert.match(rail, /data-tab="deliveries"[^\n]*\n\s*<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="calcom"\s+onclick="switchIntgTab\('calcom'\)"\s+data-i18n="intg_tab_calcom">Cal\.com<\/button>\n\s*(?:<button class="settings-tab hidden" data-tab="notetaker"[^\n]*\n\s*)?<\/nav>/, 'the last tab, but for the Notetaker\'s (hidden until the server answers; notetaker-ai-ui.test.js)');
   });
   test('the pane: one card with the status badge, the connect section, the member line, the account, the event type, the actions and the message line', () => {
     assert.match(pane, /^<div id="intg-pane-calcom" class="settings-pane">/);
@@ -49,8 +49,8 @@ describe('the markup', () => {
   });
 });
 
-// The Cal.com half of integrations.js: from its banner to the end of the file.
-function sliceCal() { const i = js.indexOf('// ── Cal.com (the "calcom" tab)'); assert.ok(i > 0, 'the Cal.com block exists'); return js.slice(i); }
+// The Cal.com half of integrations.js: from its banner to the Notetaker's (NOTETAKER_AI_CHANGES Part 5), which follows it.
+function sliceCal() { const i = js.indexOf('// ── Cal.com (the "calcom" tab)'), j = js.indexOf('// ── Notetaker: the summary AI'); assert.ok(i > 0 && j > i, 'the Cal.com block exists, the Notetaker\'s after it'); return js.slice(i, j); }
 
 describe('the script', () => {
   test('loadIntegrations loads the Cal.com status; the seven routes, nothing else', () => {
@@ -148,7 +148,7 @@ describe('booking from a deal or a contact', () => {
   });
   test('the dialog: event type, a month calendar (Monday first, the free days enabled, the first preselected, arrows by month), then a time dropdown in the viewer\'s zone, a note; a picked time is checked against the CRM calendar; Book posts the slot; the entry refreshes after', () => {
     assert.match(book, /ui\.modal\(\{ title: tf\(reschedule \? 'cal_resched_title' : 'cal_book_title', \{ name: contact\.name \}\), size: 'md', body: '<div id="cal-book" class="cal-book"><\/div>'/);
-    assert.match(book, /const B = \{ month: todayIso\.slice\(0, 7\), typeId: \(reschedule && reschedule\.calcom_event_type_id\) \|\| cal\.event_type\.id, slots: null, loading: true, date: '', picked: null, conflicts: \[\], checking: false, note: '', err: '', busy: false, loc: 0, record: false, nt: 'idle', ntWhy: '' \};/, 'this month on the calendar, the chosen event type (or the moved booking\'s) and its first place preselected; the Notetaker box unticked and not yet asked for (notetaker-ui.test.js)');
+    assert.match(book, /const B = \{ month: todayIso\.slice\(0, 7\), typeId: \(reschedule && reschedule\.calcom_event_type_id\) \|\| cal\.event_type\.id, slots: null, loading: true, date: '', picked: null, conflicts: \[\], checking: false, note: '', err: '', busy: false, loc: 0, record: false, nt: 'idle', ntWhy: '', summary: false, ai: null \};/, 'this month on the calendar, the chosen event type (or the moved booking\'s) and its first place preselected; the Notetaker box unticked and not yet asked for (notetaker-ui.test.js); the summary box unticked, no AI known yet (NOTETAKER_AI Part 6)');
     assert.match(book, /api\.get\(`\/api\/integrations\/calcom\/slots\?from=\$\{B\.month\}-01&days=\$\{daysInMonth\(B\.month\)\}&event_type_id=\$\{B\.typeId\}\$\{reschedule \? '&reschedule_uid=' \+ encodeURIComponent\(reschedule\.calcom_uid\) : ''\}`\)/, 'the whole month in one read; a moved booking\'s own slot counts as free');
     assert.match(book, /B\.date = monthDays\(\)\.find\(bookable\) \|\| '';/, 'the first bookable day is preselected');
     assert.match(book, /const lead = ym => \(new Date\(ym \+ '-01T00:00:00Z'\)\.getUTCDay\(\) \+ 6\) % 7;/, 'Monday first');
@@ -189,7 +189,7 @@ describe('booking from a deal or a contact', () => {
     assert.match(book, /const APPS = \{ 'cal-video': 'Cal Video', 'google-meet': 'Google Meet', zoom: 'Zoom', 'office365-video': 'Microsoft Teams'/, 'the video apps by name');
     assert.match(book, /const whereSel = places\.length \? field\('cal-book-where', 'cal_book_where', `<select class="select" id="cal-book-where">/, 'a Where dropdown, only when the type has somewhere to choose');
     assert.match(book, /on\(host, 'change', '#cal-book-type', \(e, el\) => \{ B\.typeId = Number\(el\.value\); B\.loc = 0; load\(\); \}\);\s*on\(host, 'change', '#cal-book-where', \(e, el\) => \{ B\.loc = Number\(el\.value\) \|\| 0; render\(\); \}\);/);
-    assert.match(book, /location: place \? \(place\.type === 'integration' \? \{ type: 'integration', integration: place\.integration \} : \{ type: place\.type \}\) : null, record: !!\(B\.record && B\.nt === 'ok' && isMeet\(place\)\) \}\)/, 'the chosen place goes with the booking; none means the type\'s default; the Notetaker box rides along (Google Meet only, once the Notetaker said it is there)');
+    assert.match(book, /location: place \? \(place\.type === 'integration' \? \{ type: 'integration', integration: place\.integration \} : \{ type: place\.type \}\) : null, record: !!\(B\.record && B\.nt === 'ok' && isMeet\(place\)\), summary: !!\(B\.summary && B\.ai && B\.record && B\.nt === 'ok' && isMeet\(place\)\) \}\)/, 'the chosen place goes with the booking; none means the type\'s default; the Notetaker box rides along (Google Meet only, once the Notetaker said it is there)');
     for (const k of ['cal_book_where', 'cal_loc_address', 'cal_loc_address_plain', 'cal_loc_link', 'cal_loc_phone']) { assert.ok(dict.en[k], 'en.' + k); assert.ok(dict.de[k], 'de.' + k); }
     assert.equal(dict.de.cal_book_where, 'Wo');
     assert.doesNotMatch(book, /data-slot|cal-book-days/, 'the chip grid is gone');
@@ -276,8 +276,8 @@ describe('the meeting link, one click away (Part 12)', () => {
   test('every view: the button under the entry in both timelines and on the Activities page, first in the calendar detail\'s footer; the detail\'s note renders its links; a click on a link in a note follows it instead of opening the editor', () => {
     assert.match(dv, /^function dvActHtml\(s\) \{ return dvLinkify\(esc\(dvActText\(s\)\)\)\.replace\(\/\\n\/g, '<br>'\); \}$/m, 'links in every activity text');
     assert.match(dv, /^function dvLinkify\(escaped\) \{ return String\(escaped \|\| ''\)\.replace\(\/https\?:\\\/\\\/\[\^\\s<\]\*\[\^\\s<\.,;:!\?\)"'\]\/g, m => `<a href="\$\{m\}" target="_blank" rel="noopener">\$\{m\}<\/a>`\); \}$/m, 'on escaped text only, closing punctuation left outside');
-    assert.equal((dv.match(/<div class="tl-text dd-pre" data-note="\$\{a\.id\}" title="\$\{esc\(t\('click_to_edit'\)\)\}">\$\{dvActHtml\(a\.content\)\}<\/div>\$\{dvJoinRow\(a\)\}`/g) || []).length, 2, 'the deal timeline and the contact timeline');
-    assert.match(objects, /<div class="tl-text ac-text">\$\{dvActHtml\(a\.content\)\}<\/div>\$\{dvJoinRow\(a\)\}/, 'the Activities page');
+    assert.equal((dv.match(/<div class="tl-text dd-pre" data-note="\$\{a\.id\}" title="\$\{esc\(t\('click_to_edit'\)\)\}">\$\{dvActPreviewHtml\(a\.content\)\}<\/div>\$\{dvNoteMoreHtml\(a\)\}\$\{dvJoinRow\(a\)\}`/g) || []).length, 2, 'the deal timeline and the contact timeline (a long note is a preview with its button first: NOTETAKER_AI Part 9)');
+    assert.match(objects, /<div class="tl-text ac-text">\$\{dvActPreviewHtml\(a\.content\)\}<\/div>\$\{dvNoteMoreHtml\(a, 'openActivityNote'\)\}\$\{dvJoinRow\(a\)\}/, 'the Activities page');
     assert.match(cal, /<div class="cal-note">\$\{dvActHtml\(e\.content\) \|\| `<span class="muted">\$\{esc\(t\('cal_no_details'\)\)\}<\/span>`\}<\/div>/, 'the calendar detail\'s note, with its links');
     assert.match(cal, /footer: `\$\{dvJoinButton\(e, 'btn btn-primary'\)\}\$\{dvIsLiveMeeting\(e\) \?/, 'the calendar detail: the way in comes first');
     assert.equal((dv.match(/'\[data-note\]', \(e, el\) => \{ if \(e\.target\.closest\('a'\)\) return; if \(!String\(window\.getSelection\(\) \|\| ''\)\)/g) || []).length, 2, 'a click on a link is a click on a link, in both views');

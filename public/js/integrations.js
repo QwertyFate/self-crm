@@ -42,12 +42,20 @@
      calcom    loadCalcomSettings, renderCalcom, calTypeLabel, connectCalcom,
                saveCalcomEventType, refreshCalcomEventTypes, registerCalcomWebhook,
                disconnectCalcom, loadCalcomLogs, showCalMsg
+     notetaker loadNotetakerAi, ntAiName, renderNotetakerAi, pickNotetakerAi, showNtAiMsg,
+               showNtAiDetail, ntAiErrorText, saveNotetakerAi, removeNotetakerAi
      clipboard copyIntgText, copyIntgJson, fallbackCopy
 
    3. CAL.COM ("calcom" tab) — one account per workspace. The server says
       can_manage; connect, the event type, refresh and disconnect are shown to
       owners/admins only, members get the account and the event type read-only.
       The key is sent once (POST /calcom/connect) and never comes back.
+
+   4. NOTETAKER ("notetaker" tab) — the AI that writes the summary of a recorded
+      meeting, one per workspace (Claude, ChatGPT, Gemini or DeepSeek). Owners and
+      admins choose it and paste its key (PUT /notetaker/ai; the server asks the AI
+      first); members see which one is set. Hidden while the Notetaker is off;
+      "Coming soon" while it is coming soon.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 let intgData = null;
@@ -253,6 +261,7 @@ async function loadIntegrations() {
   loadEngineSettings();
   switchIntgTab(currentIntgTab);
   loadCalcomSettings();
+  loadNotetakerAi();
   const intgFieldMap = document.getElementById('intg-field-map');
   if (intgFieldMap) intgFieldMap.innerHTML = '';
 
@@ -994,4 +1003,137 @@ async function disconnectCalcom() {
   if (!res || res.error) { showCalMsg(res?.error || t('cal_err_generic'), false); return; }
   calcomData = res; renderCalcom();
   showCalMsg(t('cal_disconnected_ok'), true);
+}
+
+// ── Notetaker: the summary AI (the "notetaker" tab; NOTETAKER_AI_CHANGES Part 5) ──
+// One AI per workspace writes the summary of a recorded meeting: Claude, ChatGPT, Gemini or DeepSeek, with its API
+// key and an optional model. The server says can_manage: owners and admins choose the AI, paste the key and save (the
+// server asks the AI first, utils/llm-check.js) or remove it; members see which AI is set. The key goes to the server
+// once and never comes back, only its last four characters do, to owners and admins. The tab is hidden in the markup
+// and shown once the server answers: with the Notetaker's switch off it answers 404 and the tab stays hidden. While
+// the Notetaker is coming soon, the server answers { soon: true }, and the card shows only "Coming soon" (Part 10).
+const NT_AI_NAMES = { claude: 'Claude', openai: 'ChatGPT', gemini: 'Gemini', deepseek: 'DeepSeek' };   // brand names, the same in both languages
+let ntAiData = null;
+let ntAiPick = null;   // the AI chosen in the form: the saved one, until another is clicked
+
+async function loadNotetakerAi() {
+  const data = await api.get('/api/integrations/notetaker/ai');
+  const on = !!data && !data.error;
+  document.querySelector('#page-integrations .settings-tab[data-tab="notetaker"]')?.classList.toggle('hidden', !on);
+  if (!on) { if (currentIntgTab === 'notetaker') switchIntgTab('webhook'); return; }
+  ntAiData = data;
+  ntAiPick = data.ai?.provider || null;
+  renderNotetakerAi();
+}
+
+function ntAiName(p) { return NT_AI_NAMES[p] || String(p || ''); }
+
+// Everything follows two flags from the server, configured and can_manage, and the AI chosen in the form.
+// The hiding here is cosmetic: the routes are the real gate.
+function renderNotetakerAi() {
+  const d = ntAiData;
+  const card = document.getElementById('nt-ai-card'); if (!d || !card) return;
+  const soon = d.soon === true;   // coming soon: the note, nothing to read or set
+  const a = d.ai, manage = !soon && !!d.can_manage, set = !soon && !!d.configured && !!a;
+  const show = (id, on) => document.getElementById(id)?.classList.toggle('hidden', !on);
+  const status = document.getElementById('nt-ai-status');
+  if (status) { status.textContent = soon ? t('nt_ai_status_soon') : set ? t('nt_ai_status_set') : t('nt_ai_status_none'); status.className = 'badge' + (set ? ' badge-success' : ''); }
+  show('nt-ai-soon', soon);
+  show('nt-ai-readonly-hint', !soon && !manage);
+  show('nt-ai-none', !soon && !set);
+  show('nt-ai-current-section', set);
+  show('nt-ai-form-section', manage);
+  show('nt-ai-actions', manage);
+  show('nt-ai-remove-btn', manage && set);
+  const seg = document.getElementById('nt-ai-provider');
+  if (seg) {
+    seg.innerHTML = (Array.isArray(d.providers) ? d.providers : []).filter(p => NT_AI_NAMES[p])
+      .map(p => `<button type="button" data-provider="${esc(p)}" aria-pressed="${p === ntAiPick}">${esc(ntAiName(p))}</button>`).join('');
+    seg.onclick = e => { const b = e.target.closest('[data-provider]'); if (b) pickNotetakerAi(b.dataset.provider); };
+  }
+  // the model field shows the saved model while the saved AI is chosen; another AI starts empty (its own default)
+  const model = document.getElementById('nt-ai-model');
+  if (model) model.value = set && ntAiPick === a.provider ? (a.model || '') : '';
+  const facts_el = document.getElementById('nt-ai-facts');
+  if (!set || !facts_el) return;
+  const locale = currentLang === 'de' ? 'de-DE' : 'en-GB';
+  const when = a.saved_at ? new Date(a.saved_at).toLocaleString(locale) : '';
+  const facts = [
+    [t('nt_ai_fact_ai'),       ntAiName(a.provider)],
+    [t('nt_ai_fact_model'),    a.model || t('nt_ai_model_default')],
+    ...(manage && a.key_hint ? [[t('nt_ai_fact_key'), '…' + a.key_hint]] : []),
+    [t('nt_ai_fact_saved_by'), a.saved_by_name ? tf('nt_ai_saved_by_on', { name: a.saved_by_name, date: when }) : when],
+  ];
+  facts_el.innerHTML = `<table class="table compact"><tbody>${facts.map(([k, v]) => `<tr><td class="strong">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>`;
+}
+
+function pickNotetakerAi(p) {
+  if (!ntAiData || !NT_AI_NAMES[p]) return;
+  ntAiPick = p;
+  renderNotetakerAi();
+  document.getElementById('nt-ai-key')?.focus();
+}
+
+function showNtAiMsg(text, ok) {
+  const el = document.getElementById('nt-ai-msg'); if (!el) return;
+  el.textContent = text;
+  el.className   = 'workspace-name-msg ' + (ok ? 'success' : 'error');
+  setTimeout(() => el.classList.add('hidden'), ok ? 2500 : 8000);
+}
+
+// The AI's own words under the buttons (they come from the AI, so they stay in its language); empty hides the line.
+function showNtAiDetail(text) {
+  const el = document.getElementById('nt-ai-detail'); if (!el) return;
+  el.textContent = text ? tf('nt_ai_detail', { detail: text }) : '';
+  el.classList.toggle('hidden', !text);
+}
+
+// What a refused save says, by the server's reason, in the page's language.
+function ntAiErrorText(res, provider, model) {
+  const ai = ntAiName(provider);
+  const byReason = {
+    provider:    t('nt_ai_pick_required'),
+    key_shape:   t('nt_ai_err_key_shape'),
+    model_shape: t('nt_ai_err_model_shape'),
+    key:         tf('nt_ai_err_key', { ai }),
+    model:       tf('nt_ai_err_model', { ai, model }),
+    unreachable: tf('nt_ai_err_unreachable', { ai }),
+    refused:     tf('nt_ai_err_refused', { ai }),
+  };
+  return byReason[res?.reason] || t('nt_ai_err_generic');
+}
+
+// The key goes to the server once; the field is emptied whatever the answer. The server asks the AI before it saves,
+// which can take a few seconds, so the button says so meanwhile.
+async function saveNotetakerAi(btn) {
+  const input = document.getElementById('nt-ai-key'), modelEl = document.getElementById('nt-ai-model');
+  const provider = ntAiPick;
+  if (!provider) { showNtAiMsg(t('nt_ai_pick_required'), false); return; }
+  const api_key = input ? input.value.trim() : '';
+  if (!api_key) { showNtAiMsg(t('nt_ai_key_required'), false); input?.focus(); return; }
+  const model = modelEl ? modelEl.value.trim() : '';
+  showNtAiDetail('');
+  if (btn) { btn.disabled = true; btn.textContent = t('nt_ai_checking'); }
+  try {
+    const res = await api.put('/api/integrations/notetaker/ai', { provider, api_key, model });
+    if (input) input.value = '';
+    if (!res || res.error) {
+      showNtAiMsg(ntAiErrorText(res, provider, model), false);
+      if (!['model', 'unreachable', 'provider', 'key_shape', 'model_shape'].includes(res?.reason)) showNtAiDetail(res?.error || '');   // a refused key or a busy AI: its own words help
+      return;
+    }
+    ntAiData = res; ntAiPick = res.ai?.provider || provider; renderNotetakerAi();
+    showNtAiMsg(tf('nt_ai_saved_ok', { ai: ntAiName(ntAiPick) }), true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t('nt_ai_btn_save'); }
+  }
+}
+
+async function removeNotetakerAi() {
+  const ok = await ui.confirm({ title: t('nt_ai_btn_remove'), message: t('nt_ai_confirm_remove'), confirmLabel: t('nt_ai_btn_remove'), danger: true });
+  if (!ok) return;
+  const res = await api.del('/api/integrations/notetaker/ai');
+  if (!res || res.error) { showNtAiMsg(t('nt_ai_err_generic'), false); return; }
+  ntAiData = res; ntAiPick = null; showNtAiDetail(''); renderNotetakerAi();
+  showNtAiMsg(t('nt_ai_removed_ok'), true);
 }

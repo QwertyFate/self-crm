@@ -1114,6 +1114,7 @@
           <button class="settings-tab" data-tab="deliveries" onclick="switchIntgTab('deliveries')" data-i18n="intg_tab_deliveries">Deliveries</button>
           <div class="settings-tab-sep" aria-hidden="true"></div>
           <button class="settings-tab" data-tab="calcom"     onclick="switchIntgTab('calcom')"     data-i18n="intg_tab_calcom">Cal.com</button>
+          <button class="settings-tab hidden" data-tab="notetaker" onclick="switchIntgTab('notetaker')" data-i18n="intg_tab_notetaker">Notetaker</button>
         </nav>
 
         <div class="settings-tab-body">
@@ -1400,6 +1401,63 @@
                 <button class="btn btn-sm btn-danger hidden" id="cal-disconnect-btn" onclick="disconnectCalcom()" data-i18n="cal_btn_disconnect">Disconnect</button>
                 <span id="cal-msg" class="workspace-name-msg hidden"></span>
               </div>
+            </div>
+          </div>
+
+            </div>
+          </div>
+
+          <!-- ── Notetaker: the summary AI, one per workspace (routes/integrations.js /notetaker/ai, utils/llm-check.js). Owners/admins set it; everyone sees which one. The tab shows only while the Notetaker is on; while it is coming soon, the card shows only #nt-ai-soon. ── -->
+          <div id="intg-pane-notetaker" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="intg_pane_notetaker">Notetaker</h2>
+              <p class="settings-tab-hint" data-i18n="intg_pane_notetaker_hint">The bot that records a Google Meet booked through Cal.com. After the meeting it puts a note on the deal: the transcript, or a summary written by the AI set here.</p>
+            </div>
+            <div class="intg-stack">
+
+          <div class="settings-card" id="nt-ai-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="nt_ai_title">Summary AI</h2>
+              <span id="nt-ai-status" class="badge" data-i18n="nt_ai_status_none">Not set</span>
+            </div>
+            <p class="settings-hint" data-i18n="nt_ai_hint">One AI for the whole workspace writes the summaries.</p>
+            <p class="settings-hint hidden" id="nt-ai-readonly-hint" data-i18n="nt_ai_readonly_hint">Only owners and admins can change the summary AI.</p>
+            <div class="settings-card-body">
+              <p class="empty-inline hidden" id="nt-ai-soon" data-i18n="nt_ai_soon">Coming soon: Notetaker is still being tested. The summary AI can be set here once Notetaker is available.</p>
+              <p class="empty-inline hidden" id="nt-ai-none" data-i18n="nt_ai_none">No AI is set. Meeting notes are the transcript.</p>
+              <div class="intg-section hidden" id="nt-ai-current-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="nt_ai_current_label">Current AI</h3>
+                </div>
+                <div id="nt-ai-facts"></div>
+              </div>
+              <div class="intg-section hidden" id="nt-ai-form-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="nt_ai_form_label">Set the AI</h3>
+                  <p class="intg-section-hint" data-i18n="nt_ai_form_hint">Only one AI writes the summaries; saving another replaces it.</p>
+                </div>
+                <div class="intg-fields">
+                  <div class="intg-field">
+                    <label id="nt-ai-provider-label" data-i18n="nt_ai_provider_label">AI</label>
+                    <div class="seg" id="nt-ai-provider" role="group" aria-labelledby="nt-ai-provider-label"></div>
+                  </div>
+                  <div class="intg-field">
+                    <label for="nt-ai-key" data-i18n="nt_ai_key_label">API key</label>
+                    <input type="text" id="nt-ai-key" class="intg-url-input intg-secret-input" autocomplete="off" spellcheck="false" placeholder="Paste the API key" data-i18n-ph="nt_ai_key_ph" />
+                  </div>
+                  <div class="intg-field">
+                    <label for="nt-ai-model" data-i18n="nt_ai_model_label">Model (optional)</label>
+                    <input type="text" id="nt-ai-model" class="form-control" autocomplete="off" spellcheck="false" maxlength="100" placeholder="Empty: the Notetaker's default" data-i18n-ph="nt_ai_model_ph" />
+                    <p class="help" data-i18n="nt_ai_model_hint">The model name as the AI spells it.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-card-actions hidden" id="nt-ai-actions">
+                <button class="btn btn-primary btn-sm" id="nt-ai-save-btn" onclick="saveNotetakerAi(this)" data-i18n="nt_ai_btn_save">Check and save</button>
+                <button class="btn btn-sm btn-danger hidden" id="nt-ai-remove-btn" onclick="removeNotetakerAi()" data-i18n="nt_ai_btn_remove">Remove</button>
+                <span id="nt-ai-msg" class="workspace-name-msg hidden"></span>
+              </div>
+              <p class="help hidden" id="nt-ai-detail"></p>
             </div>
           </div>
 

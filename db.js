@@ -726,6 +726,27 @@ async function initDb() {
   await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS callback_token   TEXT UNIQUE`);
   await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS note_activity_id INTEGER`);
   await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS finished_at      TIMESTAMPTZ`);
+  // The Notetaker's summary AI (NOTETAKER_AI_CHANGES Part 1, 2026-11-05): ONE per workspace, so only one can ever be
+  // used. provider: the AI, by the Notetaker's name for it (below); its API key sealed like the Cal.com key (utils/calcom.js);
+  // key_hint the key's last four characters, so an owner can tell which key is saved. Without a row a meeting's note is
+  // its transcript; with one, the booking dialog offers a summary (sent to the Notetaker with the booking).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_notetaker_ai (
+      id             SERIAL PRIMARY KEY,
+      workspace_id   INTEGER NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+      provider       TEXT NOT NULL,
+      api_key_sealed TEXT NOT NULL,
+      key_hint       TEXT,
+      saved_by       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      saved_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  // Synced with the Notetaker's booking field llm { provider, api_key, model } (Part 2): provider is its name for the AI
+  // (claude | openai | gemini | deepseek); model is optional, NULL = the Notetaker's own default for that AI.
+  await pool.query(`ALTER TABLE workspace_notetaker_ai ADD COLUMN IF NOT EXISTS model TEXT`);
+  // The booking dialog's summary box (Part 6): ticked, the meeting asks for a summary by the saved AI; false (the
+  // default, and every row from before) means the note is the transcript.
+  await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS summary BOOLEAN NOT NULL DEFAULT false`);
   // Email sync is on hold (2026-10-27): its table is NOT created, so no database (production included) gets it
   // until the feature is built. The definition stays here, commented; remove the /* */ to create it again
   // (with EMAIL_SYNC_ON in server.js and MAILBOX_SHOWN in public/js/mailbox.js).

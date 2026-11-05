@@ -9,7 +9,12 @@
      Content-Type: application/json
      Authorization: Bearer <NOTETAKER_CRM_TOKEN>   only when that is set
      { meeting_url, callback_url, join_at, external_id, metadata,
-       bot_name, max_minutes, include_notes, chat_message }
+       bot_name, max_minutes, include_notes, llm?, chat_message }
+
+   include_notes is true only with llm { provider, api_key, model? }: the meeting
+   was booked with the summary box ticked and the workspace has a summary AI
+   saved (NOTETAKER_AI_CHANGES Part 7). Otherwise it is false, and the note on
+   the deal is the transcript.
 
    join_at is the meeting's start as the host's wall clock WITH its offset
    ("2026-10-21T14:00:00+02:00"): the service refuses a time without a zone.
@@ -88,8 +93,13 @@ function isoWithOffset(iso, timeZone) {
 function externalIdFor(activityId) { return `crm-meeting-${activityId}`; }
 
 // The service's payload: the meeting, where to report back, when, our id and metadata, and the bot's defaults.
-function payload({ meetingUrl, joinAt, externalId, metadata, language, callbackToken } = {}, cfg = config()) {
-  return {
+// llm (NOTETAKER_AI_CHANGES Part 7): { provider, apiKey, model } when the meeting asked for a summary and the workspace
+// has an AI saved. Only then is include_notes true, with llm { provider, api_key, model? } beside it (model left out
+// when none is set: the Notetaker's default for that AI). Without it include_notes is false and the note is the
+// transcript; the Notetaker never falls back to a key of its own. The key goes here only, never into metadata, which
+// the Notetaker echoes back in every result.
+function payload({ meetingUrl, joinAt, externalId, metadata, language, callbackToken, llm = null } = {}, cfg = config()) {
+  const body = {
     meeting_url: meetingUrl,
     callback_url: callbackUrlFor(callbackToken, cfg),
     join_at: joinAt,
@@ -97,9 +107,11 @@ function payload({ meetingUrl, joinAt, externalId, metadata, language, callbackT
     metadata: metadata || {},
     bot_name: BOT_NAME,
     max_minutes: MAX_MINUTES,
-    include_notes: true,
+    include_notes: !!llm,
     chat_message: CHAT[language === 'en' ? 'en' : 'de'],
   };
+  if (llm) body.llm = { provider: llm.provider, api_key: llm.apiKey, ...(llm.model ? { model: llm.model } : {}) };
+  return body;
 }
 
 // The reason in an error body: a string, or a list of problems ({ msg }), or an object, kept short.
@@ -183,23 +195,30 @@ function verifySignature(raw, timestamp, signature, secret, nowMs = Date.now()) 
   return given.length === expected.length && crypto.timingSafeEqual(given, expected);
 }
 
-// The words around the notes, in the notes' language (German for German notes, else English); without notes, in the
-// booking's language. The notes themselves are Claude's, in the language the meeting was held in.
+// The words around the notes, in the notes' language (German for German notes, else English); around a transcript, in
+// the transcript's (the result's language); with neither, in the booking's language. The notes themselves are the AI's,
+// in the language the meeting was held in.
 const NOTE_WORDS = {
   de: { key_points: 'Wichtige Punkte', decisions: 'Entscheidungen', action_items: 'Aufgaben', open_questions: 'Offene Fragen', due: 'bis',
         no_notes: 'Notetaker hat das Meeting aufgenommen, aber keine Notizen geschrieben.', failed: 'Notetaker konnte das Meeting nicht aufnehmen.',
-        reason: 'Grund', hint: 'Hinweis', unknown: 'unbekannt' },
+        reason: 'Grund', hint: 'Hinweis', unknown: 'unbekannt',
+        transcript: 'Transkript', no_summary: 'Keine Zusammenfassung', cut: 'Transkript gekürzt' },
   en: { key_points: 'Key points', decisions: 'Decisions', action_items: 'Action items', open_questions: 'Open questions', due: 'due',
         no_notes: 'Notetaker recorded the meeting but wrote no notes.', failed: 'Notetaker could not record the meeting.',
-        reason: 'Reason', hint: 'Note', unknown: 'unknown' },
+        reason: 'Reason', hint: 'Note', unknown: 'unknown',
+        transcript: 'Transcript', no_summary: 'No summary', cut: 'transcript shortened' },
 };
-const MAX_NOTE = 20000, MAX_ITEMS = 50;
+// A transcript note has its own, larger cap (NOTETAKER_AI_CHANGES Part 8): 120 minutes of talk with a speaker name on
+// every line is about 130,000 characters, so a whole meeting fits; anything longer is cut and says so.
+const MAX_NOTE = 20000, MAX_ITEMS = 50, MAX_TRANSCRIPT = 200000;
 const text = (v, max = 500) => (typeof v === 'string' || typeof v === 'number' ? String(v).replace(/\s+/g, ' ').trim().slice(0, max) : '');
 const list = v => (Array.isArray(v) ? v.slice(0, MAX_ITEMS) : []);
 
 // The note the CRM writes from a result: { kind: completed | failed | ignored, content, title, reason }.
-// completed: the notes' title, summary and lists (an empty list is left out), or why there are none; a partial
-// recording says so at the end. failed: why there is no recording. Anything else is ignored.
+// completed: the notes' title, summary and lists (an empty list is left out); without notes, the transcript (Part 8:
+// the default since the summary became a choice at booking, and what is left when a summary was asked for but could
+// not be written, whose reason then comes first); with neither, why. A partial recording says so at the end.
+// failed: why there is no recording. Anything else is ignored.
 function resultNote(body, fallbackLang) {
   const b = body && typeof body === 'object' ? body : {};
   const errors = b.errors && typeof b.errors === 'object' ? b.errors : {};
@@ -229,6 +248,15 @@ function resultNote(body, fallbackLang) {
     }
   }
   const parts = [title, summary, ...sections].filter(Boolean);
+  const transcript = !parts.length && b.transcript && typeof b.transcript === 'object' && typeof b.transcript.text === 'string'
+    ? b.transcript.text.replace(/\r\n?/g, '\n').trim() : '';   // its lines kept as they are: one speaker turn each
+  if (transcript) {
+    const T = NOTE_WORDS[typeof b.language === 'string' && b.language ? (/^de/i.test(b.language) ? 'de' : 'en') : fallback];
+    const noSummary = text(errors.notes, 300);   // a summary was asked for and could not be written
+    const body = transcript.length > MAX_TRANSCRIPT ? `${transcript.slice(0, MAX_TRANSCRIPT)}\n… (${T.cut})` : transcript;
+    const out = [noSummary ? `${T.no_summary}: ${noSummary}` : '', `${T.transcript}\n${body}`, partial ? `${T.hint}: ${partial}` : ''].filter(Boolean);
+    return { kind: 'completed', title: null, reason: noSummary || null, content: out.join('\n\n') };
+  }
   if (!parts.length) {
     const reason = text(errors.notes, 300) || text(errors.transcript, 300) || L.unknown;
     parts.push(`${L.no_notes}\n${L.reason}: ${reason}`);

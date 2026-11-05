@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="de" class="lt-nojs">
+<head>
+<script>(function (h) { var c = h.classList; c.remove('lt-nojs'); c.add('lt-js');
+  try { if (matchMedia('(prefers-reduced-motion: no-preference)').matches) c.add('lt-motion'); } catch (e) {}
+  window.ltSafe = setTimeout(function () { if (!window.ltBooted) c.remove('lt-motion'); }, 3000); })(document.documentElement);</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A1220">
+  <title>Upgrads CRM: Von der Anfrage bis zur Übergabe</title>
+  <meta name="description" data-w-meta="meta_desc" content="Upgrads CRM für B2B-Vertriebsteams: Anfrage, Termin und Notiz landen ohne Abtippen im Deal. Nur auf Einladung.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" data-w-meta="og_title" content="Upgrads CRM: Von der Anfrage bis zur Übergabe.">
+  <meta property="og:description" data-w-meta="og_desc" content="Für B2B-Vertriebsteams: Anfrage, Termin und Notiz landen ohne Abtippen im Deal.">
+  <meta property="og:image" content="/images/logo.png">
+  <link rel="icon" href="/images/logo.png" type="image/png">
+  <link rel="preload" href="/fonts/SchibstedGrotesk.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/landing-two.css">
+  <script src="/js/landing-two.js" defer></script>
+</head>
+<body class="lt">
+<a class="lt-skip" href="#main" data-w="skip">Zum Inhalt springen</a>
+<!-- icons for the record and its sources, stroke on currentColor -->
+<svg class="lt-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M8 3v4M16 3v4M3.5 10h17"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 4.5h10l4 4v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1z"/><path d="M15 4.5v4h4M8 13h8M8 16.5h5"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m4 7 8 6 8-6"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6.6 3.5h2.6l1.4 4.1-2 1.3a11.5 11.5 0 0 0 6.5 6.5l1.3-2 4.1 1.4v2.6a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2z"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6.5" width="12.5" height="11" rx="2"/><path d="m15.5 10.5 5.5-3v9l-5.5-3"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4.5h5.5V10M19.5 4.5 11 13M18 14v4.5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1H10"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5.5M12 16.4v.1"/></symbol>
+</svg>
+
+<header class="lt-top lt-wrap">
+  <span class="lt-logo"><img src="/images/logo.png" width="1000" height="341" alt="Upgrads CRM" data-w-alt="brand"></span>
+  <div class="lt-top-r">
+    <button type="button" class="lt-lang" id="lt-lang" lang="en" aria-label="English" data-w="lang">EN</button>
+    <a class="lt-link" href="/" data-w="login">Anmelden</a>
+    <a class="lt-btn lt-btn-s lt-top-cta" href="#anfrage" data-w="cta">Zugang anfragen</a>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
+  <section class="lt-hero" aria-labelledby="lt-h1">
+    <div class="lt-wrap">
+      <h1 class="lt-h1" id="lt-h1"><span class="lt-ln"><span data-w="h1_a">Von der Anfrage</span></span> <span class="lt-ln"><span data-w="h1_b">bis zur Übergabe.</span></span></h1>
+      <p class="lt-lede" data-w="lede">Für B2B-Vertriebsteams: Anfrage, Termin und Notiz landen ohne Abtippen im Deal.</p>
+      <div class="lt-hero-act">
+        <a class="lt-btn" href="#anfrage" data-w="cta">Zugang anfragen</a>
+        <p class="lt-fact" data-w="fact">Nur auf Einladung. Bei Upgrads täglich im Einsatz.</p>
+      </div>
+    </div>
+    <!-- the promise: the deal record as it ends, filled in; a plane that straightens as the page scrolls -->
+    <figure class="lt-plane lt-wrap">
+      <div class="lt-plane-in" aria-hidden="true">
+      <div class="lt-rec">
+        <div class="lt-r-head">
+          <div class="lt-r-who">
+            <div class="lt-r-title"><span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.28;--b:0.34;--w:9em"></i><span class="lt-t lt-one lt-x k1 fx-r" style="--a:0.28;--b:0.36" data-w="v_title">Jonas Brandt</span></span></div>
+            <div class="lt-r-meta"><span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.28;--b:0.36;--w:7em"></i><span class="lt-r-co lt-one lt-x k1 fx-r" style="--a:0.28;--b:0.36" data-w="v_company">Lotrecht Messebau</span></span><span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.3;--b:0.36;--w:3.9em;height:1.3em;border-radius:.65em"></i><span class="lt-pill lt-x k1 fx-r lt-sw g5" style="--a:0.3;--b:0.36"><i></i><span class="lt-fl"><span class="lt-pn lt-sw g1" data-w="st_1">Neu</span><span class="lt-pn lt-sw g2" data-w="st_2">Kontaktiert</span><span class="lt-pn lt-sw g3" data-w="st_3">Angebot</span><span class="lt-pn lt-sw g4" data-w="st_4">Verhandlung</span><span class="lt-pn lt-sw g5" data-w="st_5">Gewonnen</span></span></span></span></div>
+          </div>
+          <div class="lt-r-val">
+            <span class="lt-r-val-l"><span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.28;--b:0.36;--w:4em"></i><span class="lt-x k1 fx-o" style="--a:0.28;--b:0.36" data-w="v_value">Deal-Wert</span></span></span>
+            <span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.28;--b:0.36;--w:4.4em;height:.9em"></i><span class="lt-x k1 fx-o" style="--a:0.28;--b:0.36"><span class="lt-amt lt-mut lt-x k4 fx-oi" style="--a:0.03;--b:0.09">–</span></span><span class="lt-amt lt-x k4 fx-r" style="--a:0.03;--b:0.09" data-w="v_amount">8.900 €</span></span>
+          </div>
+        </div>
+        <div class="lt-r-bar"><span class="lt-seg lt-sw g1"><span class="lt-x k1 fx-o" style="--a:0.3;--b:0.36" data-w="st_1">Neu</span></span><span class="lt-seg lt-sw g2"><span class="lt-x k1 fx-o" style="--a:0.3;--b:0.36" data-w="st_2">Kontaktiert</span></span><span class="lt-seg lt-sw g3"><span class="lt-x k1 fx-o" style="--a:0.3;--b:0.36" data-w="st_3">Angebot</span></span><span class="lt-seg lt-sw g4"><span class="lt-x k1 fx-o" style="--a:0.3;--b:0.36" data-w="st_4">Verhandlung</span></span><span class="lt-seg lt-sw g5"><span class="lt-x k1 fx-o" style="--a:0.3;--b:0.36" data-w="st_5">Gewonnen</span></span></div>
+        <div class="lt-r-body">
+          <div class="lt-r-main">
+            <div class="lt-r-h"><span data-w="v_activity">Aktivität</span></div>
+            <div class="lt-tl">
+              <i class="lt-tl-link lt-x k3 fx-o" style="--a:0.58;--b:0.64"></i>
+              <div class="lt-it lt-it-n">
+                <div class="lt-it-sk lt-x k3 fx-oi" style="--a:0.56;--b:0.62"><i></i><span><b class="lt-sk" style="--w:5em"></b><b class="lt-sk" style="--w:10em"></b></span></div>
+                <div class="lt-it-in lt-x k3 fx-r" style="--a:0.58;--b:0.64">
+                  <span class="lt-ic"><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-note"/></svg></span>
+                  <div class="lt-it-main">
+                    <div class="lt-it-head"><b data-w="v_note">Notiz</b><span class="lt-mut lt-one" data-w="v_by_nt">von Notetaker</span></div>
+                    <div class="lt-it-txt lt-b lt-x k3 fx-w" style="--a:0.62;--b:0.72"><span class="lt-one" data-w="v_n1">Messestand, 40 m², März</span></div>
+                    <div class="lt-it-txt lt-x k3 fx-w" style="--a:0.7;--b:0.8"><span class="lt-one" data-w="v_n2">Budget 9.000 €</span></div>
+                    <div class="lt-it-txt lt-x k3 fx-w" style="--a:0.78;--b:0.88"><span class="lt-one" data-w="v_n3">Angebot bis Freitag</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="lt-it lt-it-m">
+                <div class="lt-it-sk lt-x k2 fx-oi" style="--a:0.62;--b:0.7"><i></i><span><b class="lt-sk" style="--w:5em"></b><b class="lt-sk" style="--w:11em"></b></span></div>
+                <div class="lt-it-in lt-x k2 fx-r" style="--a:0.64;--b:0.72">
+                  <span class="lt-ic"><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-cal"/></svg></span>
+                  <div class="lt-it-main">
+                    <div class="lt-it-head"><b data-w="v_meeting">Termin</b></div>
+                    <div class="lt-it-txt lt-x k2 fx-w" style="--a:0.68;--b:0.78"><span class="lt-one" data-w="v_meet_title">Erstgespräch</span></div>
+                    <span class="lt-join lt-x k2 fx-o" style="--a:0.76;--b:0.84"><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-ext"/></svg><span data-w="v_join">Google Meet beitreten</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="lt-r-side">
+            <div>
+              <div class="lt-r-h"><span data-w="v_contact">Kontakt</span></div>
+              <div class="lt-person">
+                <span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.38;--b:0.46;--w:2.4em;height:2.4em;border-radius:50%"></i><span class="lt-av lt-x k1 fx-o" style="--a:0.38;--b:0.46"><span data-w="v_initials">JB</span></span></span>
+                <div class="lt-pw">
+                  <span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.38;--b:0.46;--w:6em"></i><span class="lt-pname lt-one lt-x k1 fx-r" style="--a:0.38;--b:0.46" data-w="v_title">Jonas Brandt</span></span>
+                  <span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.44;--b:0.52;--w:7.5em"></i><span class="lt-pco lt-one lt-x k1 fx-r" style="--a:0.44;--b:0.52" data-w="v_company">Lotrecht Messebau</span></span>
+                </div>
+              </div>
+              <div class="lt-cl"><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-mail"/></svg><span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.5;--b:0.58;--w:8em"></i><span class="lt-one lt-x k1 fx-r" style="--a:0.5;--b:0.58" data-w="v_email">jb@lotrecht.example</span></span></div>
+              <div class="lt-cl lt-x k1 fx-r" style="--a:0.72;--b:0.8"><i class="lt-tint lt-x k1 fx-o lt-xo" style="--a:0.74;--b:0.8;--a2:.88;--b2:.98"></i><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-phone"/></svg><span class="lt-fl"><span class="lt-one" data-w="v_phone">+49 30 23125 417</span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- the Engine's onboarding is not part of the deal: its own panel, as on the stage -->
+      <div class="lt-onb">
+        <div class="lt-onb-h"><span data-w="v_onb">Onboarding</span></div>
+        <div class="lt-onb-track">
+          <i class="lt-onb-rail"></i><i class="lt-onb-rail-on lt-x k4 fx-w lt-lin" style="--a:0.56;--b:0.91"></i>
+          <div class="lt-onb-step lt-x k4" style="--a:0.56;--b:0.61"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_1">Formular versendet</span></div>
+          <div class="lt-onb-step lt-x k4" style="--a:0.63;--b:0.68"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_2">Formular ausgefüllt</span></div>
+          <div class="lt-onb-step lt-x k4" style="--a:0.7;--b:0.75"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_3">Termin gebucht</span></div>
+          <div class="lt-onb-step lt-x k4" style="--a:0.77;--b:0.82"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_4">Call erfolgt</span></div>
+          <div class="lt-onb-step lt-x k4" style="--a:0.84;--b:0.89"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_5">Briefing fertig</span></div>
+          <div class="lt-onb-step lt-x k4" style="--a:0.91;--b:0.96"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_6">Abgeschlossen</span></div>
+        </div>
+      </div>
+      </div>
+      <figcaption class="lt-sr" data-w="hero_alt">Bild eines Deals in Upgrads CRM, ganz ausgefüllt: Jonas Brandt von Lotrecht Messebau, Deal-Wert 8.900 €, Phase „Gewonnen“. In der Aktivität eine Notiz von Notetaker und ein über Cal.com gebuchter Termin, daneben der Kontakt mit E-Mail und Telefon; darunter der Onboarding-Fortschritt der Upgrads Engine bis „Abgeschlossen“.</figcaption>
+    </figure>
+  </section>
+
+  <!-- the story: the same record, empty, fills in four chapters. Wide with motion: the stage sticks beside the words.
+       Otherwise landing-two.js puts a plate under each chapter (that chapter's source and the part it fills). -->
+  <section class="lt-story">
+    <div class="lt-wrap lt-story-grid">
+      <ol class="lt-steps" aria-label="Ein Deal, Schritt für Schritt" data-w-aria="steps_aria">
+        <li class="lt-step" data-k="1">
+          <div class="lt-step-in">
+            <h2 class="lt-h2" data-w="s1_h">Aus der Anfrage wird ein Deal.</h2>
+            <p class="lt-p" data-w="s1_p">Per Webhook, etwa über Make, Zapier oder n8n. Bekannte E-Mail: Der Kontakt wird ergänzt, nie geleert.</p>
+            <p class="lt-sr" data-w="s1_alt">Bildfolge: Ein Website-Formular schickt die Anfrage per Webhook, möglich auch über Make, Zapier oder n8n. Mit „Deal automatisch anlegen“ entsteht der Deal „Jonas Brandt“ in der ersten Phase „Neu“, der Kontakt bekommt Name, Unternehmen und E-Mail. Eine zweite Anfrage mit derselben E-Mail und leerem Firmenfeld ergänzt beim Kontakt die Telefonnummer; das Unternehmen bleibt stehen.</p>
+          </div>
+        </li>
+        <li class="lt-step" data-k="2">
+          <div class="lt-step-in">
+            <h2 class="lt-h2" data-w="s2_h">Der Termin landet im Deal.</h2>
+            <p class="lt-p" data-w="s2_p">Über Cal.com im CRM gebucht, gegen den eigenen Kalender geprüft.</p>
+            <p class="lt-sr" data-w="s2_alt">Bildfolge: Im Buchungsdialog des CRM ist 10:00 Uhr gewählt, und das CRM meldet einen Konflikt mit einem Eintrag im eigenen Kalender. Gewählt wird 11:00 Uhr, gebucht über Cal.com mit Google Meet, und der Termin steht in der Aktivität des Deals.</p>
+          </div>
+        </li>
+        <li class="lt-step" data-k="3">
+          <div class="lt-step-in">
+            <h2 class="lt-h2" data-w="s3_h">Notetaker schreibt mit.</h2>
+            <p class="lt-p" data-w="s3_p">Google Meet im CRM gebucht, Häkchen gesetzt: Die fertige Notiz landet im Deal. Bis 120 Minuten.</p>
+            <p class="lt-sr" data-w="s3_alt">Bildfolge: Beim Buchen ist „Mit Notetaker aufzeichnen“ angehakt. Notetaker nimmt das Google Meet auf; danach steht die fertige Notiz von Notetaker in der Aktivität des Deals, mit Messestand, Budget und der nächsten Aufgabe.</p>
+          </div>
+        </li>
+        <li class="lt-step" data-k="4">
+          <div class="lt-step-in">
+            <h2 class="lt-h2" data-w="s4_h">Gewonnen. Dann die Übergabe.</h2>
+            <p class="lt-p" data-w="s4_p">Optional übernimmt die Upgrads Engine das Onboarding, der Fortschritt steht im CRM.</p>
+            <p class="lt-sr" data-w="s4_alt">Bildfolge: Der Deal-Wert steht bei 8.900 €, der Deal wandert Phase für Phase bis „Gewonnen“. „Gewonnen“ ist die Auslöser-Phase der optionalen Upgrads Engine; ihre Onboarding-Schritte vom versendeten Formular bis „Abgeschlossen“ werden nacheinander abgehakt.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="lt-stage-col">
+        <div class="lt-stage" aria-hidden="true">
+          <div class="lt-rule"><b></b><i style="--th:0"></i><i style="--th:.25"></i><i style="--th:.5"></i><i style="--th:.75"></i></div>
+          <div class="lt-stage-box">
+            <div class="lt-canvas">
+        <div class="lt-src lt-pan f1" style="top:.2em">
+          <div class="lt-card lt-form-card">
+            <div class="lt-cardh"><span class="lt-fl lt-ct"><span class="lt-x k1 fx-oi" style="--a:0.62;--b:0.68" data-w="v_form">Anfrage</span><span class="lt-x k1 fx-o" style="--a:0.62;--b:0.68" data-w="v_form2">Zweite Anfrage</span></span></div>
+            <div class="lt-ff"><span class="lt-ff-l"><span class="lt-fl"><span data-w="v_f_name">Name</span></span></span><span class="lt-ff-v"><span class="lt-fl"><span data-w="v_title">Jonas Brandt</span></span></span></div>
+            <div class="lt-ff"><span class="lt-ff-l"><span class="lt-fl"><span data-w="v_f_company">Firma</span></span></span><span class="lt-ff-v"><span class="lt-fl"><span class="lt-x k1 fx-oi" style="--a:0.62;--b:0.68" data-w="v_company">Lotrecht Messebau</span></span></span></div>
+            <div class="lt-ff"><span class="lt-ff-l"><span class="lt-fl"><span data-w="v_f_email">E-Mail</span></span></span><span class="lt-ff-v"><i class="lt-ff-match lt-x k1 fx-o" style="--a:0.62;--b:0.68"></i><span class="lt-fl"><span data-w="v_email">jb@lotrecht.example</span></span></span></div>
+            <div class="lt-ff"><span class="lt-ff-l"><span class="lt-fl"><span class="lt-x k1 fx-oi" style="--a:0.62;--b:0.68" data-w="v_f_msg">Nachricht</span><span class="lt-x k1 fx-o" style="--a:0.62;--b:0.68" data-w="v_f_phone">Telefon</span></span></span><span class="lt-ff-v"><span class="lt-fl"><span class="lt-x k1 fx-oi" style="--a:0.62;--b:0.68" data-w="v_msg">Messestand im März</span><span class="lt-x k1 fx-o" style="--a:0.62;--b:0.68" data-w="v_phone">+49 30 23125 417</span></span></span></div>
+          </div>
+          <i class="lt-vline lt-x k1 fx-wd" style="--a:0.06;--b:0.12"></i>
+          <div class="lt-card lt-node-card">
+            <div class="lt-cardh"><span class="lt-ct" data-w="v_webhook">Webhook</span></div>
+            <div class="lt-chips"><span class="lt-chip"><span data-w="v_make">Make</span></span><span class="lt-chip"><span data-w="v_zapier">Zapier</span></span><span class="lt-chip"><span data-w="v_n8n">n8n</span></span></div>
+            <div class="lt-swr"><span class="lt-switch lt-x k1" style="--a:0.18;--b:0.25"><i></i></span><span data-w="v_autodeal">Deal automatisch anlegen</span></div>
+          </div>
+        </div>
+        <div class="lt-src lt-pan f2" style="top:6em">
+          <div class="lt-card lt-book">
+            <div class="lt-cardh"><span class="lt-ct" data-w="v_book">Termin buchen</span></div>
+            <div class="lt-sel"><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-video"/></svg><span data-w="v_gmeet">Google Meet</span><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-chev"/></svg></div>
+            <div class="lt-slots">
+              <div class="lt-slot"><span data-w="v_t1">10:00</span><span class="lt-slot-on lt-x k2 fx-o lt-xo" style="--a:0.1;--b:0.16;--a2:.36;--b2:.42"><span data-w="v_t1">10:00</span></span></div>
+              <div class="lt-slot"><span data-w="v_t2">11:00</span><span class="lt-slot-on lt-x k2 fx-o" style="--a:0.38;--b:0.44"><span data-w="v_t2">11:00</span></span></div>
+              <div class="lt-slot"><span data-w="v_t3">14:00</span></div>
+            </div>
+            <div class="lt-msg">
+              <div class="lt-conf lt-x k2 fx-o lt-xo" style="--a:0.18;--b:0.26;--a2:.36;--b2:.42"><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-alert"/></svg><span data-w="v_conflict">Konflikt: Teamrunde</span></div>
+              <div class="lt-sum lt-x k2 fx-o" style="--a:0.42;--b:0.48"><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-cal"/></svg><span data-w="v_summary">Do., 12. Nov., 11:00</span></div>
+            </div>
+            <div class="lt-bf"><span class="lt-go"><span class="lt-go-off"><span data-w="v_go">Buchen</span></span><span class="lt-go-on lt-x k2 fx-o lt-xo" style="--a:0.2;--b:0.26;--a2:.38;--b2:.44"><span data-w="v_go_anyway">Trotzdem buchen</span></span><span class="lt-go-on lt-x k2 fx-o" style="--a:0.4;--b:0.46"><span data-w="v_go">Buchen</span></span></span></div>
+          </div>
+        </div>
+        <div class="lt-src lt-pan f3" style="top:9.15em">
+          <div class="lt-card lt-nt">
+            <div class="lt-cbr"><span class="lt-cb lt-x k3" style="--a:0.1;--b:0.16"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:11.5px" d="M4 8.5l2.6 2.5L12 5.5"/></svg></span><span data-w="v_record">Mit Notetaker aufzeichnen</span></div>
+            <div class="lt-ntm"><span><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-video"/></svg><span data-w="v_gmeet">Google Meet</span></span><span class="lt-mut"><span data-w="v_len">47 Min.</span></span></div>
+            <div class="lt-wave"><div class="lt-wave-a"><svg viewBox="0 0 120 20" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 10 L1.6 6.38 L3.2 12.92 L4.8 4.98 L6.4 14.63 L8.0 3.88 L9.6 16.37 L11.2 3.50 L12.8 17.61 L14.4 4.03 L16.0 17.89 L17.6 5.28 L19.2 17.04 L20.8 6.25 L22.4 15.27 L24.0 6.92 L25.6 13.11 L27.2 7.01 L28.8 14.05 L30.4 5.12 L32.0 14.79 L33.6 3.74 L35.2 14.62 L36.8 3.23 L38.4 13.78 L40.0 3.68 L41.6 13.80 L43.2 4.81 L44.8 13.60 L46.4 6.13 L48.0 13.16 L49.6 7.21 L51.2 12.83 L52.8 7.77 L54.4 12.94 L56.0 7.96 L57.6 13.55 L59.2 7.68 L60.8 14.45 L62.4 6.53 L64.0 15.22 L65.6 5.32 L67.2 15.44 L68.8 4.50 L70.4 14.91 L72.0 4.46 L73.6 13.73 L75.2 5.39 L76.8 12.25 L78.4 6.94 L80.0 12.55 L81.6 5.05 L83.2 14.45 L84.8 3.62 L86.4 16.33 L88.0 3.10 L89.6 17.65 L91.2 3.60 L92.8 17.99 L94.4 4.88 L96.0 17.23 L97.6 6.33 L99.2 15.66 L100.8 6.74 L102.4 13.80 L104.0 7.54 L105.6 13.17 L107.2 6.44 L108.8 13.65 L110.4 5.59 L112.0 13.38 L113.6 5.48 L115.2 12.61 L116.8 6.04 L118.4 12.17 L120.0 6.92 L121.6 12.31"/></svg></div><div class="lt-wave-b lt-x k3 fx-w lt-lin" style="--a:0.16;--b:0.52"><svg viewBox="0 0 120 20" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 10 L1.6 6.38 L3.2 12.92 L4.8 4.98 L6.4 14.63 L8.0 3.88 L9.6 16.37 L11.2 3.50 L12.8 17.61 L14.4 4.03 L16.0 17.89 L17.6 5.28 L19.2 17.04 L20.8 6.25 L22.4 15.27 L24.0 6.92 L25.6 13.11 L27.2 7.01 L28.8 14.05 L30.4 5.12 L32.0 14.79 L33.6 3.74 L35.2 14.62 L36.8 3.23 L38.4 13.78 L40.0 3.68 L41.6 13.80 L43.2 4.81 L44.8 13.60 L46.4 6.13 L48.0 13.16 L49.6 7.21 L51.2 12.83 L52.8 7.77 L54.4 12.94 L56.0 7.96 L57.6 13.55 L59.2 7.68 L60.8 14.45 L62.4 6.53 L64.0 15.22 L65.6 5.32 L67.2 15.44 L68.8 4.50 L70.4 14.91 L72.0 4.46 L73.6 13.73 L75.2 5.39 L76.8 12.25 L78.4 6.94 L80.0 12.55 L81.6 5.05 L83.2 14.45 L84.8 3.62 L86.4 16.33 L88.0 3.10 L89.6 17.65 L91.2 3.60 L92.8 17.99 L94.4 4.88 L96.0 17.23 L97.6 6.33 L99.2 15.66 L100.8 6.74 L102.4 13.80 L104.0 7.54 L105.6 13.17 L107.2 6.44 L108.8 13.65 L110.4 5.59 L112.0 13.38 L113.6 5.48 L115.2 12.61 L116.8 6.04 L118.4 12.17 L120.0 6.92 L121.6 12.31"/></svg></div></div>
+            <div class="lt-prog"><i class="lt-x k3 fx-w lt-lin" style="--a:0.16;--b:0.52"></i></div>
+          </div>
+        </div>
+        <div class="lt-src lt-pan f4" style="top:30.75em">
+          <div class="lt-card lt-eng">
+            <div class="lt-cardh"><span class="lt-ct" data-w="v_engine">Upgrads Engine</span><span class="lt-tag"><span data-w="v_optional">Optional</span></span></div>
+            <span class="lt-echip"><i class="lt-dot"></i><span data-w="st_5">Gewonnen</span><i class="lt-echip-on lt-x k4 fx-o" style="--a:0.36;--b:0.42"></i></span>
+          </div>
+        </div>
+      <div class="lt-rec">
+        <div class="lt-r-head" data-part="head">
+          <div class="lt-r-who">
+            <div class="lt-r-title"><span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.28;--b:0.34;--w:9em"></i><span class="lt-t lt-one lt-x k1 fx-r" style="--a:0.28;--b:0.36" data-w="v_title">Jonas Brandt</span></span></div>
+            <div class="lt-r-meta"><span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.28;--b:0.36;--w:7em"></i><span class="lt-r-co lt-one lt-x k1 fx-r" style="--a:0.28;--b:0.36" data-w="v_company">Lotrecht Messebau</span></span><span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.3;--b:0.36;--w:3.9em;height:1.3em;border-radius:.65em"></i><span class="lt-pill lt-x k1 fx-r lt-sw g5" style="--a:0.3;--b:0.36"><i></i><span class="lt-fl"><span class="lt-pn lt-sw g1" data-w="st_1">Neu</span><span class="lt-pn lt-sw g2" data-w="st_2">Kontaktiert</span><span class="lt-pn lt-sw g3" data-w="st_3">Angebot</span><span class="lt-pn lt-sw g4" data-w="st_4">Verhandlung</span><span class="lt-pn lt-sw g5" data-w="st_5">Gewonnen</span></span></span></span></div>
+          </div>
+          <div class="lt-r-val">
+            <span class="lt-r-val-l"><span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.28;--b:0.36;--w:4em"></i><span class="lt-x k1 fx-o" style="--a:0.28;--b:0.36" data-w="v_value">Deal-Wert</span></span></span>
+            <span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.28;--b:0.36;--w:4.4em;height:.9em"></i><span class="lt-x k1 fx-o" style="--a:0.28;--b:0.36"><span class="lt-amt lt-mut lt-x k4 fx-oi" style="--a:0.03;--b:0.09">–</span></span><span class="lt-amt lt-x k4 fx-r" style="--a:0.03;--b:0.09" data-w="v_amount">8.900 €</span></span>
+          </div>
+        </div>
+        <div class="lt-r-bar" data-part="bar"><span class="lt-seg lt-sw g1"><span class="lt-x k1 fx-o" style="--a:0.3;--b:0.36" data-w="st_1">Neu</span></span><span class="lt-seg lt-sw g2"><span class="lt-x k1 fx-o" style="--a:0.3;--b:0.36" data-w="st_2">Kontaktiert</span></span><span class="lt-seg lt-sw g3"><span class="lt-x k1 fx-o" style="--a:0.3;--b:0.36" data-w="st_3">Angebot</span></span><span class="lt-seg lt-sw g4"><span class="lt-x k1 fx-o" style="--a:0.3;--b:0.36" data-w="st_4">Verhandlung</span></span><span class="lt-seg lt-sw g5"><span class="lt-x k1 fx-o" style="--a:0.3;--b:0.36" data-w="st_5">Gewonnen</span></span></div>
+        <div class="lt-r-body">
+          <div class="lt-r-main" data-part="tl">
+            <div class="lt-r-h"><span data-w="v_activity">Aktivität</span></div>
+            <div class="lt-tl">
+              <i class="lt-tl-link lt-x k3 fx-o" style="--a:0.58;--b:0.64"></i>
+              <div class="lt-it lt-it-n">
+                <div class="lt-it-sk lt-x k3 fx-oi" style="--a:0.56;--b:0.62"><i></i><span><b class="lt-sk" style="--w:5em"></b><b class="lt-sk" style="--w:10em"></b></span></div>
+                <div class="lt-it-in lt-x k3 fx-r" style="--a:0.58;--b:0.64">
+                  <span class="lt-ic"><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-note"/></svg></span>
+                  <div class="lt-it-main">
+                    <div class="lt-it-head"><b data-w="v_note">Notiz</b><span class="lt-mut lt-one" data-w="v_by_nt">von Notetaker</span></div>
+                    <div class="lt-it-txt lt-b lt-x k3 fx-w" style="--a:0.62;--b:0.72"><span class="lt-one" data-w="v_n1">Messestand, 40 m², März</span></div>
+                    <div class="lt-it-txt lt-x k3 fx-w" style="--a:0.7;--b:0.8"><span class="lt-one" data-w="v_n2">Budget 9.000 €</span></div>
+                    <div class="lt-it-txt lt-x k3 fx-w" style="--a:0.78;--b:0.88"><span class="lt-one" data-w="v_n3">Angebot bis Freitag</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="lt-it lt-it-m">
+                <div class="lt-it-sk lt-x k2 fx-oi" style="--a:0.62;--b:0.7"><i></i><span><b class="lt-sk" style="--w:5em"></b><b class="lt-sk" style="--w:11em"></b></span></div>
+                <div class="lt-it-in lt-x k2 fx-r" style="--a:0.64;--b:0.72">
+                  <span class="lt-ic"><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-cal"/></svg></span>
+                  <div class="lt-it-main">
+                    <div class="lt-it-head"><b data-w="v_meeting">Termin</b></div>
+                    <div class="lt-it-txt lt-x k2 fx-w" style="--a:0.68;--b:0.78"><span class="lt-one" data-w="v_meet_title">Erstgespräch</span></div>
+                    <span class="lt-join lt-x k2 fx-o" style="--a:0.76;--b:0.84"><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-ext"/></svg><span data-w="v_join">Google Meet beitreten</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="lt-r-side" data-part="contact">
+            <div>
+              <div class="lt-r-h"><span data-w="v_contact">Kontakt</span></div>
+              <div class="lt-person">
+                <span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.38;--b:0.46;--w:2.4em;height:2.4em;border-radius:50%"></i><span class="lt-av lt-x k1 fx-o" style="--a:0.38;--b:0.46"><span data-w="v_initials">JB</span></span></span>
+                <div class="lt-pw">
+                  <span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.38;--b:0.46;--w:6em"></i><span class="lt-pname lt-one lt-x k1 fx-r" style="--a:0.38;--b:0.46" data-w="v_title">Jonas Brandt</span></span>
+                  <span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.44;--b:0.52;--w:7.5em"></i><span class="lt-pco lt-one lt-x k1 fx-r" style="--a:0.44;--b:0.52" data-w="v_company">Lotrecht Messebau</span></span>
+                </div>
+              </div>
+              <div class="lt-cl"><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-mail"/></svg><span class="lt-fl"><i class="lt-sk lt-x k1 fx-oi" style="--a:0.5;--b:0.58;--w:8em"></i><span class="lt-one lt-x k1 fx-r" style="--a:0.5;--b:0.58" data-w="v_email">jb@lotrecht.example</span></span></div>
+              <div class="lt-cl lt-x k1 fx-r" style="--a:0.72;--b:0.8"><i class="lt-tint lt-x k1 fx-o lt-xo" style="--a:0.74;--b:0.8;--a2:.88;--b2:.98"></i><svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#i-phone"/></svg><span class="lt-fl"><span class="lt-one" data-w="v_phone">+49 30 23125 417</span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+          <div class="lt-onb lt-x k4 fx-r" style="--a:0.48;--b:0.56" data-part="onb">
+            <div class="lt-onb-h"><span data-w="v_onb">Onboarding</span></div>
+            <div class="lt-onb-track">
+              <i class="lt-onb-rail"></i><i class="lt-onb-rail-on lt-x k4 fx-w lt-lin" style="--a:0.56;--b:0.91"></i>
+              <div class="lt-onb-step lt-x k4" style="--a:0.56;--b:0.61"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_1">Formular versendet</span></div>
+              <div class="lt-onb-step lt-x k4" style="--a:0.63;--b:0.68"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_2">Formular ausgefüllt</span></div>
+              <div class="lt-onb-step lt-x k4" style="--a:0.7;--b:0.75"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_3">Termin gebucht</span></div>
+              <div class="lt-onb-step lt-x k4" style="--a:0.77;--b:0.82"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_4">Call erfolgt</span></div>
+              <div class="lt-onb-step lt-x k4" style="--a:0.84;--b:0.89"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_5">Briefing fertig</span></div>
+              <div class="lt-onb-step lt-x k4" style="--a:0.91;--b:0.96"><span class="lt-node"><i class="fx-o"></i><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path class="fx-d" style="--len:10.2px" d="M4.5 8.4l2.3 2.2 4.7-4.9"/></svg></span><span class="lt-onb-l" data-w="o_6">Abgeschlossen</span></div>
+            </div>
+          </div>
+        <svg class="lt-wires" viewBox="0 0 56 38.6" aria-hidden="true" focusable="false">
+          <g class="lt-pan-o f1"><path class="lt-x k1 fx-d" style="--a:0.12;--b:0.28;--len:23.40px" d="M15 22.05H15.8a.7 .7 0 0 0 .7-.7V2.7a.7 .7 0 0 1 .7-.7H18.9"/><circle class="lt-x k1 fx-o" style="--a:0.27;--b:0.29" cx="18.9" cy="2" r=".2"/></g>
+          <g class="lt-pan-o f2"><path class="lt-x k2 fx-d" style="--a:0.5;--b:0.64;--len:5.75px" d="M15 23.45H15.8a.7 .7 0 0 0 .7-.7V21.75a.7 .7 0 0 1 .7-.7H18.9"/><circle class="lt-x k2 fx-o" style="--a:0.63;--b:0.65" cx="18.9" cy="21.05" r=".2"/></g>
+          <g class="lt-pan-o f3"><path class="lt-x k3 fx-d" style="--a:0.52;--b:0.6;--len:4.75px" d="M15 15.45H15.8a.7 .7 0 0 0 .7-.7a.7 .7 0 0 1 .7-.7H18.9"/><circle class="lt-x k3 fx-o" style="--a:0.59;--b:0.61" cx="18.9" cy="14.05" r=".2"/></g>
+          <g class="lt-pan-o f4"><path class="lt-x k4 fx-d" style="--a:0.42;--b:0.52;--len:3.95px" d="M15 34.53H18.9"/><circle class="lt-x k4 fx-o" style="--a:0.51;--b:0.53" cx="18.9" cy="34.53" r=".2"/></g>
+        </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="lt-basics lt-wrap" aria-labelledby="b-h">
+    <h2 class="lt-big" id="b-h" data-w="b_h">Alles an einem Ort.</h2>
+    <p class="lt-big-p" data-w="b_p">Kontakte, Deals, Aufgaben, Kalender, Team-Chat. Auf Deutsch und Englisch.</p>
+  </section>
+
+  <section class="lt-ask" id="anfrage" aria-labelledby="ask-t">
+    <div class="lt-wrap lt-ask-in">
+      <div class="lt-ask-txt">
+        <h2 class="lt-h2" id="ask-t" data-w="ask_t">Zugang anfragen.</h2>
+        <p class="lt-p lt-ask-d" data-w="ask_d">Name und E-Mail genügen. Der Preis wird pro Team vereinbart.</p>
+        <p class="lt-limits" data-w="limits">Nur auf Einladung. Notetaker nur für Google Meet; ein kostenloses Google-Konto beendet ein Meet nach 60 Minuten. Microsoft Teams und Outlook-Kalender folgen.</p>
+      </div>
+      <div class="lt-ask-card">
+        <!-- without JavaScript the form still opens the mail app (mailto); with it, it posts to /api/landing/ask -->
+        <form class="lt-form" id="ask-form" novalidate action="mailto:team@upgrads.de?subject=Anfrage%20zu%20Upgrads%20CRM" method="post" enctype="text/plain" aria-label="Zugang anfragen" data-w-aria="ask_form">
+          <div class="lt-f">
+            <label for="ask-name" data-w="f_name">Name</label>
+            <input id="ask-name" name="name" type="text" autocomplete="name" maxlength="120" required aria-describedby="ask-name-err">
+            <p class="lt-err" id="ask-name-err" hidden data-w="f_err_name">Bitte einen Namen eintragen, mindestens zwei Zeichen.</p>
+          </div>
+          <div class="lt-f">
+            <label for="ask-email" data-w="f_email">E-Mail</label>
+            <input id="ask-email" name="email" type="email" autocomplete="email" maxlength="254" required aria-describedby="ask-email-err">
+            <p class="lt-err" id="ask-email-err" hidden data-w="f_err_email">Bitte eine E-Mail-Adresse wie name@firma.de eintragen.</p>
+          </div>
+          <div class="lt-f">
+            <label for="ask-company" data-w="f_company">Firma (optional)</label>
+            <input id="ask-company" name="company" type="text" autocomplete="organization" maxlength="120">
+          </div>
+          <div class="lt-f">
+            <label for="ask-message" data-w="f_message">Nachricht (optional)</label>
+            <textarea id="ask-message" name="message" rows="3" maxlength="1000"></textarea>
+          </div>
+          <div class="lt-trap" aria-hidden="true"><label for="ask-website">Website</label><input id="ask-website" name="website" type="text" tabindex="-1" autocomplete="off"></div>
+          <button type="submit" class="lt-btn lt-btn-full" id="ask-send" data-w="f_send_mail">Per Mail anfragen</button>
+          <p class="lt-fine"><span data-w="f_direct">Oder direkt an</span> <a class="lt-a" href="mailto:team@upgrads.de?subject=Anfrage%20zu%20Upgrads%20CRM" data-mail>team@upgrads.de</a></p>
+        </form>
+        <div class="lt-done" id="ask-done" tabindex="-1" hidden>
+          <p class="lt-done-t" id="ask-done-t" aria-live="polite"></p>
+          <div class="lt-fallback" id="ask-fallback" hidden>
+            <p class="lt-fine" id="ask-fallback-t" data-w="f_fallback">Öffnet sich kein Mailprogramm, den Text kopieren und an team@upgrads.de schicken.</p>
+            <textarea class="lt-text" id="ask-text" rows="5" readonly aria-label="Text der Anfrage" data-w-aria="f_text"></textarea>
+            <div class="lt-try">
+              <button type="button" class="lt-btn lt-btn-s" id="ask-retry" hidden data-w="f_retry">Nochmal senden</button>
+              <a class="lt-btn lt-btn-s" id="ask-mail" href="mailto:team@upgrads.de?subject=Anfrage%20zu%20Upgrads%20CRM" hidden data-w="f_open_mail">Im Mailprogramm öffnen</a>
+              <button type="button" class="lt-btn lt-btn-s lt-btn-ghost" id="ask-copy" data-w="f_copy">Text kopieren</button>
+            </div>
+          </div>
+          <p class="lt-acts"><button type="button" class="lt-btn lt-btn-s lt-btn-ghost" id="ask-edit" data-w="f_edit">Angaben ändern</button></p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="lt-foot">
+  <div class="lt-wrap lt-foot-in">
+    <p class="lt-foot-by" data-w="foot_by">Upgrads GbR, Landshut</p>
+    <nav class="lt-foot-nav" aria-label="Rechtliches und Kontakt" data-w-aria="foot_nav">
+      <a href="https://upgrads.de/impressum" data-w="imprint">Impressum</a>
+      <a href="https://upgrads.de/datenschutz" data-w="privacy">Datenschutz</a>
+      <a href="/" data-w="login">Anmelden</a>
+      <a href="mailto:team@upgrads.de?subject=Anfrage%20zu%20Upgrads%20CRM" data-mail>team@upgrads.de</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

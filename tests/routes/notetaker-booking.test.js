@@ -29,7 +29,7 @@ const pgDate = v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? ne
 const state = {};
 function reset() {
   Object.assign(state, {
-    calls: [], activities: [], recordings: [], nextId: 100, nextRec: 1,
+    calls: [], activities: [], recordings: [], nextId: 100, nextRec: 1, ai: null,   // ai: the workspace's saved summary AI { provider, sealed, model } (NOTETAKER_AI Part 7)
     deals: [{ id: 12, workspace_id: WID, title: 'Elbstraße 12', contact_id: 5, assigned_to: null }],
     contacts: [{ id: 5, workspace_id: WID, name: 'Jana Weber', email: 'jana.weber@example.de', assigned_to: null }],
     users: [{ id: 2, workspace_id: WID, name: 'Anna Weiß', email: 'anna@example.de', timezone: 'Europe/Berlin' }, { id: 42, workspace_id: WID, name: 'Mara Kühn', email: 'mara@example.de', timezone: 'Europe/Berlin' }],
@@ -66,7 +66,7 @@ const pool = {
       return { rows: [{ id: hit.id, contact_id: hit.contact_id, deal_id: hit.deal_id, content: hit.content, event_date: hit.event_date, event_time: hit.event_time, event_tz: hit.event_tz }] };
     }
     if (q.startsWith('INSERT INTO notetaker_recordings')) {
-      if (!state.recordings.some(r => r.activity_id === params[1])) state.recordings.push({ id: state.nextRec++, workspace_id: params[0], activity_id: params[1], requested_by: params[2], external_id: params[3], language: params[4], callback_token: params[5], finished_at: null, meeting_url: null, join_at: null, status: 'waiting_link', job_id: null, http_status: null, error: null });
+      if (!state.recordings.some(r => r.activity_id === params[1])) state.recordings.push({ id: state.nextRec++, workspace_id: params[0], activity_id: params[1], requested_by: params[2], external_id: params[3], language: params[4], callback_token: params[5], summary: params[6], finished_at: null, meeting_url: null, join_at: null, status: 'waiting_link', job_id: null, http_status: null, error: null });
       return { rows: [] };
     }
     if (q.startsWith('UPDATE notetaker_recordings SET callback_token = COALESCE(callback_token, $1) WHERE id = $2 RETURNING callback_token')) {
@@ -77,7 +77,9 @@ const pool = {
     if (q.startsWith('SELECT n.id, n.external_id, n.meeting_url, n.join_at, n.status, n.job_id, n.language, n.requested_by, n.callback_token, n.finished_at, a.content')) {
       const r = state.recordings.find(x => x.workspace_id === params[0] && x.activity_id === params[1]);
       const a = r && state.activities.find(x => x.id === r.activity_id && x.workspace_id === r.workspace_id);
-      return { rows: r && a ? [{ ...r, content: a.content, event_date: pgDate(a.event_date), event_time: a.event_time, event_tz: a.event_tz, deal_id: a.deal_id, contact_id: a.contact_id, cancelled_at: a.cancelled_at }] : [] };
+      assert.match(q, /n\.summary, ai\.provider AS ai_provider, ai\.api_key_sealed AS ai_key_sealed, ai\.model AS ai_model FROM notetaker_recordings n JOIN activities a ON a\.id = n\.activity_id AND a\.workspace_id = n\.workspace_id LEFT JOIN workspace_notetaker_ai ai ON ai\.workspace_id = n\.workspace_id WHERE/, 'the meeting\'s summary wish and the workspace\'s AI, read with it');
+      const ai = state.ai && state.ai.workspace_id === r?.workspace_id ? { ai_provider: state.ai.provider, ai_key_sealed: state.ai.sealed, ai_model: state.ai.model ?? null } : { ai_provider: null, ai_key_sealed: null, ai_model: null };
+      return { rows: r && a ? [{ ...r, content: a.content, event_date: pgDate(a.event_date), event_time: a.event_time, event_tz: a.event_tz, deal_id: a.deal_id, contact_id: a.contact_id, cancelled_at: a.cancelled_at, ...ai }] : [] };
     }
     if (q.startsWith('SELECT n.id, n.workspace_id, n.activity_id, n.status, a.content, a.calcom_uid, a.event_date, a.event_time, a.event_tz, c.api_key_sealed FROM notetaker_recordings n')) {
       const out = [];
@@ -149,6 +151,7 @@ before(async () => {
   app.use(express.json());
   integrations = loadRoute('integrations.js', { pool, user: { id: 2, workspaceId: WID, role: 'member', timezone: 'Europe/Berlin' } });
   integrations.setNotetakerOn(true);   // set here, so this suite tests the Notetaker whatever the switch's default (NOTETAKER_CHANGES 2026-10-27)
+  integrations.setNotetakerSoon(false);   // and offered, whatever "coming soon" says (NOTETAKER_AI_CHANGES Part 10; its own block at the end)
   app.use('/api/integrations', integrations);
   app.use((err, _req, res, _next) => res.status(500).json({ error: 'Internal server error', detail: err.message }));
   server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
@@ -171,16 +174,16 @@ describe('booking with the box ticked', () => {
     assert.match(ins.sql, /ON CONFLICT \(activity_id\) DO NOTHING/);
     const link = ins.params[5];
     assert.match(link, /^[0-9a-f]{48}$/, 'a fresh secret result link per meeting');
-    assert.deepEqual(ins.params, [WID, 100, 2, 'crm-meeting-100', 'de', link]);
+    assert.deepEqual(ins.params, [WID, 100, 2, 'crm-meeting-100', 'de', link, false], 'no summary asked for: false (NOTETAKER_AI Part 6)');
     assert.equal(sent.length, 1);
     assert.deepEqual(sent[0].headers, { 'Content-Type': 'application/json' }, 'no token set: no Authorization header');
     assert.deepEqual(sent[0].body, {
       meeting_url: MEET, callback_url: `http://localhost:3000/api/notetaker/webhook/${link}`, join_at: '2026-10-21T14:00:00+02:00', external_id: 'crm-meeting-100',
       metadata: { workspace_id: '7', activity_id: '100', deal_id: '12', contact_id: '5', user_id: '2' },
-      bot_name: 'Notetaker', max_minutes: 120, include_notes: true, chat_message: CHAT_DE,
+      bot_name: 'Notetaker', max_minutes: 120, include_notes: false, chat_message: CHAT_DE,   // no summary asked for: the transcript (NOTETAKER_AI Part 7)
     });
     assert.deepEqual(r.body.notetaker, { status: 'scheduled', job_id: 'j_1', error: null });
-    assert.deepEqual({ ...state.recordings[0], id: undefined }, { id: undefined, workspace_id: WID, activity_id: 100, requested_by: 2, external_id: 'crm-meeting-100', language: 'de', callback_token: link, finished_at: null, meeting_url: MEET, join_at: '2026-10-21T14:00:00+02:00', status: 'scheduled', job_id: 'j_1', http_status: 202, error: null });
+    assert.deepEqual({ ...state.recordings[0], id: undefined }, { id: undefined, workspace_id: WID, activity_id: 100, requested_by: 2, external_id: 'crm-meeting-100', language: 'de', callback_token: link, summary: false, finished_at: null, meeting_url: MEET, join_at: '2026-10-21T14:00:00+02:00', status: 'scheduled', job_id: 'j_1', http_status: 202, error: null });
   });
   test('no link yet (Cal.com names only the app): the request waits; the webhook brings the link and the bot is sent then, once', async () => {
     fakeNet({ 'https://api.cal.com/v2/bookings': booked('integrations:google:meet'), [NT_URL]: NT_OK });
@@ -375,5 +378,138 @@ describe('the table and the settings', () => {
     assert.match(env, /^# ?NOTETAKER_URL=http:\/\/localhost:8000\/crm\/recordings$/m);
     assert.match(env, /^# ?NOTETAKER_CRM_TOKEN=$/m);
     assert.match(env, /^# ?NOTETAKER_CALLBACK_URL=http:\/\/localhost:3000\/api\/notetaker\/webhook$/m);
+  });
+});
+
+// ── NOTETAKER_AI_CHANGES Part 6: the summary box under "Mit Notetaker aufzeichnen" ──
+describe('the summary box (NOTETAKER_AI Part 6)', () => {
+  test('ticked with the recording: kept with the meeting (summary true); the bot is booked as before', async () => {
+    fakeNet({ 'https://api.cal.com/v2/bookings': booked(MEET), [NT_URL]: NT_OK });
+    const r = await book({ record: true, summary: true });
+    assert.equal(r.status, 201);
+    const ins = state.calls.find(c => c.sql.startsWith('INSERT INTO notetaker_recordings'));
+    assert.match(ins.sql, /\(workspace_id, activity_id, requested_by, external_id, language, callback_token, summary\) VALUES \(\$1,\$2,\$3,\$4,\$5,\$6,\$7\)/);
+    assert.equal(ins.params[6], true);
+    assert.equal(state.recordings[0].summary, true);
+    assert.equal(sent.length, 1); assert.deepEqual(r.body.notetaker, { status: 'scheduled', job_id: 'j_1', error: null });
+  });
+  test('only a real true counts: "true", 1, "yes", null and a missing box all keep the transcript (false)', async () => {
+    for (const summary of ['true', 1, 'yes', null, undefined]) {
+      reset();
+      fakeNet({ 'https://api.cal.com/v2/bookings': booked(MEET), [NT_URL]: NT_OK });
+      const r = await book({ record: true, summary });
+      assert.equal(r.status, 201, JSON.stringify(summary));
+      assert.equal(state.recordings[0].summary, false, JSON.stringify(summary));
+    }
+  });
+  test('a summary without the recording is refused before Cal.com is asked: nothing booked, nothing remembered', async () => {
+    fakeNet({ 'https://api.cal.com/v2/bookings': booked(MEET), [NT_URL]: NT_OK });
+    for (const extra of [{ summary: true }, { summary: true, record: false }, { summary: true, record: 'true' }]) {
+      const r = await book(extra);
+      assert.equal(r.status, 400, JSON.stringify(extra)); assert.equal(r.body.error, 'A summary needs the Notetaker recording');
+    }
+    assert.equal(state.calls.filter(c => c.sql.startsWith('INSERT INTO activities')).length, 0);
+    assert.equal(state.recordings.length, 0); assert.equal(sent.length, 0);
+  });
+  test('the column: initDb() adds summary to notetaker_recordings, false by default, after the table', async () => {
+    const { createFakePool } = require('../helpers/fake-pool');
+    const { loadDb } = require('../helpers/load-db');
+    const dbPool = createFakePool([{ match: /COUNT\(\*\)::int AS n/, reply: () => ({ rows: [{ n: 1 }] }) }]);
+    await loadDb(fs.readFileSync(path.join(ROOT, 'db.js'), 'utf8'), dbPool).initDb();
+    const at = re => dbPool.log.findIndex(e => re.test(e.sql));
+    const alter = at(/^ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS summary BOOLEAN NOT NULL DEFAULT false$/);
+    assert.ok(alter > at(/CREATE TABLE IF NOT EXISTS notetaker_recordings/), 'after the table');
+  });
+});
+
+// ── NOTETAKER_AI_CHANGES Part 7: the summary goes to the Notetaker with the booking ──
+describe('the summary AI in the request (NOTETAKER_AI Part 7)', () => {
+  const AI_KEY = 'sk-proj-SUMMARY-0123456789abcdefghij';
+  const saveAi = (provider = 'openai', model = 'gpt-6-astra', key = AI_KEY) => { state.ai = { workspace_id: WID, provider, sealed: calcom.sealKey(key), model }; };
+  const keyNowhere = () => {
+    for (const c of state.calls) assert.ok(!JSON.stringify(c.params ?? []).includes(AI_KEY), 'the key is never written to the database: ' + c.sql.slice(0, 60));
+  };
+  test('booked with the summary and an AI saved: include_notes true and llm { provider, api_key, model }, exactly the Notetaker\'s shape; the key nowhere else', async () => {
+    saveAi();
+    fakeNet({ 'https://api.cal.com/v2/bookings': booked(MEET), [NT_URL]: NT_OK });
+    const r = await book({ record: true, summary: true });
+    assert.equal(r.status, 201);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].body.include_notes, true);
+    assert.deepEqual(sent[0].body.llm, { provider: 'openai', api_key: AI_KEY, model: 'gpt-6-astra' });
+    assert.deepEqual(sent[0].body.metadata, { workspace_id: '7', activity_id: '100', deal_id: '12', contact_id: '5', user_id: '2' }, 'metadata unchanged, no key');
+    assert.ok(!JSON.stringify(r.body).includes(AI_KEY), 'not in the answer to the browser');
+    keyNowhere();
+  });
+  test('no model saved: llm without a model (the Notetaker\'s default for that AI); each of the four names goes as it is', async () => {
+    for (const provider of ['claude', 'openai', 'gemini', 'deepseek']) {
+      reset(); saveAi(provider, null);
+      fakeNet({ 'https://api.cal.com/v2/bookings': booked(MEET), [NT_URL]: NT_OK });
+      await book({ record: true, summary: true });
+      assert.deepEqual(sent[0].body.llm, { provider, api_key: AI_KEY }, provider);
+    }
+  });
+  test('the transcript (include_notes false, no llm): box unticked with an AI saved; box ticked but the AI removed since; an old name the Notetaker refuses', async () => {
+    for (const [setup, extra, why] of [
+      [() => saveAi(), { record: true }, 'unticked'],
+      [() => {}, { record: true, summary: true }, 'no AI saved'],
+      [() => saveAi('chatgpt'), { record: true, summary: true }, 'a name from before the sync'],
+    ]) {
+      reset(); setup();
+      fakeNet({ 'https://api.cal.com/v2/bookings': booked(MEET), [NT_URL]: NT_OK });
+      const r = await book(extra);
+      assert.equal(r.status, 201, why);
+      assert.equal(sent[0].body.include_notes, false, why);
+      assert.ok(!('llm' in sent[0].body), why);
+    }
+  });
+  test('a key this server cannot open (sealed under another secret): the meeting is still recorded, for the transcript', async () => {
+    const was = process.env.SESSION_SECRET;
+    process.env.SESSION_SECRET = 'another-secret'; saveAi(); process.env.SESSION_SECRET = was;   // only the AI's key; Cal.com's still opens
+    fakeNet({ 'https://api.cal.com/v2/bookings': booked(MEET), [NT_URL]: NT_OK });
+    const r = await book({ record: true, summary: true });
+    assert.equal(r.status, 201);
+    assert.equal(sent.length, 1); assert.equal(sent[0].body.include_notes, false); assert.ok(!('llm' in sent[0].body));
+    assert.equal(state.recordings[0].status, 'scheduled');
+  });
+  test('the Notetaker refuses and quotes the key back: the stored error and the answer have it cut out', async () => {
+    saveAi();
+    fakeNet({ 'https://api.cal.com/v2/bookings': booked(MEET), [NT_URL]: { status: 400, body: { detail: `llm.api_key ${AI_KEY} is not valid` } } });
+    const r = await book({ record: true, summary: true });
+    assert.equal(r.status, 201, 'the booking stands');
+    assert.equal(state.recordings[0].status, 'failed');
+    assert.equal(state.recordings[0].error, 'The Notetaker refused the request: llm.api_key … is not valid');
+    assert.ok(!JSON.stringify(r.body).includes(AI_KEY));
+    keyNowhere();
+  });
+  test('a meeting that waited for its Meet link goes with the summary too, when the webhook brings the link', async () => {
+    saveAi('claude', 'claude-opus-5-5');
+    fakeNet({ 'https://api.cal.com/v2/bookings': booked('integrations:google:meet'), [NT_URL]: NT_OK });
+    await book({ record: true, summary: true });
+    assert.equal(sent.length, 0, 'waiting for the link');
+    await deliver('BOOKING_CREATED', { ...WEBHOOK, videoCallData: { url: MEET } });
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].body.llm, { provider: 'claude', api_key: AI_KEY, model: 'claude-opus-5-5' });
+  });
+});
+
+describe('coming soon (NOTETAKER_AI_CHANGES Part 10)', () => {
+  after(() => integrations.setNotetakerSoon(false));
+  test('the box ticked anyway: the meeting is booked, but no recording is kept and no bot is sent', async () => {
+    integrations.setNotetakerSoon(true);
+    fakeNet({ 'https://api.cal.com/v2/bookings': booked(MEET), [NT_URL]: NT_OK });
+    const r = await book({ record: true, summary: true });
+    assert.equal(r.status, 201);
+    assert.equal(r.body.notetaker, null);
+    assert.equal(state.calls.some(c => c.sql.startsWith('INSERT INTO notetaker_recordings')), false);
+    assert.deepEqual(sent, []);
+  });
+  test('switched off again (false): the same booking keeps the recording and sends the bot', async () => {
+    integrations.setNotetakerSoon(false);
+    fakeNet({ 'https://api.cal.com/v2/bookings': booked(MEET), [NT_URL]: NT_OK });
+    const r = await book({ record: true });
+    assert.equal(r.status, 201);
+    assert.ok(state.calls.some(c => c.sql.startsWith('INSERT INTO notetaker_recordings')));
+    assert.equal(sent.length, 1);
   });
 });

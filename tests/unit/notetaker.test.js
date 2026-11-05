@@ -35,7 +35,7 @@ describe('the link and the time', () => {
 });
 
 describe('the payload', () => {
-  test('the sample\'s every field: link, callback, start, external id, metadata, bot name, 120 minutes, notes, the German chat message', () => {
+  test('the sample\'s every field: link, callback, start, external id, metadata, bot name, 120 minutes, no notes without an AI (NOTETAKER_AI Part 7: the transcript), the German chat message', () => {
     const p = nt.payload({ meetingUrl: 'https://meet.google.com/abc-defg-hij', joinAt: '2026-10-21T14:00:00+02:00', externalId: nt.externalIdFor(5531), metadata: { deal_id: '1042', contact_id: '77', user_id: '2' }, language: 'de' });
     assert.deepEqual(p, {
       meeting_url: 'https://meet.google.com/abc-defg-hij',
@@ -45,9 +45,21 @@ describe('the payload', () => {
       metadata: { deal_id: '1042', contact_id: '77', user_id: '2' },
       bot_name: 'Notetaker',
       max_minutes: 120,
-      include_notes: true,
+      include_notes: false,
       chat_message: SAMPLE_CHAT,
     });
+  });
+  test('with the summary AI (NOTETAKER_AI Part 7): include_notes true and llm { provider, api_key, model } beside it, as in the Notetaker\'s sample; no model, no model field; never in metadata', () => {
+    const base = { meetingUrl: 'https://meet.google.com/abc-defg-hij', joinAt: '2026-11-06T14:00:00+01:00', externalId: nt.externalIdFor(5531), metadata: { deal_id: '1042', user_id: '2' }, language: 'de' };
+    const p = nt.payload({ ...base, llm: { provider: 'openai', apiKey: 'sk-proj-abc', model: 'gpt-6-astra' } });
+    assert.equal(p.include_notes, true);
+    assert.deepEqual(p.llm, { provider: 'openai', api_key: 'sk-proj-abc', model: 'gpt-6-astra' });
+    assert.deepEqual(Object.keys(p), ['meeting_url', 'callback_url', 'join_at', 'external_id', 'metadata', 'bot_name', 'max_minutes', 'include_notes', 'chat_message', 'llm']);
+    assert.deepEqual(p.metadata, { deal_id: '1042', user_id: '2' }, 'the key stays out of metadata');
+    const q = nt.payload({ ...base, llm: { provider: 'deepseek', apiKey: 'sk-d', model: null } });
+    assert.deepEqual(q.llm, { provider: 'deepseek', api_key: 'sk-d' }, 'no model: the Notetaker\'s default');
+    assert.equal(nt.payload({ ...base, llm: null }).llm, undefined);
+    assert.equal(nt.payload({ ...base }).include_notes, false);
   });
   test('an English booking gets the English chat message; the callback follows PORT, or NOTETAKER_CALLBACK_URL when set', () => {
     assert.match(nt.payload({ language: 'en' }).chat_message, /^Hello, I am Notetaker\. This meeting is being recorded/);

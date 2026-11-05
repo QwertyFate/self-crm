@@ -118,6 +118,19 @@ describe('a finished recording', () => {
     const r = await post(LINK, done());
     assert.equal(r.status, 200); assert.equal(notes().length, 1); assert.equal(told.length, 0);
   });
+  test('no summary asked for (NOTETAKER_AI Part 8): the transcript lands on the deal as Notetaker\'s note; the booker is told without a title', async () => {
+    const r = await post(LINK, done({ notes: null, transcript: { text: 'Anna Weiß: Hallo\nJana Weber: Guten Tag', speakers_labelled: true, turns: [] } }));
+    assert.equal(r.status, 200);
+    assert.deepEqual(notes().map(n => [n.deal_id, n.contact_id, n.type, n.source, n.created_by, n.content]), [[12, 5, 'note', 'notetaker', null, 'Transkript\nAnna Weiß: Hallo\nJana Weber: Guten Tag']]);
+    assert.equal(state.recordings[0].status, 'completed'); assert.equal(state.recordings[0].error, null);
+    assert.deepEqual(told.map(x => [x[3].type, x[3].body]), [['notetaker_done', null]]);
+  });
+  test('a long meeting\'s transcript is written whole (more than 20,000 characters)', async () => {
+    const text = 'Anna Weiß: ' + 'Wir sprechen über das Objekt. '.repeat(3000);
+    await post(LINK, done({ notes: null, transcript: { text, turns: [] } }));
+    assert.equal(notes()[0].content, 'Transkript\n' + text.trim());
+    assert.ok(notes()[0].content.length > 90000);
+  });
   test('a whole transcript fits: a 2 MB result is accepted', async () => {
     const r = await post(LINK, done({ transcript: { text: 'Anna Weiß: ' + 'blah '.repeat(400000), turns: [] } }));
     assert.equal(r.status, 200); assert.equal(notes().length, 1);

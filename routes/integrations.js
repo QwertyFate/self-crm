@@ -52,11 +52,16 @@
      GET   /calcom/logs                last 30 Cal.com deliveries (everyone)
      GET   /calcom/slots               free slots of an event type, up to 42 days, viewer's zone (everyone); ?reschedule_uid= counts that booking's own slot as free
      POST  /calcom/book                book a slot for a deal's contact or a contact (everyone); the deal's
-                                       (else the contact's) assignee rides along as a Cal.com guest
+                                       (else the contact's) assignee rides along as a Cal.com guest; record: true asks for
+                                       the Notetaker (Google Meet only), summary: true with it for the AI's summary
      POST  /calcom/cancel              cancel a booked meeting at Cal.com and mark the entry (everyone)
      POST  /calcom/reschedule          move a booked meeting to a new slot at Cal.com and on the entry (everyone)
      POST  /calcom/receive/:token      PUBLIC: Cal.com's booking webhook, signed
      GET   /notetaker/health           is the Notetaker there and does it accept the token (everyone; 15 s cache, ?fresh=1)
+     GET   /notetaker/ai               the summary AI that is set, if any (everyone; the key's last four for owner/admin)
+     PUT   /notetaker/ai               { provider, api_key, model? }  set it, replacing the one before, owner/admin;
+                                       the AI is asked first (utils/llm-check.js): 400 key/model refused, 502 not reachable
+     DELETE /notetaker/ai              remove it (notes are the transcript again), owner/admin
 
    TELLING THE ASSIGNEE (Part 12)  every booked, moved or cancelled meeting is announced to the
      assignee of the deal, else of the contact, as one bell notification (calTellAssignee): from
@@ -74,6 +79,7 @@ const engine      = require('../utils/engine');            // "a lead comes in" 
 const { masterDataChanges } = require('../utils/kunde');
 const calcom      = require('../utils/calcom');            // the Cal.com client and the sealing of its key
 const notetaker   = require('../utils/notetaker');         // the Notetaker recording bot for Google Meet (2026-10-20)
+const llmCheck    = require('../utils/llm-check');         // the Notetaker's summary AI: does it take the key? (2026-11-05)
 const baseUrl     = require('../utils/base-url');          // the public origin Cal.com must reach for the booking webhook
 const { notifyUser } = require('../notifications');         // the assignee of a deal or a contact is told of a meeting (Part 12)
 
@@ -660,11 +666,19 @@ const isMeetLocation = loc => !!loc && loc.type === 'integration' && /^google[-:
 // recording is stored or sent, a booking moved or cancelled sends nothing, the link watch finds nothing, the health
 // check answers "not available"; switching it off for good also comments out its lines in server.js and its table in db.js.
 let NOTETAKER_ON = true;
+// "Coming soon" (NOTETAKER_AI_CHANGES Part 10, 2026-11-05): while true, nobody can use the Notetaker yet:
+// - the health check answers reason 'soon', so the booking dialog greys the box out and says "Coming soon";
+// - a booking stores no recording;
+// - the summary AI's routes answer { soon: true }, so the Notetaker tab shows "Coming soon", and refuse changes.
+// Recordings booked before keep going: moves, the Meet link, the result. false offers the Notetaker again.
+let NOTETAKER_SOON = true;
 async function notetakerSync(wid, activityId) {
   const { rows: [r] } = await pool.query(
     `SELECT n.id, n.external_id, n.meeting_url, n.join_at, n.status, n.job_id, n.language, n.requested_by, n.callback_token, n.finished_at,
-            a.content, a.event_date, a.event_time, a.event_tz, a.deal_id, a.contact_id, a.cancelled_at
+            a.content, a.event_date, a.event_time, a.event_tz, a.deal_id, a.contact_id, a.cancelled_at,
+            n.summary, ai.provider AS ai_provider, ai.api_key_sealed AS ai_key_sealed, ai.model AS ai_model
      FROM notetaker_recordings n JOIN activities a ON a.id = n.activity_id AND a.workspace_id = n.workspace_id
+     LEFT JOIN workspace_notetaker_ai ai ON ai.workspace_id = n.workspace_id
      WHERE n.workspace_id = $1 AND n.activity_id = $2`,
     [wid, activityId]
   );
@@ -691,12 +705,23 @@ async function notetakerSync(wid, activityId) {
   if (r.deal_id) metadata.deal_id = String(r.deal_id);
   if (r.contact_id) metadata.contact_id = String(r.contact_id);
   if (r.requested_by) metadata.user_id = String(r.requested_by);
-  const result = await notetaker.send(notetaker.payload({ meetingUrl: url, joinAt, externalId: r.external_id, metadata, language: r.language, callbackToken }));
+  const llm = notetakerLlm(r);
+  const result = await notetaker.send(notetaker.payload({ meetingUrl: url, joinAt, externalId: r.external_id, metadata, language: r.language, callbackToken, llm }));
+  if (llm && result.error) result.error = result.error.split(llm.apiKey).join('…');   // an answer quoting what it was sent never stores the key
   await pool.query(
     'UPDATE notetaker_recordings SET meeting_url=$1, join_at=$2, status=$3, job_id=COALESCE($4, job_id), http_status=$5, error=$6, sent_at=NOW(), updated_at=NOW() WHERE id=$7',
     [url, joinAt, result.status, result.job_id, result.http, result.error || null, r.id]
   );
   return { status: result.status, job_id: result.job_id || r.job_id, error: result.error || null };
+}
+// The summary for a meeting being sent (NOTETAKER_AI_CHANGES Part 7): { provider, apiKey, model } when it was booked
+// with the summary box ticked and the workspace has an AI saved under a name the Notetaker takes; otherwise null, and
+// the meeting goes for the transcript. A key this server can no longer open (SESSION_SECRET changed) counts as none:
+// the recording is never lost over the summary.
+function notetakerLlm(r) {
+  if (!r.summary || !r.ai_key_sealed || !NT_AI_PROVIDERS.includes(r.ai_provider)) return null;
+  try { return { provider: r.ai_provider, apiKey: calcom.openKey(r.ai_key_sealed), model: r.ai_model || null }; }
+  catch { console.error('Notetaker summary AI: the stored key cannot be opened with this server secret; sending for the transcript only'); return null; }
 }
 async function notetakerSafe(wid, activityId) {
   if (!NOTETAKER_ON) return null;
@@ -704,12 +729,13 @@ async function notetakerSafe(wid, activityId) {
   catch (err) { console.error('Notetaker error:', err); return { status: 'failed', job_id: null, error: 'The Notetaker request could not be kept' }; }
 }
 // The box ticked at booking: remember it with the meeting and its result link, then send if the Meet link is already there.
-async function notetakerRequest(wid, activityId, userId, language) {
-  if (!NOTETAKER_ON) return null;
+// summary: the summary box under it (NOTETAKER_AI_CHANGES Part 6), kept with the meeting; false means the transcript.
+async function notetakerRequest(wid, activityId, userId, language, summary = false) {
+  if (!NOTETAKER_ON || NOTETAKER_SOON) return null;
   try {
     await pool.query(
-      'INSERT INTO notetaker_recordings (workspace_id, activity_id, requested_by, external_id, language, callback_token) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (activity_id) DO NOTHING',
-      [wid, activityId, userId, notetaker.externalIdFor(activityId), language === 'en' ? 'en' : 'de', notetaker.newCallbackToken()]
+      'INSERT INTO notetaker_recordings (workspace_id, activity_id, requested_by, external_id, language, callback_token, summary) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (activity_id) DO NOTHING',
+      [wid, activityId, userId, notetaker.externalIdFor(activityId), language === 'en' ? 'en' : 'de', notetaker.newCallbackToken(), summary === true]
     );
   } catch (err) { console.error('Notetaker error:', err); return { status: 'failed', job_id: null, error: 'The Notetaker request could not be kept' }; }
   return notetakerSafe(wid, activityId);
@@ -792,11 +818,12 @@ function startNotetakerLinkWatch({ intervalMs = 20000, log = console } = {}) {
 
 // Is the Notetaker there? (Part 3) Asked by the booking dialog before it offers the box (any member). The answer is
 // kept for 15 seconds, so opening dialogs does not hammer the Notetaker; ?fresh=1 ("Check again") asks at once.
-// { available: true } or { available: false, reason: unreachable | token | error }. Never fails.
+// { available: true } or { available: false, reason: unreachable | token | error | soon }. Never fails.
 const NT_HEALTH_TTL_MS = 15000;
 let ntHealth = null;   // { at, result }
 router.get('/notetaker/health', requireAuth, async (req, res) => {
   if (!NOTETAKER_ON) return res.json({ available: false, reason: 'error' });
+  if (NOTETAKER_SOON) return res.json({ available: false, reason: 'soon' });   // not asked: coming soon (Part 10)
   try {
     if (req.query.fresh !== '1' && ntHealth && Date.now() - ntHealth.at < NT_HEALTH_TTL_MS) return res.json(ntHealth.result);
     const result = await notetaker.health();
@@ -806,6 +833,83 @@ router.get('/notetaker/health', requireAuth, async (req, res) => {
     console.error('Notetaker health error:', err);
     res.json({ available: false, reason: 'error' });
   }
+});
+
+// ═══ The Notetaker's summary AI (NOTETAKER_AI_CHANGES Part 1, 2026-11-05) ═══════
+// One AI per workspace (one row in workspace_notetaker_ai), so only one is ever used: Claude, ChatGPT, Gemini or
+// DeepSeek, with its API key sealed like the Cal.com key. Everyone may read which one is set (the booking dialog offers
+// the summary only then); setting and removing it are owner/admin only, as for Cal.com. The key never leaves the server
+// again: owners and admins see its last four characters. With the Notetaker's switch off these routes answer 404.
+// Synced with the Notetaker's booking field llm { provider, api_key, model? } (Parts 2–3): the providers are its names
+// (ChatGPT is 'openai'; it refuses any other, and with it the whole booking); the model is optional, and without one
+// the Notetaker uses its own default for that AI.
+const NT_AI_PROVIDERS = ['claude', 'openai', 'gemini', 'deepseek'];
+function requireNotetakerOn(_req, res, next) {
+  if (!NOTETAKER_ON) return res.status(404).json({ error: 'The Notetaker is off' });
+  next();
+}
+// Coming soon (Part 10): no AI can be set or removed yet.
+function refuseNotetakerSoon(_req, res, next) {
+  if (NOTETAKER_SOON) return res.status(403).json({ error: 'The Notetaker is coming soon', reason: 'soon' });
+  next();
+}
+// A key as pasted, trimmed: 20 to 400 visible characters, no spaces. Whether the AI accepts it is asked after this.
+const ntAiKeyShaped = key => /^[\x21-\x7e]{20,400}$/.test(key);
+// A model name as the AIs spell them (claude-opus-5-5, gpt-6-astra, models/gemini-3.6-flash): up to 100 characters,
+// the Notetaker's limit. Whether that AI has it for the key is asked after this.
+const ntAiModelShaped = model => /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$/.test(model);
+async function loadNtAiRow(wid) {
+  const { rows: [row] } = await pool.query(
+    `SELECT a.provider, a.model, a.key_hint, a.saved_by, a.saved_at, u.name AS saved_by_name
+       FROM workspace_notetaker_ai a LEFT JOIN users u ON u.id = a.saved_by
+      WHERE a.workspace_id = $1`, [wid]
+  );
+  return row || null;
+}
+function ntAiAnswer(row, role) {
+  const manage = canManageCal(role);
+  const ai = row ? { provider: row.provider, model: row.model || null, saved_by: row.saved_by, saved_by_name: row.saved_by_name || null, saved_at: row.saved_at } : null;
+  if (ai && manage) ai.key_hint = row.key_hint || null;
+  return { configured: !!row, ai, providers: NT_AI_PROVIDERS, can_manage: manage };
+}
+
+router.get('/notetaker/ai', requireAuth, requireNotetakerOn, async (req, res, next) => {
+  if (NOTETAKER_SOON) return res.json({ soon: true });   // the tab shows "Coming soon" (Part 10)
+  try { res.json(ntAiAnswer(await loadNtAiRow(req.workspaceId), req.userRole)); }
+  catch (err) { next(err); }
+});
+
+router.put('/notetaker/ai', requireAuth, requireNotetakerOn, refuseNotetakerSoon, requireManageCal, async (req, res, next) => {
+  try {
+    const provider = req.body?.provider;
+    // every refusal names its reason, so the Integrations page can say it in the page's language (Part 5)
+    if (!NT_AI_PROVIDERS.includes(provider)) return res.status(400).json({ error: 'Choose Claude, ChatGPT, Gemini or DeepSeek', reason: 'provider' });
+    const key = typeof req.body?.api_key === 'string' ? req.body.api_key.trim() : '';
+    if (!ntAiKeyShaped(key)) return res.status(400).json({ error: 'That does not look like an API key', reason: 'key_shape' });
+    const rawModel = req.body?.model ?? '';
+    if (typeof rawModel !== 'string') return res.status(400).json({ error: 'That does not look like a model name', reason: 'model_shape' });
+    const model = rawModel.trim() || null;   // none: the Notetaker's default for that AI
+    if (model && !ntAiModelShaped(model)) return res.status(400).json({ error: 'That does not look like a model name', reason: 'model_shape' });
+    // the AI itself is asked once (Part 4): a key it refuses, or a model it does not have for this key, is never saved
+    const check = await llmCheck.checkKey(provider, key, model);
+    if (!check.ok) return res.status(check.reason === 'key' || check.reason === 'model' ? 400 : 502).json({ error: check.error, reason: check.reason });
+    await pool.query(
+      `INSERT INTO workspace_notetaker_ai (workspace_id, provider, api_key_sealed, key_hint, saved_by, model)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (workspace_id) DO UPDATE SET
+         provider=EXCLUDED.provider, api_key_sealed=EXCLUDED.api_key_sealed, key_hint=EXCLUDED.key_hint,
+         saved_by=EXCLUDED.saved_by, model=EXCLUDED.model, saved_at=NOW()`,
+      [req.workspaceId, provider, calcom.sealKey(key), key.slice(-4), req.userId, model]
+    );
+    res.json(ntAiAnswer(await loadNtAiRow(req.workspaceId), req.userRole));
+  } catch (err) { next(err); }
+});
+
+router.delete('/notetaker/ai', requireAuth, requireNotetakerOn, refuseNotetakerSoon, requireManageCal, async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM workspace_notetaker_ai WHERE workspace_id=$1', [req.workspaceId]);
+    res.json(ntAiAnswer(null, req.userRole));
+  } catch (err) { next(err); }
 });
 
 router.post('/calcom/receive/:token', async (req, res) => {
@@ -972,6 +1076,8 @@ router.post('/calcom/book', requireAuth, async (req, res, next) => {
     }
     // the Notetaker records Google Meet meetings only; asked for anywhere else, nothing is booked
     if (body.record === true && !isMeetLocation(location)) return res.status(400).json({ error: 'The Notetaker records Google Meet meetings only' });
+    // the summary is part of the recording (Part 6): asked for without it, nothing is booked
+    if (body.summary === true && body.record !== true) return res.status(400).json({ error: 'A summary needs the Notetaker recording' });
     // the assignee of the deal (else of the contact) rides along as a guest: Cal.com sends them the
     // invitation with the meeting link, so it is in their calendar; not when they are the host (already
     // there), the attendee, or have no email
@@ -1017,7 +1123,7 @@ router.post('/calcom/book', requireAuth, async (req, res, next) => {
     );
     const told = await calTellAssignee(wid, req.userId, { kind: 'booked', dealId: deal?.id || null, contactId: contact.id, title: a.content, start: booking.start || start, url: booking.meetingUrl, location: booking.location });
     // the box in the dialog: remembered with the meeting, the bot sent as soon as the Meet link is known
-    const notetakerResult = body.record === true ? await notetakerRequest(wid, act.id, req.userId, language) : null;
+    const notetakerResult = body.record === true ? await notetakerRequest(wid, act.id, req.userId, language, body.summary === true) : null;
     const guests = guest && !guestDropped ? [{ name: guest.name, email: guest.email }] : [];
     const captured = { trigger: 'BOOKED_FROM_CRM', uid: booking.uid, title: a.content, event_date: a.event_date, event_time: a.event_time, event_tz: a.event_tz, attendee: contact.email, contact_id: contact.id, deal_id: deal?.id || null, booked_by: req.userId, guest: guest ? guest.email : null, guest_dropped: guestDropped, told, ...(notetakerResult ? { notetaker: notetakerResult } : {}) };
     await calLog(wid, 'success', { booking, request: { start, event_type_id: type.id, deal_id: deal?.id || null, contact_id: contact.id } }, captured, contact.id, deal?.id || null, null);
@@ -1116,4 +1222,5 @@ router.notetakerLinkTick = notetakerLinkTick;
 router.startNotetakerLinkWatch = startNotetakerLinkWatch;
 // the suites set the switch themselves, so they test the Notetaker whatever its default
 router.setNotetakerOn = on => { NOTETAKER_ON = on === true; };
+router.setNotetakerSoon = on => { NOTETAKER_SOON = on === true; };
 module.exports = router;

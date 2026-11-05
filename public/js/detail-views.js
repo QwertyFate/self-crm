@@ -80,6 +80,31 @@ const DV_PRIO = { urgent: ['prio_urgent', 'danger'], high: ['prio_high', 'warnin
 // any string that contained a tag, which a raw "<img onerror=…>" would have satisfied.
 // Activity text as HTML: escaped, every link clickable (a new tab), line breaks kept.
 function dvActHtml(s) { return dvLinkify(esc(dvActText(s))).replace(/\n/g, '<br>'); }
+// A long note (NOTETAKER_AI_CHANGES Part 9: a meeting's transcript, say) is a preview where notes are listed (the deal
+// and contact timelines, the Activities page): its first 20 lines, then "…", and under it a button that opens the whole
+// note in a window. Long is more than 20 lines, or more than 4,000 characters, so a long text with few line breaks is
+// caught too (cut there, then "…"). A short note is shown whole, exactly as dvActHtml shows it.
+const DV_NOTE_PREVIEW_LINES = 20, DV_NOTE_PREVIEW_CHARS = 4000;
+function dvNotePreview(s) {
+  const text = dvActText(s), lines = text.split('\n');
+  if (lines.length <= DV_NOTE_PREVIEW_LINES && text.length <= DV_NOTE_PREVIEW_CHARS) return { long: false, text };
+  const head = lines.slice(0, DV_NOTE_PREVIEW_LINES).join('\n');
+  return { long: true, text: head.length > DV_NOTE_PREVIEW_CHARS ? head.slice(0, DV_NOTE_PREVIEW_CHARS).trimEnd() + ' …' : head.trimEnd() + '\n…' };
+}
+function dvActPreviewHtml(s) { return dvLinkify(esc(dvNotePreview(s).text)).replace(/\n/g, '<br>'); }
+// The button under a long note's preview, outside the note itself, so a click on it never opens the note's editor; ''
+// for a short note. The timelines catch [data-note-full] themselves; the Activities page names its own opener.
+function dvNoteMoreHtml(a, opener = '') {
+  if (!dvNotePreview(a.content).long) return '';
+  const id = Number(a.id), call = /^\w+$/.test(opener) ? ` onclick="${opener}(${id})"` : '';
+  return `<div class="note-more"><button type="button" class="btn btn-ghost btn-sm" data-note-full="${id}"${call}>${icon('file-text')}${esc(t('note_show_all'))}</button></div>`;
+}
+// The whole note in a window: its kind and when it was written as the title, the note scrolling inside.
+function dvOpenNote(a) {
+  if (!a) return;
+  ui.modal({ title: `${t(dvTypeOf(a.type).label)} · ${dvWhen(a.created_at)}`, size: 'lg', body: `<div class="note-full">${dvActHtml(a.content)}</div>`,
+    footer: `<button class="btn btn-secondary" data-close>${esc(t('btn_close'))}</button>` });
+}
 // Every http(s) address in ALREADY ESCAPED text becomes a link; closing punctuation stays outside it.
 function dvLinkify(escaped) { return String(escaped || '').replace(/https?:\/\/[^\s<]*[^\s<.,;:!?)"']/g, m => `<a href="${m}" target="_blank" rel="noopener">${m}</a>`); }
 function dvActText(s) {
@@ -255,6 +280,8 @@ function dvJoinRow(a) { const b = dvJoinButton(a); return b ? `<div class="dv-jo
 // The Notetaker's box in the booking dialog and its health check (hidden 2026-10-26, shown again 2026-10-27). false hides
 // both, so no booking asks for a recording; notes it already wrote stay on their deals.
 const DV_NOTETAKER_SHOWN = true;
+// The summary AI's name as the Notetaker tab shows it (NT_AI_NAMES in integrations.js: Claude, ChatGPT, Gemini, DeepSeek).
+function dvAiName(p) { return (typeof NT_AI_NAMES === 'object' && NT_AI_NAMES && NT_AI_NAMES[p]) || String(p || ''); }
 // reschedule: the live meeting entry to move (its booking keeps the type, the place and the attendee)
 // What the Notetaker answered, as one line: booked for the start, joining now, given the new time, already booked,
 // waiting for Cal.com's Meet link, or not booked and why (the server's reason).
@@ -278,7 +305,7 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
   const zone = currentTimezone(), locale = currentLang === 'de' ? 'de-DE' : 'en-GB', todayIso = dvIsoDateIn(zone);
   // month: the month on the calendar ('YYYY-MM'); date: the chosen day; picked: the chosen slot's start (ISO);
   // conflicts: CRM entries at that time; loc: the chosen place among the type's locations
-  const B = { month: todayIso.slice(0, 7), typeId: (reschedule && reschedule.calcom_event_type_id) || cal.event_type.id, slots: null, loading: true, date: '', picked: null, conflicts: [], checking: false, note: '', err: '', busy: false, loc: 0, record: false, nt: 'idle', ntWhy: '' };
+  const B = { month: todayIso.slice(0, 7), typeId: (reschedule && reschedule.calcom_event_type_id) || cal.event_type.id, slots: null, loading: true, date: '', picked: null, conflicts: [], checking: false, note: '', err: '', busy: false, loc: 0, record: false, nt: 'idle', ntWhy: '', summary: false, ai: null };
   const fmtTime = iso => new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', timeZone: zone });
   // the same instant on a 12-hour clock, "2:00 PM", so nobody has to convert; shown beside the 24-hour time
   const fmtAmPm = iso => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: zone });
@@ -320,11 +347,17 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
       : `<div class="cal-book-sec"><div class="field-row">${typeSel}${whereSel}</div></div>`;
     // the Notetaker: offered for a Google Meet booking only; a meeting being moved keeps its recording (the server tells the bot).
     // Greyed out until the Notetaker said it is there; if it is not, the line says why and offers Check again.
+    // Coming soon (reason 'soon', NOTETAKER_AI_CHANGES Part 10): the line says so, with nothing to check again.
     const ntOk = B.nt === 'ok';
     const ntLine = ntOk ? esc(t('cal_book_record_help'))
+      : B.nt === 'down' && B.ntWhy === 'soon' ? esc(t('cal_rec_soon'))
       : B.nt === 'down' ? `${esc(t(NT_DOWN[B.ntWhy] || NT_DOWN.error))} <button type="button" class="btn btn-ghost btn-sm" id="cal-book-recheck">${esc(t('cal_rec_recheck'))}</button>`
       : esc(t('cal_rec_checking'));
-    const rec = DV_NOTETAKER_SHOWN && !reschedule && isMeet(place) ? `<div class="cal-book-sec"><label class="check"><input type="checkbox" id="cal-book-record"${ntOk && B.record ? ' checked' : ''}${ntOk ? '' : ' disabled'}><span>${esc(t('cal_book_record'))}</span></label><p class="help" aria-live="polite">${ntLine}</p></div>` : '';
+    // the summary (NOTETAKER_AI_CHANGES Part 6): offered under a ticked recording, and only when the workspace has a
+    // summary AI saved (Integrations, Notetaker tab); unticked, the note on the deal is the transcript
+    const sumOn = ntOk && B.record && !!B.ai;
+    const sumBox = sumOn ? `<div class="cal-book-sub"><label class="check"><input type="checkbox" id="cal-book-summary"${B.summary ? ' checked' : ''}><span>${esc(tf('cal_book_summary', { ai: dvAiName(B.ai) }))}</span></label><p class="help">${esc(t('cal_book_summary_help'))}</p></div>` : '';
+    const rec = DV_NOTETAKER_SHOWN && !reschedule && isMeet(place) ? `<div class="cal-book-sec"><label class="check"><input type="checkbox" id="cal-book-record"${ntOk && B.record ? ' checked' : ''}${ntOk ? '' : ' disabled'}><span>${esc(t('cal_book_record'))}</span></label><p class="help" aria-live="polite">${ntLine}</p>${sumBox}</div>` : '';
     // when: the month with its arrows, the days (the free ones enabled), then the time, then where the clock is
     const loading = B.loading || !B.slots;
     const head = `<div class="cal-book-nav"><span class="cal-book-range">${esc(monthTitle(B.month))}</span><span class="cal-book-navbtns"><button type="button" class="btn btn-secondary btn-sm btn-icon" data-mnav="-1" aria-label="${esc(t('cal_book_month_prev'))}"${B.month <= todayIso.slice(0, 7) ? ' disabled' : ''}>${icon('chevron-left')}</button><button type="button" class="btn btn-secondary btn-sm btn-icon" data-mnav="1" aria-label="${esc(t('cal_book_month_next'))}">${icon('chevron-right')}</button></span></div>`;
@@ -341,7 +374,7 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
       : B.conflicts.length ? `<div class="cal-book-conflict" role="alert">${B.conflicts.map(c => `<p>${esc(tf('cal_book_conflict', { time: c.time, title: c.title, who: c.who }))}</p>`).join('')}<p>${esc(t('cal_book_conflict_hint'))}</p></div>` : '';
     const note = `<div class="cal-book-sec">${field('cal-book-note', reschedule ? 'cal_resched_reason' : 'cal_book_note', `<textarea class="textarea" id="cal-book-note" rows="2" placeholder="${esc(t(reschedule ? 'cal_resched_reason_ph' : 'cal_book_note_ph'))}">${esc(B.note)}</textarea>`)}</div>`;
     const slot = B.picked ? slotsOf(B.date).find(x => x.start === B.picked) || { start: B.picked } : null;
-    const summary = slot ? `<div class="cal-book-summary">${icon('calendar')}<div><b>${esc(fmtDay(B.date))}, ${esc(tf('cal_book_slot', { from: fmtTime(slot.start), to: fmtTime(slotEnd(slot)), ampm: fmtAmPm(slot.start) }))}</b><span>${esc([place ? placeLabel(place) : '', !reschedule && B.record && B.nt === 'ok' && isMeet(place) ? t('cal_book_record_short') : '', tf('cal_book_with', { name: contact.name })].filter(Boolean).join(', '))}</span></div></div>` : '';
+    const summary = slot ? `<div class="cal-book-summary">${icon('calendar')}<div><b>${esc(fmtDay(B.date))}, ${esc(tf('cal_book_slot', { from: fmtTime(slot.start), to: fmtTime(slotEnd(slot)), ampm: fmtAmPm(slot.start) }))}</b><span>${esc([place ? placeLabel(place) : '', !reschedule && B.record && B.nt === 'ok' && isMeet(place) ? t('cal_book_record_short') : '', !reschedule && sumOn && B.summary && isMeet(place) ? tf('cal_book_summary_short', { ai: dvAiName(B.ai) }) : '', tf('cal_book_with', { name: contact.name })].filter(Boolean).join(', '))}</span></div></div>` : '';
     host.innerHTML = `<p class="help">${esc(tf('cal_book_invite_to', { email: contact.email }))}</p>${what}${rec}${when}${conflict}${note}${summary}${B.err ? `<p class="cal-book-err" role="alert">${esc(B.err)}</p>` : ''}`;
     go.disabled = !B.picked || B.busy || B.checking;
     go.textContent = B.busy ? t(reschedule ? 'cal_resched_busy' : 'cal_book_booking') : B.conflicts.length ? t('cal_book_anyway') : t(reschedule ? 'cal_resched_submit' : 'cal_book_submit');
@@ -352,8 +385,12 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
   // stays greyed out while it asks; a dialog closed meanwhile is left alone; a no unticks the box.
   async function checkNotetaker(fresh) {
     B.nt = 'checking'; render();
+    const aiAsk = apiFetchSilent('/api/integrations/notetaker/ai');   // the saved summary AI, asked alongside (Part 6)
     const r = await apiFetchSilent('/api/integrations/notetaker/health' + (fresh ? '?fresh=1' : ''));
+    const aiRes = await aiAsk;
     if (!host.isConnected) return;
+    B.ai = aiRes && !aiRes.error && aiRes.configured && aiRes.ai ? aiRes.ai.provider : null;
+    if (!B.ai) B.summary = false;
     B.nt = r && r.available === true ? 'ok' : 'down'; B.ntWhy = (r && r.reason) || 'error';
     if (B.nt !== 'ok') B.record = false;
     render();
@@ -394,6 +431,7 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
   on(host, 'change', '#cal-book-type', (e, el) => { B.typeId = Number(el.value); B.loc = 0; load(); });
   on(host, 'change', '#cal-book-where', (e, el) => { B.loc = Number(el.value) || 0; render(); });
   on(host, 'change', '#cal-book-record', (e, el) => { B.record = el.checked; render(); });
+  on(host, 'change', '#cal-book-summary', (e, el) => { B.summary = el.checked; render(); });
   on(host, 'click', '#cal-book-recheck', () => checkNotetaker(true));
   on(host, 'click', '[data-mnav]', (e, el) => { B.month = addMonths(B.month, Number(el.dataset.mnav)); if (B.month < todayIso.slice(0, 7)) B.month = todayIso.slice(0, 7); load(); });
   on(host, 'click', '[data-day]', (e, el) => { if (!bookable(el.dataset.day)) return; B.date = el.dataset.day; B.picked = null; B.conflicts = []; B.err = ''; render(); host.querySelector('#cal-book-time')?.focus(); });
@@ -405,7 +443,7 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
     const place = placeOf();
     const res = reschedule
       ? await api.post('/api/integrations/calcom/reschedule', { activity_id: reschedule.id, start: B.picked, reason: B.note })
-      : await api.post('/api/integrations/calcom/book', { deal_id: dealId, contact_id: contact.id, event_type_id: B.typeId, start: B.picked, note: B.note, language: currentLang, location: place ? (place.type === 'integration' ? { type: 'integration', integration: place.integration } : { type: place.type }) : null, record: !!(B.record && B.nt === 'ok' && isMeet(place)) });
+      : await api.post('/api/integrations/calcom/book', { deal_id: dealId, contact_id: contact.id, event_type_id: B.typeId, start: B.picked, note: B.note, language: currentLang, location: place ? (place.type === 'integration' ? { type: 'integration', integration: place.integration } : { type: place.type }) : null, record: !!(B.record && B.nt === 'ok' && isMeet(place)), summary: !!(B.summary && B.ai && B.record && B.nt === 'ok' && isMeet(place)) });
     B.busy = false;
     if (!res || res.error) { B.err = res?.error || t('cal_err_generic'); render(); return; }
     const when = `${fmtWhen(B.picked)} (${fmtAmPm(B.picked)})`;
@@ -616,7 +654,7 @@ async function openDealDetail(id, opts = {}) {
         <span class="dd-tl-actions">${dvMeetingButtons(a)}<button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
       ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="dd-act-edit" rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
           <div class="row" style="justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" data-act="act-save" data-id="${a.id}">${esc(t('btn_save'))}</button></div></div>`
-        : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActHtml(a.content)}</div>${dvJoinRow(a)}`}</div></div>`;
+        : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActPreviewHtml(a.content)}</div>${dvNoteMoreHtml(a)}${dvJoinRow(a)}`}</div></div>`;
   }
   function activityHtml() {
     const ty = dvTypeOf(S.type), all = S.acts, list = S.filter ? all.filter(a => a.type === S.filter) : all, c = contactOf();
@@ -843,6 +881,7 @@ async function openDealDetail(id, opts = {}) {
   const noteEdit = el => A['act-edit']({ dataset: { id: el.dataset.note } });
   on(root, 'click', '[data-note]', (e, el) => { if (e.target.closest('a')) return; if (!String(window.getSelection() || '')) noteEdit(el); });   // a link in a note is followed, not edited
   on(root, 'dblclick', '[data-note]', (e, el) => { if (!e.target.closest('a')) noteEdit(el); });
+  on(root, 'click', '[data-note-full]', (e, el) => dvOpenNote(S.acts.find(x => x.id === +el.dataset.noteFull)));   // a long note, whole (Part 9)
   on(root, 'keydown', '#dd-act-edit', e => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.editAct = null; render('main'); }
     // Enter is a new line. Ctrl/Cmd+Enter saves by clicking Save, so the one-press lock (core.js) applies.
@@ -899,7 +938,7 @@ async function openContactDetail(id, opts = {}) {
       <span class="dd-tl-actions">${dvMeetingButtons(a)}<button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
       ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="ct-aedit" rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
           <div class="row-between"><span class="help">${esc(t('ctrl_enter_saves_esc_cancels'))}</span><span class="row"><button class="btn btn-secondary btn-sm" type="button" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" type="button" data-act="act-save">${esc(t('btn_save'))}</button></span></div></div>`
-        : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActHtml(a.content)}</div>${dvJoinRow(a)}`}</div></div>`;
+        : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActPreviewHtml(a.content)}</div>${dvNoteMoreHtml(a)}${dvJoinRow(a)}`}</div></div>`;
   };
   const taskRow = x => { const done = x.status === dvDoneKey(), pr = DV_PRIO[x.priority] || DV_PRIO.medium, late = taskIsOverdue(x, done);
     return `<li class="list-item"><label class="check round"><input type="checkbox" data-task-toggle="${x.id}" aria-label="${esc(done ? tf('dv_mark_not_done', { title: x.title }) : tf('dv_mark_done', { title: x.title }))}" ${done ? 'checked' : ''}></label>
@@ -1100,6 +1139,7 @@ async function openContactDetail(id, opts = {}) {
   // A click that ends a text selection should not swallow the selection by re-rendering.
   offs.push(on(host, 'click', '[data-note]', (e, el) => { if (e.target.closest('a')) return; if (!String(window.getSelection() || '')) startNoteEdit(+el.dataset.note); }));   // a link in a note is followed, not edited
   offs.push(on(host, 'dblclick', '[data-note]', (e, el) => { if (!e.target.closest('a')) startNoteEdit(+el.dataset.note); }));
+  offs.push(on(host, 'click', '[data-note-full]', (e, el) => dvOpenNote(acts().find(x => x.id === +el.dataset.noteFull))));   // a long note, whole (Part 9)
   offs.push(on(host, 'input', '#ct-aedit', (e, el) => { S.editText = el.value; el.removeAttribute('aria-invalid'); dvAutoGrow(el); }));
   offs.push(on(host, 'keydown', '#ct-aedit', e => {
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.editAct = null; S.editText = ''; render(); }

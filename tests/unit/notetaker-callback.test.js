@@ -76,11 +76,52 @@ describe('the note from the result', () => {
     const notes = { ...NOTES_DE, language: 'en', title: 'Offer', summary: 'Short.', key_points: [], decisions: [], action_items: [{ task: 'Send the brochure', owner: 'Tom', due: 'Friday' }], open_questions: ['Parking?'] };
     assert.equal(nt.resultNote(done({ notes }), 'de').content, ['Offer', '', 'Short.', '', 'Action items', '• Send the brochure (Tom), due Friday', '', 'Open questions', '• Parking?'].join('\n'));
   });
-  test('recorded but no notes: says so with the reason, in the booking\'s language', () => {
-    const r = nt.resultNote(done({ notes: null, errors: { recording: null, transcript: null, notes: 'no Claude API key: put ANTHROPIC_API_KEY=sk-ant-... in .env' } }), 'de');
+  test('recorded but neither notes nor a transcript: says so with the reason, in the booking\'s language', () => {
+    const r = nt.resultNote(done({ notes: null, transcript: null, errors: { recording: null, transcript: null, notes: 'no Claude API key: put ANTHROPIC_API_KEY=sk-ant-... in .env' } }), 'de');
     assert.equal(r.kind, 'completed'); assert.equal(r.title, null);
     assert.equal(r.content, 'Notetaker hat das Meeting aufgenommen, aber keine Notizen geschrieben.\nGrund: no Claude API key: put ANTHROPIC_API_KEY=sk-ant-... in .env');
-    assert.equal(nt.resultNote(done({ notes: null, errors: { transcript: 'whisper crashed' } }), 'en').content, 'Notetaker recorded the meeting but wrote no notes.\nReason: whisper crashed');
+    assert.equal(nt.resultNote(done({ notes: null, transcript: null, errors: { transcript: 'whisper crashed' } }), 'en').content, 'Notetaker recorded the meeting but wrote no notes.\nReason: whisper crashed');
+    assert.equal(nt.resultNote(done({ notes: null, transcript: { text: '  \n ' }, errors: { transcript: 'empty' } }), 'en').content, 'Notetaker recorded the meeting but wrote no notes.\nReason: empty', 'a blank transcript is none');
+  });
+  // ── NOTETAKER_AI_CHANGES Part 8: without notes, the note is the transcript ──
+  test('no summary asked for (the default): the note is the transcript under its heading, every speaker turn on its own line', () => {
+    const r = nt.resultNote(done({ notes: null, transcript: { text: 'Anna Weiß: Hallo zusammen\r\nJana Weber: Guten Tag\n\nAnna Weiß: Zum Exposé …\n' } }), 'de');
+    assert.deepEqual(r, { kind: 'completed', title: null, reason: null, content: 'Transkript\nAnna Weiß: Hallo zusammen\nJana Weber: Guten Tag\n\nAnna Weiß: Zum Exposé …' });
+  });
+  test('the heading follows the meeting\'s language (the result\'s), else the booking\'s', () => {
+    assert.match(nt.resultNote(done({ notes: null, language: 'en' }), 'de').content, /^Transcript\nAnna Weiß: Hallo zusammen$/);
+    assert.match(nt.resultNote(done({ notes: null, language: 'de-DE' }), 'en').content, /^Transkript\n/);
+    assert.match(nt.resultNote(done({ notes: null, language: null }), 'en').content, /^Transcript\n/);
+  });
+  test('a summary asked for but not written: why first, then the transcript, so nothing is lost; the reason goes to the bell', () => {
+    const r = nt.resultNote(done({ notes: null, errors: { recording: null, transcript: null, notes: 'OpenAI rejected the API key (401)' } }), 'de');
+    assert.deepEqual(r, { kind: 'completed', title: null, reason: 'OpenAI rejected the API key (401)', content: 'Keine Zusammenfassung: OpenAI rejected the API key (401)\n\nTranskript\nAnna Weiß: Hallo zusammen' });
+    assert.equal(nt.resultNote(done({ notes: null, language: 'en', errors: { notes: 'Gemini has no model x' } }), 'de').content, 'No summary: Gemini has no model x\n\nTranscript\nAnna Weiß: Hallo zusammen');
+  });
+  test('a partial recording\'s transcript says so at the end', () => {
+    const r = nt.resultNote(done({ notes: null, errors: { recording: 'partial recording: the bot stopped after 12 minutes' } }), 'de');
+    assert.equal(r.content, 'Transkript\nAnna Weiß: Hallo zusammen\n\nHinweis: partial recording: the bot stopped after 12 minutes');
+  });
+  test('a whole 120-minute meeting fits (well past the 20,000 of a notes note); past 200,000 characters it is cut and says so', () => {
+    const turn = 'Anna Weiß: ' + 'Wir sprechen über das Objekt. '.repeat(4) + '\n';
+    const long = turn.repeat(Math.ceil(150000 / turn.length)).trim();
+    const whole = nt.resultNote(done({ notes: null, transcript: { text: long } }), 'de').content;
+    assert.equal(whole, 'Transkript\n' + long, 'nothing cut');
+    assert.ok(whole.length > 150000);
+    const huge = 'x'.repeat(250000);
+    const cut = nt.resultNote(done({ notes: null, transcript: { text: huge } }), 'de').content;
+    assert.equal(cut, 'Transkript\n' + 'x'.repeat(200000) + '\n… (Transkript gekürzt)');
+    assert.match(nt.resultNote(done({ notes: null, language: 'en', transcript: { text: huge } }), 'de').content, /\n… \(transcript shortened\)$/);
+  });
+  test('notes win: a result with notes and a transcript is the notes, as before', () => {
+    assert.match(nt.resultNote(done(), 'de').content, /^Angebot Elbstraße 12\n/);
+    assert.doesNotMatch(nt.resultNote(done(), 'de').content, /Transkript|Hallo zusammen/);
+  });
+  test('odd transcript shapes are survived: not an object, no text, text not a string', () => {
+    for (const transcript of ['Anna: hi', { text: 42 }, { turns: [] }, []]) {
+      const r = nt.resultNote(done({ notes: null, transcript, errors: { transcript: 'odd' } }), 'en');
+      assert.equal(r.content, 'Notetaker recorded the meeting but wrote no notes.\nReason: odd', JSON.stringify(transcript));
+    }
   });
   test('a partial recording keeps its notes and says it was partial', () => {
     const r = nt.resultNote(done({ errors: { recording: 'partial recording: the bot stopped after 12 minutes', transcript: null, notes: null } }), 'de');

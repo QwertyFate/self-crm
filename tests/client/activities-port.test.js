@@ -39,6 +39,7 @@ const STUBS = `
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   const icon = (n, c) => '<i ' + n + (c ? ' ' + c : '') + '>'; const avatar = (w, s) => '<av ' + (typeof w === 'string' ? w : w.name) + '>';
   const dvActHtml = s => s == null ? '' : String(s); const dvActText = s => s == null ? '' : String(s).replace(/<br>/g, '\\n');
+  const dvActPreviewHtml = dvActHtml; const dvNoteMoreHtml = () => '';   // NOTETAKER_AI Part 9: a note here is short, so its preview is the note
   const fmtEURShort = v => v + '€'; let currentLang = 'en';
   // Part 11 (Cal.com): a note is never a live meeting here, so the guarded delete runs the plain path
   const dvIsLiveMeeting = () => false; const dvDeleteActivityGuarded = async (a, n, { plain }) => plain(); const openCalcomBooking = () => {}; const cancelCalcomMeeting = () => {};

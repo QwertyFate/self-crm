@@ -762,7 +762,7 @@ function renderActivitiesFeed() {
         ${a.deal_id ? `<a href="#" class="ac-link" title="${esc(a.deal_title || '')}" onclick="event.preventDefault();openActivityDeal(${a.deal_id})">${icon('deals')}<span>${esc(a.deal_title || 'Deal')}</span></a>` : ''}
         ${a.contact_id ? `<a href="#" class="ac-link" title="${esc(actContactOf(a)?.company || '')}" onclick="event.preventDefault();openActivityContact(${a.contact_id})">${icon('users')}<span>${esc(a.contact_name || t('lbl_contact'))}</span></a>` : ''}
         <span class="ac-time" title="${esc(full)}">${esc(actAgo(a.created_at))}</span></div>
-        <div class="tl-text ac-text">${dvActHtml(a.content)}</div>${dvJoinRow(a)}
+        <div class="tl-text ac-text">${dvActPreviewHtml(a.content)}</div>${dvNoteMoreHtml(a, 'openActivityNote')}${dvJoinRow(a)}
         <div class="ac-meta">${a.logged_by_name ? avatar(a.logged_by_name, 'sm') + `<span>${esc(a.logged_by_name)}</span><span class="ac-dot"></span>` : ''}<span>${esc(actTime(a.created_at))}</span></div></div>
       <button class="iconbtn kebab" type="button" onclick="openActivityKebab(this,${a.id})" aria-label="${esc(t('obj_actions_aria'))}" aria-haspopup="menu">${icon('ellipsis')}</button></div>`;
   };
@@ -800,6 +800,9 @@ function renderActivitiesRail() {
 function toggleActivitiesStat(key, value) { activitiesUI[key] = activitiesUI[key] === value ? null : value; renderActivities(); }
 
 /* ----- row actions, export ----- */
+// A long note's button (detail-views.js, dvNoteMoreHtml): the whole note in a window (NOTETAKER_AI_CHANGES Part 9).
+function openActivityNote(id) { dvOpenNote(activities.find(x => x.id === id)); }
+
 function openActivityKebab(anchor, id) {
   const a = activities.find(x => x.id === id); if (!a) return;
   const items = [];
