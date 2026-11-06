@@ -1,10 +1,10 @@
 // ROUTE + UNIT tests: the Notetaker's switches (NOTETAKER_CHANGES, 2026-10-27). It was off for a branch (commented
 // out, not deleted) and is on again. Pinned: initDb() creates notetaker_recordings with its three later columns;
 // server.js mounts the result route with its raw body and limit, and starts the link watch after initDb(); the server
-// switch and the dialog's switch are on. "Coming soon" is on too (NOTETAKER_AI_CHANGES Part 10, 2026-11-05). So a
-// freshly loaded route (nobody set the switches):
-// - answers 'soon' in its health check without asking the Notetaker, and asks it once coming soon is off;
-// - still looks for waiting requests in its link tick, so recordings booked before keep going.
+// switch and the dialog's switch are on. "Coming soon" was on from 2026-11-05 (NOTETAKER_AI_CHANGES Part 10) and is
+// off again since 2026-11-06 (Part 11). So a freshly loaded route (nobody set the switches):
+// - asks the Notetaker in its health check, and answers 'soon' without asking once coming soon is switched on;
+// - looks for waiting requests in its link tick.
 // The email sync's table stays commented (on hold).
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -58,25 +58,25 @@ describe('the Notetaker is on', () => {
     assert.match(read('routes/integrations.js'), /^let NOTETAKER_ON = true;$/m);
     assert.match(read('public/js/detail-views.js'), /^const DV_NOTETAKER_SHOWN = true;$/m);
   });
-  test('coming soon is on (Part 10)', () => {
-    assert.match(read('routes/integrations.js'), /^let NOTETAKER_SOON = true;$/m);
+  test('coming soon is off again (Part 11)', () => {
+    assert.match(read('routes/integrations.js'), /^let NOTETAKER_SOON = false;$/m);
   });
-  test('a freshly loaded route answers "coming soon" in its health check and does not ask the Notetaker', async () => {
+  test('a freshly loaded route asks the Notetaker in its health check', async () => {
     asked.length = 0;
     const r = await srv.request('GET', '/api/integrations/notetaker/health?fresh=1');
-    assert.equal(r.status, 200); assert.deepEqual(r.body, { available: false, reason: 'soon' });
-    assert.equal(asked.length, 0);
+    assert.equal(r.status, 200); assert.deepEqual(r.body, { available: true });
+    assert.equal(asked.length, 1); assert.match(asked[0], /^http:\/\/notetaker\.test\/crm\/recordings\?external_id=/);
   });
-  test('coming soon off: the health check asks the Notetaker', async () => {
-    integrations.setNotetakerSoon(false);
+  test('coming soon switched on: the health check answers "soon" and does not ask the Notetaker', async () => {
+    integrations.setNotetakerSoon(true);
     try {
       asked.length = 0;
       const r = await srv.request('GET', '/api/integrations/notetaker/health?fresh=1');
-      assert.equal(r.status, 200); assert.deepEqual(r.body, { available: true });
-      assert.equal(asked.length, 1); assert.match(asked[0], /^http:\/\/notetaker\.test\/crm\/recordings\?external_id=/);
-    } finally { integrations.setNotetakerSoon(true); }
+      assert.equal(r.status, 200); assert.deepEqual(r.body, { available: false, reason: 'soon' });
+      assert.equal(asked.length, 0);
+    } finally { integrations.setNotetakerSoon(false); }
   });
-  test('a freshly loaded route looks for requests waiting for their Meet link (booked recordings keep going while coming soon)', async () => {
+  test('a freshly loaded route looks for requests waiting for their Meet link', async () => {
     pool.reset();
     assert.deepEqual(await integrations.notetakerLinkTick(), []);
     assert.ok(pool.some(/FROM notetaker_recordings n JOIN activities a/), 'the tick queried the waiting requests');

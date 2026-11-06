@@ -23,6 +23,11 @@
    route does not wait for the HTTP delivery. Everything it does is visible
    afterwards in engine_deliveries (GET /api/engine/deliveries).
 
+   A NEW DEAL (POST / only) may also get a phone call: when the workspace has
+   fonio on for deals made by hand, utils/fonio-calls.js schedules fonio's call
+   to the deal's contact (FONIO_CHANGES). It never fails the request; what it
+   decided is in fonio_calls (GET /api/integrations/fonio/calls).
+
    urgency is an integer 0-4, clamped by clampUrgency() — never trust the body.
 
    ENDPOINTS
@@ -44,6 +49,7 @@ const requireAuth = require('../middleware/auth');
 const { notify }  = require('../notifications');
 const engine      = require('../utils/engine');
 const baseUrl     = require('../utils/base-url');
+const fonioCalls  = require('../utils/fonio-calls');   // fonio calls a new deal's contact (FONIO_CHANGES Part 3)
 
 router.use(requireAuth);
 
@@ -132,6 +138,9 @@ router.post('/', async (req, res, next) => {
       entityType: 'deal', entityId: row.id,
     });
     if (engine.stageNum(stage_id)) fireEngine(req, { dealId: row.id, contactId: contact_id, title: title.trim(), stageId: engine.stageNum(stage_id) });
+    // fonio's call to the contact, when the workspace has it on for deals made by hand; it never fails the deal
+    await fonioCalls.scheduleForDeal(pool, { workspaceId: req.workspaceId, dealId: row.id, trigger: 'deal_manual' })
+      .catch(err => console.error('fonio scheduling:', err?.message || err));
     res.status(201).json({ id: row.id });
   } catch (e) { next(e); }
 });

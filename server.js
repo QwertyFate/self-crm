@@ -216,6 +216,7 @@ app.use('/api/auth',          require('./routes/auth'));
 app.use('/api/admin',         require('./routes/admin'));
 app.use('/api/admin',         require('./routes/admin-provision'));
 app.use('/api/admin',         require('./routes/admin-engine'));       // Engine Monitor: switches, request log, deliveries (cross-tenant)
+app.use('/api/admin',         require('./routes/admin-transfer'));     // workspace export: the bundle the local CRM imports
 app.use('/api/platform',      require('./routes/platform'));
 app.use('/api/contacts',      require('./routes/contacts'));
 app.use('/api/contacts',      require('./routes/contact-documents'));   // /:contactId/documents… — falls through contacts.js like task-attachments
@@ -241,6 +242,7 @@ app.use('/api/break-scores', require('./routes/break-scores'));   // the break's
 app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations/calcom/receive', webhookIpLimiter, calcomTokenLimiter);
+app.use('/api/integrations/fonio', require('./routes/fonio'));   // fonio.ai calls a new deal's contact (FONIO_CHANGES)
 app.use('/api/integrations',  integrations);
 // Email sync is on hold (2026-10-27, EMAIL_SYNC_CHANGES): the mailbox routes are not mounted, so nobody can start a
 // Google connection. Part 1 stays in the code; true mounts it again (with MAILBOX_SHOWN in public/js/mailbox.js).
@@ -380,5 +382,8 @@ initDb()
     // Requests for the Notetaker whose Google Meet link has not come: asks Cal.com for it every 20 seconds
     // (routes/integrations.js, NOTETAKER_CHANGES Part 4), so a CRM that Cal.com's webhook cannot reach still sends the bot.
     integrations.startNotetakerLinkWatch();
+    // fonio's calls to new deals' contacts: every 30 seconds the due ones are sent, inside each workspace's calling
+    // hours (utils/fonio-calls.js, FONIO_CHANGES Part 4). FONIO_WORKER=0 disables it, e.g. on a second instance.
+    if (process.env.FONIO_WORKER !== '0') require('./utils/fonio-calls').startWorker(pool);
   })
   .catch(err => { console.error('Database init failed:', err); process.exit(1); });

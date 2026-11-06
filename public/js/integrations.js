@@ -44,6 +44,8 @@
                disconnectCalcom, loadCalcomLogs, showCalMsg
      notetaker loadNotetakerAi, ntAiName, renderNotetakerAi, pickNotetakerAi, showNtAiMsg,
                showNtAiDetail, ntAiErrorText, saveNotetakerAi, removeNotetakerAi
+     fonio     loadFonio, renderFonio, updateFonioActive, toggleFonioDay, renderFonioDays, readFonioForm, fonioErrorText, showFonioMsg,
+               showFonioDetail, saveFonio, removeFonio, loadFonioCalls, fonioCallHtml, cancelFonioCall
      clipboard copyIntgText, copyIntgJson, fallbackCopy
 
    3. CAL.COM ("calcom" tab) — one account per workspace. The server says
@@ -56,6 +58,13 @@
       admins choose it and paste its key (PUT /notetaker/ai; the server asks the AI
       first); members see which one is set. Hidden while the Notetaker is off;
       "Coming soon" while it is coming soon.
+
+   5. FONIO ("fonio" tab; FONIO_CHANGES) — fonio.ai calls the contact of every
+      new deal after the set minutes, inside the calling hours. One account per
+      workspace. Owners and admins edit the form (PUT /fonio; a new key is
+      checked with fonio first, an empty key field keeps the saved key);
+      members see it read-only. Below it, the calls (GET /fonio/calls) with
+      cancel for a waiting one (owner/admin).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 let intgData = null;
@@ -262,6 +271,7 @@ async function loadIntegrations() {
   switchIntgTab(currentIntgTab);
   loadCalcomSettings();
   loadNotetakerAi();
+  loadFonio();
   const intgFieldMap = document.getElementById('intg-field-map');
   if (intgFieldMap) intgFieldMap.innerHTML = '';
 
@@ -1136,4 +1146,238 @@ async function removeNotetakerAi() {
   if (!res || res.error) { showNtAiMsg(t('nt_ai_err_generic'), false); return; }
   ntAiData = res; ntAiPick = null; showNtAiDetail(''); renderNotetakerAi();
   showNtAiMsg(t('nt_ai_removed_ok'), true);
+}
+
+// ── fonio.ai (the "fonio" tab; FONIO_CHANGES Parts 2 and 5) ──
+// fonio's AI phone assistant calls the contact of every new deal (made by hand and/or through the lead webhook)
+// after the set minutes, inside the calling hours. The server says can_manage: owners and admins edit the form and
+// save it (a new key is checked with fonio first; an empty key field keeps the saved key, whose last four characters
+// show), members see it read-only. The calls below come from GET /fonio/calls; a waiting one can be cancelled.
+// The disabling here is cosmetic: the routes are the real gate.
+let fonioData = null;
+let fonioDays = [];   // the calling days picked in the form, 1 = Monday … 7 = Sunday
+let fonioCallsCanManage = false;
+
+async function loadFonio() {
+  const data = await api.get('/api/integrations/fonio');
+  if (!data || data.error) return;
+  fonioData = data;
+  fonioDays = Array.isArray(data.settings?.hours_days) ? [...data.settings.hours_days] : [];
+  renderFonio();
+  loadFonioCalls();
+}
+
+function renderFonio() {
+  const d = fonioData, card = document.getElementById('fonio-card');
+  if (!d || !card) return;
+  const s = d.settings || {}, manage = !!d.can_manage, set = !!d.configured;
+  const $ = id => document.getElementById(id);
+  const status = $('fonio-status');
+  if (status) {
+    status.textContent = !set ? t('fonio_status_none') : s.active ? t('fonio_status_active') : t('fonio_status_paused');
+    status.className = 'badge' + (set && s.active ? ' badge-success' : set ? ' badge-warning' : '');
+  }
+  $('fonio-readonly-hint')?.classList.toggle('hidden', manage);
+  $('fonio-actions')?.classList.toggle('hidden', !manage);
+  $('fonio-remove-btn')?.classList.toggle('hidden', !(manage && set));
+  const key = $('fonio-key');
+  if (key) key.placeholder = set && s.key_hint ? tf('fonio_key_ph_keep', { hint: s.key_hint }) : t('fonio_key_ph');
+  const val = (id, v) => { const el = $(id); if (el) el.value = v ?? ''; };
+  const chk = (id, v) => { const el = $(id); if (el) el.checked = !!v; };
+  val('fonio-from', s.from_number);
+  chk('fonio-active', s.active);
+  chk('fonio-on-manual', s.on_deal_manual);
+  chk('fonio-on-webhook', s.on_deal_webhook);
+  val('fonio-delay', s.delay_minutes);
+  val('fonio-cc', s.country_code);
+  val('fonio-prefixes', (s.number_prefixes || []).join(', '));
+  chk('fonio-hours-on', s.hours_on);
+  val('fonio-hours-from', s.hours_from);
+  val('fonio-hours-to', s.hours_to);
+  const tz = $('fonio-hours-tz');
+  if (tz) tz.textContent = set && s.hours_tz ? tf('fonio_hours_tz', { tz: s.hours_tz }) : t('fonio_hours_tz_own');
+  const seg = $('fonio-days');
+  if (seg) {
+    seg.innerHTML = [1, 2, 3, 4, 5, 6, 7].map(n =>
+      `<button type="button" data-day="${n}" aria-pressed="${fonioDays.includes(n)}"${manage ? '' : ' disabled'}>${esc(t('fonio_day_' + n))}</button>`).join('');
+    seg.onclick = e => { const b = e.target.closest('[data-day]'); if (b && manage) toggleFonioDay(Number(b.dataset.day)); };
+  }
+  card.querySelectorAll('input').forEach(el => { el.disabled = !manage; });
+  updateFonioActive();
+  const facts = $('fonio-facts');
+  if (facts) {
+    if (!set) { facts.innerHTML = ''; return; }
+    const locale = currentLang === 'de' ? 'de-DE' : 'en-GB';
+    const when = s.saved_at ? new Date(s.saved_at).toLocaleString(locale) : '';
+    const rows = [
+      [t('fonio_fact_number'), s.from_number],
+      ...(manage && s.key_hint ? [[t('fonio_fact_key'), '…' + s.key_hint]] : []),
+      [t('fonio_fact_saved_by'), s.saved_by_name ? tf('fonio_saved_by_on', { name: s.saved_by_name, date: when }) : when],
+    ];
+    facts.innerHTML = `<table class="table compact"><tbody>${rows.map(([k, v]) => `<tr><td class="strong">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>`;
+  }
+}
+
+// Active is the main switch; the two triggers only choose which new deals are called once it is on. While it is off
+// in the form (saved or just switched), the triggers are greyed out and a line says that no calls go out. Their
+// values stay as they are and are saved with the form, so switching Active on again brings them back.
+function updateFonioActive() {
+  const active = !!document.getElementById('fonio-active')?.checked;
+  const manage = !!fonioData?.can_manage;
+  for (const id of ['fonio-on-manual', 'fonio-on-webhook']) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !manage || !active;
+  }
+  document.getElementById('fonio-paused-hint')?.classList.toggle('hidden', active);
+}
+
+function toggleFonioDay(n) {
+  fonioDays = fonioDays.includes(n) ? fonioDays.filter(x => x !== n) : [...fonioDays, n].sort((a, b) => a - b);
+  renderFonioDays();
+}
+
+// Only the day buttons: re-rendering the whole card would throw away what is typed in the form.
+function renderFonioDays() {
+  document.querySelectorAll('#fonio-days [data-day]').forEach(b => b.setAttribute('aria-pressed', String(fonioDays.includes(Number(b.dataset.day)))));
+}
+
+// The form as the PUT body. The key is sent only when one is typed; the number starts are split on commas.
+function readFonioForm(form) {
+  const body = {
+    from_number: form.from.trim(),
+    active: !!form.active,
+    on_deal_manual: !!form.onManual,
+    on_deal_webhook: !!form.onWebhook,
+    delay_minutes: form.delay === '' ? NaN : Number(form.delay),
+    country_code: form.cc.trim(),
+    number_prefixes: form.prefixes.split(/[,;\n]+/).map(x => x.trim()).filter(Boolean),
+    hours_on: !!form.hoursOn,
+    hours_days: [...form.days].sort((a, b) => a - b),
+    hours_from: form.hoursFrom,
+    hours_to: form.hoursTo,
+  };
+  const key = form.key.trim();
+  if (key) body.api_key = key;
+  return body;
+}
+
+// What a refused save says, by the server's reason, in the page's language.
+function fonioErrorText(res) {
+  const byReason = {
+    key_required: t('fonio_err_key_required'),
+    key_shape:    t('fonio_err_key_shape'),
+    from_number:  t('fonio_err_from_number'),
+    delay:        t('fonio_err_delay'),
+    country_code: t('fonio_err_country_code'),
+    prefixes:     t('fonio_err_prefixes'),
+    hours_days:   t('fonio_err_hours_days'),
+    hours:        t('fonio_err_hours'),
+    key:          t('fonio_err_key'),
+    refused:      t('fonio_err_refused'),
+    unreachable:  t('fonio_err_unreachable'),
+  };
+  return byReason[res?.reason] || t('fonio_err_generic');
+}
+
+function showFonioMsg(text, ok) {
+  const el = document.getElementById('fonio-msg'); if (!el) return;
+  el.textContent = text;
+  el.className   = 'workspace-name-msg ' + (ok ? 'success' : 'error');
+  setTimeout(() => el.classList.add('hidden'), ok ? 2500 : 8000);
+}
+
+// fonio's own words under the buttons (they come from fonio, so they stay in its language); empty hides the line.
+function showFonioDetail(text) {
+  const el = document.getElementById('fonio-detail'); if (!el) return;
+  el.textContent = text ? tf('fonio_detail', { detail: text }) : '';
+  el.classList.toggle('hidden', !text);
+}
+
+async function saveFonio(btn) {
+  const v = id => document.getElementById(id)?.value ?? '';
+  const c = id => !!document.getElementById(id)?.checked;
+  const body = readFonioForm({
+    key: v('fonio-key'), from: v('fonio-from'), active: c('fonio-active'), onManual: c('fonio-on-manual'),
+    onWebhook: c('fonio-on-webhook'), delay: v('fonio-delay'), cc: v('fonio-cc'), prefixes: v('fonio-prefixes'),
+    hoursOn: c('fonio-hours-on'), days: fonioDays, hoursFrom: v('fonio-hours-from'), hoursTo: v('fonio-hours-to'),
+  });
+  showFonioDetail('');
+  if (btn) { btn.disabled = true; btn.textContent = body.api_key ? t('fonio_checking') : t('fonio_btn_save'); }
+  try {
+    const res = await api.put('/api/integrations/fonio', body);
+    const keyEl = document.getElementById('fonio-key'); if (keyEl) keyEl.value = '';
+    if (!res || res.error) {
+      showFonioMsg(fonioErrorText(res), false);
+      if (res?.reason === 'key' || res?.reason === 'refused') showFonioDetail(res?.error || '');   // fonio's own words help here
+      return;
+    }
+    fonioData = res;
+    fonioDays = [...(res.settings?.hours_days || [])];
+    renderFonio();
+    showFonioMsg(body.api_key ? t('fonio_saved_key_ok') : t('fonio_saved_ok'), true);
+    loadFonioCalls();   // switching it off cancels the waiting calls
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t('fonio_btn_save'); }
+  }
+}
+
+async function removeFonio() {
+  const ok = await ui.confirm({ title: t('fonio_btn_remove'), message: t('fonio_confirm_remove'), confirmLabel: t('fonio_btn_remove'), danger: true });
+  if (!ok) return;
+  const res = await api.del('/api/integrations/fonio');
+  if (!res || res.error) { showFonioMsg(t('fonio_err_generic'), false); return; }
+  fonioData = res;
+  fonioDays = [...(res.settings?.hours_days || [])];
+  showFonioDetail('');
+  renderFonio();
+  showFonioMsg(t('fonio_removed_ok'), true);
+  loadFonioCalls();
+}
+
+async function loadFonioCalls() {
+  const el = document.getElementById('fonio-calls'); if (!el) return;
+  const data = await api.get('/api/integrations/fonio/calls');
+  const calls = data && !data.error ? (data.calls || []) : [];
+  fonioCallsCanManage = !!data?.can_manage;
+  el.innerHTML = calls.length ? calls.map(c => fonioCallHtml(c, fonioCallsCanManage)).join('') : `<p class="empty-inline">${esc(t('fonio_calls_none'))}</p>`;
+}
+
+const FONIO_CALL_BADGE = { sent: 'success', failed: 'failed', scheduled: 'pending', sending: 'pending' };
+
+// One call of the history. Every value from the server is escaped: contact and deal names are typed by people,
+// fonio's message comes from fonio.
+function fonioCallHtml(c, manage) {
+  const locale = currentLang === 'de' ? 'de-DE' : 'en-GB';
+  const fmt = x => (x ? new Date(x).toLocaleString(locale) : '');
+  const when = c.status === 'scheduled' ? tf('fonio_call_due', { date: fmt(c.due_at) }) : fmt(c.sent_at || c.created_at);
+  const who = [c.contact_name, c.deal_title && c.deal_title !== c.contact_name ? c.deal_title : ''].filter(Boolean).join(' · ');
+  const reason = c.reason ? (c.reason === 'by_user' && c.cancelled_by_name ? tf('fonio_reason_by_name', { name: c.cancelled_by_name }) : t('fonio_reason_' + c.reason)) : '';
+  const fields = [
+    c.to_number || c.raw_number,
+    t('fonio_trigger_' + c.trigger),
+    reason,
+    c.message ? tf('fonio_detail', { detail: c.message }) : '',
+  ].filter(Boolean);
+  const cancel = manage && c.status === 'scheduled'
+    ? ` <button class="btn btn-sm btn-ghost" onclick="cancelFonioCall(${Number(c.id)}, this)">${esc(t('fonio_call_cancel'))}</button>` : '';
+  return `<div class="intg-log-entry${c.status === 'failed' ? ' error' : ''}">
+    <div class="intg-log-entry-header">
+      <span class="intg-log-badge ${FONIO_CALL_BADGE[c.status] || ''}">${esc(t('fonio_call_status_' + c.status))}</span>
+      <span class="intg-log-time">${esc(when)}</span>
+      <span class="intg-log-contact">${esc(who)}</span>${cancel}
+    </div>
+    <div class="intg-log-fields">${fields.map(f => `<span class="intg-log-field">${esc(f)}</span>`).join('')}</div>
+  </div>`;
+}
+
+async function cancelFonioCall(id, btn) {
+  if (btn) btn.disabled = true;
+  const res = await api.post(`/api/integrations/fonio/calls/${Number(id)}/cancel`, {});
+  if (!res || res.error) {
+    showFonioMsg(res?.reason === 'not_waiting' ? t('fonio_call_not_waiting') : t('fonio_err_generic'), false);
+    loadFonioCalls();
+    return;
+  }
+  showFonioMsg(t('fonio_call_cancelled_ok'), true);
+  loadFonioCalls();
 }

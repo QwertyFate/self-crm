@@ -64,12 +64,19 @@ describe('markup: the tab bar and the provisioning panel', () => {
     assert.match(dealSection, /does\s*\n?\s*<strong>not<\/strong> fill these/);
   });
 
-  test('the table head and every placeholder row agree on 8 columns', () => {
+  test('the table head and every placeholder row agree on 9 columns', () => {
     const head = panel.slice(panel.indexOf('<thead>'), panel.indexOf('</thead>'));
-    assert.equal((head.match(/<th>/g) || []).length, 8);
-    for (const m of panel.matchAll(/colspan="(\d+)"/g)) assert.equal(m[1], '8');
-    const rowsFn = require('../helpers/client-fn').sliceFn(html, 'renderProvisionRows', 'admin.html');
-    for (const m of rowsFn.matchAll(/colspan="(\d+)"/g)) assert.equal(m[1], '8');
+    assert.equal((head.match(/<th>/g) || []).length, 9);
+    for (const m of panel.matchAll(/colspan="(\d+)"/g)) assert.equal(m[1], '9');
+    const { sliceFn } = require('../helpers/client-fn');
+    for (const fn of ['renderProvisionRows', 'loadProvisionList']) {
+      for (const m of sliceFn(html, fn, 'admin.html').matchAll(/colspan="(\d+)"/g)) assert.equal(m[1], '9', fn);
+    }
+  });
+
+  test('the export hint warns that the file holds password hashes', () => {
+    assert.match(panel, /<strong>Export<\/strong> downloads a copy of the whole workspace/);
+    assert.match(panel, /password hash: keep it like a password/);
   });
 
   test('every function reachable by onclick is actually defined', () => {
@@ -78,7 +85,7 @@ describe('markup: the tab bar and the provisioning panel', () => {
     // silent in a browser, so resolve them all against the script.
     const fromPanel = [...panel.matchAll(/onclick="(\w+)\(/g)].map(m => m[1]);
     const fromTabs  = [...html.matchAll(/onclick="(showAdminTab)\(/g)].map(m => m[1]);
-    const generated = ['copyProvText', 'renderProvisionResult', 'resetProvisionForm', 'readProvFields', 'copyRow'];
+    const generated = ['copyProvText', 'renderProvisionResult', 'resetProvisionForm', 'readProvFields', 'copyRow', 'exportWorkspace'];
     const called = new Set([...fromPanel, ...fromTabs, ...generated]);
 
     assert.deepEqual([...new Set(fromPanel)].sort(),
@@ -140,8 +147,18 @@ describe('renderProvisionRows: the workspace table', () => {
   };
 
   test('an empty list renders one spanning row, not an empty table', () => {
-    assert.match(F.renderProvisionRows([]), /colspan="8"/);
-    assert.match(F.renderProvisionRows(null), /colspan="8"/);
+    assert.match(F.renderProvisionRows([]), /colspan="9"/);
+    assert.match(F.renderProvisionRows(null), /colspan="9"/);
+  });
+
+  test('every row has an Export button for its own workspace id', () => {
+    assert.match(F.renderProvisionRows([row]), /<button class="prov-copy-btn" onclick="exportWorkspace\(7, this\)">Export<\/button>/);
+  });
+
+  test('the id in the Export onclick is forced to a number, so it cannot carry script', () => {
+    const out = F.renderProvisionRows([{ ...row, id: '7);alert(1);//' }]);
+    const handlers = [...out.matchAll(/onclick="exportWorkspace\(([^"]*)\)"/g)].map(m => m[1]);
+    assert.deepEqual(handlers, ['NaN, this']);
   });
 
   test('a provisioned workspace is badged, a pre-existing one shows a dash', () => {

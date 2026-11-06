@@ -62,6 +62,7 @@
      PUT   /notetaker/ai               { provider, api_key, model? }  set it, replacing the one before, owner/admin;
                                        the AI is asked first (utils/llm-check.js): 400 key/model refused, 502 not reachable
      DELETE /notetaker/ai              remove it (notes are the transcript again), owner/admin
+     /fonio                            fonio.ai — its own file, routes/fonio.js, mounted ahead of this one (FONIO_CHANGES)
 
    TELLING THE ASSIGNEE (Part 12)  every booked, moved or cancelled meeting is announced to the
      assignee of the deal, else of the contact, as one bell notification (calTellAssignee): from
@@ -80,6 +81,7 @@ const { masterDataChanges } = require('../utils/kunde');
 const calcom      = require('../utils/calcom');            // the Cal.com client and the sealing of its key
 const notetaker   = require('../utils/notetaker');         // the Notetaker recording bot for Google Meet (2026-10-20)
 const llmCheck    = require('../utils/llm-check');         // the Notetaker's summary AI: does it take the key? (2026-11-05)
+const fonioCalls  = require('../utils/fonio-calls');       // fonio calls a lead's new deal (FONIO_CHANGES Part 3)
 const baseUrl     = require('../utils/base-url');          // the public origin Cal.com must reach for the booking webhook
 const { notifyUser } = require('../notifications');         // the assignee of a deal or a contact is told of a meeting (Part 12)
 
@@ -300,6 +302,9 @@ router.post('/receive/:key', async (req, res) => {
         [wid, contact.id, wh.pipeline_id, stageId, contact.name]
       );
       dealId = deal.id;
+      // fonio's call to the lead, when the workspace has it on for the lead link; it never fails the delivery
+      await fonioCalls.scheduleForDeal(pool, { workspaceId: wid, dealId, trigger: 'deal_webhook' })
+        .catch(err => console.error('fonio scheduling:', err?.message || err));
     }
 
     await pool.query(
@@ -671,7 +676,8 @@ let NOTETAKER_ON = true;
 // - a booking stores no recording;
 // - the summary AI's routes answer { soon: true }, so the Notetaker tab shows "Coming soon", and refuse changes.
 // Recordings booked before keep going: moves, the Meet link, the result. false offers the Notetaker again.
-let NOTETAKER_SOON = true;
+// Off again since 2026-11-06 (Part 11): the Notetaker is offered for testing.
+let NOTETAKER_SOON = false;
 async function notetakerSync(wid, activityId) {
   const { rows: [r] } = await pool.query(
     `SELECT n.id, n.external_id, n.meeting_url, n.join_at, n.status, n.job_id, n.language, n.requested_by, n.callback_token, n.finished_at,

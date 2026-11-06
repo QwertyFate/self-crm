@@ -1115,6 +1115,8 @@
           <div class="settings-tab-sep" aria-hidden="true"></div>
           <button class="settings-tab" data-tab="calcom"     onclick="switchIntgTab('calcom')"     data-i18n="intg_tab_calcom">Cal.com</button>
           <button class="settings-tab hidden" data-tab="notetaker" onclick="switchIntgTab('notetaker')" data-i18n="intg_tab_notetaker">Notetaker</button>
+          <div class="settings-tab-sep" aria-hidden="true"></div>
+          <button class="settings-tab" data-tab="fonio"      onclick="switchIntgTab('fonio')"      data-i18n="intg_tab_fonio">fonio</button>
         </nav>
 
         <div class="settings-tab-body">
@@ -1458,6 +1460,118 @@
                 <span id="nt-ai-msg" class="workspace-name-msg hidden"></span>
               </div>
               <p class="help hidden" id="nt-ai-detail"></p>
+            </div>
+          </div>
+
+            </div>
+          </div>
+
+          <!-- ── fonio.ai: calls the contact of a new deal (routes/fonio.js, utils/fonio-calls.js; FONIO_CHANGES Parts 2 and 5). Owners/admins set it up; everyone sees the settings (read-only) and the calls. ── -->
+          <div id="intg-pane-fonio" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="intg_pane_fonio">fonio</h2>
+              <p class="settings-tab-hint" data-i18n="intg_pane_fonio_hint">fonio's AI phone assistant calls the contact of every new deal, a set number of minutes after the deal is created, inside the calling hours.</p>
+            </div>
+            <div class="intg-stack">
+
+          <div class="settings-card" id="fonio-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="fonio_title">Connection</h2>
+              <span id="fonio-status" class="badge" data-i18n="fonio_status_none">Not connected</span>
+            </div>
+            <p class="settings-hint" data-i18n="fonio_hint">One fonio account for the whole workspace. Everyone sees the settings and the calls; only owners and admins can change them.</p>
+            <p class="settings-hint hidden" id="fonio-readonly-hint" data-i18n="fonio_readonly_hint">Only owners and admins can change the fonio settings.</p>
+            <div class="settings-card-body">
+              <div id="fonio-facts"></div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_conn_label">Account</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_conn_hint">The API key from fonio and the fonio number the calls come from. In fonio, the assistant assigned to this number for outbound calls makes the call.</p>
+                </div>
+                <div class="intg-fields">
+                  <div class="intg-field">
+                    <label for="fonio-key" data-i18n="fonio_key_label">API key</label>
+                    <input type="text" id="fonio-key" class="intg-url-input intg-secret-input" autocomplete="off" spellcheck="false" placeholder="Paste the fonio API key" data-i18n-ph="fonio_key_ph" />
+                  </div>
+                  <div class="intg-field">
+                    <label for="fonio-from" data-i18n="fonio_from_label">fonio number</label>
+                    <input type="text" id="fonio-from" class="form-control" autocomplete="off" spellcheck="false" inputmode="tel" placeholder="+4930123456" data-i18n-ph="fonio_from_ph" />
+                    <p class="help" data-i18n="fonio_from_hint">With + and the country code.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_when_label">When fonio calls</h3>
+                </div>
+                <div class="intg-fields">
+                  <label class="switch-row"><input type="checkbox" id="fonio-active" class="switch" onchange="updateFonioActive()"> <span data-i18n="fonio_active">Active: call the contact of new deals</span></label>
+                  <p class="help hidden" id="fonio-paused-hint" data-i18n="fonio_paused_hint">Paused: no calls go out until "Active" is on. The two switches below apply once it is.</p>
+                  <label class="switch-row"><input type="checkbox" id="fonio-on-manual" class="switch"> <span data-i18n="fonio_on_manual">New deals created by hand</span></label>
+                  <label class="switch-row"><input type="checkbox" id="fonio-on-webhook" class="switch"> <span data-i18n="fonio_on_webhook">New deals from the lead webhook</span></label>
+                  <div class="intg-field">
+                    <label for="fonio-delay" data-i18n="fonio_delay_label">Call after (minutes)</label>
+                    <input type="number" id="fonio-delay" class="form-control" min="0" max="10080" step="1" />
+                    <p class="help" data-i18n="fonio_delay_hint">0 calls within half a minute.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_numbers_label">Numbers</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_numbers_hint">fonio dials numbers with + and the country code. A contact's number that starts with 0 gets the country code below.</p>
+                </div>
+                <div class="intg-fields">
+                  <div class="intg-field">
+                    <label for="fonio-cc" data-i18n="fonio_cc_label">Country code for numbers starting with 0</label>
+                    <input type="text" id="fonio-cc" class="form-control" autocomplete="off" spellcheck="false" inputmode="tel" placeholder="+49" data-i18n-ph="fonio_cc_ph" />
+                  </div>
+                  <div class="intg-field">
+                    <label for="fonio-prefixes" data-i18n="fonio_prefixes_label">Only call numbers starting with</label>
+                    <input type="text" id="fonio-prefixes" class="form-control" autocomplete="off" spellcheck="false" placeholder="+49, 0171, 0160" data-i18n-ph="fonio_prefixes_ph" />
+                    <p class="help" data-i18n="fonio_prefixes_hint">Separated by commas. Empty: every number.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_hours_label">Calling hours</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_hours_hint">A call that falls due outside these hours waits for the next opening.</p>
+                </div>
+                <div class="intg-fields">
+                  <label class="switch-row"><input type="checkbox" id="fonio-hours-on" class="switch"> <span data-i18n="fonio_hours_on">Only call within these hours</span></label>
+                  <div class="intg-field">
+                    <label id="fonio-days-label" data-i18n="fonio_days_label">Days</label>
+                    <div class="seg" id="fonio-days" role="group" aria-labelledby="fonio-days-label"></div>
+                  </div>
+                  <div class="intg-field">
+                    <label for="fonio-hours-from" data-i18n="fonio_hours_from">From</label>
+                    <input type="time" id="fonio-hours-from" class="form-control" />
+                  </div>
+                  <div class="intg-field">
+                    <label for="fonio-hours-to" data-i18n="fonio_hours_to">To</label>
+                    <input type="time" id="fonio-hours-to" class="form-control" />
+                    <p class="help" id="fonio-hours-tz"></p>
+                  </div>
+                </div>
+              </div>
+              <div class="settings-card-actions hidden" id="fonio-actions">
+                <button class="btn btn-primary btn-sm" id="fonio-save-btn" onclick="saveFonio(this)" data-i18n="fonio_btn_save">Save</button>
+                <button class="btn btn-sm btn-danger hidden" id="fonio-remove-btn" onclick="removeFonio()" data-i18n="fonio_btn_remove">Remove</button>
+                <span id="fonio-msg" class="workspace-name-msg hidden"></span>
+              </div>
+              <p class="help hidden" id="fonio-detail"></p>
+            </div>
+          </div>
+
+          <div class="settings-card" id="fonio-calls-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="fonio_calls_title">Calls</h2>
+              <button class="btn btn-sm btn-ghost" onclick="loadFonioCalls()" data-i18n="fonio_calls_refresh">Refresh</button>
+            </div>
+            <p class="settings-hint" data-i18n="fonio_calls_hint">The last 50 calls, newest first. A waiting call can be cancelled until it is made.</p>
+            <div class="settings-card-body">
+              <div id="fonio-calls"></div>
             </div>
           </div>
 

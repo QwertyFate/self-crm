@@ -747,6 +747,65 @@ async function initDb() {
   // The booking dialog's summary box (Part 6): ticked, the meeting asks for a summary by the saved AI; false (the
   // default, and every row from before) means the note is the transcript.
   await pool.query(`ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS summary BOOLEAN NOT NULL DEFAULT false`);
+  // fonio.ai (FONIO_CHANGES Part 1, 2026-11-06; routes/fonio.js, utils/fonio.js): ONE connection per workspace. fonio
+  // calls a new deal's contact delay_minutes after the deal is created — by hand (on_deal_manual) and/or through the
+  // lead link (on_deal_webhook) — while active is on. api_key_sealed under the Cal.com sealing, key_hint its last four;
+  // from_number the company's fonio number (+E.164), which picks the fonio assistant. A contact's number is made
+  // international with country_code (a leading 0) and called only when it starts with one of number_prefixes ([] = any).
+  // With hours_on, calls go out only on hours_days (1 = Monday … 7 = Sunday) from hours_from to hours_to, in hours_tz —
+  // the zone of whoever last saved the hours (users.timezone), as for tasks and activities.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_fonio (
+      id               SERIAL PRIMARY KEY,
+      workspace_id     INTEGER NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+      api_key_sealed   TEXT NOT NULL,
+      key_hint         TEXT,
+      from_number      TEXT NOT NULL,
+      active           BOOLEAN NOT NULL DEFAULT false,
+      delay_minutes    INTEGER NOT NULL DEFAULT 5,
+      on_deal_manual   BOOLEAN NOT NULL DEFAULT true,
+      on_deal_webhook  BOOLEAN NOT NULL DEFAULT true,
+      country_code     TEXT NOT NULL DEFAULT '+49',
+      number_prefixes  JSONB NOT NULL DEFAULT '[]',
+      hours_on         BOOLEAN NOT NULL DEFAULT true,
+      hours_days       JSONB NOT NULL DEFAULT '[1,2,3,4,5]',
+      hours_from       TIME NOT NULL DEFAULT '09:00',
+      hours_to         TIME NOT NULL DEFAULT '18:00',
+      hours_tz         TEXT NOT NULL DEFAULT 'Europe/Berlin',
+      saved_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      saved_at         TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  // fonio's calls (FONIO_CHANGES Parts 3–5; utils/fonio-calls.js): the queue AND the history, one row per call.
+  // trigger: deal_manual | deal_webhook. status: scheduled (waiting for due_at) → sending → sent | failed; or
+  // skipped (never callable: reason no_contact, no_phone, bad_number, number_not_allowed, already_scheduled) or
+  // cancelled (reason inactive, disconnected, by_user). raw_number is the contact's number as saved, to_number as
+  // called; message is fonio's own answer. A row stuck in 'sending' (the process died mid-request) becomes failed
+  // 'interrupted' and is never sent again: fonio may already be ringing.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS fonio_calls (
+      id            SERIAL PRIMARY KEY,
+      workspace_id  INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      deal_id       INTEGER REFERENCES deals(id)    ON DELETE SET NULL,
+      contact_id    INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+      trigger       TEXT NOT NULL CHECK (trigger IN ('deal_manual','deal_webhook')),
+      status        TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','sending','sent','failed','skipped','cancelled')),
+      reason        TEXT,
+      raw_number    TEXT,
+      to_number     TEXT,
+      message       TEXT,
+      due_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      sent_at       TIMESTAMPTZ,
+      attempts      INTEGER NOT NULL DEFAULT 0,
+      cancelled_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS fonio_calls_due_idx ON fonio_calls (due_at) WHERE status = 'scheduled'`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS fonio_calls_ws_idx ON fonio_calls (workspace_id, created_at DESC)`);
+  // One waiting call per contact, even when two new deals for the same contact are scheduled at the same moment.
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS fonio_calls_one_waiting ON fonio_calls (contact_id) WHERE status IN ('scheduled','sending')`);
   // Email sync is on hold (2026-10-27): its table is NOT created, so no database (production included) gets it
   // until the feature is built. The definition stays here, commented; remove the /* */ to create it again
   // (with EMAIL_SYNC_ON in server.js and MAILBOX_SHOWN in public/js/mailbox.js).

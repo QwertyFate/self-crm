@@ -12,14 +12,14 @@ const html = read('public/index.html');
 const js   = read('public/js/integrations.js');
 const css  = read('public/style.css');
 const dict = new Function(sliceConst('public/js/core.js', 'TRANSLATIONS').replace(/^[^{]*/, 'return '))();
-const pane = html.slice(html.indexOf('<div id="intg-pane-notetaker"'), html.indexOf('<!-- ── Workspaces page ── -->'));
+const pane = html.slice(html.indexOf('<div id="intg-pane-notetaker"'), html.indexOf('<!-- ── fonio.ai'));   // fonio's pane follows (fonio-ui.test.js)
 const pageStart = html.indexOf('<section id="page-integrations"');
 const rail = html.slice(pageStart, html.indexOf('<div class="settings-tab-body">', pageStart));
-const block = js.slice(js.indexOf('// ── Notetaker: the summary AI'));
+const block = js.slice(js.indexOf('// ── Notetaker: the summary AI'), js.indexOf('// ── fonio.ai'));
 
 describe('the markup', () => {
   test('the rail: the Notetaker tab after Cal.com, hidden until the server says the Notetaker is on', () => {
-    assert.match(rail, /data-i18n="intg_tab_calcom">Cal\.com<\/button>\n\s*<button class="settings-tab hidden" data-tab="notetaker" onclick="switchIntgTab\('notetaker'\)" data-i18n="intg_tab_notetaker">Notetaker<\/button>\n\s*<\/nav>/);
+    assert.match(rail, /data-i18n="intg_tab_calcom">Cal\.com<\/button>\n\s*<button class="settings-tab hidden" data-tab="notetaker" onclick="switchIntgTab\('notetaker'\)" data-i18n="intg_tab_notetaker">Notetaker<\/button>\n\s*(?:<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="fonio"[^\n]*\n\s*)?<\/nav>/);
     assert.match(css, /^\.settings-tab\[data-tab="notetaker"\]::before \{ --ico: url\("data:image\/svg\+xml;charset=utf-8,%3Csvg[^"]*stroke='black'[^"]*rect x='9' y='2' width='6' height='12' rx='3'[^"]*"\); \}$/m, 'the rail icon: a microphone');
     assert.match(css, /^\.hidden \{ display: none !important; \}$/m, 'the hidden tab really is hidden: .hidden wins over .settings-tab');
   });

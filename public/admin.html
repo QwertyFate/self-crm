@@ -467,16 +467,22 @@
             Every workspace on the platform, newest first. "Provisioned" means it was created here;
             workspaces that predate this panel show "—" because nothing was backfilled.
           </p>
+          <p class="prov-hint">
+            <strong>Export</strong> downloads a copy of the whole workspace — its name, members and owner, settings,
+            fields, pipelines, contacts, deals, notes and tasks — for the local CRM to import. The workspace here is
+            not changed. Integrations, logs and chat stay out.
+            <strong>The file holds every member's password hash: keep it like a password.</strong>
+          </p>
           <div class="prov-table-wrap">
             <table class="prov-table">
               <thead>
                 <tr>
                   <th>Workspace</th><th>Owner</th><th>Created</th><th>Provisioned</th>
-                  <th>Members</th><th>Fields (C/D)</th><th>Data (C/D)</th><th>Webhook</th>
+                  <th>Members</th><th>Fields (C/D)</th><th>Data (C/D)</th><th>Webhook</th><th>Export</th>
                 </tr>
               </thead>
               <tbody id="prov-list-body">
-                <tr><td colspan="8" class="loading">Loading…</td></tr>
+                <tr><td colspan="9" class="loading">Loading…</td></tr>
               </tbody>
             </table>
           </div>
@@ -1608,12 +1614,12 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
         const data = await res.json();
         body.innerHTML = renderProvisionRows(data.workspaces);
       } catch (e) {
-        body.innerHTML = `<tr><td colspan="8" class="message error">${esc(e.message)}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="9" class="message error">${esc(e.message)}</td></tr>`;
       }
     }
 
     function renderProvisionRows(rows) {
-      if (!rows || !rows.length) return '<tr><td colspan="8" class="loading">No workspaces yet.</td></tr>';
+      if (!rows || !rows.length) return '<tr><td colspan="9" class="loading">No workspaces yet.</td></tr>';
       return rows.map(w => `
         <tr>
           <td><strong>${esc(w.name)}</strong><br><span class="prov-hint">#${w.id}</span></td>
@@ -1627,7 +1633,35 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
                 ? (w.webhook_active ? '<span class="prov-badge yes">Active</span>' : '<span class="prov-badge off">Inactive</span>') +
                   ` <button class="prov-copy-btn" onclick="copyProvText(${JSON.stringify(w.webhook_url).replace(/"/g, '&quot;')}, this)">Copy URL</button>`
                 : '<span class="prov-badge no">none</span>'}</td>
+          <td><button class="prov-copy-btn" onclick="exportWorkspace(${Number(w.id)}, this)">Export</button></td>
         </tr>`).join('');
+    }
+
+    // The whole workspace as a .tar.gz for the local CRM (GET /workspaces/:id/export,
+    // routes/admin-transfer.js). fetch + blob rather than a plain link, so a failure shows
+    // as a message here instead of an error page saved as the download.
+    async function exportWorkspace(id, btn) {
+      const was = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Exporting…';
+      try {
+        const res = await fetch(`${API_BASE}/workspaces/${id}/export`);
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Export failed');
+        const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '')?.[1] || `workspace-${id}.tar.gz`;
+        const url = URL.createObjectURL(await res.blob());
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (e) {
+        showMessage(e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = was;
+      }
     }
 
     function fmtProvDate(value) {

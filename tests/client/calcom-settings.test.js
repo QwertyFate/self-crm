@@ -19,7 +19,7 @@ const rail = html.slice(pageStart, html.indexOf('<div class="settings-tab-body">
 
 describe('the markup', () => {
   test('the rail: a separator and the Cal.com tab after Deliveries', () => {
-    assert.match(rail, /data-tab="deliveries"[^\n]*\n\s*<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="calcom"\s+onclick="switchIntgTab\('calcom'\)"\s+data-i18n="intg_tab_calcom">Cal\.com<\/button>\n\s*(?:<button class="settings-tab hidden" data-tab="notetaker"[^\n]*\n\s*)?<\/nav>/, 'the last tab, but for the Notetaker\'s (hidden until the server answers; notetaker-ai-ui.test.js)');
+    assert.match(rail, /data-tab="deliveries"[^\n]*\n\s*<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="calcom"\s+onclick="switchIntgTab\('calcom'\)"\s+data-i18n="intg_tab_calcom">Cal\.com<\/button>\n\s*(?:<button class="settings-tab hidden" data-tab="notetaker"[^\n]*\n\s*)?(?:<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="fonio"[^\n]*\n\s*)?<\/nav>/, 'the last tab, but for the Notetaker\'s (hidden until the server answers; notetaker-ai-ui.test.js) and fonio\'s group (fonio-ui.test.js)');
   });
   test('the pane: one card with the status badge, the connect section, the member line, the account, the event type, the actions and the message line', () => {
     assert.match(pane, /^<div id="intg-pane-calcom" class="settings-pane">/);
