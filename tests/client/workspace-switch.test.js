@@ -23,7 +23,8 @@ function setup(answer) {
     function alert(m) { __calls.push(['alert', m]); }
     function __get() { return { socket, currentUser, onlineUsers, chatOldestId, chatNewestId, chatPageOpen, chatLoadingMore }; }`;
   const F = loadFns('public/js/auth.js', ['switchWorkspace'], {
-    state: { currentWorkspace: { id: 1, name: 'One' }, currentUser: { id: 11, role: 'owner', notification_prefs: { deals: false } }, kanbanFields: [], contactColumns: [], objectColumns: [], socket: null, onlineUsers: [{ id: 3 }], chatOldestId: 40, chatNewestId: 90, chatPageOpen: true, chatLoadingMore: true },
+    // masterSession: a global of core.js that switchWorkspace reads (MASTER_ACCESS_CHANGES Part 3); an ordinary session here
+    state: { masterSession: false, currentWorkspace: { id: 1, name: 'One' }, currentUser: { id: 11, role: 'owner', notification_prefs: { deals: false } }, kanbanFields: [], contactColumns: [], objectColumns: [], socket: null, onlineUsers: [{ id: 3 }], chatOldestId: 40, chatNewestId: 90, chatPageOpen: true, chatLoadingMore: true },
     extra, expose: ['__calls', '__get'],
   });
   const oldSocket = { id: 'old', disconnected: 0, disconnect() { this.disconnected++; } };

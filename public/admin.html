@@ -255,6 +255,12 @@
     #tab-monitor select { padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 13px; background: #fff; }
     #tab-tutorial code, #tab-engine code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
 
+    /* ── CRM access tab (MASTER_ACCESS_CHANGES Part 2) ── */
+    /* a masked TEXT field: a password field here makes Chrome offer to save the secret (as the Cal.com key, style.css) */
+    .crm-secret-input { -webkit-text-security: disc; }
+    #tab-crm .input-group { max-width: 420px; }
+    .crm-open { color: #b45309; font-weight: 600; }
+
     /* ── Workspace table ── */
     .prov-table { width: 100%; border-collapse: collapse; font-size: 14px; }
     .prov-table th {
@@ -310,6 +316,7 @@
         <button class="admin-tab"        id="tabbtn-tutorial"     onclick="showAdminTab('tutorial')">API Tutorial</button>
         <button class="admin-tab"        id="tabbtn-engine"       onclick="showAdminTab('engine')">Engine API</button>
         <button class="admin-tab"        id="tabbtn-monitor"      onclick="showAdminTab('monitor')">Engine Monitor</button>
+        <button class="admin-tab"        id="tabbtn-crm"          onclick="showAdminTab('crm')">CRM access</button>
       </div>
 
       <div id="tab-defaults">
@@ -893,6 +900,35 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
         </div>
       </div><!-- /#tab-monitor -->
 
+      <div id="tab-crm" class="hidden">
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Open the CRM with every workspace</h2>
+          <p class="prov-hint">
+            The admin secret opens the normal CRM. Its workspace picker then lists every workspace, and each one opens
+            as its <strong>owner</strong>: you see and can change everything the owner can, and what you change shows
+            as the owner's. Every visit is logged below. "Beenden" in the CRM's banner brings you back here.
+          </p>
+          <div class="input-group">
+            <label for="crm-secret">Admin Secret</label>
+            <input type="text" id="crm-secret" class="crm-secret-input" autocomplete="off" spellcheck="false"
+                   placeholder="Enter admin secret" onkeydown="if (event.key === 'Enter') openMasterCrm()" />
+          </div>
+          <button class="btn btn-primary" id="crm-open-btn" onclick="openMasterCrm()">Open the CRM</button>
+          <div id="crm-error" style="margin-top:14px"></div>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Access log</h2>
+          <p class="prov-hint">One row per visit: the workspace, the owner it opened as, when it began and ended, and from where. The last 100 visits.</p>
+          <div style="overflow-x:auto">
+            <table class="prov-table">
+              <thead><tr><th>Workspace</th><th>Opened as</th><th>Entered</th><th>Left</th><th>IP</th></tr></thead>
+              <tbody id="crm-log-body"><tr><td colspan="5" class="loading">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div><!-- /#tab-crm -->
+
       <div id="message" class="message" style="display: none;"></div>
     </div>
   </div>
@@ -1294,13 +1330,14 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
        ══════════════════════════════════════════════════════════════════════ */
 
     function showAdminTab(name) {
-      for (const t of ['defaults', 'provisioning', 'tutorial', 'engine', 'monitor']) {
+      for (const t of ['defaults', 'provisioning', 'tutorial', 'engine', 'monitor', 'crm']) {
         document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== name);
         document.getElementById(`tabbtn-${t}`).classList.toggle('active', t === name);
       }
       if (name === 'provisioning') loadProvisionList();
       if (name === 'tutorial' || name === 'engine') fillTutorialHost();
       if (name === 'monitor') loadEngineMonitor();
+      if (name === 'crm') loadCrmLog();
     }
 
     // The tutorial's snippets name this console's own host, so they are copy-and-run.
@@ -1662,6 +1699,67 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
         btn.disabled = false;
         btn.textContent = was;
       }
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       CRM ACCESS TAB (MASTER_ACCESS_CHANGES Part 2)
+       The admin secret → POST /crm-login → the normal CRM at /, whose picker
+       then lists every workspace, each opened as its owner (utils/master.js).
+       The table is GET /crm-log: the last 100 visits.
+       ══════════════════════════════════════════════════════════════════════ */
+
+    async function openMasterCrm() {
+      const input = document.getElementById('crm-secret');
+      const errorEl = document.getElementById('crm-error');
+      const btn = document.getElementById('crm-open-btn');
+      errorEl.innerHTML = '';
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE}/crm-login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ secret: input.value })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          input.value = '';
+          window.location.href = data.redirect || '/';
+          return;
+        }
+        errorEl.innerHTML = `<div class="message error">${esc(data.error || 'The CRM could not be opened.')}</div>`;
+      } catch (e) {
+        errorEl.innerHTML = `<div class="message error">Error: ${esc(e.message)}</div>`;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function loadCrmLog() {
+      const body = document.getElementById('crm-log-body');
+      try {
+        const res = await fetch(`${API_BASE}/crm-log`);
+        const data = await res.json().catch(() => ({}));
+        body.innerHTML = renderCrmLog(res.ok ? data.visits : null);
+      } catch (e) {
+        body.innerHTML = renderCrmLog(null);
+      }
+    }
+
+    function renderCrmLog(visits) {
+      if (!Array.isArray(visits)) return '<tr><td colspan="5" class="loading">The log could not be loaded.</td></tr>';
+      if (!visits.length) return '<tr><td colspan="5" class="loading">No visits yet.</td></tr>';
+      return visits.map(v => `<tr>
+          <td>${esc(v.workspace_name || '—')}</td>
+          <td>${esc(v.user_name || '—')}</td>
+          <td>${esc(fmtVisitTime(v.entered_at))}</td>
+          <td>${v.left_at ? esc(fmtVisitTime(v.left_at)) : '<span class="crm-open">still open</span>'}</td>
+          <td class="mon-code">${esc(v.ip || '—')}</td>
+        </tr>`).join('');
+    }
+
+    function fmtVisitTime(value) {
+      const d = new Date(value);
+      return value && !isNaN(d) ? d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
     }
 
     function fmtProvDate(value) {

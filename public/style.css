@@ -660,6 +660,11 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 /* ── Main column: top bar + scrolling view ───────────────────────────────── */
 .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .topbar { height: 56px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; padding: 0 20px; flex: none; }
+/* The master CRM's banner (MASTER_ACCESS_CHANGES Part 4): on every page while a customer workspace is open through
+   the admin secret, in the warning colours so it is never mistaken for an ordinary session (.hidden wins: !important) */
+.master-banner { display: flex; align-items: center; gap: 10px; padding: 6px 20px; background: var(--warning-bg); color: var(--warning); border-bottom: 1px solid var(--warning-bd); font-size: 13px; flex: none; }
+.master-banner-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.master-banner strong { font-weight: 600; }
 .crumbs { display: flex; align-items: center; gap: 6px; color: var(--text-3); font-size: var(--fs-md); min-width: 0; white-space: nowrap; overflow: hidden; flex: 0 1 auto; }
 .crumbs b { color: var(--text); font-weight: 600; } .crumbs .ic { width: 14px; height: 14px; } .crumbs a, .crumbs span { white-space: nowrap; }
 .search-trigger { margin: 0 auto; display: flex; align-items: center; gap: 10px; width: min(440px, 100%); height: 36px; padding: 0 12px; border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--r-md); color: var(--text-3); font-size: var(--fs-md); cursor: pointer; }

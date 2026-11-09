@@ -20,6 +20,11 @@
                  Changing them affects future workspaces only.
      /features   platform_settings.features: { tourEnabled }.
      /stats      global counts.
+     /crm-login  the master CRM: the same secret opens the CRM itself with
+                 every workspace in its picker and switcher, each entered as
+                 its owner and logged (utils/master.js, routes/auth.js).
+     /crm-leave  ends master mode, keeps the console login (the banner's "Beenden").
+     /crm-log    the last 100 visits, for the console's "CRM access" tab.
    One-shot tenant provisioning (/provision) is the OTHER router mounted at
    /api/admin — routes/admin-provision.js. requireAdmin is shared from
    middleware/admin-auth.js so both files gate on the same flag.
@@ -39,6 +44,7 @@ const crypto   = require('crypto');
 const { pool } = require('../db');
 const { readFeatures, writeFeatures } = require('../utils/features');
 const requireAdmin = require('../middleware/admin-auth');
+const master   = require('../utils/master');
 
 router.get('/me', (req, res) => {
   res.json({ isAdmin: !!req.session?.isAdmin });
@@ -53,9 +59,55 @@ router.post('/login', (req, res) => {
   res.json({ success: true });
 });
 
-router.post('/logout', (req, res) => {
-  req.session.isAdmin = false;
-  res.json({ success: true });
+router.post('/logout', async (req, res, next) => {
+  try {
+    // the master CRM needs isAdmin: logging out here also ends it, and leaves no owner session behind (utils/master.js)
+    if (req.session.master) {
+      await master.leave(req);
+      delete req.session.master; delete req.session.userId; delete req.session.workspaceId; delete req.session.userRole;
+    }
+    req.session.isAdmin = false;
+    res.json({ success: true });
+  } catch (e) { next(e); }
+});
+
+// The master CRM (MASTER_ACCESS_CHANGES Part 1, 2026-11-09): the same secret opens the CRM itself, with every
+// workspace in its picker and switcher (routes/auth.js; utils/master.js). The console's "CRM-Zugang" tab posts here,
+// then goes to /. The session starts with no user and no workspace: the CRM shows its picker first.
+router.post('/crm-login', async (req, res, next) => {
+  try {
+    const adminSecret = process.env.ADMIN_SECRET;
+    if (!adminSecret) return res.status(503).json({ error: 'ADMIN_SECRET is not configured on this server.' });
+    if (!requireAdmin.secretMatches(req.body?.secret, adminSecret)) return res.status(401).json({ error: 'Invalid admin secret.' });
+    await master.leave(req);   // a visit still open from an earlier master login ends here
+    delete req.session.userId; delete req.session.workspaceId; delete req.session.userRole;
+    req.session.isAdmin = true;
+    req.session.master  = { since: new Date().toISOString(), logId: null };
+    res.json({ success: true, redirect: '/' });
+  } catch (e) { next(e); }
+});
+
+// "Beenden" in the CRM's master banner (MASTER_ACCESS_CHANGES Part 4): ends master mode but keeps the console's own
+// login, so the console opens again without the secret. The CRM's logout (routes/auth.js) ends both.
+router.post('/crm-leave', requireAdmin, async (req, res, next) => {
+  try {
+    await master.leave(req);
+    delete req.session.master; delete req.session.userId; delete req.session.workspaceId; delete req.session.userRole;
+    res.json({ success: true, redirect: '/adminconsole' });
+  } catch (e) { next(e); }
+});
+
+// The master CRM's visits, newest first, for the console's "CRM access" tab (MASTER_ACCESS_CHANGES Part 2).
+router.get('/crm-log', requireAdmin, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, workspace_id, workspace_name, user_name, entered_at, left_at, ip
+         FROM master_access_log
+        ORDER BY entered_at DESC, id DESC
+        LIMIT 100`
+    );
+    res.json({ visits: rows });
+  } catch (e) { next(e); }
 });
 
 router.get('/invites', requireAdmin, async (req, res, next) => {

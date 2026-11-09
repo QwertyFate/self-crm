@@ -289,6 +289,8 @@
             <div class="au-head"><h1 class="au-title" data-i18n="au_title_picker">Arbeitsbereich wählen</h1><p class="au-sub" data-i18n="au_sub_picker">Dieses Konto gehört zu mehreren Arbeitsbereichen. Welcher soll geöffnet werden?</p></div>
             <div id="workspace-picker-list" class="workspace-picker-list"></div>
             <div id="workspace-picker-error" class="au-alert hidden" role="alert"></div>
+            <!-- the master CRM's way back (MASTER_ACCESS_CHANGES Part 3; auth.js showWorkspacePicker) -->
+            <div id="workspace-picker-console" class="au-aux hidden"><a href="/adminconsole" data-i18n="au_back_console">Zurück zur Admin-Konsole</a></div>
           </div>
 
           <!-- ── View: Join Workspace (its own ids — the in-app modal has join-ws-code / join-ws-error) ── -->
@@ -374,6 +376,13 @@
     </nav>
 
     <div class="main">
+      <!-- The master CRM (MASTER_ACCESS_CHANGES Part 4): shown while the admin secret has a workspace open as its owner -->
+      <div id="master-banner" class="master-banner hidden" role="status">
+        <svg class="ic" aria-hidden="true"><use href="#i-lock"/></svg>
+        <span class="master-banner-text"><span data-i18n="master_label">Plattform-Zugang:</span> <strong id="master-banner-ws"></strong>, <span data-i18n="master_as">geöffnet als</span> <strong id="master-banner-name"></strong></span>
+        <button class="btn btn-sm btn-ghost" type="button" onclick="switchPage('workspaces')" data-i18n="master_all">Alle Arbeitsbereiche</button>
+        <button class="btn btn-sm" type="button" onclick="endMasterSession()" data-i18n="master_end">Beenden</button>
+      </div>
       <header class="topbar">
         <div class="crumbs" id="crumbs"></div>
         <button class="search-trigger" onclick="openPalette()" type="button" aria-label="Search" data-i18n-aria="html_search"><svg class="ic" aria-hidden="true"><use href="#i-search"/></svg><span class="grow" data-i18n="topbar_search">Go to a page…</span><span class="kbd-wrap"><span class="kbd">Ctrl K</span></span></button>
@@ -1590,7 +1599,7 @@
               <h1 data-i18n="nav_workspaces">Workspaces</h1>
               <p class="text-muted" data-i18n="html_ws_sub">Switch between your workspaces or create a new one.</p>
             </div>
-            <button class="btn btn-primary" onclick="openCreateWorkspaceModal()" style="flex-shrink: 0;"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="html_new_workspace">New Workspace</span></button>
+            <button class="btn btn-primary" id="ws-page-new-btn" onclick="openCreateWorkspaceModal()" style="flex-shrink: 0;"><svg class="ic" aria-hidden="true"><use href="#i-plus"/></svg><span data-i18n="html_new_workspace">New Workspace</span></button>
           </div>
         </div>
         <div id="workspaces-grid" class="ws-page-grid"></div>

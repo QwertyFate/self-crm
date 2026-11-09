@@ -806,6 +806,22 @@ async function initDb() {
   await pool.query(`CREATE INDEX IF NOT EXISTS fonio_calls_ws_idx ON fonio_calls (workspace_id, created_at DESC)`);
   // One waiting call per contact, even when two new deals for the same contact are scheduled at the same moment.
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS fonio_calls_one_waiting ON fonio_calls (contact_id) WHERE status IN ('scheduled','sending')`);
+  // The master CRM (MASTER_ACCESS_CHANGES Part 1, 2026-11-09; utils/master.js): one row per visit of a workspace
+  // through the admin secret — the workspace, the owner row the visit acted as, when it began and ended, and from
+  // where. The names are copied so a row outlives a deleted workspace or user (hence SET NULL, not CASCADE).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS master_access_log (
+      id              SERIAL PRIMARY KEY,
+      workspace_id    INTEGER REFERENCES workspaces(id) ON DELETE SET NULL,
+      user_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      workspace_name  TEXT,
+      user_name       TEXT,
+      entered_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      left_at         TIMESTAMPTZ,
+      ip              TEXT,
+      user_agent      TEXT
+    )
+  `);
   // Email sync is on hold (2026-10-27): its table is NOT created, so no database (production included) gets it
   // until the feature is built. The definition stays here, commented; remove the /* */ to create it again
   // (with EMAIL_SYNC_ON in server.js and MAILBOX_SHOWN in public/js/mailbox.js).

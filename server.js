@@ -266,8 +266,6 @@ app.use('/api/dokumente',     require('./routes/engine-dokumente'));   // GET /:
 app.get('/adminconsole', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 // The public landing page: a standalone document (landingpage.html + landing.css + js/landing-ui.js + js/landing.js), no session.
 app.get('/landingpage', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landingpage.html')));
-// The second public landing page: a standalone document (landingpagetwo.html + landing-two.css + js/landing-two.js), no session.
-app.get('/landingpagetwo', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landingpagetwo.html')));
 
 // The client files' fingerprint. Every open tab asks for it (and hears it on each socket connect)
 // and reloads itself when it changes, so a deploy reaches people without a manual refresh.

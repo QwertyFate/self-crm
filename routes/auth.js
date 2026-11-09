@@ -35,6 +35,12 @@
      POST /join-workspace     join another workspace with an invite code
    The first four POSTs are rate limited in server.js.
 
+   THE MASTER CRM (utils/master.js, MASTER_ACCESS_CHANGES Part 1): a session
+   from POST /api/admin/crm-login carries `master`. For it /me, the picker,
+   /select-workspace, /switch-workspace and /my-workspaces cover EVERY
+   workspace, and entering one points the session at that workspace's owner
+   row (logged in master_access_log). Without `master` nothing here changes.
+
    ⚠ TWO KNOWN SHARP EDGES (see §8 of readmedev.md)
      - login and forgot-password both do `WHERE email = $1` with no ORDER BY
        and no LIMIT, then use the first row. With several rows per email, which
@@ -58,9 +64,14 @@ const bcrypt   = require('bcryptjs');
 const crypto   = require('crypto');
 const { pool, seedDefaultPipeline } = require('../db');
 const { sendPasswordReset } = require('../utils/mailer');
+const master   = require('../utils/master');
 
 router.get('/me', async (req, res, next) => {
   try {
+    // the master CRM before a workspace is picked: the picker, with every workspace (utils/master.js)
+    if (master.isMaster(req) && !req.session.userId) {
+      return res.json({ user: null, master: true, needs_workspace_picker: true, workspaces: await master.allWorkspaces() });
+    }
     if (!req.session?.userId) return res.json({ user: null });
 
     const { rows: [user] } = await pool.query(
@@ -88,6 +99,10 @@ router.get('/me', async (req, res, next) => {
 
     workspace.kanban_fields    = workspace.kanban_fields    || ['company', 'email'];
     workspace.contact_columns  = workspace.contact_columns  || [];
+    // in the master CRM the list is every workspace, and `master` tells the app to show its banner
+    if (master.isMaster(req)) {
+      return res.json({ user, workspace, workspaces: await master.allWorkspaces(), master: { since: req.session.master.since } });
+    }
     res.json({ user, workspace, workspaces });
   } catch (e) { next(e); }
 });
@@ -144,6 +159,10 @@ router.post('/login', async (req, res, next) => {
 
 router.post('/select-workspace', async (req, res, next) => {
   try {
+    // the master CRM enters any workspace as its owner; the lines below then resolve that owner's row as usual
+    if (master.isMaster(req) && !await master.enter(req, req.body?.workspace_id)) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
     if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
     const { workspace_id } = req.body;
 
@@ -175,6 +194,10 @@ router.post('/select-workspace', async (req, res, next) => {
 
 router.post('/switch-workspace', async (req, res, next) => {
   try {
+    // the master CRM switches to any workspace as its owner (the previous visit is closed in the log)
+    if (master.isMaster(req) && !await master.enter(req, req.body?.workspace_id)) {
+      return res.status(404).json({ error: 'Workspace not found' });
+    }
     if (!req.session?.userId) return res.status(401).json({ error: 'Not authenticated' });
     const { workspace_id } = req.body;
 
@@ -207,6 +230,10 @@ router.post('/switch-workspace', async (req, res, next) => {
 
 router.get('/my-workspaces', async (req, res, next) => {
   try {
+    // the master CRM's switcher: every workspace
+    if (master.isMaster(req)) {
+      return res.json({ workspaces: await master.allWorkspaces(), active_workspace_id: req.session.workspaceId || null, master: true });
+    }
     if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
     const { rows: [currentUser] } = await pool.query(
       'SELECT email FROM users WHERE id=$1',
@@ -377,7 +404,9 @@ router.post('/signup', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
+  // a master visit ends in the log; a failed write must not keep anyone logged in
+  try { await master.leave(req); } catch (e) { console.error('Master CRM: closing the visit failed:', e.message); }
   req.session.destroy(() => res.json({ success: true }));
 });
 

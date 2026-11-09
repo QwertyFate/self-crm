@@ -95,8 +95,7 @@ function answer(row, role) {
 // The merged settings checked as a whole: { value } or { reason, error }.
 function checkSettings(s) {
   const from = fonio.compactNumber(s.from_number);
-  if (!fonio.isE164(from)) return { reason: 'from_number', error: 'The fonio number must start with + and the country code, e.g. +4930123456' };
-  if (!Number.isInteger(s.delay_minutes) || s.delay_minutes < 0 || s.delay_minutes > MAX_DELAY) {
+  if (!fonio.isE164(from)) return { reason: 'from_number', error: 'The fonio number must start with + and the country code, e.g. +4930123456' };  if (!Number.isInteger(s.delay_minutes) || s.delay_minutes < 0 || s.delay_minutes > MAX_DELAY) {
     return { reason: 'delay', error: `The delay is a whole number of minutes from 0 to ${MAX_DELAY}` };
   }
   for (const k of ['active', 'on_deal_manual', 'on_deal_webhook', 'hours_on']) {

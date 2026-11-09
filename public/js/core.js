@@ -52,6 +52,9 @@
 
 let currentUser      = null;
 let currentWorkspace = null;
+// The master CRM (MASTER_ACCESS_CHANGES Part 3): the session came from the admin console's "CRM access" tab, so the
+// picker and the Workspaces page show every workspace, each opened as its owner, under the banner (auth.js)
+let masterSession    = false;
 let kanbanFields     = ['company', 'email'];
 
 let contacts   = [];
@@ -310,6 +313,10 @@ const TRANSLATIONS = {
     auth_copy_link:'Reset link:', btn_send_reset:'Send reset link', auth_back_login:'Back to log in',
     au_title_reset:'Set a new password', au_sub_reset:'At least 6 characters.', auth_new_password:'New password', lbl_confirm_password:'Confirm password', btn_set_password:'Save password',
     au_title_picker:'Choose a workspace', au_sub_picker:'This account belongs to several workspaces. Which one should open?',
+    // the master CRM (MASTER_ACCESS_CHANGES Parts 3–4)
+    au_title_picker_master:'Platform access', au_sub_picker_master:'Every workspace opens as its owner. Each visit is logged.',
+    au_back_console:'Back to the admin console',
+    master_label:'Platform access:', master_as:'opened as', master_all:'All workspaces', master_end:'End',
     au_title_join:'Join a workspace', au_sub_join:'Enter the invite code from the workspace owner or admin.', btn_join_workspace:'Join', btn_back:'Back',
     auth_pw_updated:'Password updated. Log in with your new password.', auth_pw_mismatch:'The passwords do not match.', auth_code_required:'Please enter the invite code.',
     auth_err_invalid:'Email address or password is not correct.', auth_err_limit:'Too many failed attempts. Please try again in 15 minutes.',
@@ -844,6 +851,10 @@ const TRANSLATIONS = {
     auth_copy_link:'Link zum Zurücksetzen:', btn_send_reset:'Link senden', auth_back_login:'Zurück zur Anmeldung',
     au_title_reset:'Neues Passwort festlegen', au_sub_reset:'Mindestens 6 Zeichen.', auth_new_password:'Neues Passwort', lbl_confirm_password:'Passwort bestätigen', btn_set_password:'Passwort speichern',
     au_title_picker:'Arbeitsbereich wählen', au_sub_picker:'Dieses Konto gehört zu mehreren Arbeitsbereichen. Welcher soll geöffnet werden?',
+    // the master CRM (MASTER_ACCESS_CHANGES Parts 3–4)
+    au_title_picker_master:'Plattform-Zugang', au_sub_picker_master:'Jeder Arbeitsbereich öffnet sich als sein Inhaber. Jeder Besuch wird protokolliert.',
+    au_back_console:'Zurück zur Admin-Konsole',
+    master_label:'Plattform-Zugang:', master_as:'geöffnet als', master_all:'Alle Arbeitsbereiche', master_end:'Beenden',
     au_title_join:'Arbeitsbereich beitreten', au_sub_join:'Den Einladungscode vom Inhaber oder Admin des Arbeitsbereichs eingeben.', btn_join_workspace:'Beitreten', btn_back:'Zurück',
     auth_pw_updated:'Passwort aktualisiert. Jetzt mit dem neuen Passwort anmelden.', auth_pw_mismatch:'Die Passwörter stimmen nicht überein.', auth_code_required:'Bitte den Einladungscode eingeben.',
     auth_err_invalid:'E-Mail-Adresse oder Passwort ist nicht korrekt.', auth_err_limit:'Zu viele Fehlversuche. Bitte in 15 Minuten erneut versuchen.',

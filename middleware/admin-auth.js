@@ -45,3 +45,5 @@ function requireAdmin(req, res, next) {
 }
 
 module.exports = requireAdmin;
+// the same constant-time comparison for routes/admin.js POST /crm-login (MASTER_ACCESS_CHANGES Part 1)
+module.exports.secretMatches = secretMatches;

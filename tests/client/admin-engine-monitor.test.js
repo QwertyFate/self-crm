@@ -21,7 +21,7 @@ describe('the tab', () => {
   test('a fifth tab after Engine API, a hidden panel, showAdminTab knows it and loads it', () => {
     assert.match(html, /id="tabbtn-engine"[^>]*>Engine API<\/button>\s*<button class="admin-tab"\s+id="tabbtn-monitor"\s+onclick="showAdminTab\('monitor'\)">Engine Monitor<\/button>/);
     assert.match(html, /<div id="tab-monitor" class="hidden">/);
-    assert.match(inline, /for \(const t of \['defaults', 'provisioning', 'tutorial', 'engine', 'monitor'\]\)/);
+    assert.match(inline, /for \(const t of \['defaults', 'provisioning', 'tutorial', 'engine', 'monitor', 'crm'\]\)/);   // 'crm': MASTER_ACCESS_CHANGES Part 2
     assert.match(inline, /if \(name === 'monitor'\) loadEngineMonitor\(\);/);
   });
   test('the switches: two status badges and two buttons wired to toggleEngineControl, disabled until loaded', () => {

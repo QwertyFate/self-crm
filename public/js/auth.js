@@ -50,6 +50,9 @@
                  closeCreateWorkspaceModal, handleCreateWorkspace,
                  openJoinWorkspaceModal, showJoinWorkspace, closeJoinWorkspace,
                  handleJoinWorkspace
+     master CRM  renderMasterBanner, endMasterSession (MASTER_ACCESS_CHANGES: a
+                 session from the console's "CRM access" tab — masterSession in
+                 core.js — sees every workspace, each opened as its owner)
      caches      ensureFields, ensureContacts, ensureMembers, ensurePipelines
 
    ⚠ handleCreateWorkspace posts to /api/workspace, which stores the literal
@@ -73,6 +76,7 @@ async function init() {
   }
 
   const data = await api.get('/api/auth/me');
+  masterSession = !!data.master;   // the master CRM (MASTER_ACCESS_CHANGES Part 3)
   if (data.user && !resetToken) {
     currentUser      = data.user;
     currentWorkspace = data.workspace;
@@ -81,6 +85,10 @@ async function init() {
     dealColumns      = Array.isArray(data.user?.deal_columns) ? data.user.deal_columns : [];
     objectColumns    = data.workspace.object_columns   || [];
     showApp();
+  } else if (masterSession && data.needs_workspace_picker) {
+    // the master CRM before a pick: the picker, with every workspace
+    showAuth();
+    showWorkspacePicker(data.workspaces, null);
   } else {
     showAuth();
     if (resetToken) showResetForm(resetToken);
@@ -121,6 +129,7 @@ function showApp() {
   document.getElementById('app').classList.remove('hidden');
   window.history.replaceState({}, '', window.location.pathname);
   setSidebarWorkspace(currentWorkspace?.name);
+  renderMasterBanner();
   const settingsLabel = document.getElementById('settings-workspace-label');
   if (settingsLabel) settingsLabel.textContent = currentWorkspace?.name || '';
   document.getElementById('sidebar-user').textContent = currentUser?.name || '';
@@ -272,6 +281,14 @@ async function handleLogin(e) {
 
 function showWorkspacePicker(workspaces, user) {
   showAuthView('workspace-picker');
+  // the master CRM: its own heading, and the way back to the console (MASTER_ACCESS_CHANGES Part 3)
+  const view  = document.getElementById('auth-view-workspace-picker');
+  const title = view.querySelector('.au-title'), sub = view.querySelector('.au-sub');
+  title.dataset.i18n = masterSession ? 'au_title_picker_master' : 'au_title_picker';
+  sub.dataset.i18n   = masterSession ? 'au_sub_picker_master'   : 'au_sub_picker';
+  title.textContent = t(title.dataset.i18n);
+  sub.textContent   = t(sub.dataset.i18n);
+  document.getElementById('workspace-picker-console').classList.toggle('hidden', !masterSession);
   document.getElementById('workspace-picker-list').innerHTML = workspaces.map(w => `
     <button class="workspace-picker-btn" onclick="selectWorkspace(${w.id})">
       <div class="workspace-picker-avatar">${(w.name||'?')[0].toUpperCase()}</div>
@@ -333,6 +350,9 @@ async function loadWorkspacesPage() {
     </div>`;
   }).join('');
 
+  // the master CRM lists every workspace and adds none: a workspace made here would belong to the owner it is open as
+  document.getElementById('ws-page-new-btn')?.classList.toggle('hidden', !!data.master);
+  if (data.master) { grid.innerHTML = cards; return; }
   grid.innerHTML = cards + `
     <div class="ws-page-card ws-page-add" onclick="openAddWorkspaceChoice()">
       <div class="ws-page-card-banner ws-page-add-banner">
@@ -352,6 +372,8 @@ async function switchWorkspace(workspaceId) {
   if (workspaceId === currentWorkspace?.id) { await switchPage('deals'); return; }
   const data = await api.post('/api/auth/switch-workspace', { workspace_id: workspaceId });
   if (data.error) { alert(data.error); return; }
+  // the master CRM opens the other workspace as ITS owner: another person, so the app boots afresh
+  if (masterSession) { window.location.reload(); return; }
   currentWorkspace = data.workspace;
   // Users are per-workspace rows, so the id, the role and the notification preferences change on switch.
   if (currentUser && data.role)    currentUser.role = data.role;
@@ -523,9 +545,28 @@ async function handleResetPassword(e) {
 
 async function logout(e) {
   e?.preventDefault();
+  const wasMaster = masterSession;
   await api.post('/api/auth/logout', {});
   resetClientState();
+  if (wasMaster) { window.location.href = '/adminconsole'; return; }   // the master CRM came from the console
   showAuth();
+}
+
+// The master CRM's banner (MASTER_ACCESS_CHANGES Part 4): which workspace is open, and as whose owner row.
+// The words are data-i18n spans in index.html; only the two names are set here.
+function renderMasterBanner() {
+  const el = document.getElementById('master-banner');
+  if (!el) return;
+  el.classList.toggle('hidden', !masterSession);
+  document.getElementById('master-banner-ws').textContent   = masterSession ? (currentWorkspace?.name || '') : '';
+  document.getElementById('master-banner-name').textContent = masterSession ? (currentUser?.name || '') : '';
+}
+
+// "Beenden": master mode ends, the console's own login stays (POST /api/admin/crm-leave)
+async function endMasterSession() {
+  await api.post('/api/admin/crm-leave', {});
+  resetClientState();
+  window.location.href = '/adminconsole';
 }
 
 document.querySelectorAll('.sb-link[data-page]').forEach(link => {
@@ -568,7 +609,7 @@ function resetClientState() {
   if (socket) { socket.disconnect(); socket = null; }
   onlineUsers = []; chatOldestId = null; chatNewestId = null; chatOpen = false; chatPageOpen = false; chatLoadingMore = false;
   updateChatBadge(0);
-  currentUser = null; currentWorkspace = null;
+  currentUser = null; currentWorkspace = null; masterSession = false;
   contacts = []; fields = []; activities = []; members = [];
   pipelines = []; deals = []; dealFields = []; dealColumns = []; currentPipelineId = null; dragDealId = null;
   kanbanFields = ['company', 'email']; dealKanbanFields = ['contact', 'value']; contactColumns = []; colWidths = {};
