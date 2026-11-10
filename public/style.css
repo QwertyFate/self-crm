@@ -1755,6 +1755,12 @@ input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
 [data-theme="dark"] .intg-code { background: #060C14; border: 1px solid var(--line); }
 .intg-json-block { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; margin-top: var(--sp-4); }
 .intg-json-block .intg-code { border-radius: 0; }
+/* fonio tab: one variable per row — the placeholder it came from, its name, the CRM value, remove (FONIO_CHANGES Part 14) */
+.fonio-var-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--sp-2); align-items: center; padding: var(--sp-2) 0; border-top: 1px solid var(--line-soft); }
+.fonio-var-row:first-child { border-top: 0; }
+.fonio-var-from { grid-column: 1 / -1; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; color: var(--text-3, inherit); overflow-wrap: anywhere; }
+.fonio-vars-out { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow-y: auto; }
+@media (max-width: 640px) { .fonio-var-row { grid-template-columns: minmax(0, 1fr); } }
 .intg-json-header {
   display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3); background: var(--surface); border-bottom: 1px solid var(--line);

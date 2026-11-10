@@ -138,6 +138,13 @@ const notetakerLinkLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
   keyGenerator: (req) => req.path || 'unknown',
 });
+// fonio's result link (routes/fonio.js /receive): one per workspace, one delivery per finished call, keyed by the path.
+const fonioLinkLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 60,
+  message: { error: 'Too many deliveries for this link.' },
+  standardHeaders: true, legacyHeaders: false,
+  keyGenerator: (req) => req.path || 'unknown',
+});
 // The landing page's request form (routes/landing.js): a person asks once or twice; five a quarter hour per
 // address is room for typos and too little for a flood of fake leads in the team's CRM.
 const landingAskLimiter = rateLimit({
@@ -173,6 +180,9 @@ app.use('/api/integrations/calcom/receive', express.raw({ type: '*/*', limit: '1
 // The Notetaker's result is signed over the raw body (X-Notetaker-Signature) and carries the whole transcript,
 // so this path keeps the bytes and allows more than json()'s 100kb.
 app.use('/api/notetaker/webhook', express.raw({ type: '*/*', limit: '5mb' }));
+// fonio's result after a call (routes/fonio.js /receive) carries the transcript, and fonio's HTTP Request may send
+// it without a JSON content type: the raw bytes, up to 1 MB, parsed by the route.
+app.use('/api/integrations/fonio/receive', express.raw({ type: '*/*', limit: '1mb' }));
 app.use(express.json());
 // Engine API paths: a malformed or oversized body is a body-parser error BEFORE the routers run.
 // Answer the Engine's { fehler } shape (400 / 413) instead of the browser's { error } — and never a crash.
@@ -242,7 +252,8 @@ app.use('/api/break-scores', require('./routes/break-scores'));   // the break's
 app.use('/api/tasks',         require('./routes/task-attachments'));
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations/calcom/receive', webhookIpLimiter, calcomTokenLimiter);
-app.use('/api/integrations/fonio', require('./routes/fonio'));   // fonio.ai calls a new deal's contact (FONIO_CHANGES)
+app.use('/api/integrations/fonio/receive', webhookIpLimiter, fonioLinkLimiter);
+app.use('/api/integrations/fonio', require('./routes/fonio'));   // fonio.ai calls a new deal's contact (FONIO_CHANGES); /receive is PUBLIC
 app.use('/api/integrations',  integrations);
 // Email sync is on hold (2026-10-27, EMAIL_SYNC_CHANGES): the mailbox routes are not mounted, so nobody can start a
 // Google connection. Part 1 stays in the code; true mounts it again (with MAILBOX_SHOWN in public/js/mailbox.js).

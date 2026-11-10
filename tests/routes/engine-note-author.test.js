@@ -21,8 +21,8 @@ before(async () => {
 });
 after(async () => { await contacts.close(); await activities.close(); });
 
-// the Notetaker's notes are signed the same way (NOTETAKER_CHANGES Part 2)
-const LABEL = /COALESCE\(u\.name, CASE WHEN a\.source = 'engine' THEN 'Upgrads Engine' WHEN a\.source = 'notetaker' THEN 'Notetaker' END\) AS logged_by_name/;
+// the Notetaker's notes are signed the same way (NOTETAKER_CHANGES Part 2), and fonio's (FONIO_CHANGES Part 7)
+const LABEL = /COALESCE\(u\.name, CASE WHEN a\.source = 'engine' THEN 'Upgrads Engine' WHEN a\.source = 'notetaker' THEN 'Notetaker' WHEN a\.source = 'fonio' THEN 'fonio' END\) AS logged_by_name/;
 
 describe('the author label', () => {
   test('GET /api/contacts/:id selects a.source and labels Engine notes', async () => {

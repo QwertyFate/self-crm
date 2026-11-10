@@ -1,10 +1,16 @@
 // CLIENT (static) tests for the fonio tab on the Integrations page (FONIO_CHANGES Parts 2 and 5). No browser: the
 // markup is asserted as text and the pure functions are sliced out of public/js/integrations.js and run with the real
 // English dictionary. Pinned: the rail tab and its icon; every element the code reads is in the pane; every text has
-// its data-i18n; the tab talks to exactly its five routes and puts nothing unescaped into the page; every status,
+// its data-i18n; the tab talks to exactly its six routes and puts nothing unescaped into the page; every status,
 // reason, trigger and day the server can send has its label in both languages; every refusal the server names has
 // its own sentence; the form becomes the right PUT body (the key only when typed); a call's row escapes what people
 // and fonio typed, and offers cancel only to owners/admins on a waiting call.
+// Part 8: the result card (the link fonio posts to, the Body to paste, the last delivery) shows only when the
+// server sent a link, which it does for owners/admins with a saved connection; the Body's names are ones the
+// server reads; every delivery outcome the server records has its words in both languages.
+// Part 14: the variables card. A pasted prompt's placeholders become rows (a name from their words, a CRM value
+// where the words say so), the prompt comes back with the connected ones as {{name}}, only rows with a name and a
+// value are saved, every source the server offers has its label, and what people typed cannot inject markup.
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const { read, sliceFn, sliceConst, loadFns } = require('../helpers/client-fn');
@@ -29,7 +35,9 @@ describe('markup', () => {
   test('every element the code reads is in the pane', () => {
     const ids = ['fonio-card', 'fonio-status', 'fonio-readonly-hint', 'fonio-facts', 'fonio-key', 'fonio-from', 'fonio-active', 'fonio-on-manual',
       'fonio-on-webhook', 'fonio-delay', 'fonio-cc', 'fonio-prefixes', 'fonio-hours-on', 'fonio-days', 'fonio-hours-from', 'fonio-hours-to',
-      'fonio-hours-tz', 'fonio-actions', 'fonio-save-btn', 'fonio-remove-btn', 'fonio-msg', 'fonio-detail', 'fonio-calls-card', 'fonio-calls'];
+      'fonio-hours-tz', 'fonio-actions', 'fonio-save-btn', 'fonio-remove-btn', 'fonio-msg', 'fonio-detail', 'fonio-calls-card', 'fonio-calls',
+      'fonio-result-card', 'fonio-result-url', 'fonio-result-body', 'fonio-result-last',
+      'fonio-vars-card', 'fonio-vars-prompt', 'fonio-vars-found', 'fonio-vars-rows', 'fonio-vars-out-wrap', 'fonio-vars-out', 'fonio-vars-msg'];
     for (const id of ids) assert.ok(pane.includes(`id="${id}"`), `missing #${id}`);
     for (const m of block.matchAll(/getElementById\('([a-z-]+)'\)|\$\('([a-z-]+)'\)/g)) {
       const id = m[1] || m[2];
@@ -55,11 +63,11 @@ describe('markup', () => {
 });
 
 describe('code', () => {
-  test('loadIntegrations loads the tab; the tab uses its five routes and nothing else; no raw fetch; nothing unescaped into innerHTML', () => {
+  test('loadIntegrations loads the tab; the tab uses its six routes and nothing else; no raw fetch; nothing unescaped into innerHTML', () => {
     assert.match(sliceFn(js, 'loadIntegrations', 'integrations.js'), /loadNotetakerAi\(\);\s*loadFonio\(\);/);
     const routes = [...block.matchAll(/api\.(get|post|put|patch|del)\(([`'])([^`']+)\2/g)].map(m => `${m[1]} ${m[3]}`);
     assert.deepEqual([...new Set(routes)].sort(), [
-      'del /api/integrations/fonio', 'get /api/integrations/fonio', 'get /api/integrations/fonio/calls',
+      'del /api/integrations/fonio', 'get /api/integrations/fonio', 'get /api/integrations/fonio/calls', 'get /api/integrations/fonio/sources',
       'post /api/integrations/fonio/calls/${Number(id)}/cancel', 'put /api/integrations/fonio',
     ]);
     assert.doesNotMatch(block, /fetch\(|innerHTML = [^`]*\$\{(?!esc\()/);
@@ -168,6 +176,7 @@ describe('fonioErrorText: every refusal the server names has its own sentence', 
     const reasons = new Set([...read('routes/fonio.js').matchAll(/reason: '([a-z_]+)'/g)].map(m => m[1]));
     for (const r of ['key', 'refused', 'unreachable']) reasons.add(r);   // utils/fonio.js testKey
     for (const r of ['active', 'on_deal_manual', 'on_deal_webhook', 'hours_on', 'not_waiting']) reasons.delete(r);   // switches the form always sends right; the cancel route's own
+    reasons.delete('inbound');   // the result link's answer to fonio (Part 7), never shown on the page
     for (const r of reasons) assert.notEqual(F.fonioErrorText({ reason: r }), dict.en.fonio_err_generic, r);
     assert.equal(F.fonioErrorText({ reason: 'whatever' }), dict.en.fonio_err_generic);
     assert.equal(F.fonioErrorText(null), dict.en.fonio_err_generic);
@@ -206,5 +215,249 @@ describe("fonioCallHtml: one call's row", () => {
   test('what people and fonio typed cannot inject markup', () => {
     const out = F.fonioCallHtml(call({ contact_name: '<img src=x onerror=alert(1)>', deal_title: '<script>x</script>', message: '<b>hi</b>', to_number: '"><svg>' }), true);
     for (const raw of ['<img', '<script>', '<b>', '<svg>']) assert.ok(!out.includes(raw), raw);
+  });
+});
+
+describe('the result card (Part 8): the link, the Body for fonio, the last delivery', () => {
+  const bodySrc = js.match(/const FONIO_RESULT_BODY = JSON\.stringify\(\{[\s\S]*?\}, null, 2\);/)[0];
+  const R = loadFns('public/js/integrations.js', ['renderFonioResult', 'fonioDeliveryText'], {
+    state: { currentLang: 'en', fonioData: null, document: null },
+    extra: `${bodySrc}
+      ${sliceConst('public/js/integrations.js', 'FONIO_DELIVERY_OUTCOMES')}
+      const t = k => { const v = globalThis.__fonioDict.en[k]; if (v === undefined) throw new Error('no key ' + k); return v; };
+      const tf = (k, o) => t(k).replace(/\\{(\\w+)\\}/g, (_, n) => o[n]);
+      function __body() { return FONIO_RESULT_BODY; }`,
+    expose: ['__body'],
+  });
+  function page() {
+    const card = { hidden: true, classList: { toggle(_c, on) { card.hidden = on; } } };
+    const els = { 'fonio-result-card': card, 'fonio-result-url': { value: '' }, 'fonio-result-body': { textContent: '' }, 'fonio-result-last': { textContent: '' } };
+    R.__set('document', { getElementById: id => els[id] || null });
+    return els;
+  }
+  const LINK = 'https://crm.example/api/integrations/fonio/receive/' + 'a'.repeat(64);
+
+  test('markup: the card starts hidden, the link is read-only, both copy buttons copy', () => {
+    assert.match(pane, /<div class="settings-card hidden" id="fonio-result-card">/);
+    assert.match(pane, /<input type="text" id="fonio-result-url" readonly class="intg-url-input" \/>\s*<button class="btn btn-sm" onclick="copyIntgText\(this, document\.getElementById\('fonio-result-url'\)\.value\)" data-i18n="btn_copy">/);
+    assert.match(pane, /<div class="intg-json-block">[\s\S]*?onclick="copyIntgJson\(this\)"[\s\S]*?<pre class="intg-code" id="fonio-result-body"><\/pre>/);
+    assert.ok(pane.indexOf('id="fonio-result-card"') > pane.indexOf('id="fonio-card"') && pane.indexOf('id="fonio-result-card"') < pane.indexOf('id="fonio-calls-card"'), 'between the connection and the calls');
+  });
+
+  test('renderFonio draws it, also when nothing is connected (before the early return)', () => {
+    const fn = sliceFn(js, 'renderFonio', 'integrations.js');
+    assert.ok(fn.indexOf('renderFonioResult();') > 0 && fn.indexOf('renderFonioResult();') < fn.indexOf("if (!set) { facts.innerHTML = ''; return; }"));
+  });
+
+  test('owner with a connection: the link, the Body and the last delivery are filled in', () => {
+    const els = page();
+    R.__set('fonioData', { configured: true, can_manage: true, settings: { receive_url: LINK, last_delivery: null } });
+    R.renderFonioResult();
+    assert.equal(els['fonio-result-card'].hidden, false);
+    assert.equal(els['fonio-result-url'].value, LINK);
+    assert.equal(els['fonio-result-body'].textContent, R.__body());
+    assert.equal(els['fonio-result-last'].textContent, 'Nothing has arrived from fonio yet.');
+  });
+
+  test('hidden for a member, without a connection, and without a link', () => {
+    for (const data of [
+      { configured: true, can_manage: false, settings: { receive_url: LINK } },
+      { configured: false, can_manage: true, settings: { receive_url: LINK } },
+      { configured: true, can_manage: true, settings: { receive_url: null } },
+      null,
+    ]) {
+      const els = page();
+      els['fonio-result-card'].hidden = false;
+      R.__set('fonioData', data);
+      R.renderFonioResult();
+      assert.equal(els['fonio-result-card'].hidden, true, JSON.stringify(data));
+      assert.equal(els['fonio-result-url'].value, '', 'no link written into a hidden card');
+    }
+  });
+
+  test('the Body is JSON whose names the server reads; the person and agent numbers are found by shape', () => {
+    const body = JSON.parse(R.__body());
+    const fr = require('../../utils/fonio-result');
+    const filled = Object.fromEntries(Object.keys(body).map(k => [k, 'x']));
+    Object.assign(filled, { crm_call_id: '7', conversation_link: 'https://app.fonio.ai/c/1', person_number: '+491711234567', agent_number: '+4930123456' });
+    assert.deepEqual(fr.readResult(filled, '+4930123456'), { crmCallId: 7, conversationId: 'x', link: 'https://app.fonio.ai/c/1', direction: 'x', inbound: false,
+      duration: 'x', summary: 'x', transcript: 'x', numbers: ['+491711234567'] });
+    assert.deepEqual(Object.keys(body), ['crm_call_id', 'conversation_id', 'conversation_link', 'direction', 'person_number', 'agent_number', 'duration', 'summary', 'transcript']);
+  });
+
+  test('every outcome the server records has its words in both languages; the list here matches the server', () => {
+    const recorded = new Set([...server.matchAll(/outcome: '([a-z_]+)'|remember\('([a-z_]+)'\)/g)].map(m => m[1] || m[2]));
+    const listed = new Function(sliceConst('public/js/integrations.js', 'FONIO_DELIVERY_OUTCOMES').replace(/^[^[]*/, 'return '))();
+    assert.deepEqual([...recorded].sort(), [...listed].sort());
+    for (const o of [...listed, 'other']) assert.ok(both(`fonio_delivery_${o}`), o);
+    for (const k of ['fonio_result_title', 'fonio_result_hint', 'fonio_result_link_label', 'fonio_result_link_hint', 'fonio_result_body_label',
+      'fonio_result_body_name', 'fonio_result_body_hint', 'fonio_result_last_none', 'fonio_result_last', 'fonio_delivery_fields']) assert.ok(both(k), k);
+  });
+
+  test('the last delivery: when, what happened, the field names; an unknown outcome is just "received"', () => {
+    const at = '2026-11-10T09:05:00.000Z', date = new Date(at).toLocaleString('en-GB');
+    assert.equal(R.fonioDeliveryText({ at, outcome: 'noted', call_id: 4, fields: ['summary', 'transcript'] }), `Last delivery ${date}: note written. Fields: summary, transcript`);
+    assert.equal(R.fonioDeliveryText({ at, outcome: 'bad_json', fields: [] }), `Last delivery ${date}: the Body was not valid JSON.`);
+    assert.equal(R.fonioDeliveryText({ at, outcome: 'something_new' }), `Last delivery ${date}: received.`);
+    assert.equal(R.fonioDeliveryText(null), 'Nothing has arrived from fonio yet.');
+    assert.equal(R.fonioDeliveryText({}), 'Nothing has arrived from fonio yet.');
+  });
+});
+
+describe('the variables card (Part 14): a prompt\'s placeholders connected to CRM values', () => {
+  const fnNames = ['fonioVarKey', 'fonioFindPlaceholders', 'fonioSuggestSource', 'fonioRowsFromPrompt', 'fonioConvertPrompt', 'fonioVarsBody',
+    'fonioVarOptions', 'fonioVarRowHtml', 'renderFonioVars', 'renderFonioVarsOut', 'resetFonioVars'];
+  const V = loadFns('public/js/integrations.js', fnNames, {
+    state: { fonioData: null, fonioVars: [], fonioVarSources: null, fonioVarsPrompt: '', document: null },
+    extra: `${sliceConst('public/js/integrations.js', 'FONIO_VAR_HINTS')}
+      const FONIO_PLACEHOLDER = ${js.match(/const FONIO_PLACEHOLDER = (\/.*\/g);/)[1]};
+      const t = k => { const v = globalThis.__fonioDict.en[k]; if (v === undefined) throw new Error('no key ' + k); return v; };
+      ${sliceFn(read('public/js/core.js'), 'esc', 'core.js')}`,
+  });
+  const VALUES = require('../../utils/fonio-calls').VALUE_SOURCES;
+  const SRC = { values: VALUES, contact_fields: [{ key: 'eigenkapital', name: 'Eigenkapital' }, { key: 'cf_7', name: 'Warum in Immobilien investieren?' }],
+    deal_fields: [{ key: 'budget', name: 'Budget' }] };
+  const PROMPT = 'Spreche ich mit {Vorname Nachname}?\nAnfrage vom {Anfragedatum}. Adresse: {Adresse, Teil für Teil}.\nBeim Eigenkapital {Spanne}, {Eigenkapital}. Danke, {Vorname Nachname}. Schon da: {{email}}. Termin {freie Zeit 1}.';
+
+  test('markup: the card starts hidden; find, add and save call their functions; the converted prompt starts hidden', () => {
+    assert.match(pane, /<div class="settings-card hidden" id="fonio-vars-card">/);
+    assert.match(pane, /<textarea id="fonio-vars-prompt"[^>]*data-i18n-ph="fonio_vars_prompt_ph"><\/textarea>/);
+    for (const call of ['fonioVarsFromPrompt()', 'addFonioVar()', 'saveFonioVars(this)']) assert.ok(pane.includes(`onclick="${call}"`), call);
+    assert.match(pane, /<div class="intg-section hidden" id="fonio-vars-out-wrap">/);
+    assert.match(pane, /<pre class="intg-code fonio-vars-out" id="fonio-vars-out"><\/pre>/);
+    assert.match(css, /^\.fonio-var-row \{ display: grid;/m);
+  });
+
+  test('fonioVarKey: words as a variable name', () => {
+    assert.equal(V.fonioVarKey('Vorname Nachname'), 'vorname_nachname');
+    assert.equal(V.fonioVarKey('Adresse, Teil für Teil'), 'adresse_teil_fuer_teil');
+    assert.equal(V.fonioVarKey('E-Mail'), 'e_mail');
+    assert.equal(V.fonioVarKey('1. Wahl'), 'v_1_wahl');
+    assert.equal(V.fonioVarKey('crm_call_id'), 'v_crm_call_id');
+    assert.equal(V.fonioVarKey('x'.repeat(80)).length, 60);
+    assert.equal(V.fonioVarKey('???'), '');
+  });
+
+  test('the names it makes are names the server accepts', () => {
+    const { checkVariables } = require('../../utils/fonio-calls');
+    for (const words of ['Vorname Nachname', 'Adresse, Teil für Teil', '1. Wahl', 'crm_call_id', 'x'.repeat(80), 'Größe (m²)']) {
+      assert.ok(checkVariables([{ name: V.fonioVarKey(words), source: 'value:name' }]).value, words);
+    }
+  });
+
+  test('fonioFindPlaceholders: single and double braces, each once, in order; JSON-like text across lines is not one', () => {
+    assert.deepEqual(V.fonioFindPlaceholders(PROMPT).map(p => p.text),
+      ['{Vorname Nachname}', '{Anfragedatum}', '{Adresse, Teil für Teil}', '{Spanne}', '{Eigenkapital}', '{{email}}', '{freie Zeit 1}']);
+    assert.deepEqual(V.fonioFindPlaceholders('{{ vorname }} {}  {\n"a": 1\n}'), [{ text: '{{ vorname }}', inner: 'vorname', double: true }]);
+    assert.deepEqual(V.fonioFindPlaceholders('{ Name }'), [{ text: '{ Name }', inner: 'Name', double: false }]);
+    assert.deepEqual(V.fonioFindPlaceholders(''), []);
+  });
+
+  test('fonioSuggestSource: a built-in by its own name or a usual word, a custom field by its name; nothing when the name does not say', () => {
+    assert.equal(V.fonioSuggestSource('email', SRC), 'value:email');
+    assert.equal(V.fonioSuggestSource('vorname_nachname', SRC), 'value:name');
+    assert.equal(V.fonioSuggestSource('anfragedatum', SRC), 'value:request_date');
+    assert.equal(V.fonioSuggestSource('e_mail', SRC), 'value:email');
+    assert.equal(V.fonioSuggestSource('eigenkapital', SRC), 'contact_field:eigenkapital');
+    assert.equal(V.fonioSuggestSource('warum_in_immobilien_investieren', SRC), 'contact_field:cf_7');
+    assert.equal(V.fonioSuggestSource('budget', SRC), 'deal_field:budget');
+    assert.equal(V.fonioSuggestSource('deal_budget', SRC), 'deal_field:budget');
+    for (const k of ['spanne', 'freie_zeit_1', 'adresse_teil_fuer_teil', '']) assert.equal(V.fonioSuggestSource(k, SRC), '', k);
+    assert.equal(V.fonioSuggestSource('email', null), '');
+    for (const target of Object.values(new Function(sliceConst('public/js/integrations.js', 'FONIO_VAR_HINTS').replace(/^[^{]*/, 'return '))())) assert.ok(VALUES.includes(target), target);
+  });
+
+  test('fonioRowsFromPrompt: one row per placeholder, suggestions filled in, saved rows kept and tied to their {{name}}; twice adds nothing', () => {
+    const saved = [{ name: 'email', source: 'value:email', from: '' }, { name: 'spanne', source: 'contact_field:eigenkapital', from: '' }];
+    const first = V.fonioRowsFromPrompt(PROMPT, saved, SRC);
+    assert.equal(first.added, 6);
+    assert.deepEqual(first.rows, [
+      { name: 'email', source: 'value:email', from: '{{email}}' },
+      { name: 'spanne', source: 'contact_field:eigenkapital', from: '' },
+      { name: 'vorname_nachname', source: 'value:name', from: '{Vorname Nachname}' },
+      { name: 'anfragedatum', source: 'value:request_date', from: '{Anfragedatum}' },
+      { name: 'adresse_teil_fuer_teil', source: '', from: '{Adresse, Teil für Teil}' },
+      { name: 'spanne_2', source: '', from: '{Spanne}' },
+      { name: 'eigenkapital', source: 'contact_field:eigenkapital', from: '{Eigenkapital}' },
+      { name: 'freie_zeit_1', source: '', from: '{freie Zeit 1}' },
+    ]);
+    assert.deepEqual(saved[0], { name: 'email', source: 'value:email', from: '' }, 'the rows passed in are not changed');
+    const again = V.fonioRowsFromPrompt(PROMPT, first.rows, SRC);
+    assert.equal(again.added, 0);
+    assert.deepEqual(again.rows, first.rows);
+    // a single-brace placeholder is never tied to a saved row of the same words: it gets its own row
+    assert.deepEqual(V.fonioRowsFromPrompt('{ email }', [{ name: 'email', source: 'value:email', from: '' }], SRC).rows.map(r => r.name), ['email', 'email_2']);
+  });
+
+  test('fonioConvertPrompt: connected placeholders become {{name}} everywhere; unconnected ones and {{…}} already there stay', () => {
+    const rows = V.fonioRowsFromPrompt(PROMPT, [], SRC).rows;
+    rows.find(r => r.from === '{Adresse, Teil für Teil}').source = 'value:email';
+    rows.find(r => r.from === '{Adresse, Teil für Teil}').name = ' email_adresse ';
+    assert.equal(V.fonioConvertPrompt(PROMPT, rows),
+      'Spreche ich mit {{vorname_nachname}}?\nAnfrage vom {{anfragedatum}}. Adresse: {{email_adresse}}.\nBeim Eigenkapital {Spanne}, {{eigenkapital}}. Danke, {{vorname_nachname}}. Schon da: {{email}}. Termin {freie Zeit 1}.');
+    assert.equal(V.fonioConvertPrompt('{name} and {{name}}', [{ name: 'kunde', source: 'value:name', from: '{name}' }]), '{{kunde}} and {{name}}');
+    assert.equal(V.fonioConvertPrompt(PROMPT, []), PROMPT);
+  });
+
+  test('fonioVarsBody: only rows with a name and a CRM value, trimmed, without the placeholder', () => {
+    assert.deepEqual(V.fonioVarsBody([{ name: ' a ', source: 'value:name', from: '{A}' }, { name: 'b', source: '', from: '{B}' }, { name: '  ', source: 'value:email', from: '' }]),
+      [{ name: 'a', source: 'value:name' }]);
+  });
+
+  test('every source the server offers has its label in both languages; so do the groups and the card\'s texts', () => {
+    for (const v of VALUES) assert.ok(both(`fonio_var_src_${v}`), v);
+    for (const k of ['fonio_var_src_none', 'fonio_var_missing', 'fonio_var_group_contact', 'fonio_var_group_deal', 'fonio_var_group_contact_fields',
+      'fonio_var_group_deal_fields', 'fonio_vars_found', 'fonio_vars_found_none', 'fonio_vars_none', 'fonio_vars_saved', 'fonio_var_name_label',
+      'fonio_var_name_ph', 'fonio_var_source_label', 'fonio_var_remove', 'fonio_err_variables']) assert.ok(both(k), k);
+  });
+
+  test('a row: the placeholder, the name, the chosen value selected; a field that is gone says so; nothing typed injects markup', () => {
+    const row = V.fonioVarRowHtml({ name: 'spanne', source: 'contact_field:eigenkapital', from: '{Spanne}' }, 2, SRC);
+    assert.match(row, /<span class="fonio-var-from">\{Spanne\}<\/span>/);
+    assert.match(row, /value="spanne"[^>]*oninput="setFonioVar\(2, 'name', this\.value\)"/);
+    assert.match(row, /<option value="contact_field:eigenkapital" selected>Eigenkapital<\/option>/);
+    assert.match(row, /<optgroup label="Custom deal fields"><option value="deal_field:budget">Budget<\/option><\/optgroup>/);
+    assert.match(row, /<option value="value:first_name">First name<\/option>/);
+    assert.equal((row.match(/ selected>/g) || []).length, 1);
+    assert.match(V.fonioVarRowHtml({ name: 'x', source: 'deal_field:gone', from: '' }, 0, SRC), /<option value="deal_field:gone" selected>Field no longer exists<\/option>/);
+    assert.match(V.fonioVarRowHtml({ name: 'x', source: '', from: '' }, 0, SRC), /<option value="" selected>Not from the CRM<\/option>/);
+    const evil = '"><img src=x onerror=alert(1)>';
+    const out = V.fonioVarRowHtml({ name: evil, source: evil, from: `{${evil}}` }, 0, { values: VALUES, contact_fields: [{ key: evil, name: evil }], deal_fields: [] });
+    assert.doesNotMatch(out, /<img/);
+  });
+
+  test('renderFonioVars: shown to an owner with a connection, hidden otherwise; the converted prompt only once a prompt is pasted', () => {
+    const el = () => { const e = { hidden: null, innerHTML: '', textContent: '', value: 'old', classList: { toggle(_c, on) { e.hidden = on; } } }; return e; };
+    const els = { 'fonio-vars-card': el(), 'fonio-vars-rows': el(), 'fonio-vars-out-wrap': el(), 'fonio-vars-out': el(), 'fonio-vars-prompt': el() };
+    V.__set('document', { getElementById: id => els[id] || null });
+    V.__set('fonioVarSources', SRC);
+    V.__set('fonioData', { configured: true, can_manage: true, settings: { variables: [{ name: 'vorname', source: 'value:first_name' }] } });
+    V.resetFonioVars();
+    assert.equal(els['fonio-vars-prompt'].value, '');
+    V.renderFonioVars();
+    assert.equal(els['fonio-vars-card'].hidden, false);
+    assert.match(els['fonio-vars-rows'].innerHTML, /value="vorname"/);
+    assert.equal(els['fonio-vars-out-wrap'].hidden, true);
+    V.__set('fonioVarsPrompt', 'Hallo {{vorname}}');
+    V.renderFonioVars();
+    assert.deepEqual([els['fonio-vars-out-wrap'].hidden, els['fonio-vars-out'].textContent], [false, 'Hallo {{vorname}}']);
+    V.__set('fonioVars', []);
+    V.renderFonioVars();
+    assert.match(els['fonio-vars-rows'].innerHTML, /No variables yet\./);
+    for (const data of [{ configured: true, can_manage: false, settings: {} }, { configured: false, can_manage: true, settings: {} }, null]) {
+      V.__set('fonioData', data);
+      V.renderFonioVars();
+      assert.equal(els['fonio-vars-card'].hidden, true, JSON.stringify(data));
+    }
+  });
+
+  test('the wiring: loaded with the tab, redrawn by renderFonio, reset only on load and remove, saved as { variables } alone', () => {
+    assert.match(sliceFn(js, 'loadFonio', 'integrations.js'), /resetFonioVars\(\);\s*renderFonio\(\);[\s\S]*if \(data\.can_manage\) \{[\s\S]*api\.get\('\/api\/integrations\/fonio\/sources'\)/);
+    assert.match(sliceFn(js, 'renderFonio', 'integrations.js'), /renderFonioResult\(\);\s*renderFonioVars\(\);/);
+    assert.match(sliceFn(js, 'removeFonio', 'integrations.js'), /resetFonioVars\(\);\s*renderFonio\(\);/);
+    assert.doesNotMatch(sliceFn(js, 'saveFonio', 'integrations.js'), /resetFonioVars|variables/);
+    assert.match(sliceFn(js, 'saveFonioVars', 'integrations.js'), /api\.put\('\/api\/integrations\/fonio', \{ variables: fonioVarsBody\(fonioVars\) \}\)/);
+    assert.match(sliceFn(js, 'setFonioVar', 'integrations.js'), /renderFonioVarsOut\(\);/);
+    assert.doesNotMatch(sliceFn(js, 'setFonioVar', 'integrations.js'), /renderFonioVars\(\)/, 'typing does not redraw the row');
   });
 });

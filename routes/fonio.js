@@ -20,7 +20,21 @@
    own zone (req.userTimezone) when the hours are saved, as tasks stamp due_tz.
 
    requireAuth is applied per route, not with router.use, so that fonio's
-   public result receiver (phase 2) can join this prefix later.
+   public result receiver can share this prefix.
+
+   THE RESULT LINK (Part 7)  fonio's API cannot fetch a call or its
+   transcript, so fonio sends them itself after each call: an "HTTP Request"
+   on the assistant in fonio, Run "After the conversation", POST to
+   receive_url — the workspace's own secret link (workspace_fonio.
+   receive_token), shown to owners and admins only. The link alone decides
+   the workspace. The call is found and the note written by
+   utils/fonio-calls.js saveResult; utils/fonio-result.js reads the body and
+   writes the note's text. An inbound call (direction in…) or a call that
+   matches nothing is acknowledged and ignored, so fonio does not count it as
+   failed. Every delivery is remembered in last_delivery (when, the outcome,
+   the body's field names), so the page can show what fonio sends.
+   server.js gives this path its raw bytes (1 MB, a whole transcript) and the
+   webhook limits.
 
    THE CALLS (Parts 3–5, utils/fonio-calls.js): a new deal schedules a call,
    the worker sends it. Everyone sees the history; owners and admins cancel a
@@ -34,6 +48,8 @@
      DELETE /                    remove the connection (owner/admin)
      GET    /calls               the last 50 calls, newest first (everyone)
      POST   /calls/:id/cancel    cancel a waiting call (owner/admin); 409 when it is no longer waiting
+     POST   /receive/:token      PUBLIC: fonio's result after a call → a note on the deal and contact;
+                                 404 unknown link, 400 not JSON
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const express     = require('express');
@@ -43,6 +59,8 @@ const requireAuth = require('../middleware/auth');
 const calcom      = require('../utils/calcom');   // sealKey: the fonio key is sealed like the Cal.com key
 const fonio       = require('../utils/fonio');
 const fonioCalls  = require('../utils/fonio-calls');
+const fonioResult = require('../utils/fonio-result');
+const baseUrl     = require('../utils/base-url');
 
 const MAX_DELAY  = 7 * 24 * 60;                 // minutes: a week
 const HHMM       = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -53,6 +71,7 @@ const DEFAULTS = {
 };
 const SETTING_KEYS = Object.keys(DEFAULTS).filter(k => k !== 'hours_tz');
 const HOURS_KEYS = ['hours_on', 'hours_days', 'hours_from', 'hours_to'];
+const LINK = /^[0-9a-f]{64}$/;   // receive_token: two random UUIDs without their dashes (db.js)
 
 const canManage = role => role === 'owner' || role === 'admin';
 function requireManage(req, res, next) {
@@ -68,7 +87,7 @@ async function loadRow(wid) {
   const { rows: [row] } = await pool.query(
     `SELECT f.from_number, f.active, f.delay_minutes, f.on_deal_manual, f.on_deal_webhook, f.country_code,
             f.number_prefixes, f.hours_on, f.hours_days, f.hours_from, f.hours_to, f.hours_tz, f.key_hint,
-            f.saved_by, f.saved_at, u.name AS saved_by_name
+            f.receive_token, f.last_delivery, f.variables, f.saved_by, f.saved_at, u.name AS saved_by_name
        FROM workspace_fonio f LEFT JOIN users u ON u.id = f.saved_by
       WHERE f.workspace_id = $1`, [wid]
   );
@@ -84,11 +103,22 @@ function settingsOf(row) {
   return s;
 }
 
-function answer(row, role) {
-  const manage = canManage(role);
+// The result link fonio posts to, or null without a token or a known origin.
+function receiveUrl(req, row) {
+  const origin = baseUrl(req);
+  return origin && row.receive_token ? `${origin}/api/integrations/fonio/receive/${row.receive_token}` : null;
+}
+
+function answer(req, row) {
+  const manage = canManage(req.userRole);
   if (!row) return { configured: false, settings: { ...DEFAULTS }, can_manage: manage };
-  const settings = { ...settingsOf(row), saved_by: row.saved_by, saved_by_name: row.saved_by_name || null, saved_at: row.saved_at };
-  if (manage) settings.key_hint = row.key_hint || null;
+  const settings = { ...settingsOf(row), variables: Array.isArray(row.variables) ? row.variables : [],
+    saved_by: row.saved_by, saved_by_name: row.saved_by_name || null, saved_at: row.saved_at };
+  if (manage) {
+    settings.key_hint = row.key_hint || null;
+    settings.receive_url = receiveUrl(req, row);   // a secret: whoever has it can write notes into this workspace
+    settings.last_delivery = row.last_delivery || null;
+  }
   return { configured: true, settings, can_manage: manage };
 }
 
@@ -118,7 +148,7 @@ function checkSettings(s) {
 }
 
 router.get('/', requireAuth, async (req, res, next) => {
-  try { res.json(answer(await loadRow(req.workspaceId), req.userRole)); }
+  try { res.json(answer(req, await loadRow(req.workspaceId))); }
   catch (err) { next(err); }
 });
 
@@ -138,6 +168,13 @@ router.put('/', requireAuth, requireManage, async (req, res, next) => {
     const checked = checkSettings(merged);
     if (!checked.value) return res.status(400).json({ error: checked.error, reason: checked.reason });
     const s = checked.value;
+    // the workspace's own variables for the prompt: replaced as a whole when sent, kept when not
+    let variables = null;
+    if (body.variables !== undefined) {
+      const v = fonioCalls.checkVariables(body.variables);
+      if (!v.value) return res.status(400).json({ error: v.error, reason: 'variables' });
+      variables = v.value;
+    }
 
     // a new key is asked about once: one fonio refuses, or a fonio that does not answer, writes nothing
     if (key) {
@@ -174,8 +211,9 @@ router.put('/', requireAuth, requireManage, async (req, res, next) => {
            saved_by = EXCLUDED.saved_by, saved_at = NOW()`, params
       );
     }
+    if (variables) await pool.query('UPDATE workspace_fonio SET variables = $2::jsonb WHERE workspace_id = $1', [req.workspaceId, JSON.stringify(variables)]);
     if (saved?.active && !s.active) await fonioCalls.cancelWaiting(pool, req.workspaceId, 'inactive', req.userId);
-    res.json(answer(await loadRow(req.workspaceId), req.userRole));
+    res.json(answer(req, await loadRow(req.workspaceId)));
   } catch (err) { next(err); }
 });
 
@@ -183,7 +221,19 @@ router.delete('/', requireAuth, requireManage, async (req, res, next) => {
   try {
     await fonioCalls.cancelWaiting(pool, req.workspaceId, 'disconnected', req.userId);
     await pool.query('DELETE FROM workspace_fonio WHERE workspace_id = $1', [req.workspaceId]);
-    res.json(answer(null, req.userRole));
+    res.json(answer(req, null));
+  } catch (err) { next(err); }
+});
+
+// What a variable can be connected to (Part 14): the built-in values and this workspace's custom fields.
+router.get('/sources', requireAuth, requireManage, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT 'contact' AS kind, field_key, name FROM custom_fields WHERE workspace_id = $1
+       UNION ALL SELECT 'deal' AS kind, field_key, name FROM deal_fields WHERE workspace_id = $1`, [req.workspaceId]
+    );
+    const of = kind => rows.filter(r => r.kind === kind).map(r => ({ key: r.field_key, name: r.name }));
+    res.json({ values: fonioCalls.VALUE_SOURCES, contact_fields: of('contact'), deal_fields: of('deal') });
   } catch (err) { next(err); }
 });
 
@@ -199,6 +249,28 @@ router.post('/calls/:id/cancel', requireAuth, requireManage, async (req, res, ne
     const row = await fonioCalls.cancelOne(pool, req.workspaceId, id, req.userId);
     if (!row) return res.status(409).json({ error: 'This call is no longer waiting', reason: 'not_waiting' });
     res.json({ calls: await fonioCalls.listCalls(pool, req.workspaceId), can_manage: true });
+  } catch (err) { next(err); }
+});
+
+router.post('/receive/:token', async (req, res, next) => {
+  const token = String(req.params.token || '');
+  if (!LINK.test(token)) return res.status(404).json({ error: 'Unknown link' });
+  try {
+    const { rows: [conn] } = await pool.query('SELECT workspace_id, from_number FROM workspace_fonio WHERE receive_token = $1', [token]);
+    if (!conn) return res.status(404).json({ error: 'Unknown link' });
+    const body = fonioResult.parseBody(req.body);
+    const remember = (outcome, callId = null) => pool.query(
+      'UPDATE workspace_fonio SET last_delivery = $2::jsonb WHERE workspace_id = $1',
+      [conn.workspace_id, JSON.stringify({ at: new Date().toISOString(), outcome, call_id: callId, fields: body ? fonioResult.fieldNames(body) : [] })]
+    );
+    if (!body) { await remember('bad_json'); return res.status(400).json({ error: 'Body is not JSON' }); }
+
+    const r = fonioResult.readResult(body, conn.from_number);
+    if (r.inbound) { await remember('inbound'); return res.json({ ignored: true, reason: 'inbound' }); }
+    const out = await fonioCalls.saveResult(pool, conn.workspace_id, r, fonioResult.resultNote(r));
+    await remember(out.outcome, out.call_id ?? null);
+    if (out.outcome === 'no_match' || out.outcome === 'gone') return res.json({ ignored: true, reason: out.outcome });
+    res.json({ success: true, already: out.outcome === 'already', call_id: out.call_id, activity_id: out.activity_id ?? null });
   } catch (err) { next(err); }
 });
 

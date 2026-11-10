@@ -13,12 +13,15 @@
                                      → 200 { status: 'success' | 'error', message }
    The key may go in the Authorization header or as apiKey in the body. The
    body is used here, so no header scheme has to be guessed.
-   There is NO client or agent id: the fonio number (fromNumber) picks the
+   The spec has no client or agent id: the fonio number (fromNumber) picks the
    assistant, the one assigned to that number for outbound calls in fonio.
-   There is no call id, no scheduling and no transcript in this API — the CRM
-   waits the delay itself, and a call's result can only come back through
-   fonio's post-call webhook (phase 2). Outbound calls need fonio's identity
-   check (KYC) done for the company.
+   fonio's help page "Outbound API" (read 2026-11-09) does list an agentId,
+   "the ID of the assistant that handles the conversation"; it is not sent
+   here. There is no call id, no scheduling and no transcript in this API (the
+   spec, read again 2026-11-09) — the CRM waits the delay itself, and a call's
+   result comes back only when fonio sends it after the call (routes/fonio.js
+   /receive, Part 7). Outbound calls need fonio's identity check (KYC) done
+   for the company.
 
    testKey() never throws:
      { ok: true }

@@ -655,7 +655,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'user'`);
   try {
     await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_source_check`);
-    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine','calcom','notetaker'))`);
+    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine','calcom','notetaker','fonio'))`);
   } catch (e) {
     if (e.code !== '42710') throw e;
   }
@@ -806,6 +806,22 @@ async function initDb() {
   await pool.query(`CREATE INDEX IF NOT EXISTS fonio_calls_ws_idx ON fonio_calls (workspace_id, created_at DESC)`);
   // One waiting call per contact, even when two new deals for the same contact are scheduled at the same moment.
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS fonio_calls_one_waiting ON fonio_calls (contact_id) WHERE status IN ('scheduled','sending')`);
+  // fonio's result after a call (FONIO_CHANGES Part 7, 2026-11-09; routes/fonio.js /receive, utils/fonio-result.js).
+  // receive_token names the workspace's public result link, filled for every row (old ones too) by the volatile
+  // default: 64 hex characters from two random UUIDs. last_delivery is what the link last got: when, what came of it,
+  // the body's field names (never the values). On a call: result_at when fonio's result arrived (one per call),
+  // conversation_id / conversation_link fonio's own, note_activity_id the note it became. The unique index keeps one
+  // conversation from becoming two notes, even when two deliveries of it are matched to different calls.
+  await pool.query(`ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS receive_token TEXT NOT NULL UNIQUE DEFAULT replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')`);
+  await pool.query(`ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS last_delivery JSONB`);
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS result_at         TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS conversation_id   TEXT`);
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS conversation_link TEXT`);
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS note_activity_id  INTEGER REFERENCES activities(id) ON DELETE SET NULL`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS fonio_calls_one_conversation ON fonio_calls (workspace_id, conversation_id) WHERE conversation_id IS NOT NULL`);
+  // The workspace's own variables for the assistant's prompt in fonio (FONIO_CHANGES Part 13, 2026-11-10;
+  // utils/fonio-calls.js checkVariables): [{ name, source }], each sent with every call as name → the source's value.
+  await pool.query(`ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS variables JSONB NOT NULL DEFAULT '[]'::jsonb`);
   // The master CRM (MASTER_ACCESS_CHANGES Part 1, 2026-11-09; utils/master.js): one row per visit of a workspace
   // through the admin secret — the workspace, the owner row the visit acted as, when it began and ended, and from
   // where. The names are copied so a row outlives a deleted workspace or user (hence SET NULL, not CASCADE).

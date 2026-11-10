@@ -63,7 +63,10 @@
       new deal after the set minutes, inside the calling hours. One account per
       workspace. Owners and admins edit the form (PUT /fonio; a new key is
       checked with fonio first, an empty key field keeps the saved key);
-      members see it read-only. Below it, the calls (GET /fonio/calls) with
+      members see it read-only. Owners and admins also get the result link
+      and the Body to paste into fonio, so a call's summary and transcript
+      come back as a note, and the workspace's own variables for the
+      assistant's prompt (a name → a CRM value, sent with every call). Below it, the calls (GET /fonio/calls) with
       cancel for a waiting one (owner/admin).
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -1163,8 +1166,13 @@ async function loadFonio() {
   if (!data || data.error) return;
   fonioData = data;
   fonioDays = Array.isArray(data.settings?.hours_days) ? [...data.settings.hours_days] : [];
+  resetFonioVars();
   renderFonio();
   loadFonioCalls();
+  if (data.can_manage) {
+    const src = await api.get('/api/integrations/fonio/sources');
+    if (src && !src.error) { fonioVarSources = src; renderFonioVars(); }
+  }
 }
 
 function renderFonio() {
@@ -1204,6 +1212,8 @@ function renderFonio() {
   }
   card.querySelectorAll('input').forEach(el => { el.disabled = !manage; });
   updateFonioActive();
+  renderFonioResult();
+  renderFonioVars();
   const facts = $('fonio-facts');
   if (facts) {
     if (!set) { facts.innerHTML = ''; return; }
@@ -1216,6 +1226,207 @@ function renderFonio() {
     ];
     facts.innerHTML = `<table class="table compact"><tbody>${rows.map(([k, v]) => `<tr><td class="strong">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>`;
   }
+}
+
+// ── fonio: the workspace's own variables for the assistant's prompt (FONIO_CHANGES Parts 13 and 14) ──
+// fonio fills a value into the prompt where it says {{name}} and the call carries that name. Owners and admins keep
+// a list here: a name, and the CRM value sent under it (GET /fonio/sources lists what there is: the built-in values
+// and this workspace's custom fields). A prompt can be pasted to start from: each placeholder in braces becomes a
+// row with a name made from its words and, where the words say so, a suggested value; the prompt comes back with
+// the connected placeholders written as {{name}}, to paste into fonio. The prompt itself never leaves the page.
+let fonioVars = [];            // rows: { name, source, from } — `from` is the placeholder as the pasted prompt wrote it
+let fonioVarSources = null;    // { values, contact_fields, deal_fields }
+let fonioVarsPrompt = '';
+
+// Words people write in a placeholder → the built-in value they mean.
+const FONIO_VAR_HINTS = {
+  vorname: 'first_name', firstname: 'first_name', nachname: 'last_name', lastname: 'last_name', surname: 'last_name',
+  vorname_nachname: 'name', vor_und_nachname: 'name', fullname: 'name', full_name: 'name', kunde: 'name', kundenname: 'name',
+  e_mail: 'email', mail: 'email', e_mail_adresse: 'email', email_adresse: 'email', mailadresse: 'email',
+  telefon: 'phone', telefonnummer: 'phone', handynummer: 'phone', rufnummer: 'phone',
+  firma: 'company', unternehmen: 'company', anfragedatum: 'request_date', datum_der_anfrage: 'request_date',
+  stadt: 'ort', city: 'ort', postleitzahl: 'plz', website: 'webseite', dealtitel: 'deal_title', deal: 'deal_title',
+};
+const FONIO_PLACEHOLDER = /\{\{([^{}\n]+)\}\}|\{([^{}\n]+)\}/g;
+
+// A placeholder's words as a variable name: "E-Mail" → e_mail, "Größe in m²" → groesse_in_m2.
+function fonioVarKey(text) {
+  let k = String(text ?? '').toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .normalize('NFKD').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (/^\d/.test(k) || /^crm_/.test(k)) k = 'v_' + k;
+  return k.slice(0, 60).replace(/_+$/, '');
+}
+
+// Every different placeholder of a prompt, in order: { text: as written, inner: its words, double: two braces a side }.
+function fonioFindPlaceholders(prompt) {
+  const out = [], seen = new Set();
+  for (const m of String(prompt ?? '').matchAll(FONIO_PLACEHOLDER)) {
+    const inner = (m[1] ?? m[2]).trim();
+    if (!inner || seen.has(m[0])) continue;
+    seen.add(m[0]);
+    out.push({ text: m[0], inner, double: m[1] !== undefined });
+  }
+  return out;
+}
+
+// The CRM value a variable name most likely means, or '' when the name does not say.
+function fonioSuggestSource(key, src) {
+  const values = src?.values || [];
+  if (values.includes(key)) return 'value:' + key;
+  if (FONIO_VAR_HINTS[key] && values.includes(FONIO_VAR_HINTS[key])) return 'value:' + FONIO_VAR_HINTS[key];
+  const c = (src?.contact_fields || []).find(f => f.key === key || fonioVarKey(f.name) === key);
+  if (c) return 'contact_field:' + c.key;
+  const d = (src?.deal_fields || []).find(f => f.key === key || fonioVarKey(f.name) === key || 'deal_' + fonioVarKey(f.name) === key);
+  return d ? 'deal_field:' + d.key : '';
+}
+
+// The pasted prompt's placeholders as rows, added to the ones there. A {{name}} that already has its row is tied to it.
+function fonioRowsFromPrompt(prompt, rows, src) {
+  const out = rows.map(r => ({ ...r }));
+  let added = 0;
+  for (const p of fonioFindPlaceholders(prompt)) {
+    if (out.some(r => r.from === p.text)) continue;
+    const same = p.double && out.find(r => !r.from && r.name === p.inner);
+    if (same) { same.from = p.text; continue; }
+    const base = fonioVarKey(p.inner);
+    if (!base) continue;
+    let name = base;
+    for (let n = 2; out.some(r => r.name === name); n++) name = `${base.slice(0, 56)}_${n}`;
+    out.push({ name, source: fonioSuggestSource(base, src), from: p.text });
+    added++;
+  }
+  return { rows: out, added };
+}
+
+// The prompt with every connected placeholder written as {{name}}; the others stay as they are.
+function fonioConvertPrompt(prompt, rows) {
+  const byText = new Map(rows.filter(r => r.from && r.source && r.name.trim()).map(r => [r.from, `{{${r.name.trim()}}}`]));
+  return String(prompt ?? '').replace(FONIO_PLACEHOLDER, m => byText.get(m) ?? m);
+}
+
+// What is saved: the rows that have a name and a CRM value.
+function fonioVarsBody(rows) {
+  return rows.filter(r => r.name.trim() && r.source).map(r => ({ name: r.name.trim(), source: r.source }));
+}
+
+function fonioVarOptions(selected, src) {
+  const opt = (value, label) => `<option value="${esc(value)}"${value === selected ? ' selected' : ''}>${esc(label)}</option>`;
+  const group = (label, opts) => (opts.length ? `<optgroup label="${esc(label)}">${opts.join('')}</optgroup>` : '');
+  const values = src?.values || [];
+  const known = selected === '' || values.includes(selected.slice(6)) && selected.startsWith('value:')
+    || (src?.contact_fields || []).some(f => 'contact_field:' + f.key === selected)
+    || (src?.deal_fields || []).some(f => 'deal_field:' + f.key === selected);
+  return opt('', t('fonio_var_src_none'))
+    + (known ? '' : opt(selected, t('fonio_var_missing')))
+    + group(t('fonio_var_group_contact'), values.filter(v => !v.startsWith('deal_')).map(v => opt('value:' + v, t('fonio_var_src_' + v))))
+    + group(t('fonio_var_group_deal'), values.filter(v => v.startsWith('deal_')).map(v => opt('value:' + v, t('fonio_var_src_' + v))))
+    + group(t('fonio_var_group_contact_fields'), (src?.contact_fields || []).map(f => opt('contact_field:' + f.key, f.name)))
+    + group(t('fonio_var_group_deal_fields'), (src?.deal_fields || []).map(f => opt('deal_field:' + f.key, f.name)));
+}
+
+function fonioVarRowHtml(r, i, src) {
+  return `<div class="fonio-var-row">
+    ${r.from ? `<span class="fonio-var-from">${esc(r.from)}</span>` : ''}
+    <input type="text" class="form-control" value="${esc(r.name)}" spellcheck="false" autocomplete="off" aria-label="${esc(t('fonio_var_name_label'))}" placeholder="${esc(t('fonio_var_name_ph'))}" oninput="setFonioVar(${Number(i)}, 'name', this.value)" />
+    <select class="form-control" aria-label="${esc(t('fonio_var_source_label'))}" onchange="setFonioVar(${Number(i)}, 'source', this.value)">${fonioVarOptions(r.source, src)}</select>
+    <button type="button" class="btn btn-sm btn-ghost" onclick="removeFonioVar(${Number(i)})">${esc(t('fonio_var_remove'))}</button>
+  </div>`;
+}
+
+// The saved list as rows; called when the tab loads and when the connection is removed, not on every render, so
+// rows being edited survive a save of the form above.
+function resetFonioVars() {
+  fonioVars = (fonioData?.settings?.variables || []).map(v => ({ name: v.name, source: v.source, from: '' }));
+  fonioVarsPrompt = '';
+  const ta = document.getElementById('fonio-vars-prompt'); if (ta) ta.value = '';
+}
+
+function renderFonioVars() {
+  const card = document.getElementById('fonio-vars-card'); if (!card) return;
+  const show = !!(fonioData?.configured && fonioData.can_manage);
+  card.classList.toggle('hidden', !show);
+  if (!show) return;
+  const rows = document.getElementById('fonio-vars-rows');
+  rows.innerHTML = fonioVars.length ? fonioVars.map((r, i) => fonioVarRowHtml(r, i, fonioVarSources)).join('') : `<p class="empty-inline">${esc(t('fonio_vars_none'))}</p>`;
+  renderFonioVarsOut();
+}
+
+// Only the converted prompt: typing a name must not redraw the row being typed in.
+function renderFonioVarsOut() {
+  document.getElementById('fonio-vars-out-wrap').classList.toggle('hidden', !fonioVarsPrompt);
+  document.getElementById('fonio-vars-out').textContent = fonioVarsPrompt ? fonioConvertPrompt(fonioVarsPrompt, fonioVars) : '';
+}
+
+function setFonioVar(i, key, value) {
+  if (!fonioVars[i]) return;
+  fonioVars[i][key] = value;
+  renderFonioVarsOut();
+}
+function addFonioVar() { fonioVars.push({ name: '', source: '', from: '' }); renderFonioVars(); }
+function removeFonioVar(i) { fonioVars.splice(i, 1); renderFonioVars(); }
+
+function showFonioVarsMsg(id, text, ok) {
+  const el = document.getElementById(id); if (!el) return;
+  el.textContent = text;
+  el.className   = 'workspace-name-msg ' + (ok ? 'success' : 'error');
+  setTimeout(() => el.classList.add('hidden'), ok ? 4000 : 8000);
+}
+
+function fonioVarsFromPrompt() {
+  fonioVarsPrompt = document.getElementById('fonio-vars-prompt').value;
+  const found = fonioFindPlaceholders(fonioVarsPrompt).length;
+  fonioVars = fonioRowsFromPrompt(fonioVarsPrompt, fonioVars, fonioVarSources).rows;
+  renderFonioVars();
+  showFonioVarsMsg('fonio-vars-found', found ? tf('fonio_vars_found', { n: found }) : t('fonio_vars_found_none'), !!found);
+}
+
+async function saveFonioVars(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.put('/api/integrations/fonio', { variables: fonioVarsBody(fonioVars) });
+    if (!res || res.error) { showFonioVarsMsg('fonio-vars-msg', fonioErrorText(res), false); return; }
+    fonioData = res;
+    showFonioVarsMsg('fonio-vars-msg', t('fonio_vars_saved'), true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// The Body for fonio's HTTP Request (Run "After the conversation", POST to the result link). The names on the left
+// are the ones utils/fonio-result.js reads. The values in {{ }} are fonio's variables; the three in angle brackets
+// are picked in fonio through "Add Variable", under fonio's own labels.
+const FONIO_RESULT_BODY = JSON.stringify({
+  crm_call_id: '{{crm_call_id}}',
+  conversation_id: '{{conversationId}}',
+  conversation_link: '{{conversationLink}}',
+  direction: '{{direction}}',
+  person_number: '{{personNumber}}',
+  agent_number: '{{agentNumber}}',
+  duration: '<Duration>',
+  summary: '<Summary>',
+  transcript: '<Plain transcript>',
+}, null, 2);
+const FONIO_DELIVERY_OUTCOMES = ['noted', 'already', 'no_match', 'gone', 'inbound', 'bad_json'];
+
+// The result card: only owners and admins get the link from the server, and only once a connection is saved.
+function renderFonioResult() {
+  const card = document.getElementById('fonio-result-card'); if (!card) return;
+  const s = fonioData?.settings || {};
+  const show = !!(fonioData?.configured && fonioData.can_manage && s.receive_url);
+  card.classList.toggle('hidden', !show);
+  if (!show) return;
+  document.getElementById('fonio-result-url').value = s.receive_url;
+  document.getElementById('fonio-result-body').textContent = FONIO_RESULT_BODY;
+  document.getElementById('fonio-result-last').textContent = fonioDeliveryText(s.last_delivery);
+}
+
+// What fonio last sent to the link: when, what the CRM did with it, and the names of the fields it carried.
+function fonioDeliveryText(d) {
+  if (!d || !d.at) return t('fonio_result_last_none');
+  const date = new Date(d.at).toLocaleString(currentLang === 'de' ? 'de-DE' : 'en-GB');
+  const outcome = t('fonio_delivery_' + (FONIO_DELIVERY_OUTCOMES.includes(d.outcome) ? d.outcome : 'other'));
+  const fields = Array.isArray(d.fields) && d.fields.length ? tf('fonio_delivery_fields', { fields: d.fields.join(', ') }) : '';
+  return [tf('fonio_result_last', { date, outcome }), fields].filter(Boolean).join(' ');
 }
 
 // Active is the main switch; the two triggers only choose which new deals are called once it is on. While it is off
@@ -1272,6 +1483,7 @@ function fonioErrorText(res) {
     prefixes:     t('fonio_err_prefixes'),
     hours_days:   t('fonio_err_hours_days'),
     hours:        t('fonio_err_hours'),
+    variables:    t('fonio_err_variables'),
     key:          t('fonio_err_key'),
     refused:      t('fonio_err_refused'),
     unreachable:  t('fonio_err_unreachable'),
@@ -1329,6 +1541,7 @@ async function removeFonio() {
   fonioData = res;
   fonioDays = [...(res.settings?.hours_days || [])];
   showFonioDetail('');
+  resetFonioVars();
   renderFonio();
   showFonioMsg(t('fonio_removed_ok'), true);
   loadFonioCalls();

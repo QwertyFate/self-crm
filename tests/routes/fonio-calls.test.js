@@ -217,6 +217,11 @@ describe('the worker sends due calls', () => {
       name: 'Erika Muster', email: 'erika@muster.de', phone: '0171 1234567', company: 'Muster GmbH', ort: 'Berlin',
       contact_owner: 'Olaf Owner', deal_title: 'Erika Muster', deal_value: '5000', deal_pipeline: 'Sales', deal_stage: 'New',
       deal_owner: 'Olaf Owner', 'Lead Source': 'Ads', deal_Budget: '10k',
+      request_date: only().created_at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' }),
+      lead_source: 'Ads', deal_budget: '10k',     // the custom fields once more, under plain names for fonio's prompt
+      first_name: 'Erika', last_name: 'Muster',   // the name's first word and the rest
+      vorname: 'Erika', nachname: 'Muster', telefon: '0171 1234567', firma: 'Muster GmbH',   // the same under German names
+      anfragedatum: only().created_at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Berlin' }),
     });
     const c = only();
     assert.equal(c.status, 'sent');
@@ -404,5 +409,89 @@ describe('the triggers', () => {
       assert.equal(r.status, 200);
       assert.deepEqual(seen, []);
     } finally { await s.close(); done(); }
+  });
+});
+
+describe("the context's names for fonio's prompt (Part 11)", () => {
+  test('plainKey: a custom field name as a plain variable name', () => {
+    assert.equal(fonioCalls.plainKey('Lead Source'), 'lead_source');
+    assert.equal(fonioCalls.plainKey('Größe (m²) / Straße'), 'groesse_m2_strasse');
+    assert.equal(fonioCalls.plainKey('  Eigenkapital-Spanne '), 'eigenkapital_spanne');
+    assert.equal(fonioCalls.plainKey('Café'), 'cafe');
+    assert.equal(fonioCalls.plainKey('???'), '');
+  });
+  test('requestDate: the day in the given zone, written the German way; nothing for no date; a bad zone falls back to Berlin', () => {
+    assert.equal(fonioCalls.requestDate('2026-11-10T23:30:00.000Z', 'Europe/Berlin'), '11.11.2026');
+    assert.equal(fonioCalls.requestDate('2026-11-10T23:30:00.000Z', 'America/New_York'), '10.11.2026');
+    assert.equal(fonioCalls.requestDate('2026-11-10T09:00:00.000Z', 'Not/AZone'), '10.11.2026');
+    assert.equal(fonioCalls.requestDate(null, 'Europe/Berlin'), '');
+    assert.equal(fonioCalls.requestDate('nonsense', 'Europe/Berlin'), '');
+  });
+});
+
+describe("the workspace's own variables for the prompt (Part 13)", () => {
+  const tick = now => fonioCalls.runDue(pool, { now });
+  async function contextWith(variables) {
+    seed();
+    db.conn = CONN({ variables });
+    fon.calls.length = 0;
+    await schedule(100);
+    await tick(minutes(WED10, 6));
+    return fon.calls[0].body.context;
+  }
+
+  test('each name carries its CRM value: a built-in, a custom contact field, a custom deal field', async () => {
+    const ctx = await contextWith([
+      { name: 'Anrede_Name', source: 'value:name' },
+      { name: 'spanne', source: 'deal_field:budget' },
+      { name: 'herkunft', source: 'contact_field:lead_source' },
+      { name: 'datum', source: 'value:request_date' },
+    ]);
+    assert.equal(ctx.Anrede_Name, 'Erika Muster');
+    assert.equal(ctx.spanne, '10k');
+    assert.equal(ctx.herkunft, 'Ads');
+    assert.equal(ctx.datum, ctx.request_date);
+    assert.equal(ctx.name, 'Erika Muster', 'what every call carries is still there');
+  });
+
+  test('an empty or missing value is sent as empty text, so the prompt never shows a raw placeholder', async () => {
+    const ctx = await contextWith([{ name: 'nachricht', source: 'contact_field:notes' }, { name: 'weg', source: 'deal_field:gone' }, { name: 'web', source: 'value:webseite' }]);
+    assert.deepEqual([ctx.nachricht, ctx.weg, ctx.web], ['', '', '']);
+  });
+
+  test("a variable wins over what the call carries under that name, but never feeds another one and never takes the CRM's ids", async () => {
+    const ctx = await contextWith([
+      { name: 'name', source: 'value:company' },
+      { name: 'kontakt', source: 'value:name' },
+      { name: 'crm_call_id', source: 'value:name' },   // cannot be saved; a row put there by hand is passed over
+    ]);
+    assert.equal(ctx.name, 'Muster GmbH');
+    assert.equal(ctx.kontakt, 'Erika Muster', 'read before any variable was written');
+    assert.equal(ctx.crm_call_id, '1');
+  });
+
+  test('no variables, or a column that is not a list: the context as before', async () => {
+    const plain = await contextWith([]);
+    assert.deepEqual(await contextWith(undefined), plain);
+    assert.deepEqual(await contextWith('nonsense'), plain);
+  });
+
+  test('checkVariables: trims and keeps good rows; refuses bad names, crm_ names, doubles, unknown sources, too many', () => {
+    assert.deepEqual(fonioCalls.checkVariables([{ name: ' vorname ', source: ' value:first_name ' }, { name: 'x1', source: 'contact_field:eigenkapital' }]),
+      { value: [{ name: 'vorname', source: 'value:first_name' }, { name: 'x1', source: 'contact_field:eigenkapital' }] });
+    assert.deepEqual(fonioCalls.checkVariables([]), { value: [] });
+    const bad = list => assert.ok(fonioCalls.checkVariables(list).error, JSON.stringify(list));
+    bad('x'); bad(null);
+    for (const name of ['', '1abc', 'Vorname Nachname', 'e-mail', 'größe', 'a'.repeat(61), 'crm_call_id', 'CRM_x']) bad([{ name, source: 'value:name' }]);
+    for (const source of ['', 'name', 'value:password', 'value:crm_call_id', 'contact_field:', 'deal_field:a b', 'other:x', 5]) bad([{ name: 'ok', source }]);
+    bad([{ name: 'a', source: 'value:name' }, { name: 'a', source: 'value:email' }]);
+    bad(Array.from({ length: fonioCalls.MAX_VARIABLES + 1 }, (_, i) => ({ name: `v${i}`, source: 'value:name' })));
+    assert.ok(fonioCalls.checkVariables(Array.from({ length: fonioCalls.MAX_VARIABLES }, (_, i) => ({ name: `v${i}`, source: 'value:name' }))).value);
+  });
+
+  test('every built-in source is a value the context can carry', async () => {
+    seed();
+    const src = require('fs').readFileSync(require('path').join(__dirname, '../../utils/fonio-calls.js'), 'utf8');
+    for (const k of fonioCalls.VALUE_SOURCES) assert.ok(fonioCalls.CONTACT_FIELDS.includes(k) || src.includes(`put('${k}'`), k);
   });
 });

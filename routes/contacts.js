@@ -191,7 +191,7 @@ router.get('/:id', async (req, res, next) => {
              a.completed, a.source, a.cancelled_at, a.calcom_uid, a.calcom_event_type_id,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
              a.deal_id, db.title AS deal_title,
-             COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' WHEN a.source = 'notetaker' THEN 'Notetaker' END) AS logged_by_name, u.email AS logged_by_email
+             COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' WHEN a.source = 'notetaker' THEN 'Notetaker' WHEN a.source = 'fonio' THEN 'fonio' END) AS logged_by_name, u.email AS logged_by_email
       FROM activities a
       LEFT JOIN users u ON u.id = a.created_by
       LEFT JOIN deals db ON db.id = a.deal_id

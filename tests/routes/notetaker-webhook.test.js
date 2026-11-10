@@ -193,10 +193,10 @@ describe('the wiring', () => {
     assert.match(db, /ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS note_activity_id INTEGER/);
     assert.match(db, /ALTER TABLE notetaker_recordings ADD COLUMN IF NOT EXISTS finished_at\s+TIMESTAMPTZ/);
     assert.ok(db.indexOf('ADD COLUMN IF NOT EXISTS callback_token') > db.indexOf('CREATE TABLE IF NOT EXISTS notetaker_recordings'));
-    assert.match(db, /ADD CONSTRAINT activities_source_check CHECK\(source IN \('user','engine','calcom','notetaker'\)\)/);
+    assert.match(db, /ADD CONSTRAINT activities_source_check CHECK\(source IN \('user','engine','calcom','notetaker','fonio'\)\)/);
   });
   test('the timelines sign a Notetaker note "Notetaker", as the Engine\'s are signed "Upgrads Engine"', () => {
-    const label = /COALESCE\(u\.name, CASE WHEN a\.source = 'engine' THEN 'Upgrads Engine' WHEN a\.source = 'notetaker' THEN 'Notetaker' END\) AS logged_by_name/g;
+    const label = /COALESCE\(u\.name, CASE WHEN a\.source = 'engine' THEN 'Upgrads Engine' WHEN a\.source = 'notetaker' THEN 'Notetaker' WHEN a\.source = 'fonio' THEN 'fonio' END\) AS logged_by_name/g;
     assert.equal((read('routes/activities.js').match(label) || []).length, 2);
     assert.equal((read('routes/contacts.js').match(label) || []).length, 1);
   });

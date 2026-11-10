@@ -1573,6 +1573,88 @@
             </div>
           </div>
 
+          <!-- fonio's result after a call (FONIO_CHANGES Parts 7 and 8): the workspace's result link and the Body to paste into fonio's HTTP Request. Owners/admins only, once a connection is saved (renderFonioResult). -->
+          <div class="settings-card hidden" id="fonio-result-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="fonio_result_title">Call results</h2>
+            </div>
+            <p class="settings-hint" data-i18n="fonio_result_hint">After a call, fonio can send its summary and transcript to this CRM, which writes them as a note on the deal. This is set up once in fonio.</p>
+            <div class="settings-card-body">
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_result_link_label">Result link</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_result_link_hint">In fonio, add an HTTP Request to the assistant that makes the calls: Run "After the conversation", method POST, this link as the URL. Keep the link secret: whoever has it can write notes into this workspace.</p>
+                </div>
+                <div class="intg-url-box">
+                  <input type="text" id="fonio-result-url" readonly class="intg-url-input" />
+                  <button class="btn btn-sm" onclick="copyIntgText(this, document.getElementById('fonio-result-url').value)" data-i18n="btn_copy">Copy</button>
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_result_body_label">Body for the HTTP Request</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_result_body_hint">Paste this as the Body. Replace the three values in angle brackets with fonio's variables from "Add Variable"; keep the names on the left as they are.</p>
+                </div>
+                <div class="intg-json-block">
+                  <div class="intg-json-header">
+                    <span data-i18n="fonio_result_body_name">Body</span>
+                    <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)" data-i18n="btn_copy">Copy</button>
+                  </div>
+                  <pre class="intg-code" id="fonio-result-body"></pre>
+                </div>
+              </div>
+              <p class="help" id="fonio-result-last"></p>
+            </div>
+          </div>
+
+          <!-- The workspace's own variables for the assistant's prompt in fonio (FONIO_CHANGES Parts 13 and 14): paste the prompt, connect each placeholder to a CRM value, copy the prompt back. Owners/admins only (renderFonioVars). -->
+          <div class="settings-card hidden" id="fonio-vars-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="fonio_vars_title">Variables for the assistant</h2>
+            </div>
+            <p class="settings-hint" data-i18n="fonio_vars_hint">The assistant in fonio only knows a contact's details where its prompt names them as {{variable}}. Here you decide which CRM value is sent under which name with every call.</p>
+            <div class="settings-card-body">
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_vars_prompt_label">Start from your prompt</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_vars_prompt_hint">Paste the assistant's prompt from fonio. Every placeholder in braces becomes a row below. The prompt is not saved in the CRM.</p>
+                </div>
+                <textarea id="fonio-vars-prompt" class="settings-textarea" rows="6" spellcheck="false" placeholder="Paste the prompt here" data-i18n-ph="fonio_vars_prompt_ph"></textarea>
+                <div class="settings-card-actions">
+                  <button class="btn btn-sm" onclick="fonioVarsFromPrompt()" data-i18n="fonio_vars_find">Find placeholders</button>
+                  <span id="fonio-vars-found" class="workspace-name-msg hidden"></span>
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_vars_list_label">Variables</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_vars_list_hint">The name is what the prompt uses in double braces. Rows set to "Not from the CRM" are not sent and stay in the prompt as they are.</p>
+                </div>
+                <div id="fonio-vars-rows"></div>
+                <div class="settings-card-actions">
+                  <button class="btn btn-sm" onclick="addFonioVar()" data-i18n="fonio_vars_add">Add variable</button>
+                </div>
+              </div>
+              <div class="intg-section hidden" id="fonio-vars-out-wrap">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_vars_out_label">Your prompt for fonio</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_vars_out_hint">The same prompt with the connected placeholders written as variables. Save below, then paste this into the assistant in fonio.</p>
+                </div>
+                <div class="intg-json-block">
+                  <div class="intg-json-header">
+                    <span data-i18n="fonio_vars_out_name">Prompt</span>
+                    <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)" data-i18n="btn_copy">Copy</button>
+                  </div>
+                  <pre class="intg-code fonio-vars-out" id="fonio-vars-out"></pre>
+                </div>
+              </div>
+              <div class="settings-card-actions">
+                <button class="btn btn-primary btn-sm" onclick="saveFonioVars(this)" data-i18n="fonio_vars_save">Save variables</button>
+                <span id="fonio-vars-msg" class="workspace-name-msg hidden"></span>
+              </div>
+            </div>
+          </div>
+
           <div class="settings-card" id="fonio-calls-card">
             <div class="settings-card-header">
               <h2 data-i18n="fonio_calls_title">Calls</h2>

@@ -36,6 +36,13 @@ const pool = {
       country_code: p[8], number_prefixes: JSON.parse(p[9]), hours_on: p[10], hours_days: JSON.parse(p[11]),
       hours_from: `${p[12]}:00`, hours_to: `${p[13]}:00`, hours_tz: p[14], saved_by: p[15],
     });
+    if (text === 'UPDATE workspace_fonio SET variables = $2::jsonb WHERE workspace_id = $1') {
+      if (state.row?.workspace_id === params[0]) state.row = { ...state.row, variables: JSON.parse(params[1]) };
+      return { rowCount: 1, rows: [] };
+    }
+    if (text.startsWith("SELECT 'contact' AS kind, field_key, name FROM custom_fields WHERE workspace_id = $1 UNION ALL SELECT 'deal' AS kind, field_key, name FROM deal_fields WHERE workspace_id = $1")) {
+      return { rows: params[0] === WS ? [{ kind: 'contact', field_key: 'eigenkapital', name: 'Eigenkapital' }, { kind: 'deal', field_key: 'budget', name: 'Budget' }] : [] };
+    }
     if (text.startsWith('INSERT INTO workspace_fonio')) {
       state.row = { workspace_id: params[0], api_key_sealed: params[1], key_hint: params[2], ...fields(params) };
       return { rowCount: 1, rows: [] };
@@ -304,5 +311,66 @@ describe('the table', () => {
     assert.match(create.sql, /workspace_id INTEGER NOT NULL UNIQUE REFERENCES workspaces\(id\) ON DELETE CASCADE/);
     assert.match(create.sql, /api_key_sealed TEXT NOT NULL/);
     assert.match(create.sql, /active BOOLEAN NOT NULL DEFAULT false/);
+  });
+});
+
+describe("the workspace's own variables for the prompt (Part 13)", () => {
+  const VARS = [{ name: 'vorname', source: 'value:first_name' }, { name: 'spanne', source: 'contact_field:eigenkapital' }];
+  const varWrites = () => state.calls.filter(c => c.sql === 'UPDATE workspace_fonio SET variables = $2::jsonb WHERE workspace_id = $1');
+
+  test('saved with the settings, read back by everyone; nothing sent keeps them; an empty list clears them', async () => {
+    const r = await save(owner, { ...FIRST, variables: VARS });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.settings.variables, VARS);
+    assert.deepEqual(varWrites().map(c => c.params), [[WS, JSON.stringify(VARS)]]);
+    assert.deepEqual((await member.request('GET', '/api/integrations/fonio')).body.settings.variables, VARS);
+
+    state.calls.length = 0;
+    const kept = await save(admin, { delay_minutes: 9 });
+    assert.deepEqual(kept.body.settings.variables, VARS);
+    assert.equal(varWrites().length, 0, 'a save that does not name them does not write them');
+
+    assert.deepEqual((await save(owner, { variables: [] })).body.settings.variables, []);
+  });
+
+  test('a bad list is refused with its reason before fonio is asked or anything is written', async () => {
+    for (const variables of ['x', [{ name: 'Vorname Nachname', source: 'value:name' }], [{ name: 'crm_call_id', source: 'value:name' }],
+      [{ name: 'a', source: 'value:nope' }], [{ name: 'a', source: 'value:name' }, { name: 'a', source: 'value:email' }]]) {
+      const r = await save(owner, { ...FIRST, variables });
+      assert.equal(r.status, 400, JSON.stringify(variables));
+      assert.equal(r.body.reason, 'variables');
+    }
+    assert.equal(fon.calls.length, 0);
+    assert.deepEqual(writes(), []);
+  });
+
+  test('a member cannot save them', async () => {
+    await save(owner, FIRST);
+    state.calls.length = 0;
+    assert.equal((await save(member, { variables: VARS })).status, 403);
+    assert.deepEqual(writes(), []);
+  });
+
+  test('never connected: an empty list', async () => {
+    assert.equal((await owner.request('GET', '/api/integrations/fonio')).body.settings.variables, undefined);
+    await save(owner, FIRST);
+    assert.deepEqual((await owner.request('GET', '/api/integrations/fonio')).body.settings.variables, []);
+  });
+
+  test('initDb adds the column, empty for every row', () => {
+    const dbSrc = fs.readFileSync(path.join(ROOT, 'db.js'), 'utf8');
+    assert.match(dbSrc, /ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS variables JSONB NOT NULL DEFAULT '\[\]'::jsonb/);
+  });
+});
+
+describe('what a variable can be connected to (Part 14)', () => {
+  test("owner and admin get the built-in values and this workspace's custom fields; a member does not", async () => {
+    const r = await owner.request('GET', '/api/integrations/fonio/sources');
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body, { values: require('../../utils/fonio-calls').VALUE_SOURCES,
+      contact_fields: [{ key: 'eigenkapital', name: 'Eigenkapital' }], deal_fields: [{ key: 'budget', name: 'Budget' }] });
+    assert.deepEqual(state.calls.at(-1).params, [WS], "asked for the caller's workspace");
+    assert.equal((await admin.request('GET', '/api/integrations/fonio/sources')).status, 200);
+    assert.equal((await member.request('GET', '/api/integrations/fonio/sources')).status, 403);
   });
 });

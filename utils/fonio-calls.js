@@ -30,7 +30,25 @@
    its custom fields by their names), the deal as deal_* (title, value,
    pipeline, stage, owner, custom fields), and crm_call_id / crm_deal_id /
    crm_contact_id so fonio's result can be matched later (phase 2). A custom
-   field never overwrites a built-in key.
+   field never overwrites a built-in key. first_name and last_name are the
+   name's first word and the rest, unless a custom field has that name.
+   fonio fills a value in where the assistant's prompt names it as {{key}},
+   so every custom field also goes under a plain name (lead_source for
+   "Lead Source", deal_budget for the deal's "Budget"), and request_date is
+   the day the call was queued (DD.MM.YYYY, the calling hours' zone). German
+   prompts can use vorname, nachname, anfragedatum, telefon and firma: the
+   same values under German names (email, strasse, plz, ort already are).
+   The workspace's own variables (workspace_fonio.variables, Part 13) come
+   last: a name of the workspace's choosing for a CRM value of its choosing.
+
+   THE RESULT (Part 7)  saveResult() takes what fonio sent after a call
+   (utils/fonio-result.js readResult) and finds the call it belongs to: by
+   crm_call_id when fonio filled it in, else the newest call sent to one of
+   its numbers in the last RESULT_HOURS that has no result yet. One result per
+   call and one note per conversation: the claim (result_at) and the note are
+   one statement, and fonio_calls_one_conversation refuses a conversation that
+   was already noted. The note goes on the call's deal and contact, with no
+   author and source 'fonio' (the timelines sign it "fonio").
 
    Every function takes the pool, so the routes' pool (and a test's fake)
    is the one used.
@@ -43,6 +61,7 @@ const fonio  = require('./fonio');
 const RETRY_MINUTES = 5;
 const MAX_ATTEMPTS  = 3;
 const STUCK_MINUTES = 2;
+const RESULT_HOURS  = 6;
 const TRIGGERS = ['deal_manual', 'deal_webhook'];
 const CONTACT_FIELDS = ['name', 'email', 'phone', 'company', 'rechtsform', 'ust_id', 'handelsregisternummer', 'webseite', 'quelle', 'strasse', 'plz', 'ort'];
 
@@ -109,7 +128,55 @@ function asText(v) {
   return String(v).trim();
 }
 
-async function callContext(pool, call) {
+// A custom field's name as a plain variable name for fonio's prompt: "Lead Source" → lead_source, "Größe" → groesse.
+function plainKey(name) {
+  return String(name).toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .normalize('NFKD').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+// The day the call was queued (the deal was made that moment), as people in Germany write it, in the zone `tz`.
+function requestDate(at, tz) {
+  const d = new Date(at);
+  if (!at || Number.isNaN(d.getTime())) return '';
+  const opts = { day: '2-digit', month: '2-digit', year: 'numeric' };
+  try { return d.toLocaleDateString('de-DE', { ...opts, timeZone: tz || 'Europe/Berlin' }); }
+  catch { return d.toLocaleDateString('de-DE', { ...opts, timeZone: 'Europe/Berlin' }); }
+}
+
+// German key → the key whose value it repeats. A custom field of that name wins (it is put first).
+const GERMAN_KEYS = [['vorname', 'first_name'], ['nachname', 'last_name'], ['anfragedatum', 'request_date'], ['telefon', 'phone'], ['firma', 'company']];
+
+// THE WORKSPACE'S OWN VARIABLES (Part 13). The assistant's prompt in fonio uses a value as {{name}}; owners and
+// admins say which CRM value goes under which name: [{ name, source }]. A source is
+//   value:<key>            one of VALUE_SOURCES, the values every call carries anyway
+//   contact_field:<key>    a custom contact field, by its field_key
+//   deal_field:<key>       a custom deal field, by its field_key
+// crm_… names are the CRM's own (the result is matched by them) and cannot be taken.
+const VALUE_SOURCES = ['name', 'first_name', 'last_name', 'email', 'phone', 'company', 'rechtsform', 'ust_id', 'handelsregisternummer',
+  'webseite', 'quelle', 'strasse', 'plz', 'ort', 'contact_owner', 'request_date', 'deal_title', 'deal_value', 'deal_pipeline', 'deal_stage', 'deal_owner'];
+const MAX_VARIABLES = 60;
+const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,59}$/;
+const FIELD_SOURCE = /^(contact_field|deal_field):([^\s:]{1,120})$/;
+
+// A variables list as sent by the page, checked: { value } (trimmed) or { error }.
+function checkVariables(list) {
+  if (!Array.isArray(list) || list.length > MAX_VARIABLES) return { error: `Up to ${MAX_VARIABLES} variables` };
+  const out = [], seen = new Set();
+  for (const v of list) {
+    const name = typeof v?.name === 'string' ? v.name.trim() : '';
+    const source = typeof v?.source === 'string' ? v.source.trim() : '';
+    if (!VARIABLE_NAME.test(name)) return { error: 'A variable name is letters, digits and _, starting with a letter or _' };
+    if (/^crm_/i.test(name)) return { error: 'Names starting with crm_ are used by the CRM itself' };
+    if (seen.has(name)) return { error: `The variable ${name} is there twice` };
+    const known = source.startsWith('value:') ? VALUE_SOURCES.includes(source.slice(6)) : FIELD_SOURCE.test(source);
+    if (!known) return { error: `The variable ${name} is not connected to a CRM value` };
+    seen.add(name);
+    out.push({ name, source });
+  }
+  return { value: out };
+}
+
+async function callContext(pool, call, tz, variables) {
   const wid = call.workspace_id;
   const { rows: [deal] } = call.deal_id ? await pool.query(
     `SELECT d.id, d.title, d.value, d.custom_data, d.contact_id, p.name AS pipeline, s.name AS stage, u.name AS owner
@@ -142,8 +209,31 @@ async function callContext(pool, call) {
     put('deal_stage', deal.stage);
     put('deal_owner', deal.owner);
   }
+  put('request_date', requestDate(call.created_at, tz));
   for (const [k, v] of Object.entries(contact.custom_data || {})) put(label('contact', k), v);
   if (deal) for (const [k, v] of Object.entries(deal.custom_data || {})) put(`deal_${label('deal', k)}`, v);
+  // The same custom fields once more under plain names: fonio's prompt uses a value as {{name}}, and a field
+  // called "Lead Source" is easier to write there as {{lead_source}}.
+  const plain = (prefix, name, v) => { const k = plainKey(name); if (k) put(prefix + k, v); };
+  for (const [k, v] of Object.entries(contact.custom_data || {})) plain('', label('contact', k), v);
+  if (deal) for (const [k, v] of Object.entries(deal.custom_data || {})) plain('deal_', label('deal', k), v);
+  // The CRM keeps one name; fonio assistants often greet by first_name / last_name. The first word and the rest,
+  // put last so a custom field of that name (the real thing) wins over this split.
+  const [first, ...rest] = asText(contact.name).split(/\s+/).filter(Boolean);
+  put('first_name', first);
+  put('last_name', rest.join(' '));
+  // German names for the same values: the assistants' prompts are German, and {{vorname}} reads better there.
+  for (const [de, en] of GERMAN_KEYS) put(de, ctx[en]);
+  // The workspace's own variables last, over everything but the CRM's ids. Read from the values as they are before
+  // any of them is written, so one variable never feeds another. An empty value is sent as '' (the prompt named it).
+  const base = { ...ctx };
+  for (const v of Array.isArray(variables) ? variables : []) {
+    if (!v || typeof v.name !== 'string' || typeof v.source !== 'string' || /^crm_/i.test(v.name)) continue;
+    const field = FIELD_SOURCE.exec(v.source);
+    const value = v.source.startsWith('value:') ? base[v.source.slice(6)]
+      : field ? asText(((field[1] === 'deal_field' ? deal?.custom_data : contact.custom_data) || {})[field[2]]) : '';
+    ctx[v.name] = value || '';
+  }
   return { contact, deal: deal || null, context: ctx };
 }
 
@@ -174,7 +264,7 @@ async function sendCall(pool, id, now = new Date()) {
     if (!at) return done('skipped', { reason: 'no_hours' });
     // the hours were changed since: wait for them (that claim was no attempt)
     if (at.getTime() > new Date(now).getTime()) return done('scheduled', { dueAt: at.toISOString(), giveBack: true });
-    const ctx = await callContext(pool, call);
+    const ctx = await callContext(pool, call, conn.hours_tz, conn.variables);
     if (!ctx.contact) return done('skipped', { reason: 'no_contact' });
     const n = checkNumber(ctx.contact.phone, conn);
     if (!n.number || n.reason) return done('skipped', { reason: n.reason, toNumber: n.number || null });
@@ -262,7 +352,56 @@ async function listCalls(pool, wid, { limit = 50 } = {}) {
   return rows;
 }
 
+// fonio's result for one call as a note: { outcome, call_id, activity_id }. outcome: noted; already (this call or this
+// conversation has its note); no_match (no call of this workspace fits); gone (the call's contact and deal are deleted).
+async function saveResult(pool, wid, r, content, now = new Date()) {
+  if (r.conversationId) {
+    const { rows: [seen] } = await pool.query(
+      'SELECT id, note_activity_id FROM fonio_calls WHERE workspace_id = $1 AND conversation_id = $2', [wid, r.conversationId]
+    );
+    if (seen) return { outcome: 'already', call_id: seen.id, activity_id: seen.note_activity_id };
+  }
+  let call = null;
+  if (r.crmCallId) {
+    ({ rows: [call] } = await pool.query(
+      `SELECT id, contact_id, deal_id, result_at, note_activity_id FROM fonio_calls
+        WHERE id = $1 AND workspace_id = $2 AND status = 'sent'`, [r.crmCallId, wid]
+    ));
+  }
+  if (!call && r.numbers.length) {
+    ({ rows: [call] } = await pool.query(
+      `SELECT id, contact_id, deal_id, result_at, note_activity_id FROM fonio_calls
+        WHERE workspace_id = $1 AND status = 'sent' AND result_at IS NULL AND to_number = ANY($2::text[]) AND sent_at > $3
+        ORDER BY sent_at DESC, id DESC LIMIT 1`, [wid, r.numbers, new Date(new Date(now).getTime() - RESULT_HOURS * 3600000)]
+    ));
+  }
+  if (!call) return { outcome: 'no_match' };
+  if (call.result_at) return { outcome: 'already', call_id: call.id, activity_id: call.note_activity_id };
+  if (!call.contact_id && !call.deal_id) return { outcome: 'gone', call_id: call.id };
+
+  // claim the call and write the note in ONE statement: both happen, or neither
+  let created;
+  try {
+    ({ rows: [created] } = await pool.query(
+      `WITH claim AS (
+         UPDATE fonio_calls SET result_at = NOW(), conversation_id = $2, conversation_link = $3, updated_at = NOW()
+          WHERE id = $1 AND result_at IS NULL RETURNING workspace_id, contact_id, deal_id
+       )
+       INSERT INTO activities (workspace_id, contact_id, deal_id, type, content, created_by, source)
+       SELECT workspace_id, contact_id, deal_id, 'note', $4::text, NULL, 'fonio' FROM claim RETURNING id`,
+      [call.id, r.conversationId, r.link, content]
+    ));
+  } catch (err) {
+    if (err && err.code === '23505') return { outcome: 'already', call_id: call.id, activity_id: null };   // this conversation, delivered twice at once
+    throw err;
+  }
+  if (!created) return { outcome: 'already', call_id: call.id, activity_id: null };   // a delivery running alongside won
+  await pool.query('UPDATE fonio_calls SET note_activity_id = $1 WHERE id = $2', [created.id, call.id]);
+  return { outcome: 'noted', call_id: call.id, activity_id: created.id };
+}
+
 module.exports = {
-  RETRY_MINUTES, MAX_ATTEMPTS, STUCK_MINUTES, TRIGGERS, CONTACT_FIELDS,
-  scheduleForDeal, callContext, sendCall, runDue, startWorker, cancelWaiting, cancelOne, listCalls, checkNumber,
+  RETRY_MINUTES, MAX_ATTEMPTS, STUCK_MINUTES, RESULT_HOURS, TRIGGERS, CONTACT_FIELDS,
+  VALUE_SOURCES, MAX_VARIABLES, checkVariables,
+  scheduleForDeal, callContext, plainKey, requestDate, sendCall, runDue, startWorker, cancelWaiting, cancelOne, listCalls, checkNumber, saveResult,
 };
