@@ -30,8 +30,14 @@
    the workspace. The call is found and the note written by
    utils/fonio-calls.js saveResult; utils/fonio-result.js reads the body and
    writes the note's text. An inbound call (direction in…) or a call that
-   matches nothing is acknowledged and ignored, so fonio does not count it as
-   failed. Every delivery is remembered in last_delivery (when, the outcome,
+   matches no call of the CRM is kept in the call log (fonio_other_calls,
+   Part 15, saveOther): noted on the contact with that number, and on that
+   contact's deal when it has exactly one; an unknown number is kept without
+   a note. A body with nothing in it is acknowledged and ignored, so fonio
+   does not count it as failed. A result that names a meeting agreed in the
+   call (meeting_booked, meeting_date, meeting_time; Part 28) has it booked at
+   Cal.com or Calendly when one is connected (utils/fonio-meeting.js); the
+   note's last line says what came of it. Every delivery is remembered in last_delivery (when, the outcome,
    the body's field names), so the page can show what fonio sends.
    server.js gives this path its raw bytes (1 MB, a whole transcript) and the
    webhook limits.
@@ -48,8 +54,12 @@
      DELETE /                    remove the connection (owner/admin)
      GET    /calls               the last 50 calls, newest first (everyone)
      POST   /calls/:id/cancel    cancel a waiting call (owner/admin); 409 when it is no longer waiting
-     POST   /receive/:token      PUBLIC: fonio's result after a call → a note on the deal and contact;
-                                 404 unknown link, 400 not JSON
+     GET    /log                 the call log: calls the CRM sent and calls it did not start, newest first (everyone)
+     GET    /log/:kind/:id       one call's technical record: request, fonio's answer, the result Body (owner/admin)
+     POST   /log/:id/contact     { contact_id }: connect a kept call without a contact to one, and write its note
+                                 (everyone); 404 unknown call or contact, 409 it has a contact already
+     POST   /receive/:token      PUBLIC: fonio's result after a call → a note on the deal and contact; a call
+                                 the CRM did not start → the call log; 404 unknown link, 400 not JSON
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const express     = require('express');
@@ -61,6 +71,8 @@ const fonio       = require('../utils/fonio');
 const fonioCalls  = require('../utils/fonio-calls');
 const fonioResult = require('../utils/fonio-result');
 const baseUrl     = require('../utils/base-url');
+const fonioMeeting = require('../utils/fonio-meeting');   // a meeting agreed in a call, booked at Cal.com or Calendly (Part 28)
+const { notifyUser } = require('../notifications');
 
 const MAX_DELAY  = 7 * 24 * 60;                 // minutes: a week
 const HHMM       = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -252,11 +264,72 @@ router.post('/calls/:id/cancel', requireAuth, requireManage, async (req, res, ne
   } catch (err) { next(err); }
 });
 
+// The call log (Part 16): everyone in the workspace reads it, as everyone reads the calls and the notes.
+router.get('/log', requireAuth, async (req, res, next) => {
+  try { res.json({ entries: await fonioCalls.listLog(pool, req.workspaceId), can_manage: canManage(req.userRole) }); }
+  catch (err) { next(err); }
+});
+
+// One call's technical record (Part 18): what was sent to fonio, what it answered, the Body it sent afterwards.
+router.get('/log/:kind/:id', requireAuth, requireManage, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!['call', 'other'].includes(req.params.kind) || !Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Bad call id' });
+    const detail = await fonioCalls.callDetail(pool, req.workspaceId, req.params.kind, id);
+    if (!detail) return res.status(404).json({ error: 'Call not found' });
+    res.json(detail);
+  } catch (err) { next(err); }
+});
+
+// A kept conversation without a contact is connected to one: the page first makes the contact through /api/contacts
+// (its checks, its notification, the Engine) or picks an existing one, then names it here.
+router.post('/log/:id/contact', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id), contactId = Number(req.body?.contact_id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Bad call id' });
+    if (!Number.isInteger(contactId) || contactId <= 0) return res.status(400).json({ error: 'Bad contact id' });
+    const note = row => fonioResult.resultNote({ inbound: row.direction === 'inbound', duration: row.duration || '', summary: row.summary || '',
+      transcript: row.transcript || '', link: row.conversation_link });
+    const out = await fonioCalls.connectOther(pool, req.workspaceId, id, contactId, note);
+    if (out.error === 'connected') return res.status(409).json({ error: 'This call already has a contact', code: 'connected' });
+    if (out.error) return res.status(404).json({ error: out.error === 'no_contact' ? 'Contact not found' : 'Call not found', code: out.error });
+    res.json({ success: true, contact_id: out.contact_id, deal_id: out.deal_id, activity_id: out.activity_id });
+  } catch (err) { next(err); }
+});
+
+// A meeting agreed in the call (Part 28): booked for the note's contact at the connected booking service, the
+// outcome added to the note as its last line, and somebody told — the assignee of the deal (else of the contact)
+// hears of the booked meeting like of any other, and of one that could not be booked so a person can see to it.
+// Never throws and never fails fonio's delivery; answers what came of it, or null when the call named no meeting.
+async function meetingFromCall(wid, r, noteId) {
+  if (!r.meeting || !noteId) return null;
+  try {
+    const { rows: [note] } = await pool.query('SELECT contact_id, deal_id FROM activities WHERE id = $1 AND workspace_id = $2', [noteId, wid]);
+    if (!note) return null;
+    const m = await fonioMeeting.bookMeeting(pool, { wid, contactId: note.contact_id, dealId: note.deal_id, meeting: r.meeting });
+    if (!m) return null;
+    await pool.query("UPDATE activities SET content = content || $3 WHERE id = $1 AND workspace_id = $2", [noteId, wid, '\n\n' + fonioMeeting.noteLine(m)]);
+    if (m.status === 'booked' && m.inserted) {
+      await require('./integrations').booking.tellAssignee(wid, null, { kind: 'booked', dealId: note.deal_id, contactId: note.contact_id, title: m.title, start: m.start, url: m.url, location: m.location });
+    } else if (m.status === 'failed') {
+      const assignee = await fonioMeeting.assigneeOf(pool, wid, note.deal_id, note.contact_id);
+      if (assignee) await notifyUser(wid, null, assignee, {
+        type: 'meeting_failed', category: 'activities', title: fonioMeeting.whenText(m), body: fonioMeeting.noteLine(m).slice(0, 300),
+        entityType: note.deal_id ? 'deal' : 'contact', entityId: note.deal_id || note.contact_id,
+      });
+    }
+    return { status: m.status, service: m.service || null, reason: m.reason || null, activity_id: m.activity_id || null };
+  } catch (err) {
+    console.error('fonio: booking the agreed meeting failed:', err?.message || err);
+    return { status: 'failed', service: null, reason: null, activity_id: null };
+  }
+}
+
 router.post('/receive/:token', async (req, res, next) => {
   const token = String(req.params.token || '');
   if (!LINK.test(token)) return res.status(404).json({ error: 'Unknown link' });
   try {
-    const { rows: [conn] } = await pool.query('SELECT workspace_id, from_number FROM workspace_fonio WHERE receive_token = $1', [token]);
+    const { rows: [conn] } = await pool.query('SELECT workspace_id, from_number, country_code FROM workspace_fonio WHERE receive_token = $1', [token]);
     if (!conn) return res.status(404).json({ error: 'Unknown link' });
     const body = fonioResult.parseBody(req.body);
     const remember = (outcome, callId = null) => pool.query(
@@ -266,11 +339,21 @@ router.post('/receive/:token', async (req, res, next) => {
     if (!body) { await remember('bad_json'); return res.status(400).json({ error: 'Body is not JSON' }); }
 
     const r = fonioResult.readResult(body, conn.from_number);
-    if (r.inbound) { await remember('inbound'); return res.json({ ignored: true, reason: 'inbound' }); }
-    const out = await fonioCalls.saveResult(pool, conn.workspace_id, r, fonioResult.resultNote(r));
+    const content = fonioResult.resultNote(r);
+    const out = r.inbound ? { outcome: 'no_match' } : await fonioCalls.saveResult(pool, conn.workspace_id, r, content);
+    if (out.outcome === 'no_match') {   // not a call the CRM started: kept in the call log, noted on the contact with that number
+      const o = await fonioCalls.saveOther(pool, conn, r, content);
+      if (o.outcome === 'noted' || o.outcome === 'logged') await fonioCalls.keepResultBody(pool, 'other', o.other_id, body);
+      await remember(o.outcome);
+      if (o.outcome === 'no_match') return res.json({ ignored: true, reason: o.outcome });
+      const meeting = o.outcome === 'noted' ? await meetingFromCall(conn.workspace_id, r, o.activity_id) : null;
+      return res.json({ success: true, already: o.outcome === 'already', call_id: null, other_id: o.other_id, activity_id: o.activity_id ?? null, ...(meeting ? { meeting } : {}) });
+    }
+    if (out.outcome === 'noted') await fonioCalls.keepResultBody(pool, 'call', out.call_id, body);
     await remember(out.outcome, out.call_id ?? null);
-    if (out.outcome === 'no_match' || out.outcome === 'gone') return res.json({ ignored: true, reason: out.outcome });
-    res.json({ success: true, already: out.outcome === 'already', call_id: out.call_id, activity_id: out.activity_id ?? null });
+    if (out.outcome === 'gone') return res.json({ ignored: true, reason: out.outcome });
+    const meeting = out.outcome === 'noted' ? await meetingFromCall(conn.workspace_id, r, out.activity_id) : null;
+    res.json({ success: true, already: out.outcome === 'already', call_id: out.call_id, activity_id: out.activity_id ?? null, ...(meeting ? { meeting } : {}) });
   } catch (err) { next(err); }
 });
 

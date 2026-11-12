@@ -183,6 +183,8 @@ app.use('/api/notetaker/webhook', express.raw({ type: '*/*', limit: '5mb' }));
 // fonio's result after a call (routes/fonio.js /receive) carries the transcript, and fonio's HTTP Request may send
 // it without a JSON content type: the raw bytes, up to 1 MB, parsed by the route.
 app.use('/api/integrations/fonio/receive', express.raw({ type: '*/*', limit: '1mb' }));
+// Calendly's booking webhooks are signed over the raw body (Calendly-Webhook-Signature), as Cal.com's are.
+app.use('/api/integrations/calendly/receive', express.raw({ type: '*/*', limit: '1mb' }));
 app.use(express.json());
 // Engine API paths: a malformed or oversized body is a body-parser error BEFORE the routers run.
 // Answer the Engine's { fehler } shape (400 / 413) instead of the browser's { error } — and never a crash.
@@ -254,6 +256,8 @@ app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations/calcom/receive', webhookIpLimiter, calcomTokenLimiter);
 app.use('/api/integrations/fonio/receive', webhookIpLimiter, fonioLinkLimiter);
 app.use('/api/integrations/fonio', require('./routes/fonio'));   // fonio.ai calls a new deal's contact (FONIO_CHANGES); /receive is PUBLIC
+app.use('/api/integrations/calendly/receive', webhookIpLimiter, calcomTokenLimiter);   // Calendly's receiver: the same limits as Cal.com's, keyed by the path
+app.use('/api/integrations/calendly', require('./routes/calendly'));   // the workspace's Calendly account (CALENDLY_CHANGES); /receive is PUBLIC
 app.use('/api/integrations',  integrations);
 // Email sync is on hold (2026-10-27, EMAIL_SYNC_CHANGES): the mailbox routes are not mounted, so nobody can start a
 // Google connection. Part 1 stays in the code; true mounts it again (with MAILBOX_SHOWN in public/js/mailbox.js).

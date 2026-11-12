@@ -360,6 +360,8 @@
         <a href="#" class="sb-link" data-page="analytics"><svg class="ic" aria-hidden="true"><use href="#i-bar-chart"/></svg><span class="sb-text" data-i18n="nav_analytics">Analytics</span></a>
         <!-- Onboarding monitor: shown by updateOnboardingNav() to owners/admins while the Upgrads Engine integration is active -->
         <a href="#" class="sb-link hidden" data-page="onboarding" id="nav-onboarding-link"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="sb-text" data-i18n="nav_onboarding">Onboarding</span></a>
+        <!-- fonio calls: shown by updateFonioLogNav() / showFonioLogNav() only while fonio is connected in Integrations (public/js/fonio-log.js) -->
+        <a href="#" class="sb-link hidden" data-page="calls" id="nav-fonio-log-link"><svg class="ic" aria-hidden="true"><use href="#i-phone"/></svg><span class="sb-text" data-i18n="nav_calls">fonio calls</span></a>
         <a href="#" class="sb-link" data-page="integrations"><svg class="ic" aria-hidden="true"><use href="#i-plug"/></svg><span class="sb-text" data-i18n="nav_integrations">Integrations</span></a>
       </div>
 
@@ -1105,6 +1107,35 @@
         </div>
       </section>
 
+      <!-- ── fonio calls: every call fonio reported, in and out — public/js/fonio-log.js ── -->
+      <section id="page-calls" class="page">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title"><svg class="ic" aria-hidden="true"><use href="#i-phone"/></svg><span data-i18n="nav_calls">fonio calls</span></h1>
+            <p class="page-sub" id="fonio-log-sub"></p>
+          </div>
+          <div class="page-actions">
+            <button class="btn btn-secondary btn-sm" type="button" onclick="loadFonioLog()"><svg class="ic ic-sm" aria-hidden="true"><use href="#i-refresh"/></svg><span data-i18n="btn_refresh">Refresh</span></button>
+          </div>
+        </div>
+        <div class="toolbar" id="fonio-log-toolbar"></div>
+        <div class="table-wrap">
+          <table class="table" id="fonio-log-table">
+            <thead><tr>
+              <th data-i18n="fcl_col_when">When</th>
+              <th data-i18n="fcl_col_direction">Direction</th>
+              <th data-i18n="fcl_col_number">Number</th>
+              <th data-i18n="fcl_col_contact">Contact</th>
+              <th data-i18n="fcl_col_deal">Deal</th>
+              <th data-i18n="fcl_col_result">Summary</th>
+              <th class="fcl-actions" data-i18n="fcl_col_actions">Action</th>
+              <th class="fcl-more" aria-hidden="true"></th>
+            </tr></thead>
+            <tbody id="fonio-log-body"></tbody>
+          </table>
+        </div>
+      </section>
+
       <section id="page-integrations" class="page page-rail">
         <div class="page-header">
           <div>
@@ -1124,6 +1155,7 @@
           <div class="settings-tab-sep" aria-hidden="true"></div>
           <button class="settings-tab" data-tab="calcom"     onclick="switchIntgTab('calcom')"     data-i18n="intg_tab_calcom">Cal.com</button>
           <button class="settings-tab hidden" data-tab="notetaker" onclick="switchIntgTab('notetaker')" data-i18n="intg_tab_notetaker">Notetaker</button>
+          <button class="settings-tab" data-tab="calendly"   onclick="switchIntgTab('calendly')"   data-i18n="intg_tab_calendly">Calendly</button>
           <div class="settings-tab-sep" aria-hidden="true"></div>
           <button class="settings-tab" data-tab="fonio"      onclick="switchIntgTab('fonio')"      data-i18n="intg_tab_fonio">fonio</button>
         </nav>
@@ -1347,6 +1379,72 @@
             <p class="settings-hint" data-i18n="engine_deliveries_hint">Attempts and the last response from the Engine for each event.</p>
             <div class="settings-card-body">
               <div id="engine-deliveries" class="engine-deliveries"><p class="empty-inline" data-i18n="engine_no_deliveries">No events sent yet.</p></div>
+            </div>
+          </div>
+
+            </div>
+          </div>
+
+          <!-- ── Calendly: one account per workspace, and only while Cal.com is not connected (routes/calendly.js, utils/calendly.js, public/js/calendly.js; CALENDLY_CHANGES Part 1). Owners/admins connect; everyone sees the account. ── -->
+          <div id="intg-pane-calendly" class="settings-pane">
+            <div class="settings-pane-head">
+              <h2 class="settings-pane-title" data-i18n="intg_pane_calendly">Calendly</h2>
+              <p class="settings-tab-hint" data-i18n="intg_pane_calendly_hint">One Calendly account for the whole workspace: its bookings land on the calendar. Booking a meeting from a deal or a contact is not possible with Calendly yet.</p>
+            </div>
+            <div class="intg-stack">
+
+          <div class="settings-card" id="cly-card">
+            <div class="settings-card-header">
+              <h2 data-i18n="cly_title">Calendly connection</h2>
+              <span id="cly-status" class="badge" data-i18n="cal_status_none">Not connected</span>
+            </div>
+            <p class="settings-hint" data-i18n="cly_hint">Connect the Calendly account whose bookings this workspace should see. Everyone in the workspace sees the account and its bookings; only owners and admins can change the connection.</p>
+            <p class="settings-hint hidden" id="cly-readonly-hint" data-i18n="cly_readonly_hint">Only owners and admins can connect or disconnect Calendly.</p>
+            <p class="settings-hint hidden" id="cly-blocked" data-i18n="cly_blocked">Cal.com is connected in this workspace. A workspace books with one service: to use Calendly, disconnect Cal.com first.</p>
+            <div class="settings-card-body">
+              <div class="intg-section hidden" id="cly-connect-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="cly_token_label">Personal access token</h3>
+                  <p class="intg-section-hint" data-i18n="cly_token_hint">From Calendly, as the guide below describes. The token is stored encrypted and never shown again.</p>
+                </div>
+                <div class="intg-url-box">
+                  <input type="text" id="cly-token" class="intg-url-input intg-secret-input" autocomplete="off" spellcheck="false" placeholder="Paste the Calendly token" data-i18n-ph="cly_token_ph" />
+                </div>
+              </div>
+              <div class="intg-section hidden" id="cly-guide-section">
+                <div class="intg-guide-panel" id="cly-guide-panel"></div>
+              </div>
+              <p class="empty-inline hidden" id="cly-none" data-i18n="cly_none">No Calendly account is connected yet.</p>
+              <div class="intg-section hidden" id="cly-account-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="cal_account_label">Connected account</h3>
+                </div>
+                <div id="cly-facts"></div>
+              </div>
+              <div class="intg-section hidden" id="cly-type-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="cal_event_type_label">Event type for bookings</h3>
+                  <p class="intg-section-hint" data-i18n="cly_event_type_hint">The Calendly event type a meeting booked from a deal or a contact will use.</p>
+                </div>
+                <div class="intg-field">
+                  <select id="cly-event-type" class="form-control" onchange="saveCalendlyEventType()"></select>
+                  <input type="text" id="cly-type-readonly" class="form-control hidden" readonly />
+                </div>
+              </div>
+              <div class="intg-section hidden" id="cly-log-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="cal_log_title">Recent bookings</h3>
+                  <p class="intg-section-hint" data-i18n="cly_log_hint">Every booking Calendly reported, and what became of it.</p>
+                </div>
+                <div id="cly-log" class="intg-logs"><p class="empty-inline" data-i18n="cal_log_none">No booking has arrived yet.</p></div>
+              </div>
+              <div class="settings-card-actions" id="cly-actions">
+                <button class="btn btn-primary btn-sm hidden" id="cly-connect-btn" onclick="connectCalendly(this)" data-i18n="cal_btn_connect">Connect</button>
+                <button class="btn btn-sm hidden" id="cly-refresh-btn" onclick="refreshCalendlyEventTypes(this)" data-i18n="cal_btn_refresh">Refresh event types</button>
+                <button class="btn btn-sm hidden" id="cly-register-btn" onclick="registerCalendlyWebhook(this)" data-i18n="cal_btn_register">Register webhook</button>
+                <button class="btn btn-sm btn-danger hidden" id="cly-disconnect-btn" onclick="disconnectCalendly()" data-i18n="cal_btn_disconnect">Disconnect</button>
+                <span id="cly-msg" class="workspace-name-msg hidden"></span>
+              </div>
             </div>
           </div>
 
@@ -1613,6 +1711,7 @@
               <h2 data-i18n="fonio_vars_title">Variables for the assistant</h2>
             </div>
             <p class="settings-hint" data-i18n="fonio_vars_hint">The assistant in fonio only knows a contact's details where its prompt names them as {{variable}}. Here you decide which CRM value is sent under which name with every call.</p>
+            <p class="settings-hint" data-i18n="fonio_vars_slots_hint">While Cal.com or Calendly is connected, every call the CRM starts also carries {{freie_termine}} (the next free times of the chosen event type, for example "Do 20.11.2026: 09:00, 09:30; Fr 21.11.2026: 14:00"), {{freie_termine_json}} (the same as a list) and {{heute}} (today's weekday and date). Name them in the prompt so the assistant only offers times that can be booked. A prompt that calls them something else works too: connect its name below to “Free times” or “Today's date”.</p>
             <div class="settings-card-body">
               <div class="intg-section">
                 <div class="intg-section-head">
@@ -1914,6 +2013,56 @@
   </div>
 
   <!-- Object Field Modal -->
+  <!-- fonio calls: connect a call from an unknown number to a contact that exists (public/js/fonio-log.js) -->
+  <div id="fcl-pick-modal" class="modal-overlay hidden">
+    <div class="modal sm">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="fcl_pick_title">Connect to a contact</h2>
+        <button class="iconbtn" onclick="closeModal('fcl-pick-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-xs text-muted" data-i18n="fcl_pick_hint">The call's note is written on the contact you pick.</p>
+        <div class="field"><input type="search" id="fcl-pick-search" autocomplete="off" placeholder="Search name, company, phone" data-i18n-ph="fcl_pick_ph" aria-label="Search contacts" data-i18n-aria="fcl_pick_ph" oninput="renderFonioLogPick()" /></div>
+        <ul class="fcl-pick-list" id="fcl-pick-list"></ul>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('fcl-pick-modal')" data-i18n="btn_cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- fonio calls: one call's technical details, for owners and admins (public/js/fonio-log.js openFonioLogTech) -->
+  <div id="fcl-tech-modal" class="modal-overlay hidden">
+    <div class="modal lg">
+      <div class="modal-head">
+        <h2 class="modal-title" data-i18n="fcl_tech_title">Technical details</h2>
+        <button class="iconbtn" onclick="closeModal('fcl-tech-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-xs text-muted" data-i18n="fcl_tech_hint">For developers: what the CRM keeps about this call. The API key is never part of it.</p>
+        <div class="fcl-tech-part" id="fcl-tech-request-wrap">
+          <div class="fcl-tech-head"><h3 data-i18n="fcl_tech_request"></h3><button type="button" class="btn btn-sm" id="fcl-tech-request-copy" onclick="copyIntgText(this, document.getElementById('fcl-tech-request').textContent)" data-i18n="btn_copy">Copy</button></div>
+          <pre class="intg-code" id="fcl-tech-request"></pre>
+        </div>
+        <div class="fcl-tech-part" id="fcl-tech-response-wrap">
+          <div class="fcl-tech-head"><h3 data-i18n="fcl_tech_response"></h3><button type="button" class="btn btn-sm" id="fcl-tech-response-copy" onclick="copyIntgText(this, document.getElementById('fcl-tech-response').textContent)" data-i18n="btn_copy">Copy</button></div>
+          <pre class="intg-code" id="fcl-tech-response"></pre>
+        </div>
+        <div class="fcl-tech-part" id="fcl-tech-result_body-wrap">
+          <div class="fcl-tech-head"><h3 data-i18n="fcl_tech_result"></h3><button type="button" class="btn btn-sm" id="fcl-tech-result_body-copy" onclick="copyIntgText(this, document.getElementById('fcl-tech-result_body').textContent)" data-i18n="btn_copy">Copy</button></div>
+          <pre class="intg-code" id="fcl-tech-result_body"></pre>
+        </div>
+        <div class="fcl-tech-part" id="fcl-tech-record-wrap">
+          <div class="fcl-tech-head"><h3 data-i18n="fcl_tech_record"></h3><button type="button" class="btn btn-sm" id="fcl-tech-record-copy" onclick="copyIntgText(this, document.getElementById('fcl-tech-record').textContent)" data-i18n="btn_copy">Copy</button></div>
+          <pre class="intg-code" id="fcl-tech-record"></pre>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('fcl-tech-modal')" data-i18n="btn_close">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="object-field-modal" class="modal-overlay hidden">
     <div class="modal sm">
       <div class="modal-head">
@@ -2230,6 +2379,8 @@
   <script src="js/analytics.js"></script>
   <script src="js/integrations.js"></script>
   <script src="js/onboarding.js"></script>
+  <script src="js/fonio-log.js"></script>
+  <script src="js/calendly.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/chat.js"></script>
   <script src="js/guide.js"></script>

@@ -142,6 +142,7 @@ function showApp() {
   loadColWidths();
   updateBoardNavVisibility();
   updateOnboardingNav();
+  updateFonioLogNav();
   updateObjectsNav();
   updateSuppliersNav();
   loadNotifPrefs();
@@ -592,6 +593,7 @@ async function switchPage(page) {
   if (page === 'board')        await loadBoard();
   if (page === 'analytics')    await loadAnalytics();
   if (page === 'onboarding')   await loadOnboarding();
+  if (page === 'calls')        await loadFonioLog();
   if (page === 'integrations') await loadIntegrations();
   if (page === 'workspaces')   await loadWorkspacesPage();
   if (page === 'chat')         await loadChatPage();

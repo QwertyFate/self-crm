@@ -487,6 +487,7 @@ function openCalendarEventDetail(uid) {
         <span class="badge"><i class="cal-dot ${e.type}"></i>${esc(t(ty.key))}</span>
         <span class="badge badge-outline">${esc(rel)}</span>
         ${e.completed ? `<span class="badge badge-success">${esc(t('tk_done'))}</span>` : ''}
+        ${e.source === 'calendly' ? `<span class="badge badge-outline">${esc(t('src_calendly'))}</span>` : ''}
         ${e.calcom_uid ? `<span class="badge badge-outline">${esc(t('src_calcom'))}</span>` : ''}
         ${e.cancelled_at ? `<span class="badge badge-danger">${esc(t('act_cancelled'))}</span>` : ''}
       </div>

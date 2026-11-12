@@ -19,7 +19,7 @@ const rail = html.slice(pageStart, html.indexOf('<div class="settings-tab-body">
 
 describe('the markup', () => {
   test('the rail: a separator and the Cal.com tab after Deliveries', () => {
-    assert.match(rail, /data-tab="deliveries"[^\n]*\n\s*<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="calcom"\s+onclick="switchIntgTab\('calcom'\)"\s+data-i18n="intg_tab_calcom">Cal\.com<\/button>\n\s*(?:<button class="settings-tab hidden" data-tab="notetaker"[^\n]*\n\s*)?(?:<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="fonio"[^\n]*\n\s*)?<\/nav>/, 'the last tab, but for the Notetaker\'s (hidden until the server answers; notetaker-ai-ui.test.js) and fonio\'s group (fonio-ui.test.js)');
+    assert.match(rail, /data-tab="deliveries"[^\n]*\n\s*<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="calcom"\s+onclick="switchIntgTab\('calcom'\)"\s+data-i18n="intg_tab_calcom">Cal\.com<\/button>\n\s*(?:<button class="settings-tab hidden" data-tab="notetaker"[^\n]*\n\s*)?(?:<button class="settings-tab" data-tab="calendly"[^\n]*\n\s*)?(?:<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="fonio"[^\n]*\n\s*)?<\/nav>/, 'the last tab, but for the Notetaker\'s (hidden until the server answers; notetaker-ai-ui.test.js), Calendly\'s (calendly-ui.test.js) and fonio\'s group (fonio-ui.test.js)');
   });
   test('the pane: one card with the status badge, the connect section, the member line, the account, the event type, the actions and the message line', () => {
     assert.match(pane, /^<div id="intg-pane-calcom" class="settings-pane">/);
@@ -286,7 +286,7 @@ describe('the meeting link, one click away (Part 12)', () => {
   });
   test('the bell: a meeting on a deal or a contact of mine is announced by kind (booked, moved, cancelled) with the meeting\'s own title; a contact notification opens the contact; the keys exist in both languages', () => {
     assert.match(notif, /meeting_booked:\s+'📅',[\s\S]*meeting_moved:\s+'🗓️',\s*meeting_cancelled: '🚫',/);
-    assert.match(notif, /^const NOTIF_KINDS = \{ meeting_booked: 'notif_meeting_booked', meeting_moved: 'notif_meeting_moved', meeting_cancelled: 'notif_meeting_cancelled', notetaker_done: 'notif_notetaker_done', notetaker_failed: 'notif_notetaker_failed' \};$/m);   // + the Notetaker's two (NOTETAKER_CHANGES Part 2)
+    assert.match(notif, /^const NOTIF_KINDS = \{ meeting_booked: 'notif_meeting_booked', meeting_moved: 'notif_meeting_moved', meeting_cancelled: 'notif_meeting_cancelled', meeting_failed: 'notif_meeting_failed', notetaker_done: 'notif_notetaker_done', notetaker_failed: 'notif_notetaker_failed' \};$/m);   // + the Notetaker's two (NOTETAKER_CHANGES Part 2)
     assert.match(notif, /function notifKind\(type\) \{ return NOTIF_KINDS\[type\] \? `<div class="notif-kind">\$\{esc\(t\(NOTIF_KINDS\[type\]\)\)\}<\/div>` : ''; \}/);
     assert.match(notif, /\$\{notifKind\(n\.type\)\}<div class="notif-title">\$\{esc\(n\.title\)\}<\/div>/, 'the kind above the title; older kinds look as before');
     assert.match(notif, /switchPage\('contacts'\);\s*if \(typeof openContactDetail === 'function'\) openContactDetail\(entityId\);/);

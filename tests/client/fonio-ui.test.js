@@ -165,6 +165,12 @@ describe('readFonioForm: the form as the PUT body', () => {
       hours_from: '09:00', hours_to: '18:00',
     });
   });
+  test('the variables card says which free-time variables every call carries while a booking service is connected (Part 29)', () => {
+    assert.match(pane, /<p class="settings-hint" data-i18n="fonio_vars_slots_hint">[^<]+<\/p>/);
+    for (const lang of ['en', 'de']) for (const name of ['{{freie_termine}}', '{{freie_termine_json}}', '{{heute}}']) assert.ok(dict[lang].fonio_vars_slots_hint.includes(name), `${lang}: ${name}`);
+    const names = require('../../utils/fonio-calls').SLOT_NAMES;
+    assert.deepEqual(names, { text: ['freie_termine', 'free_times'], json: ['freie_termine_json', 'free_times_json'], today: ['heute', 'today'] });
+  });
   test('a typed key is sent, trimmed', () => assert.equal(F.readFonioForm({ ...form, key: '  fonio_live_abc  ' }).api_key, 'fonio_live_abc'));
   test('an empty delay is sent as not-a-number, so the server refuses it instead of reading 0', () => {
     assert.ok(Number.isNaN(F.readFonioForm({ ...form, delay: '' }).delay_minutes));
@@ -281,8 +287,13 @@ describe('the result card (Part 8): the link, the Body for fonio, the last deliv
     const filled = Object.fromEntries(Object.keys(body).map(k => [k, 'x']));
     Object.assign(filled, { crm_call_id: '7', conversation_link: 'https://app.fonio.ai/c/1', person_number: '+491711234567', agent_number: '+4930123456' });
     assert.deepEqual(fr.readResult(filled, '+4930123456'), { crmCallId: 7, conversationId: 'x', link: 'https://app.fonio.ai/c/1', direction: 'x', inbound: false,
-      duration: 'x', summary: 'x', transcript: 'x', numbers: ['+491711234567'] });
-    assert.deepEqual(Object.keys(body), ['crm_call_id', 'conversation_id', 'conversation_link', 'direction', 'person_number', 'agent_number', 'duration', 'summary', 'transcript']);
+      duration: 'x', summary: 'x', transcript: 'x', numbers: ['+491711234567'], name: 'x', meeting: null });
+    assert.deepEqual(Object.keys(body), ['crm_call_id', 'conversation_id', 'conversation_link', 'direction', 'person_number', 'agent_number', 'caller_name', 'meeting_booked', 'meeting_date', 'meeting_time', 'meeting_email', 'duration', 'summary', 'transcript']);
+    // Part 28: the three meeting names are read too; left as fonio's unfilled placeholders they are no meeting
+    assert.deepEqual(fr.readResult({ ...filled, meeting_booked: 'yes', meeting_date: '2026-11-20', meeting_time: '14:00' }, '+4930123456').meeting, { date: '2026-11-20', time: '14:00', email: null, said: '2026-11-20 14:00' });
+    assert.equal(fr.readResult(body, '+4930123456').meeting, null);
+    for (const lang of ['en', 'de']) for (const k of ['meeting_booked', 'meeting_date', 'meeting_time', 'meeting_email']) assert.ok(dict[lang].fonio_result_body_hint.includes(k), `${lang}: the hint says what ${k} is`);
+    for (const k of ['notif_meeting_failed']) { assert.ok(dict.en[k]); assert.ok(dict.de[k]); }
   });
 
   test('every outcome the server records has its words in both languages; the list here matches the server', () => {
@@ -310,11 +321,21 @@ describe('the variables card (Part 14): a prompt\'s placeholders connected to CR
   const V = loadFns('public/js/integrations.js', fnNames, {
     state: { fonioData: null, fonioVars: [], fonioVarSources: null, fonioVarsPrompt: '', document: null },
     extra: `${sliceConst('public/js/integrations.js', 'FONIO_VAR_HINTS')}
+      ${sliceConst('public/js/integrations.js', 'FONIO_VAR_CALENDAR')}
       const FONIO_PLACEHOLDER = ${js.match(/const FONIO_PLACEHOLDER = (\/.*\/g);/)[1]};
       const t = k => { const v = globalThis.__fonioDict.en[k]; if (v === undefined) throw new Error('no key ' + k); return v; };
       ${sliceFn(read('public/js/core.js'), 'esc', 'core.js')}`,
   });
   const VALUES = require('../../utils/fonio-calls').VALUE_SOURCES;
+  test('the calendar\'s free times and today are values a prompt\'s name can be connected to (Part 32): suggested for the usual names, in a group of their own', () => {
+    for (const v of ['free_times', 'free_times_json', 'today']) assert.ok(VALUES.includes(v), v);
+    const src = { values: VALUES, contact_fields: [], deal_fields: [] };
+    for (const [key, want] of [['freie_termine', 'value:free_times'], ['freie_zeiten', 'value:free_times'], ['free_times', 'value:free_times'], ['freie_termine_json', 'value:free_times_json'], ['heute', 'value:today'], ['today', 'value:today'], ['heutiges_datum', 'value:today']]) assert.equal(V.fonioSuggestSource(key, src), want, key);
+    const options = V.fonioVarOptions('value:free_times', src);
+    assert.match(options, /<optgroup label="Calendar \(Cal\.com or Calendly\)"><option value="value:free_times" selected>Free times, as text<\/option><option value="value:free_times_json">Free times, as a list \(JSON\)<\/option><option value="value:today">Today's date<\/option><\/optgroup>$/);
+    assert.doesNotMatch(options.slice(0, options.indexOf('Calendar (')), /value:free_times|value:today/, 'not among the contact\'s values');
+    for (const k of ['fonio_var_group_calendar', 'fonio_var_src_free_times', 'fonio_var_src_free_times_json', 'fonio_var_src_today']) { assert.ok(dict.en[k], k); assert.ok(dict.de[k], k); }
+  });
   const SRC = { values: VALUES, contact_fields: [{ key: 'eigenkapital', name: 'Eigenkapital' }, { key: 'cf_7', name: 'Warum in Immobilien investieren?' }],
     deal_fields: [{ key: 'budget', name: 'Budget' }] };
   const PROMPT = 'Spreche ich mit {Vorname Nachname}?\nAnfrage vom {Anfragedatum}. Adresse: {Adresse, Teil für Teil}.\nBeim Eigenkapital {Spanne}, {Eigenkapital}. Danke, {Vorname Nachname}. Schon da: {{email}}. Termin {freie Zeit 1}.';

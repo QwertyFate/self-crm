@@ -439,6 +439,44 @@ async function initDb() {
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_calcom_uid ON activities (workspace_id, calcom_uid) WHERE calcom_uid IS NOT NULL`);
   await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'lead'`);
 
+  // Calendly (utils/calendly.js, routes/calendly.js; CALENDLY_CHANGES Part 1): ONE connection per workspace,
+  // the sealed personal access token of a Calendly account. A workspace has Cal.com or Calendly, never both
+  // (each connect route refuses while the other is connected). Calendly names everything by URI: user_uri and
+  // org_uri are the account and its organization, event_type_uri the event type bookings from a deal use, and
+  // event_types the account's active list as last fetched. receive_token and webhook_secret are minted at
+  // connect and kept across reconnects for the booking webhook; webhook_uri is Calendly's name for it once
+  // it is registered (Part 2).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_calendly (
+      id              SERIAL PRIMARY KEY,
+      workspace_id    INTEGER NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+      token_sealed    TEXT NOT NULL,
+      user_uri        TEXT NOT NULL,
+      org_uri         TEXT,
+      cly_name        TEXT,
+      cly_email       TEXT,
+      cly_slug        TEXT,
+      cly_timezone    TEXT,
+      scheduling_url  TEXT,
+      event_types     JSONB NOT NULL DEFAULT '[]',
+      event_type_uri  TEXT,
+      receive_token   TEXT NOT NULL UNIQUE,
+      webhook_secret  TEXT NOT NULL,
+      webhook_uri     TEXT,
+      connected_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      connected_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ DEFAULT NOW(),
+      last_error      TEXT
+    )
+  `);
+  // A Calendly booking is an activity of type 'meeting' with source 'calendly' (CALENDLY_CHANGES Part 2):
+  // calendly_uri is the INVITEE's URI, Calendly's name for one person's booking (a cancellation finds its entry by
+  // it, a reschedule renames it to the new invitee; one entry per booking per workspace); calendly_event_uri is the
+  // scheduled event, which a cancellation from the CRM will name. cancelled_at marks a cancelled booking, as for Cal.com.
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS calendly_uri       TEXT`);
+  await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS calendly_event_uri TEXT`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_calendly_uri ON activities (workspace_id, calendly_uri) WHERE calendly_uri IS NOT NULL`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_workspaces (
       user_id      INTEGER NOT NULL REFERENCES users(id)      ON DELETE CASCADE,
@@ -655,7 +693,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'user'`);
   try {
     await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_source_check`);
-    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine','calcom','notetaker','fonio'))`);
+    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine','calcom','notetaker','fonio','calendly'))`);
   } catch (e) {
     if (e.code !== '42710') throw e;
   }
@@ -822,6 +860,38 @@ async function initDb() {
   // The workspace's own variables for the assistant's prompt in fonio (FONIO_CHANGES Part 13, 2026-11-10;
   // utils/fonio-calls.js checkVariables): [{ name, source }], each sent with every call as name → the source's value.
   await pool.query(`ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS variables JSONB NOT NULL DEFAULT '[]'::jsonb`);
+  // Conversations the CRM did not start (FONIO_CHANGES Part 15, 2026-11-11; utils/fonio-calls.js saveOther): an
+  // incoming call, or an outgoing one that fits no row of fonio_calls. number is the person's (+E.164, NULL when
+  // hidden), caller_name what fonio's Body gave as caller_name. contact_id is the contact with that number, deal_id
+  // that contact's deal when it has exactly one; the note (note_activity_id) is on the contact, and on that deal.
+  // Without a contact nothing is noted, so the row keeps the transcript itself until a contact is made from it.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS fonio_other_calls (
+      id                SERIAL PRIMARY KEY,
+      workspace_id      INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      direction         TEXT NOT NULL CHECK (direction IN ('inbound','outbound')),
+      number            TEXT,
+      caller_name       TEXT,
+      contact_id        INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+      deal_id           INTEGER REFERENCES deals(id)    ON DELETE SET NULL,
+      conversation_id   TEXT,
+      conversation_link TEXT,
+      duration          TEXT,
+      summary           TEXT,
+      transcript        TEXT,
+      note_activity_id  INTEGER REFERENCES activities(id) ON DELETE SET NULL,
+      created_at        TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS fonio_other_calls_ws_idx ON fonio_other_calls (workspace_id, created_at DESC)`);
+  // A call's technical record for owners and admins (FONIO_CHANGES Part 18, 2026-11-11): request is what the CRM sent
+  // to fonio's outbound_call (the key replaced), response fonio's answer (HTTP status and body), result_body the Body
+  // fonio sent after the call. NULL for calls from before.
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS request     JSONB`);
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS response    JSONB`);
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS result_body JSONB`);
+  await pool.query(`ALTER TABLE fonio_other_calls ADD COLUMN IF NOT EXISTS result_body JSONB`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS fonio_other_calls_one_conversation ON fonio_other_calls (workspace_id, conversation_id) WHERE conversation_id IS NOT NULL`);
   // The master CRM (MASTER_ACCESS_CHANGES Part 1, 2026-11-09; utils/master.js): one row per visit of a workspace
   // through the admin secret — the workspace, the owner row the visit acted as, when it began and ended, and from
   // where. The names are copied so a row outlives a deleted workspace or user (hence SET NULL, not CASCADE).

@@ -24,6 +24,7 @@
                  openActivityModal, saveActivity */
 
 async function openContactModal(id) {
+  if (typeof fonioLogForget === 'function') fonioLogForget();   // fonio-log.js: only its own opening is for a call
   await Promise.all([ensureFields(), ensureMembers()]);
   document.getElementById('contact-form').reset();
   document.getElementById('cf-error').hidden = true;
@@ -96,9 +97,11 @@ async function saveContact(e) {
   closeModal('contact-modal');
   invalidate();
   const page = document.querySelector('.page.active')?.id.replace('page-', '');
+  // a contact made from a call on the fonio calls page takes that call and its note (fonio-log.js)
+  const fromCall = !id && typeof fonioLogContactSaved === 'function' && await fonioLogContactSaved(saved.id);
   if (page === 'deals') {
     await loadDeals();
-  } else {
+  } else if (!fromCall) {
     await loadContacts();
   }
 }

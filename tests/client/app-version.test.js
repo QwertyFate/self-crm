@@ -20,9 +20,9 @@ describe('the watch', () => {
     assert.match(sliceFn(core, 'appRememberPage', 'core.js'), /document\.querySelector\('\.sb-link\[aria-current="page"\]'\)\?\.dataset\.page[\s\S]*sessionStorage\.setItem\('crm_reload_page', JSON\.stringify\(\{ page, at: Date\.now\(\) \}\)\)/);
     const r = sliceFn(core, 'appRestorePage', 'core.js');
     assert.match(r, /sessionStorage\.removeItem\('crm_reload_page'\);/); assert.match(r, /APP_PAGES\.includes\(page\) && Date\.now\(\) - at < 5 \* 60 \* 1000 \? page : null/);
-    assert.match(core, /^const APP_PAGES = \['deals', 'contacts', 'suppliers', 'activities', 'calendar', 'settings', 'objects', 'tasks', 'board', 'analytics', 'onboarding', 'integrations', 'workspaces', 'chat'\];/m);
+    assert.match(core, /^const APP_PAGES = \['deals', 'contacts', 'suppliers', 'activities', 'calendar', 'settings', 'objects', 'tasks', 'board', 'analytics', 'onboarding', 'calls', 'integrations', 'workspaces', 'chat'\];/m);
     const pages = [...read('public/index.html').matchAll(/data-page="([a-z-]+)"/g)].map(m => m[1]);
-    for (const p of new Set(pages)) assert.ok(['deals', 'contacts', 'suppliers', 'activities', 'calendar', 'settings', 'objects', 'tasks', 'board', 'analytics', 'onboarding', 'integrations', 'workspaces', 'chat'].includes(p), 'every sidebar page can be restored: ' + p);
+    for (const p of new Set(pages)) assert.ok(['deals', 'contacts', 'suppliers', 'activities', 'calendar', 'settings', 'objects', 'tasks', 'board', 'analytics', 'onboarding', 'calls', 'integrations', 'workspaces', 'chat'].includes(p), 'every sidebar page can be restored: ' + p);
     assert.match(sliceFn(core, 'appReloadNow', 'core.js'), /appRememberPage\(\); location\.reload\(\);/);
     assert.match(sliceFn(auth, 'showApp', 'auth.js'), /switchPage\(appRestorePage\(\) \|\| 'deals'\);/, 'after a self-reload the same page; every other entry still lands on Deals');
   });

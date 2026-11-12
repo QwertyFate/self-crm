@@ -81,6 +81,11 @@ const pool = {
       c.status = 'sending'; c.attempts++; c.updated_at = new Date();
       return { rows: [{ ...c }] };
     }
+    if (t === 'UPDATE fonio_calls SET request = $2::jsonb, response = $3::jsonb WHERE id = $1') {
+      if (db.failKeep) throw new Error('jsonb refused');
+      Object.assign(call(p[0]), { request: JSON.parse(p[1]), response: JSON.parse(p[2]) });
+      return { rowCount: 1, rows: [] };
+    }
     if (t.startsWith('UPDATE fonio_calls SET status = $2')) {
       const c = call(p[0]);
       Object.assign(c, { status: p[1], reason: p[2], message: p[3] ?? c.message, to_number: p[4] ?? c.to_number, due_at: p[5] ? new Date(p[5]) : c.due_at,
@@ -229,6 +234,18 @@ describe('the worker sends due calls', () => {
     assert.ok(c.sent_at);
     assert.deepEqual(await tick(minutes(WED10, 10)), [], 'a sent call is never sent again');
     assert.equal(fon.calls.length, 1);
+    // Part 18: what was sent and what fonio answered are kept with the call — the key is not
+    assert.deepEqual(c.request, { url: 'https://app.fonio.ai/api/public/v1/outbound_call', body: { apiKey: '(hidden)', fromNumber: '+4930123456', toNumber: '+491711234567', context: b.context } });
+    assert.deepEqual(c.response, { http: 200, body: { status: 'success', message: 'Call initiated' } });
+    assert.ok(!JSON.stringify([c.request, c.response]).includes(KEY));
+  });
+  test('the technical record failing to save changes nothing about the call (Part 18)', async () => {
+    db.failKeep = true;
+    try {
+      await schedule(100);
+      assert.deepEqual(await tick(minutes(WED10, 6)), [{ id: 1, status: 'sent', reason: null }]);
+      assert.equal(only().request, undefined);
+    } finally { db.failKeep = false; }
   });
 
   test('the same call claimed twice at once is sent once', async () => {
@@ -274,6 +291,7 @@ describe('the worker sends due calls', () => {
     await tick(minutes(WED10, 6)); await tick(minutes(WED10, 30));
     assert.deepEqual([only().status, only().reason, only().message], ['failed', 'fonio', 'KYC not completed']);
     assert.equal(fon.calls.length, 1);
+    assert.deepEqual(only().response, { http: 200, body: { status: 'error', message: 'KYC not completed' } }, "fonio's refusal is kept as it came");
   });
 
   test('fonio busy (429): tried again in 5 minutes, at most 3 times, then failed', async () => {
@@ -294,6 +312,8 @@ describe('the worker sends due calls', () => {
     assert.equal(only().status, 'failed');
     assert.match(only().message, /may have started/);
     assert.equal(fon.calls.length, 1);
+    assert.deepEqual({ http: only().response.http, body: only().response.body }, { http: 0, body: null }, 'no answer: recorded as none');
+    assert.match(only().response.error, /may have started/);
   });
 
   test('a row left mid-send by a dead process is failed "interrupted", never sent', async () => {
@@ -302,6 +322,64 @@ describe('the worker sends due calls', () => {
     await tick(minutes(WED10, 6));
     assert.deepEqual([only().status, only().reason], ['failed', 'interrupted']);
     assert.equal(fon.calls.length, 0);
+  });
+});
+
+describe("the booking service's free times go with the call, for the assistant (Part 29)", () => {
+  const bookingSlots = require('../../utils/booking-slots');
+  const realFreeSlots = bookingSlots.freeSlots;
+  const tick = now => fonioCalls.runDue(pool, { now });
+  const B = (d, h, m = 0) => Date.UTC(2026, 10, d, h - 1, m);   // Berlin clock in November
+  let asked;
+  const service = answer => { asked = []; bookingSlots.freeSlots = async (p, wid, from) => { asked.push({ wid, from }); return typeof answer === 'function' ? answer() : answer; }; };
+  after(() => { bookingSlots.freeSlots = realFreeSlots; });
+  const sent = async () => { await schedule(100); await tick(minutes(WED10, 6)); return fon.calls[0].body.context; };
+
+  test('with a booking service connected: the next free times as text and as a list, and today, under German and English names, on the account\'s clock', async () => {
+    service({ service: 'calendly', zone: 'Europe/Berlin', slots: [B(5, 9), B(5, 9, 30), B(6, 14)] });
+    const ctx = await sent();
+    assert.deepEqual(asked, [{ wid: WS, from: minutes(WED10, 6).getTime() }], 'asked when the call goes out, so the times are fresh');
+    assert.equal(ctx.freie_termine, 'Do 05.11.2026: 09:00, 09:30; Fr 06.11.2026: 14:00'); assert.equal(ctx.free_times, ctx.freie_termine);
+    assert.equal(ctx.freie_termine_json, '["2026-11-05 09:00","2026-11-05 09:30","2026-11-06 14:00"]'); assert.equal(ctx.free_times_json, ctx.freie_termine_json);
+    assert.equal(ctx.heute, 'Mittwoch, 04.11.2026'); assert.equal(ctx.today, ctx.heute);
+    assert.equal(ctx.vorname, 'Erika', 'everything else as before');
+  });
+  test('nothing free: the times are empty text and an empty list, so the prompt never shows a raw placeholder', async () => {
+    service({ service: 'calcom', zone: 'Europe/Berlin', slots: [] });
+    const ctx = await sent();
+    assert.deepEqual([ctx.freie_termine, ctx.freie_termine_json, ctx.heute], ['', '[]', 'Mittwoch, 04.11.2026']);
+  });
+  test('no booking service, or the lookup failing: the call goes out without them, exactly as before', async () => {
+    service(null);
+    const ctx = await sent();
+    for (const k of ['freie_termine', 'free_times', 'freie_termine_json', 'free_times_json', 'heute', 'today']) assert.ok(!(k in ctx), k);
+    seed(); fon.calls.length = 0;
+    service(() => { throw new Error('boom'); });
+    const again = await sent();
+    assert.ok(!('freie_termine' in again)); assert.equal(only().status, 'sent');
+  });
+  test("a name the workspace's own variables already use is left to them", async () => {
+    db.conn = CONN({ variables: [{ name: 'heute', source: 'value:company' }] });
+    service({ service: 'calendly', zone: 'Europe/Berlin', slots: [B(5, 9)] });
+    const ctx = await sent();
+    assert.equal(ctx.heute, 'Muster GmbH'); assert.equal(ctx.today, 'Mittwoch, 04.11.2026'); assert.equal(ctx.freie_termine, 'Do 05.11.2026: 09:00');
+  });
+  test("a prompt that calls them something else: the workspace's own name connected to the free times or to today carries them (Part 32); empty without a booking service", async () => {
+    db.conn = CONN({ variables: [{ name: 'offene_zeiten', source: 'value:free_times' }, { name: 'datum', source: 'value:today' }, { name: 'liste', source: 'value:free_times_json' }] });
+    service({ service: 'calendly', zone: 'Europe/Berlin', slots: [B(5, 9)] });
+    const ctx = await sent();
+    assert.deepEqual([ctx.offene_zeiten, ctx.datum, ctx.liste], ['Do 05.11.2026: 09:00', 'Mittwoch, 04.11.2026', '["2026-11-05 09:00"]']);
+    seed(); fon.calls.length = 0;
+    db.conn = CONN({ variables: [{ name: 'offene_zeiten', source: 'value:free_times' }] });
+    service(null);
+    const none = await sent();
+    assert.equal(none.offene_zeiten, '', 'named in the prompt, so it is sent, empty');
+    assert.deepEqual(fonioCalls.checkVariables([{ name: 'offene_zeiten', source: 'value:free_times' }]).value, [{ name: 'offene_zeiten', source: 'value:free_times' }], 'a save accepts it');
+  });
+  test('the request kept for the technical details carries them too', async () => {
+    service({ service: 'calendly', zone: 'Europe/Berlin', slots: [B(5, 9)] });
+    await sent();
+    assert.equal(only().request.body.context.freie_termine, 'Do 05.11.2026: 09:00');
   });
 });
 
@@ -492,6 +570,7 @@ describe("the workspace's own variables for the prompt (Part 13)", () => {
   test('every built-in source is a value the context can carry', async () => {
     seed();
     const src = require('fs').readFileSync(require('path').join(__dirname, '../../utils/fonio-calls.js'), 'utf8');
-    for (const k of fonioCalls.VALUE_SOURCES) assert.ok(fonioCalls.CONTACT_FIELDS.includes(k) || src.includes(`put('${k}'`), k);
+    const fromCalendar = Object.values(fonioCalls.SLOT_NAMES).flat();   // the booking service's free times and today (Part 32)
+    for (const k of fonioCalls.VALUE_SOURCES) assert.ok(fonioCalls.CONTACT_FIELDS.includes(k) || src.includes(`put('${k}'`) || fromCalendar.includes(k), k);
   });
 });

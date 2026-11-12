@@ -275,6 +275,7 @@ async function loadIntegrations() {
   loadCalcomSettings();
   loadNotetakerAi();
   loadFonio();
+  if (typeof loadCalendly === 'function') loadCalendly();   // public/js/calendly.js (CALENDLY_CHANGES Part 1)
   const intgFieldMap = document.getElementById('intg-field-map');
   if (intgFieldMap) intgFieldMap.innerHTML = '';
 
@@ -942,8 +943,9 @@ async function connectCalcom(btn) {
   try {
     const res = await api.post('/api/integrations/calcom/connect', { api_key });
     if (input) input.value = '';
-    if (!res || res.error) { showCalMsg(res?.error || t('cal_err_generic'), false); return; }
+    if (!res || res.error) { showCalMsg(res?.code === 'calendly_connected' ? t('cal_err_calendly') : (res?.error || t('cal_err_generic')), false); return; }
     calcomData = res; renderCalcom();
+    if (typeof loadCalendly === 'function') loadCalendly();   // its card says "Cal.com is connected" from now on
     showCalMsg(t('cal_connected_ok'), true);
   } finally {
     if (btn) btn.disabled = false;
@@ -1015,6 +1017,7 @@ async function disconnectCalcom() {
   const res = await api.del('/api/integrations/calcom');
   if (!res || res.error) { showCalMsg(res?.error || t('cal_err_generic'), false); return; }
   calcomData = res; renderCalcom();
+  if (typeof loadCalendly === 'function') loadCalendly();   // Calendly can be connected again
   showCalMsg(t('cal_disconnected_ok'), true);
 }
 
@@ -1161,6 +1164,7 @@ let fonioData = null;
 let fonioDays = [];   // the calling days picked in the form, 1 = Monday … 7 = Sunday
 let fonioCallsCanManage = false;
 
+
 async function loadFonio() {
   const data = await api.get('/api/integrations/fonio');
   if (!data || data.error) return;
@@ -1178,6 +1182,7 @@ async function loadFonio() {
 function renderFonio() {
   const d = fonioData, card = document.getElementById('fonio-card');
   if (!d || !card) return;
+  if (typeof showFonioLogNav === 'function') showFonioLogNav(!!d.configured);   // the fonio calls page exists while fonio is connected (fonio-log.js)
   const s = d.settings || {}, manage = !!d.can_manage, set = !!d.configured;
   const $ = id => document.getElementById(id);
   const status = $('fonio-status');
@@ -1246,7 +1251,11 @@ const FONIO_VAR_HINTS = {
   telefon: 'phone', telefonnummer: 'phone', handynummer: 'phone', rufnummer: 'phone',
   firma: 'company', unternehmen: 'company', anfragedatum: 'request_date', datum_der_anfrage: 'request_date',
   stadt: 'ort', city: 'ort', postleitzahl: 'plz', website: 'webseite', dealtitel: 'deal_title', deal: 'deal_title',
+  // the booking service's free times and today (FONIO_CHANGES Part 32)
+  freie_termine: 'free_times', freie_zeiten: 'free_times', freie_termine_json: 'free_times_json', freie_zeiten_json: 'free_times_json',
+  heute: 'today', heutiges_datum: 'today', datum_heute: 'today',
 };
+const FONIO_VAR_CALENDAR = ['free_times', 'free_times_json', 'today'];   // their own group in the picker
 const FONIO_PLACEHOLDER = /\{\{([^{}\n]+)\}\}|\{([^{}\n]+)\}/g;
 
 // A placeholder's words as a variable name: "E-Mail" → e_mail, "Größe in m²" → groesse_in_m2.
@@ -1318,10 +1327,11 @@ function fonioVarOptions(selected, src) {
     || (src?.deal_fields || []).some(f => 'deal_field:' + f.key === selected);
   return opt('', t('fonio_var_src_none'))
     + (known ? '' : opt(selected, t('fonio_var_missing')))
-    + group(t('fonio_var_group_contact'), values.filter(v => !v.startsWith('deal_')).map(v => opt('value:' + v, t('fonio_var_src_' + v))))
+    + group(t('fonio_var_group_contact'), values.filter(v => !v.startsWith('deal_') && !FONIO_VAR_CALENDAR.includes(v)).map(v => opt('value:' + v, t('fonio_var_src_' + v))))
     + group(t('fonio_var_group_deal'), values.filter(v => v.startsWith('deal_')).map(v => opt('value:' + v, t('fonio_var_src_' + v))))
     + group(t('fonio_var_group_contact_fields'), (src?.contact_fields || []).map(f => opt('contact_field:' + f.key, f.name)))
-    + group(t('fonio_var_group_deal_fields'), (src?.deal_fields || []).map(f => opt('deal_field:' + f.key, f.name)));
+    + group(t('fonio_var_group_deal_fields'), (src?.deal_fields || []).map(f => opt('deal_field:' + f.key, f.name)))
+    + group(t('fonio_var_group_calendar'), values.filter(v => FONIO_VAR_CALENDAR.includes(v)).map(v => opt('value:' + v, t('fonio_var_src_' + v))));
 }
 
 function fonioVarRowHtml(r, i, src) {
@@ -1394,7 +1404,8 @@ async function saveFonioVars(btn) {
 
 // The Body for fonio's HTTP Request (Run "After the conversation", POST to the result link). The names on the left
 // are the ones utils/fonio-result.js reads. The values in {{ }} are fonio's variables; the three in angle brackets
-// are picked in fonio through "Add Variable", under fonio's own labels.
+// are picked in fonio through "Add Variable", under fonio's own labels. caller_name is a variable of the user's own
+// in fonio (it asks for a description): the name the person gave in the call, for the call log (Part 15).
 const FONIO_RESULT_BODY = JSON.stringify({
   crm_call_id: '{{crm_call_id}}',
   conversation_id: '{{conversationId}}',
@@ -1402,11 +1413,16 @@ const FONIO_RESULT_BODY = JSON.stringify({
   direction: '{{direction}}',
   person_number: '{{personNumber}}',
   agent_number: '{{agentNumber}}',
+  caller_name: '{{caller_name}}',
+  meeting_booked: '{{meeting_booked}}',
+  meeting_date: '{{meeting_date}}',
+  meeting_time: '{{meeting_time}}',
+  meeting_email: '{{meeting_email}}',
   duration: '<Duration>',
   summary: '<Summary>',
   transcript: '<Plain transcript>',
 }, null, 2);
-const FONIO_DELIVERY_OUTCOMES = ['noted', 'already', 'no_match', 'gone', 'inbound', 'bad_json'];
+const FONIO_DELIVERY_OUTCOMES = ['noted', 'logged', 'already', 'no_match', 'gone', 'bad_json'];
 
 // The result card: only owners and admins get the link from the server, and only once a connection is saved.
 function renderFonioResult() {

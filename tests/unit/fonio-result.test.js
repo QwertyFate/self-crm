@@ -34,7 +34,7 @@ describe('readResult', () => {
     const r = fr.readResult({ crm_call_id: '17', conversation_id: 'conv_1', conversation_link: 'https://app.fonio.ai/c/1', direction: 'outbound',
       duration: '125', summary: ' Termin vereinbart. ', transcript: 'Agent: Hallo\r\nKunde: Hi', person_number: '+49 171 1234567', agent_number: OWN }, OWN);
     assert.deepEqual(r, { crmCallId: 17, conversationId: 'conv_1', link: 'https://app.fonio.ai/c/1', direction: 'outbound', inbound: false,
-      duration: '125', summary: 'Termin vereinbart.', transcript: 'Agent: Hallo\nKunde: Hi', numbers: ['+491711234567'] });
+      duration: '125', summary: 'Termin vereinbart.', transcript: 'Agent: Hallo\nKunde: Hi', numbers: ['+491711234567'], name: '', meeting: null });
   });
   test("fonio's own names and its default Body (the person's number as \"from\")", () => {
     const r = fr.readResult({ conversationId: 'c9', from: '+491711234567', to: OWN, conversationLink: 'https://app.fonio.ai/x', plainTranscript: 'T', summary: 'S' }, OWN);
@@ -52,7 +52,7 @@ describe('readResult', () => {
   test("the suggested Body's <values>, pasted into fonio without being replaced, are empty too: the note says nothing came", () => {
     const r = fr.readResult({ duration: '<Duration>', summary: '<Summary>', transcript: '<Plain transcript>' }, OWN);
     assert.deepEqual([r.duration, r.summary, r.transcript], ['', '', '']);
-    assert.equal(fr.resultNote(r), 'fonio-Anruf\n\nfonio hat weder eine Zusammenfassung noch ein Transkript mitgeschickt.');
+    assert.equal(fr.resultNote(r), 'fonio-Anruf\n\n' + fr.NOT_RECORDED);
     assert.equal(fr.readResult({ summary: 'Kunde: <b>ja</b> gerne' }, OWN).summary, 'Kunde: <b>ja</b> gerne');
   });
   test('crm_call_id only as a positive whole number', () => {
@@ -71,7 +71,7 @@ describe('readResult', () => {
     for (const d of ['outbound', 'OUTGOING', '', '{{direction}}']) assert.equal(fr.readResult({ direction: d }, OWN).inbound, false, d);
   });
   test('nothing usable: all empty, never a throw', () => {
-    assert.deepEqual(fr.readResult(null, OWN), { crmCallId: null, conversationId: null, link: null, direction: '', inbound: false, duration: '', summary: '', transcript: '', numbers: [] });
+    assert.deepEqual(fr.readResult(null, OWN), { crmCallId: null, conversationId: null, link: null, direction: '', inbound: false, duration: '', summary: '', transcript: '', numbers: [], name: '', meeting: null });
   });
 });
 
@@ -82,7 +82,7 @@ describe('resultNote', () => {
       'fonio-Anruf · Dauer 125\n\nZusammenfassung\nTermin vereinbart.\n\nTranskript\nAgent: Hallo\nKunde: Hi\n\nGespräch in fonio: https://app.fonio.ai/c/1');
   });
   test('fonio sent neither summary nor transcript: the note says so', () => {
-    assert.equal(fr.resultNote(base), 'fonio-Anruf\n\nfonio hat weder eine Zusammenfassung noch ein Transkript mitgeschickt.');
+    assert.equal(fr.resultNote(base), 'fonio-Anruf\n\n' + fr.NOT_RECORDED);
   });
   test('a long summary and a long transcript are cut and say so', () => {
     const note = fr.resultNote({ ...base, summary: 's'.repeat(fr.MAX_SUMMARY + 5), transcript: 't'.repeat(fr.MAX_TRANSCRIPT + 5) });
@@ -97,5 +97,37 @@ describe('fieldNames', () => {
     assert.equal(fr.fieldNames(body).length, 30);
     assert.deepEqual(fr.fieldNames({ summary: 'private words' }), ['summary']);
     assert.deepEqual(fr.fieldNames(null), []);
+  });
+});
+
+// ── Part 28: a meeting agreed in the call ────────────────────────────────────
+describe('readMeeting: a meeting the assistant agreed in the call', () => {
+  const m = b => fr.readMeeting(b);
+  test('yes with a day and a time, as the CRM asks for them', () => {
+    assert.deepEqual(m({ meeting_booked: 'yes', meeting_date: '2026-11-20', meeting_time: '14:00' }), { date: '2026-11-20', time: '14:00', email: null, said: '2026-11-20 14:00' });
+    assert.deepEqual(fr.readResult({ meeting_booked: 'yes', meeting_date: '2026-11-20', meeting_time: '14:00' }, OWN).meeting, { date: '2026-11-20', time: '14:00', email: null, said: '2026-11-20 14:00' });
+  });
+  test('as an assistant may write them: German dates, "Uhr", am/pm, a date-time in one field, other names for the fields', () => {
+    for (const [date, want] of [['20.11.2026', '2026-11-20'], ['1.2.26', '2026-02-01'], ['20/11/2026', '2026-11-20'], ['2026-11-20T14:30:00+01:00', '2026-11-20'], ['2026-1-5', '2026-01-05']]) assert.equal(fr.readDate(date), want, date);
+    for (const bad of ['31.02.2026', '2026-13-01', 'nächsten Donnerstag', '', '20.11.', '1999-01-01']) assert.equal(fr.readDate(bad), null, bad);
+    for (const [time, want] of [['14:00', '14:00'], ['9:30', '09:30'], ['14.00', '14:00'], ['14 Uhr', '14:00'], ['14:30 Uhr', '14:30'], ['2:30 pm', '14:30'], ['12 am', '00:00'], ['14:00:00', '14:00'], ['2026-11-20T08:15:00', '08:15'], ['9', '09:00']]) assert.equal(fr.readTime(time), want, time);
+    for (const bad of ['nachmittags', '25:00', '14:75', '']) assert.equal(fr.readTime(bad), null, bad);
+    assert.deepEqual(m({ termin_gebucht: 'Ja', termin_datum: '20.11.2026', termin_uhrzeit: '14 Uhr' }), { date: '2026-11-20', time: '14:00', email: null, said: '20.11.2026 14 Uhr' });
+    assert.deepEqual(m({ meetingBooked: 'true', meetingDate: '2026-11-20T14:30:00', meetingTime: '' }), { date: '2026-11-20', time: '14:30', email: null, said: '2026-11-20T14:30:00' });
+  });
+  test('no meeting: a plain no (whatever else is filled), nothing filled, or fonio\'s placeholders left as they are', () => {
+    for (const no of ['no', 'Nein', 'false', '0', 'none', 'keiner', '-']) assert.equal(m({ meeting_booked: no, meeting_date: '2026-11-20', meeting_time: '14:00' }), null, no);
+    assert.equal(m({ summary: 'x' }), null);
+    assert.equal(m({ meeting_booked: '{{meeting_booked}}', meeting_date: '{{meeting_date}}', meeting_time: '{{meeting_time}}' }), null);
+    assert.equal(m({ meeting_booked: '', meeting_date: '2026-11-20', meeting_time: '' }), null, 'no yes and no whole time: nothing to go on');
+  });
+  test('no yes/no at all, but a readable day and time: a meeting; yes with a time nobody can read: a meeting without date and time, what was said kept for the note', () => {
+    assert.deepEqual(m({ meeting_date: '2026-11-20', meeting_time: '14:00' }), { date: '2026-11-20', time: '14:00', email: null, said: '2026-11-20 14:00' });
+    assert.deepEqual(m({ meeting_booked: 'yes', meeting_date: 'nächsten Donnerstag', meeting_time: 'nachmittags' }), { date: null, time: null, email: null, said: 'nächsten Donnerstag nachmittags' });
+    assert.deepEqual(m({ meeting_booked: 'yes' }), { date: null, time: null, email: null, said: null });
+  });
+  test('an email the lead gave in the call rides along, lower-cased; something that is no address does not', () => {
+    assert.equal(m({ meeting_booked: 'yes', meeting_date: '2026-11-20', meeting_time: '14:00', meeting_email: ' Erika@Muster.de ' }).email, 'erika@muster.de');
+    assert.equal(m({ meeting_booked: 'yes', meeting_date: '2026-11-20', meeting_time: '14:00', meeting_email: 'keine' }).email, null);
   });
 });

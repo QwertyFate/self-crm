@@ -19,7 +19,7 @@ const block = js.slice(js.indexOf('// ── Notetaker: the summary AI'), js.ind
 
 describe('the markup', () => {
   test('the rail: the Notetaker tab after Cal.com, hidden until the server says the Notetaker is on', () => {
-    assert.match(rail, /data-i18n="intg_tab_calcom">Cal\.com<\/button>\n\s*<button class="settings-tab hidden" data-tab="notetaker" onclick="switchIntgTab\('notetaker'\)" data-i18n="intg_tab_notetaker">Notetaker<\/button>\n\s*(?:<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="fonio"[^\n]*\n\s*)?<\/nav>/);
+    assert.match(rail, /data-i18n="intg_tab_calcom">Cal\.com<\/button>\n\s*<button class="settings-tab hidden" data-tab="notetaker" onclick="switchIntgTab\('notetaker'\)" data-i18n="intg_tab_notetaker">Notetaker<\/button>\n\s*(?:<button class="settings-tab" data-tab="calendly"[^\n]*\n\s*)?(?:<div class="settings-tab-sep" aria-hidden="true"><\/div>\n\s*<button class="settings-tab" data-tab="fonio"[^\n]*\n\s*)?<\/nav>/);
     assert.match(css, /^\.settings-tab\[data-tab="notetaker"\]::before \{ --ico: url\("data:image\/svg\+xml;charset=utf-8,%3Csvg[^"]*stroke='black'[^"]*rect x='9' y='2' width='6' height='12' rx='3'[^"]*"\); \}$/m, 'the rail icon: a microphone');
     assert.match(css, /^\.hidden \{ display: none !important; \}$/m, 'the hidden tab really is hidden: .hidden wins over .settings-tab');
   });

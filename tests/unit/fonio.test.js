@@ -73,10 +73,20 @@ describe('outboundCall: one request, retried only when fonio cannot have taken i
   test('sends apiKey, fromNumber, toNumber and context in the body to outbound_call', async () => {
     let seen;
     globalThis.fetch = async (url, init) => { seen = { url, init }; return reply(200, { status: 'success', message: 'Call initiated' })(); };
-    assert.deepEqual(await call(), { ok: true, message: 'Call initiated' });
+    assert.deepEqual(await call(), { ok: true, message: 'Call initiated', answer: { http: 200, body: { status: 'success', message: 'Call initiated' } } });
     assert.equal(seen.url, 'https://app.fonio.ai/api/public/v1/outbound_call');
     assert.equal(seen.init.method, 'POST');
     assert.deepEqual(JSON.parse(seen.init.body), { apiKey: KEY, fromNumber: '+4930123456', toNumber: '+491711234567', context: { name: 'Erika' } });
+  });
+  test("fonio's answer is handed back as it came (Part 18): the status, the body, the key blanked, a huge body cut", async () => {
+    globalThis.fetch = reply(400, { message: `Invalid key ${KEY}`, details: { apiKey: KEY, more: [1, 2] } });
+    assert.deepEqual((await call()).answer, { http: 400, body: { message: 'Invalid key …', details: { apiKey: '…', more: [1, 2] } } });
+    globalThis.fetch = async () => new Response('<html>busy</html>', { status: 503 });
+    assert.deepEqual((await call()).answer, { http: 503, body: null });
+    globalThis.fetch = reply(200, { status: 'success', blob: 'x'.repeat(30000) });
+    const big = (await call()).answer.body;
+    assert.deepEqual(Object.keys(big), ['cut']);
+    assert.equal(big.cut.length, 2000);
   });
   const cases = [
     ['200 with status error', 200, { status: 'error', message: 'KYC not completed' }, false],

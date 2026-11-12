@@ -44,7 +44,7 @@
      GET   /logs                       last 50 deliveries
      POST  /receive/:key               PUBLIC
      GET   /calcom                     status (everyone); ?fresh=1 re-reads the event types from Cal.com first
-     POST  /calcom/connect             { api_key }        owner/admin
+     POST  /calcom/connect             { api_key }        owner/admin; 409 calendly_connected while Calendly is connected
      PATCH /calcom                     { event_type_id }  owner/admin
      POST  /calcom/refresh             re-fetch the event types, owner/admin
      POST  /calcom/register-webhook    (re)register the booking webhook at Cal.com, owner/admin
@@ -63,6 +63,7 @@
                                        the AI is asked first (utils/llm-check.js): 400 key/model refused, 502 not reachable
      DELETE /notetaker/ai              remove it (notes are the transcript again), owner/admin
      /fonio                            fonio.ai — its own file, routes/fonio.js, mounted ahead of this one (FONIO_CHANGES)
+     /calendly                         Calendly — its own file, routes/calendly.js, mounted ahead of this one (CALENDLY_CHANGES)
 
    TELLING THE ASSIGNEE (Part 12)  every booked, moved or cancelled meeting is announced to the
      assignee of the deal, else of the contact, as one bell notification (calTellAssignee): from
@@ -432,6 +433,9 @@ router.post('/calcom/connect', requireAuth, requireManageCal, async (req, res, n
     const key = typeof req.body?.api_key === 'string' ? req.body.api_key.trim() : '';
     if (!calcom.isApiKeyShaped(key)) return res.status(400).json({ error: 'That does not look like a Cal.com API key (they start with cal_)' });
     const wid = req.workspaceId;
+    // Cal.com or Calendly, never both (routes/calendly.js refuses the other way round; CALENDLY_CHANGES Part 1)
+    const { rows: calendlyRows } = await pool.query('SELECT 1 FROM workspace_calendly WHERE workspace_id=$1', [wid]);
+    if (calendlyRows.length) return res.status(409).json({ error: 'Calendly is connected; disconnect it before connecting Cal.com', code: 'calendly_connected' });
     let me, types;
     try {
       me    = await calcom.getMe(key);
@@ -1229,4 +1233,8 @@ router.startNotetakerLinkWatch = startNotetakerLinkWatch;
 // the suites set the switch themselves, so they test the Notetaker whatever its default
 router.setNotetakerOn = on => { NOTETAKER_ON = on === true; };
 router.setNotetakerSoon = on => { NOTETAKER_SOON = on === true; };
+// The booking receiver's rules, shared with Calendly's receiver (routes/calendly.js, CALENDLY_CHANGES Part 2): the
+// contact (and deal) a booking belongs to, the CRM user who hosts it, and telling the assignee.
+router.booking = { contactFor: calContactFor, ownerFor: calOwnerFor, tellAssignee: calTellAssignee };
+
 module.exports = router;

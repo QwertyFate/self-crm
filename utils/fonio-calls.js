@@ -40,6 +40,9 @@
    same values under German names (email, strasse, plz, ort already are).
    The workspace's own variables (workspace_fonio.variables, Part 13) come
    last: a name of the workspace's choosing for a CRM value of its choosing.
+   With Cal.com or Calendly connected, the call also carries the service's
+   next free times (freie_termine, freie_termine_json) and today's date
+   (heute), so the assistant offers only times that can be booked (Part 29).
 
    THE RESULT (Part 7)  saveResult() takes what fonio sent after a call
    (utils/fonio-result.js readResult) and finds the call it belongs to: by
@@ -57,6 +60,7 @@
 
 const calcom = require('./calcom');   // openKey: the fonio key is sealed like the Cal.com key
 const fonio  = require('./fonio');
+const bookingSlots = require('./booking-slots');   // the free times of Cal.com or Calendly for the assistant (Part 29); called through the module, so a test can stand in for it
 
 const RETRY_MINUTES = 5;
 const MAX_ATTEMPTS  = 3;
@@ -153,7 +157,8 @@ const GERMAN_KEYS = [['vorname', 'first_name'], ['nachname', 'last_name'], ['anf
 //   deal_field:<key>       a custom deal field, by its field_key
 // crm_… names are the CRM's own (the result is matched by them) and cannot be taken.
 const VALUE_SOURCES = ['name', 'first_name', 'last_name', 'email', 'phone', 'company', 'rechtsform', 'ust_id', 'handelsregisternummer',
-  'webseite', 'quelle', 'strasse', 'plz', 'ort', 'contact_owner', 'request_date', 'deal_title', 'deal_value', 'deal_pipeline', 'deal_stage', 'deal_owner'];
+  'webseite', 'quelle', 'strasse', 'plz', 'ort', 'contact_owner', 'request_date', 'deal_title', 'deal_value', 'deal_pipeline', 'deal_stage', 'deal_owner',
+  'free_times', 'free_times_json', 'today'];   // the booking service's free times and today's date (Parts 29 and 32), '' without a service
 const MAX_VARIABLES = 60;
 const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,59}$/;
 const FIELD_SOURCE = /^(contact_field|deal_field):([^\s:]{1,120})$/;
@@ -176,7 +181,7 @@ function checkVariables(list) {
   return { value: out };
 }
 
-async function callContext(pool, call, tz, variables) {
+async function callContext(pool, call, tz, variables, extra = null) {
   const wid = call.workspace_id;
   const { rows: [deal] } = call.deal_id ? await pool.query(
     `SELECT d.id, d.title, d.value, d.custom_data, d.contact_id, p.name AS pipeline, s.name AS stage, u.name AS owner
@@ -224,6 +229,9 @@ async function callContext(pool, call, tz, variables) {
   put('last_name', rest.join(' '));
   // German names for the same values: the assistants' prompts are German, and {{vorname}} reads better there.
   for (const [de, en] of GERMAN_KEYS) put(de, ctx[en]);
+  // What the caller found out for this call (the booking service's free times and today, Parts 29 and 32): built-in
+  // values like the rest, so a variable of the workspace's own can carry them under its own name. Empty text counts.
+  for (const [k, v] of Object.entries(extra || {})) if (!(k in ctx)) ctx[k] = typeof v === 'string' ? v : asText(v);
   // The workspace's own variables last, over everything but the CRM's ids. Read from the values as they are before
   // any of them is written, so one variable never feeds another. An empty value is sent as '' (the prompt named it).
   const base = { ...ctx };
@@ -235,6 +243,25 @@ async function callContext(pool, call, tz, variables) {
     ctx[v.name] = value || '';
   }
   return { contact, deal: deal || null, context: ctx };
+}
+
+// The free times of the workspace's booking service, as context for the assistant (Parts 29 and 32): with Cal.com or
+// Calendly connected, a call carries freie_termine (the next free times as a line of text), freie_termine_json (the
+// same as a JSON list) and heute (today's weekday and date) — all on the connected account's clock, which is also
+// the clock a meeting agreed in the call is booked on (utils/fonio-meeting.js). English prompts can use free_times,
+// free_times_json and today, and those three are also the names the workspace's own variables connect to
+// (VALUE_SOURCES), so a prompt can call them what it likes. Nothing free, or the service silent: the times are empty
+// text, so a prompt never shows a raw placeholder. Without a booking service: null, nothing is added. Never throws.
+const SLOT_NAMES = { text: ['freie_termine', 'free_times'], json: ['freie_termine_json', 'free_times_json'], today: ['heute', 'today'] };
+async function freeTimeValues(pool, wid, now) {
+  try {
+    const found = await bookingSlots.freeSlots(pool, wid, new Date(now).getTime());
+    if (!found) return null;
+    const values = { text: bookingSlots.slotsText(found.slots, found.zone), json: bookingSlots.slotsJson(found.slots, found.zone), today: bookingSlots.todayText(now, found.zone) };
+    const out = {};
+    for (const [kind, names] of Object.entries(SLOT_NAMES)) for (const n of names) out[n] = values[kind];
+    return out;
+  } catch { return null; }
 }
 
 // One due call, claimed and decided now. null when another tick has it already.
@@ -264,7 +291,7 @@ async function sendCall(pool, id, now = new Date()) {
     if (!at) return done('skipped', { reason: 'no_hours' });
     // the hours were changed since: wait for them (that claim was no attempt)
     if (at.getTime() > new Date(now).getTime()) return done('scheduled', { dueAt: at.toISOString(), giveBack: true });
-    const ctx = await callContext(pool, call, conn.hours_tz, conn.variables);
+    const ctx = await callContext(pool, call, conn.hours_tz, conn.variables, await freeTimeValues(pool, call.workspace_id, now));
     if (!ctx.contact) return done('skipped', { reason: 'no_contact' });
     const n = checkNumber(ctx.contact.phone, conn);
     if (!n.number || n.reason) return done('skipped', { reason: n.reason, toNumber: n.number || null });
@@ -279,6 +306,11 @@ async function sendCall(pool, id, now = new Date()) {
   catch { return done('failed', { reason: 'key', message: 'The saved fonio key cannot be opened; save it again' }); }
 
   const result = await fonio.outboundCall(apiKey, { fromNumber: conn.from_number, toNumber: number, context });
+  // what was sent and what fonio answered, for the call's technical details (Part 18) — never the key; a failure to
+  // keep them changes nothing about the call
+  await keepJson(pool, 'UPDATE fonio_calls SET request = $2::jsonb, response = $3::jsonb WHERE id = $1',
+    call.id, { url: `${fonio.BASE}/public/v1/outbound_call`, body: { apiKey: '(hidden)', fromNumber: conn.from_number, toNumber: number, context } },
+    result.answer || { http: result.http ?? 0, body: null, error: result.error || null });
   if (result.ok) return done('sent', { message: result.message, toNumber: number, sent: true });
   if (result.retry && call.attempts < MAX_ATTEMPTS) {
     return done('scheduled', { message: result.error, toNumber: number, dueAt: new Date(new Date(now).getTime() + RETRY_MINUTES * 60000).toISOString() });
@@ -400,8 +432,177 @@ async function saveResult(pool, wid, r, content, now = new Date()) {
   return { outcome: 'noted', call_id: call.id, activity_id: created.id };
 }
 
+// A conversation the CRM did not start (Part 15) — an incoming call, or an outgoing one no call above fits — kept in
+// fonio_other_calls: { outcome, other_id, activity_id }. The person's number picks the contact (the one changed last
+// when several share it); the note goes on the contact, and on its deal when it has exactly one. Without a contact
+// the row keeps the transcript. outcome: noted; logged (no contact, no note); already (this conversation is kept);
+// no_match (no number and nothing said: nothing worth a row).
+async function saveOther(pool, conn, r, content) {
+  const wid = conn.workspace_id;
+  if (!r.numbers.length && !r.summary && !r.transcript && !r.conversationId) return { outcome: 'no_match' };
+  if (r.conversationId) {
+    const { rows: [seen] } = await pool.query(
+      'SELECT id, note_activity_id FROM fonio_other_calls WHERE workspace_id = $1 AND conversation_id = $2', [wid, r.conversationId]
+    );
+    if (seen) return { outcome: 'already', other_id: seen.id, activity_id: seen.note_activity_id };
+  }
+  let contact = null, number = r.numbers[0] || null, dealId = null;
+  if (r.numbers.length) {
+    const { rows } = await pool.query(
+      `SELECT id, phone FROM contacts WHERE workspace_id = $1 AND phone IS NOT NULL AND phone <> '' ORDER BY updated_at DESC, id DESC`, [wid]
+    );
+    for (const c of rows) {
+      const n = fonio.toInternational(c.phone, conn.country_code);
+      if (n && r.numbers.includes(n)) { contact = c; number = n; break; }
+    }
+  }
+  if (contact) {
+    const { rows: deals } = await pool.query('SELECT id FROM deals WHERE workspace_id = $1 AND contact_id = $2 ORDER BY id LIMIT 2', [wid, contact.id]);
+    if (deals.length === 1) dealId = deals[0].id;
+  }
+  const direction = r.inbound ? 'inbound' : 'outbound';
+  const summary = r.summary.slice(0, 4000) || null;
+  let row;
+  try {
+    if (contact) {
+      // the note and the row in ONE statement: both happen, or neither
+      ({ rows: [row] } = await pool.query(
+        `WITH note AS (
+           INSERT INTO activities (workspace_id, contact_id, deal_id, type, content, created_by, source)
+           VALUES ($1::int, $2::int, $3::int, 'note', $4::text, NULL, 'fonio') RETURNING id
+         )
+         INSERT INTO fonio_other_calls (workspace_id, direction, number, caller_name, contact_id, deal_id, conversation_id,
+                                        conversation_link, duration, summary, note_activity_id)
+         SELECT $1::int, $5::text, $6::text, $7::text, $2::int, $3::int, $8::text, $9::text, $10::text, $11::text, id FROM note
+         RETURNING id, note_activity_id`,
+        [wid, contact.id, dealId, content, direction, number, r.name || null, r.conversationId, r.link, r.duration || null, summary]
+      ));
+    } else {
+      ({ rows: [row] } = await pool.query(
+        `INSERT INTO fonio_other_calls (workspace_id, direction, number, caller_name, conversation_id, conversation_link,
+                                        duration, summary, transcript)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, note_activity_id`,
+        [wid, direction, number, r.name || null, r.conversationId, r.link, r.duration || null, summary, r.transcript.slice(0, 200000) || null]
+      ));
+    }
+  } catch (err) {
+    if (err && err.code === '23505') return { outcome: 'already', other_id: null, activity_id: null };   // this conversation, delivered twice at once
+    throw err;
+  }
+  if (!contact) return { outcome: 'logged', other_id: row.id, activity_id: null };
+  return { outcome: 'noted', other_id: row.id, activity_id: row.note_activity_id ?? null };
+}
+
+// JSON as jsonb can hold it: no NUL characters, and no string longer than 20,000 characters (a transcript is in the
+// note already).
+function forJsonb(value) {
+  return JSON.stringify(value, (_k, v) => {
+    if (typeof v !== 'string') return v;
+    const s = v.includes('\u0000') ? v.split('\u0000').join('') : v;
+    return s.length > 20000 ? `${s.slice(0, 20000)}… (cut)` : s;
+  });
+}
+// One technical record written beside a call: best effort, an error is swallowed.
+async function keepJson(pool, sql, id, ...values) {
+  try { await pool.query(sql, [id, ...values.map(forJsonb)]); } catch { /* the call itself is unaffected */ }
+}
+// The Body fonio sent after a call, kept with the row it became (Part 18): kind 'call' (fonio_calls) or 'other'.
+function keepResultBody(pool, kind, id, body) {
+  if (!id || !body) return Promise.resolve();
+  return keepJson(pool, `UPDATE ${kind === 'call' ? 'fonio_calls' : 'fonio_other_calls'} SET result_body = $2::jsonb WHERE id = $1`, id, body);
+}
+
+// One call's technical record for owners and admins (Part 18): the row as it is, with what was sent to fonio, what
+// fonio answered and the Body fonio sent afterwards. null when it is not this workspace's. The kept transcript of an
+// unconnected call is left out: it is in result_body.
+async function callDetail(pool, wid, kind, id) {
+  const { rows: [row] } = kind === 'call'
+    ? await pool.query(
+      `SELECT id, deal_id, contact_id, trigger, status, reason, raw_number, to_number, message, attempts, due_at, sent_at, result_at,
+              conversation_id, conversation_link, note_activity_id, created_at, updated_at, request, response, result_body
+         FROM fonio_calls WHERE id = $1 AND workspace_id = $2`, [id, wid])
+    : await pool.query(
+      `SELECT id, direction, number, caller_name, contact_id, deal_id, conversation_id, conversation_link, duration, summary,
+              note_activity_id, created_at, result_body
+         FROM fonio_other_calls WHERE id = $1 AND workspace_id = $2`, [id, wid]);
+  if (!row) return null;
+  const { request = null, response = null, result_body = null, ...record } = row;
+  return { kind, record, request, response, result_body };
+}
+
+// The call log (Part 16): every call fonio made for the CRM (fonio_calls, status sent) and every conversation the CRM
+// did not start (fonio_other_calls), newest first, with the contact and deal each is connected to. The transcript is
+// not part of it: it is in the note, or waits in the row until a contact is connected.
+async function listLog(pool, wid, { limit = 100 } = {}) {
+  const [sent, other, waiting] = await Promise.all([
+    pool.query(
+      `SELECT f.id, f.sent_at AS at, f.to_number AS number, f.contact_id, c.name AS contact_name, f.deal_id, d.title AS deal_title,
+              f.conversation_link AS link, f.result_at, f.note_activity_id
+         FROM fonio_calls f LEFT JOIN contacts c ON c.id = f.contact_id LEFT JOIN deals d ON d.id = f.deal_id
+        WHERE f.workspace_id = $1 AND f.status = 'sent'
+        ORDER BY f.sent_at DESC, f.id DESC LIMIT $2`, [wid, limit]
+    ),
+    pool.query(
+      `SELECT o.id, o.created_at AS at, o.direction, o.number, o.caller_name, o.contact_id, c.name AS contact_name, o.deal_id,
+              d.title AS deal_title, o.conversation_link AS link, o.duration, o.summary, o.note_activity_id
+         FROM fonio_other_calls o LEFT JOIN contacts c ON c.id = o.contact_id LEFT JOIN deals d ON d.id = o.deal_id
+        WHERE o.workspace_id = $1
+        ORDER BY o.created_at DESC, o.id DESC LIMIT $2`, [wid, limit]
+    ),
+    // the calls still to come (Part 24): the soonest first
+    pool.query(
+      `SELECT f.id, f.due_at AS at, f.to_number AS number, f.contact_id, c.name AS contact_name, f.deal_id, d.title AS deal_title
+         FROM fonio_calls f LEFT JOIN contacts c ON c.id = f.contact_id LEFT JOIN deals d ON d.id = f.deal_id
+        WHERE f.workspace_id = $1 AND f.status IN ('scheduled','sending')
+        ORDER BY f.due_at, f.id LIMIT $2`, [wid, limit]
+    ),
+  ]);
+  const entry = (r, by_crm) => ({
+    key: `${by_crm ? 'call' : 'other'}:${r.id}`, id: r.id, by_crm, direction: by_crm ? 'outbound' : r.direction, at: r.at,
+    number: r.number || null, caller_name: by_crm ? null : r.caller_name || null,
+    contact_id: r.contact_id ?? null, contact_name: r.contact_name || null, deal_id: r.deal_id ?? null, deal_title: r.deal_title || null,
+    duration: by_crm ? null : r.duration || null, summary: by_crm ? null : r.summary || null, link: r.link || null,
+    result: by_crm ? !!r.result_at : true, noted: r.note_activity_id != null,
+  });
+  const planned = waiting.rows.map(r => ({ ...entry(r, true), planned: true }));
+  return [...planned, ...[...sent.rows.map(r => entry(r, true)), ...other.rows.map(r => entry(r, false))]
+    .sort((a, b) => new Date(b.at) - new Date(a.at) || (a.key < b.key ? 1 : -1)).slice(0, limit)];
+}
+
+// A kept conversation without a contact gets one (Part 16) — a contact just made from it, or an existing one — and
+// its note, written from what the row kept: { ok, contact_id, deal_id, activity_id } or { error }. error: not_found
+// (no such row here), no_contact (no such contact here), connected (it has a contact already). As in saveOther the
+// note is also on the contact's deal when it has exactly one. noteOf(row) writes the note's text.
+async function connectOther(pool, wid, id, contactId, noteOf) {
+  const { rows: [row] } = await pool.query(
+    `SELECT id, direction, contact_id, conversation_link, duration, summary, transcript FROM fonio_other_calls
+      WHERE id = $1 AND workspace_id = $2`, [id, wid]
+  );
+  if (!row) return { error: 'not_found' };
+  if (row.contact_id) return { error: 'connected' };
+  const { rows: [contact] } = await pool.query('SELECT id FROM contacts WHERE id = $1 AND workspace_id = $2', [contactId, wid]);
+  if (!contact) return { error: 'no_contact' };
+  const { rows: deals } = await pool.query('SELECT id FROM deals WHERE workspace_id = $1 AND contact_id = $2 ORDER BY id LIMIT 2', [wid, contact.id]);
+  const dealId = deals.length === 1 ? deals[0].id : null;
+  // claim the row and write the note in ONE statement: two clicks at once make one note
+  const { rows: [note] } = await pool.query(
+    `WITH claim AS (
+       UPDATE fonio_other_calls SET contact_id = $3::int, deal_id = $4::int, transcript = NULL
+        WHERE id = $1 AND workspace_id = $2 AND contact_id IS NULL RETURNING workspace_id, contact_id, deal_id
+     )
+     INSERT INTO activities (workspace_id, contact_id, deal_id, type, content, created_by, source)
+     SELECT workspace_id, contact_id, deal_id, 'note', $5::text, NULL, 'fonio' FROM claim RETURNING id`,
+    [id, wid, contact.id, dealId, noteOf(row)]
+  );
+  if (!note) return { error: 'connected' };
+  await pool.query('UPDATE fonio_other_calls SET note_activity_id = $1 WHERE id = $2', [note.id, id]);
+  return { ok: true, contact_id: contact.id, deal_id: dealId, activity_id: note.id };
+}
+
 module.exports = {
+  saveOther, listLog, connectOther, keepResultBody, callDetail,
   RETRY_MINUTES, MAX_ATTEMPTS, STUCK_MINUTES, RESULT_HOURS, TRIGGERS, CONTACT_FIELDS,
   VALUE_SOURCES, MAX_VARIABLES, checkVariables,
+  freeTimeValues, SLOT_NAMES,
   scheduleForDeal, callContext, plainKey, requestDate, sendCall, runDue, startWorker, cancelWaiting, cancelOne, listCalls, checkNumber, saveResult,
 };

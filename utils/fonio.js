@@ -117,6 +117,17 @@ function errorText(message, apiKey, fallback) {
   return (apiKey ? text.split(apiKey).join('…') : text).slice(0, 200);
 }
 
+// fonio's answer as it came, the key blanked wherever it is repeated, and nothing longer than 20,000 characters;
+// null when it was not JSON or cannot be kept.
+function withoutKey(body, apiKey) {
+  if (body === null || body === undefined) return null;
+  try {
+    const text = JSON.stringify(body);
+    if (text.length > 20000) return { cut: text.slice(0, 2000) };
+    return JSON.parse(apiKey ? text.split(JSON.stringify(apiKey).slice(1, -1)).join('…') : text);
+  } catch { return null; }
+}
+
 async function testKey(apiKey, { timeoutMs = TIMEOUT_MS } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -158,12 +169,14 @@ async function outboundCall(apiKey, { fromNumber, toNumber, context = {} }, { ti
     });
     let body = null;
     try { body = await res.json(); } catch { /* not JSON */ }
-    if (res.ok && body?.status === 'success') return { ok: true, message: errorText(body?.message, apiKey, 'Call started') };
+    const answer = { http: res.status, body: withoutKey(body, apiKey) };   // kept with the call for the technical details
+    if (res.ok && body?.status === 'success') return { ok: true, message: errorText(body?.message, apiKey, 'Call started'), answer };
     return {
       ok: false,
       retry: res.status === 429 || res.status === 503,
       http: res.status,
       error: errorText(body?.message, apiKey, res.ok ? 'fonio did not start the call' : `fonio answered ${res.status}`),
+      answer,
     };
   } catch (err) {
     if (err && err.name === 'AbortError') {

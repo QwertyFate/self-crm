@@ -758,7 +758,7 @@ function renderActivitiesFeed() {
     const label = t('act_' + a.type);
     const full = new Date(a.created_at).toLocaleString(actLocale(), { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     return `<div class="ac-row" data-aid="${a.id}"><span class="tl-ic ${a.type}" title="${esc(label)}">${icon(a.type)}</span>
-      <div style="min-width:0"><div class="ac-head"><b>${esc(label)}</b>${a.cancelled_at ? `<span class="badge badge-danger">${esc(t('act_cancelled'))}</span>` : ''}${a.source === 'calcom' ? `<span class="badge badge-outline" title="${esc(t('src_calcom'))}">${esc(t('src_calcom'))}</span>` : ''}
+      <div style="min-width:0"><div class="ac-head"><b>${esc(label)}</b>${a.cancelled_at ? `<span class="badge badge-danger">${esc(t('act_cancelled'))}</span>` : ''}${a.source === 'calcom' ? `<span class="badge badge-outline" title="${esc(t('src_calcom'))}">${esc(t('src_calcom'))}</span>` : ''}${a.source === 'calendly' ? `<span class="badge badge-outline" title="${esc(t('src_calendly'))}">${esc(t('src_calendly'))}</span>` : ''}
         ${a.deal_id ? `<a href="#" class="ac-link" title="${esc(a.deal_title || '')}" onclick="event.preventDefault();openActivityDeal(${a.deal_id})">${icon('deals')}<span>${esc(a.deal_title || 'Deal')}</span></a>` : ''}
         ${a.contact_id ? `<a href="#" class="ac-link" title="${esc(actContactOf(a)?.company || '')}" onclick="event.preventDefault();openActivityContact(${a.contact_id})">${icon('users')}<span>${esc(a.contact_name || t('lbl_contact'))}</span></a>` : ''}
         <span class="ac-time" title="${esc(full)}">${esc(actAgo(a.created_at))}</span></div>
