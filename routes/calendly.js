@@ -18,7 +18,9 @@
    own language: token_shape, calcom_connected, rejected (Calendly took the
    token for wrong), scope (the token lacks permissions: `scopes` lists them),
    unreachable, calendly_error (`detail` is Calendly's message), not_connected,
-   event_type, reseal (the stored token cannot be opened any more).
+   event_type, reseal (the stored token cannot be opened any more); and when
+   booking: start, contact, no_email, no_phone, location, refused (`detail` is
+   why Calendly would not book: the time is taken, most often).
 
    requireAuth is applied per route, not with router.use, so that Calendly's
    public booking receiver can share this prefix.
@@ -43,6 +45,17 @@
    uses Cal.com's three words (BOOKING_CREATED / _RESCHEDULED / _CANCELLED) so
    the page shows both logs with the same texts.
 
+   BOOKING FROM THE CRM (Part 4)  "Book meeting" on a deal or a contact books
+   at Calendly while Calendly is the connected service, in the dialog Cal.com
+   bookings use (public/js/detail-views.js). GET /slots answers a month's free
+   times in the shape /calcom/slots has; POST /book books one for the contact
+   (Calendly sends the invitation) and writes the 'meeting' entry at once, named
+   by the invitee URI Calendly answers with — so the webhook's invitee.created
+   lands on the same row and only fills in the meeting link. Any member may
+   book; the host is the connected account, the entry belongs to whoever booked.
+   Not here yet: cancel and reschedule from the CRM, a note for the invitation,
+   the assignee as a guest, the Notetaker.
+
    ENDPOINTS
      GET    /                  status (everyone): { connected, calendly, can_manage, blocked_by }
      POST   /connect           { token }       owner/admin; registers the booking webhook
@@ -52,6 +65,8 @@
      DELETE /                  disconnect (and remove the webhook at Calendly), owner/admin
      GET    /logs              the last 30 Calendly deliveries (everyone)
      POST   /receive/:token    PUBLIC: Calendly's booking webhook, signed
+     GET    /slots             ?from=YYYY-MM-DD&days=N&event_type=<uri>: free times by day (everyone)
+     POST   /book              { deal_id?, contact_id, event_type?, start, location? }: book it (everyone)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const express     = require('express');
@@ -384,6 +399,133 @@ router.post('/receive/:token', async (req, res) => {
     if (wid) await logDelivery(wid, 'error', null, {}, null, null, String(err?.message || err).slice(0, 300));
     res.status(500).json({ error: 'Internal error' });
   }
+});
+
+
+// ═══ Calendly: booking from the CRM (Part 4) ═════════════════════════════════
+// Any member may book, as with Cal.com: the host is always the connected account, and the entry belongs to whoever
+// booked. The customer is the deal's contact or the contact itself; Calendly needs a name and an email for the
+// invitation, which it sends itself. The entry is written here at once under the invitee URI Calendly answers with,
+// and the webhook's delivery lands on that row.
+
+const DAY_MS = 24 * 60 * 60000;
+const dateOnly = s => (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null);
+function addDays(date, n) { const d = new Date(date + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+
+// The connection with its token opened; answers 404 / 409 itself and returns null then.
+async function openConnection(req, res) {
+  const row = await loadRow(req.workspaceId);
+  if (!row) { res.status(404).json(NOT_CONNECTED); return null; }
+  let token;
+  try { token = calcom.openKey(row.token_sealed); }
+  catch { res.status(409).json(RESEAL); return null; }
+  return { row, token };
+}
+// The event type a request names by its URI, else the one chosen on the card; null when the account has none such.
+function eventTypeFor(row, wanted) {
+  const types = Array.isArray(row.event_types) ? row.event_types : [];
+  const uri = typeof wanted === 'string' && wanted.trim() ? wanted.trim() : row.event_type_uri;
+  return types.find(t => t.uri === uri) || null;
+}
+const NO_TYPE = { error: 'Choose one of the connected account\'s event types', code: 'event_type' };
+
+// The free start times of an event type from `from` on, for `days` days, grouped by the day on the viewer's clock:
+// the shape /calcom/slots answers, so one dialog reads both. Calendly gives at most a week a request and refuses a
+// start in the past, so the range is asked a week at a time and begins a minute from now at the earliest.
+router.get('/slots', requireAuth, async (req, res, next) => {
+  try {
+    const opened = await openConnection(req, res); if (!opened) return;
+    const { row, token } = opened;
+    const type = eventTypeFor(row, req.query.event_type);
+    if (!type) return res.status(400).json(NO_TYPE);
+    const zone = req.userTimezone || calcom.FALLBACK_ZONE;
+    const from = dateOnly(req.query.from) || calcom.wallClock(new Date().toISOString(), zone).date;
+    const days = Math.min(42, Math.max(1, parseInt(req.query.days, 10) || 7));   // up to a month's grid
+    const first = Math.max(Date.parse(calcom.utcFromWallClock(from, '00:00', zone)), Date.now() + 60000);
+    const last  = Date.parse(calcom.utcFromWallClock(addDays(from, days), '00:00', zone));
+    const weeks = [];
+    for (let s = first; s < last; s += 7 * DAY_MS) weeks.push([s, Math.min(s + 7 * DAY_MS, last)]);
+    let lists;
+    try { lists = await Promise.all(weeks.map(([s, e]) => calendly.listAvailableTimes(token, { eventType: type.uri, start: new Date(s).toISOString(), end: new Date(e).toISOString() }))); }
+    catch (err) { if (failure(res, err)) return; throw err; }
+    const slots = {};
+    const starts = [...new Set(lists.flat().map(s => Date.parse(s)).filter(Number.isFinite))].sort((a, b) => a - b);
+    for (const ms of starts) {
+      const start = new Date(ms).toISOString();
+      const day = calcom.wallClock(start, zone).date;
+      (slots[day] ||= []).push({ start, end: type.duration ? new Date(ms + type.duration * 60000).toISOString() : null });
+    }
+    res.json({ event_type: { uri: type.uri, name: type.name, duration: type.duration }, time_zone: zone, from, days, slots });
+  } catch (err) { next(err); }
+});
+
+router.post('/book', requireAuth, async (req, res, next) => {
+  try {
+    const opened = await openConnection(req, res); if (!opened) return;
+    const { row, token } = opened;
+    const wid = req.workspaceId, body = req.body && typeof req.body === 'object' ? req.body : {};
+    const type = eventTypeFor(row, body.event_type);
+    if (!type) return res.status(400).json(NO_TYPE);
+    const startMs = typeof body.start === 'string' ? Date.parse(body.start) : NaN;
+    if (Number.isNaN(startMs)) return res.status(400).json({ error: 'start must be an ISO date-time', code: 'start' });
+    const start = new Date(startMs).toISOString();
+    const dealId = body.deal_id ? parseInt(body.deal_id, 10) || null : null;
+    let contactId = body.contact_id ? parseInt(body.contact_id, 10) || null : null;
+    let deal = null;
+    if (dealId) {
+      const { rows: [d] } = await pool.query('SELECT id, title, contact_id, assigned_to FROM deals WHERE id=$1 AND workspace_id=$2', [dealId, wid]);
+      if (!d) return res.status(400).json({ error: 'Deal not found in this workspace', code: 'contact' });
+      deal = d;
+      if (!contactId) contactId = d.contact_id;
+    }
+    if (!contactId) return res.status(400).json({ error: 'A contact is required', code: 'contact' });
+    const { rows: [contact] } = await pool.query('SELECT id, name, email, phone FROM contacts WHERE id=$1 AND workspace_id=$2', [contactId, wid]);
+    if (!contact) return res.status(400).json({ error: 'Contact not found in this workspace', code: 'contact' });
+    const email = String(contact.email || '').trim();
+    if (!email) return res.status(400).json({ error: 'The contact has no email address; Calendly needs one for the invitation', code: 'no_email' });
+    // where it happens: the place chosen in the dialog, named by its position among the type's places; none means the first
+    const places = type.poolingType === 'round_robin' ? [] : (Array.isArray(type.locations) ? type.locations : []);
+    const chosen = body.location !== undefined && body.location !== null && body.location !== '';
+    const at = chosen ? Number(body.location) : 0;
+    if (chosen && (!Number.isInteger(at) || at < 0 || at >= places.length)) return res.status(400).json({ error: 'Choose one of the event type\'s places', code: 'location' });
+    // Calendly calls the customer there: without a number it has nobody to call
+    if (places[at]?.kind === 'outbound_call' && !String(contact.phone || '').trim()) return res.status(400).json({ error: 'This place needs the contact\'s phone number', code: 'no_phone' });
+    const location = calendly.bookingLocation(type, contact.phone, at);
+    const zone = req.userTimezone || calcom.FALLBACK_ZONE;
+    let made;
+    try { made = await calendly.createInvitee(token, { eventType: type.uri, start, name: contact.name || email, email, timezone: zone, location }); }
+    catch (err) {
+      if (!(err instanceof calendly.CalendlyError)) throw err;
+      // the token (401, a missing permission) and Calendly being away are the connection's failures; anything else is
+      // Calendly's no to THIS booking — the time was taken meanwhile, most often — and is said in its own words
+      if (err.status === 0 || err.status === 401 || err.status >= 500 || (err.status === 403 && err.scopes.length)) { failure(res, err); return; }
+      return res.status(409).json({ error: 'Calendly did not accept the booking: ' + err.message, code: 'refused', detail: err.message });
+    }
+    // the entry, at once, on the connected account's clock like the receiver's: the row the webhook will land on
+    // (same invitee URI). Should the webhook have been faster, its row is taken over: it keeps Calendly's title, link
+    // and time, and gets the deal, the contact booked for, and the booker as its owner.
+    const a = calendly.inviteeToActivity({ uid: made.uri, eventUri: made.eventUri, title: type.name, start, attendee: { name: contact.name, email }, meetingUrl: null }, row.cly_timezone);
+    const { rows: [act] } = await pool.query(
+      `INSERT INTO activities (workspace_id, contact_id, deal_id, type, content, created_by, event_date, event_time, event_tz, source, calendly_uri, calendly_event_uri)
+       VALUES ($1,$2,$3,'meeting',$4,$5,$6,$7,$8,'calendly',$9,$10)
+       ON CONFLICT (workspace_id, calendly_uri) WHERE calendly_uri IS NOT NULL
+       DO UPDATE SET contact_id=EXCLUDED.contact_id, deal_id=COALESCE(EXCLUDED.deal_id, activities.deal_id), created_by=EXCLUDED.created_by, cancelled_at=NULL,
+                     calendly_event_uri=COALESCE(EXCLUDED.calendly_event_uri, activities.calendly_event_uri)
+       RETURNING id, content, (xmax = 0) AS inserted`,
+      [wid, contact.id, deal?.id || null, a.content, req.userId, a.event_date, a.event_time, a.event_tz, made.uri, made.eventUri]
+    );
+    // told once: a row the webhook made first has already told the assignee
+    const told = act.inserted
+      ? await booking.tellAssignee(wid, req.userId, { kind: 'booked', dealId: deal?.id || null, contactId: contact.id, title: a.content, start, url: null, location: calendly.placeName(location) })
+      : null;
+    const captured = { trigger: 'BOOKED_FROM_CRM', uid: made.uri, title: a.content, event_date: a.event_date, event_time: a.event_time, event_tz: a.event_tz, attendee: email.toLowerCase(), contact_id: contact.id, deal_id: deal?.id || null, booked_by: req.userId, told };
+    await logDelivery(wid, 'success', { booking: { uri: made.uri, event: made.eventUri }, request: { start, event_type: type.uri, deal_id: deal?.id || null, contact_id: contact.id, location } }, captured, contact.id, deal?.id || null, null);
+    res.status(201).json({
+      activity: { id: act.id, type: 'meeting', content: act.content, event_date: a.event_date, event_time: a.event_time, event_tz: a.event_tz, contact_id: contact.id, deal_id: deal?.id || null, calendly_uri: made.uri, calendly_event_uri: made.eventUri, source: 'calendly', created_by: req.userId },
+      booking: { uri: made.uri, event_uri: made.eventUri, start, location },
+      told,
+    });
+  } catch (err) { next(err); }
 });
 
 module.exports = router;

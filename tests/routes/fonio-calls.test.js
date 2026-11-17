@@ -70,7 +70,7 @@ const pool = {
     // Part 33: a retry booked after a call that reached nobody
     if (t.startsWith("INSERT INTO fonio_calls (workspace_id, deal_id, contact_id, trigger, status, raw_number, to_number, due_at, follow_up_of, follow_up_no)")) {
       if (db.calls.some(c => c.contact_id === p[2] && waitingStatus(c.status))) throw Object.assign(new Error('duplicate key'), { code: '23505' });
-      const row = { id: db.nextCall++, workspace_id: p[0], deal_id: p[1], contact_id: p[2], trigger: 'follow_up', status: 'scheduled', reason: null, raw_number: p[3],
+      const row = { id: db.nextCall++, workspace_id: p[0], deal_id: p[1], contact_id: p[2], trigger: /VALUES \(\$1,\$2,\$3,'callback','scheduled'/.test(t) ? 'callback' : 'follow_up', status: 'scheduled', reason: null, raw_number: p[3],
         to_number: p[4], due_at: new Date(p[5]), follow_up_of: p[6], follow_up_no: p[7], message: null, sent_at: null, attempts: 0, cancelled_by: null,
         created_at: new Date(), updated_at: new Date() };
       db.calls.push(row);
@@ -82,6 +82,18 @@ const pool = {
         to_number: p[7], due_at: p[8] ? new Date(p[8]) : new Date(), message: null, sent_at: null, attempts: 0, cancelled_by: null, created_at: new Date(), updated_at: new Date() };
       db.calls.push(row);
       return { rows: [{ id: row.id, status: row.status, reason: row.reason, due_at: row.due_at }] };
+    }
+    // Part 35: how many callbacks the chain a call belongs to has had, and a sweep's retry that becomes the callback
+    if (t.startsWith('WITH RECURSIVE chain AS ( SELECT id, follow_up_of, trigger FROM fonio_calls WHERE id = $1 AND workspace_id = $2 UNION ALL')) {
+      let n = 0;
+      for (let c = db.calls.find(x => x.id === p[0] && x.workspace_id === p[1]); c; c = call(c.follow_up_of)) if (c.trigger === 'callback') n++;
+      return { rows: [{ callbacks: n }] };
+    }
+    if (t === "UPDATE fonio_calls SET trigger = 'callback', due_at = $2, follow_up_no = $3, updated_at = NOW() WHERE follow_up_of = $1 AND status = 'scheduled' RETURNING id, status, reason, due_at") {
+      const c = db.calls.find(x => x.follow_up_of === p[0] && x.status === 'scheduled');
+      if (!c) return { rows: [] };
+      Object.assign(c, { trigger: 'callback', due_at: new Date(p[1]), follow_up_no: p[2] });
+      return { rows: [{ id: c.id, status: c.status, reason: c.reason, due_at: c.due_at }] };
     }
     if (t === 'UPDATE fonio_calls SET follow_up_at = NOW(), updated_at = NOW() WHERE id = $1 AND follow_up_at IS NULL RETURNING id') {
       const c = call(p[0]);
@@ -539,6 +551,126 @@ describe('the outcome decides the delay, and an answered result takes the retry 
   });
 });
 
+// ── Part 35: a callback at the time the person asked for ────────────────────
+describe('a callback at the time the person asked for (Part 35)', () => {
+  const sentCall = (over = {}) => {
+    const c = { id: db.nextCall++, workspace_id: WS, deal_id: 100, contact_id: 10, trigger: 'deal_manual', status: 'sent', reason: null,
+      raw_number: '0171 1234567', to_number: '+491711234567', due_at: minutes(WED10, -10), sent_at: minutes(WED10, -5),
+      result_at: null, follow_up_no: 0, follow_up_at: null, follow_up_of: null, attempts: 1, created_at: minutes(WED10, -10), updated_at: minutes(WED10, -5) };
+    Object.assign(c, over);
+    db.calls.push(c);
+    return c;
+  };
+  const callbacks = () => db.calls.filter(c => c.trigger === 'callback');
+  const instant = (cb, zone = 'Europe/Berlin', now = WED10) => { const w = fonioCalls.callbackInstant(cb, zone, now); return w.why ? w.why : [w.at.toISOString(), w.date, w.time]; };
+  const day = (day, time) => ({ day, time, minutes: null, said: 'x' });
+
+  test('the instant on the workspace\'s clock (Wednesday 10:00 in Berlin): a date, today, tomorrow, a weekday, a time alone, a day alone, "in 2 hours"', () => {
+    assert.deepEqual(instant(day({ offset: 0 }, '15:00')), ['2026-11-04T14:00:00.000Z', '2026-11-04', '15:00']);
+    assert.deepEqual(instant(day({ offset: 1 }, '09:30')), ['2026-11-05T08:30:00.000Z', '2026-11-05', '09:30']);
+    assert.deepEqual(instant(day({ date: '2026-11-06' }, '14:30')), ['2026-11-06T13:30:00.000Z', '2026-11-06', '14:30']);
+    assert.deepEqual(instant(day({ weekday: 5 }, '14:30')), ['2026-11-06T13:30:00.000Z', '2026-11-06', '14:30'], 'Friday is in two days');
+    assert.deepEqual(instant(day({ weekday: 3 }, '15:00')), ['2026-11-04T14:00:00.000Z', '2026-11-04', '15:00'], 'Wednesday, still ahead today');
+    assert.deepEqual(instant(day({ weekday: 3 }, '09:00')), ['2026-11-11T08:00:00.000Z', '2026-11-11', '09:00'], 'Wednesday, gone by today: next week');
+    assert.deepEqual(instant(day(null, '15:00')), ['2026-11-04T14:00:00.000Z', '2026-11-04', '15:00'], 'a time alone: its next occurrence');
+    assert.deepEqual(instant(day(null, '09:00')), ['2026-11-05T08:00:00.000Z', '2026-11-05', '09:00'], '…which is tomorrow when it has passed');
+    assert.deepEqual(instant(day({ offset: 1 }, null)), ['2026-11-05T09:00:00.000Z', '2026-11-05', '10:00'], 'a day alone: ten in the morning');
+    assert.equal(fonioCalls.CALLBACK_DAY_TIME, '10:00');
+    assert.deepEqual(instant({ day: null, time: null, minutes: 120, said: 'in 2 Stunden' }), ['2026-11-04T11:00:00.000Z', '2026-11-04', '12:00']);
+    // the same words on another clock: 17:00 in Manila
+    assert.deepEqual(instant(day(null, '18:00'), 'Asia/Manila'), ['2026-11-04T10:00:00.000Z', '2026-11-04', '18:00']);
+    assert.deepEqual(instant(day({ offset: 1 }, '09:00'), 'Asia/Manila'), ['2026-11-05T01:00:00.000Z', '2026-11-05', '09:00']);
+  });
+  test('not planned: unreadable, in the past, more than 14 days ahead, between 22:00 and 07:00', () => {
+    assert.equal(instant(null), 'unreadable'); assert.equal(instant({ unreadable: true, said: 'später' }), 'unreadable');
+    assert.equal(instant(day({ offset: 0 }, '09:30')), 'past'); assert.equal(instant(day({ date: '2026-11-03' }, '15:00')), 'past');
+    assert.deepEqual(instant(day({ date: '2026-11-18' }, '09:59')), ['2026-11-18T08:59:00.000Z', '2026-11-18', '09:59'], 'a minute under 14 days is planned');
+    assert.equal(instant(day({ date: '2026-11-18' }, '10:01')), 'too_far'); assert.equal(fonioCalls.CALLBACK_DAYS, 14);
+    for (const t of ['22:00', '23:30', '00:30', '06:59']) assert.equal(instant(day({ offset: 1 }, t)), 'night', t);
+    for (const t of ['07:00', '21:59']) assert.equal(instant(day({ offset: 1 }, t)).length, 3, t);
+    assert.equal(instant({ day: null, time: null, minutes: 13 * 60, said: 'in 13 Stunden' }), 'night', '10:00 + 13 hours is 23:00');
+    assert.deepEqual(fonioCalls.CALLBACK_NIGHT, { from: '22:00', to: '07:00' });
+  });
+
+  test('planned as a normal call for that time: the same contact, deal and number, answering the call it follows, no retry counted', async () => {
+    const c = sentCall({ follow_up_no: 1 });
+    const out = await fonioCalls.callbackAfterResult(pool, WS, c, { day: { offset: 0 }, time: '15:00', minutes: null, said: 'heute 15:00' }, WED10);
+    const [f] = callbacks();
+    assert.deepEqual(out, { status: 'planned', call_id: f.id, due_at: f.due_at, date: '2026-11-04', time: '15:00', said: 'heute 15:00' });
+    assert.deepEqual([f.status, f.follow_up_of, f.follow_up_no, f.contact_id, f.deal_id, f.raw_number, f.to_number], ['scheduled', c.id, 1, 10, 100, '0171 1234567', '+491711234567']);
+    assert.equal(f.due_at.toISOString(), '2026-11-04T14:00:00.000Z');
+    assert.ok(c.follow_up_at, 'the call has its one follow-up');
+    assert.equal(fonioCalls.callbackLine(out), 'Rückruf gewünscht („heute 15:00“): geplant für 04.11.2026, 15:00');
+  });
+  test('the worker sends it at that time although the calling hours are over — a normal call at that hour waits for the morning', async () => {
+    const c = sentCall();
+    await fonioCalls.callbackAfterResult(pool, WS, c, { day: { offset: 0 }, time: '19:30', minutes: null, said: 'heute 19:30' }, WED10);
+    const [f] = callbacks();
+    assert.equal(f.due_at.toISOString(), '2026-11-04T18:30:00.000Z', '19:30 in Berlin, not moved to 09:00');
+    await fonioCalls.runDue(pool, { now: new Date('2026-11-04T18:29:00.000Z') });
+    assert.equal(f.status, 'scheduled', 'not before its time'); assert.equal(fon.calls.length, 0);
+    await fonioCalls.runDue(pool, { now: new Date('2026-11-04T18:30:30.000Z') });
+    assert.equal(f.status, 'sent'); assert.equal(fon.calls.length, 1);
+    assert.equal(fon.calls[0].body.toNumber, '+491711234567');
+    // the contrast: a call a new deal started, due at the same moment
+    seed(); fon.calls.length = 0;
+    await schedule(100);
+    only().due_at = new Date('2026-11-04T18:30:00.000Z');
+    await fonioCalls.runDue(pool, { now: new Date('2026-11-04T18:30:30.000Z') });
+    assert.equal(only().status, 'scheduled'); assert.equal(only().due_at.toISOString(), '2026-11-05T08:00:00.000Z'); assert.equal(fon.calls.length, 0);
+  });
+  test('with calling hours that name no day at all a callback still goes out', async () => {
+    db.conn = CONN({ hours_days: [] });
+    const c = sentCall();
+    await fonioCalls.callbackAfterResult(pool, WS, c, { day: { offset: 0 }, time: '15:00', minutes: null, said: 'x' }, WED10);
+    await fonioCalls.runDue(pool, { now: new Date('2026-11-04T14:00:30.000Z') });
+    assert.equal(callbacks()[0].status, 'sent');
+  });
+  test('nothing to say: no callback named, the contact gone, fonio switched off or disconnected', async () => {
+    const cb = { day: { offset: 0 }, time: '15:00', minutes: null, said: 'x' };
+    assert.equal(await fonioCalls.callbackAfterResult(pool, WS, sentCall(), null, WED10), null);
+    assert.equal(await fonioCalls.callbackAfterResult(pool, WS, sentCall({ contact_id: null }), cb, WED10), null);
+    db.conn = CONN({ active: false });
+    assert.equal(await fonioCalls.callbackAfterResult(pool, WS, sentCall(), cb, WED10), null);
+    db.conn = null;
+    assert.equal(await fonioCalls.callbackAfterResult(pool, WS, sentCall(), cb, WED10), null);
+    assert.equal(callbacks().length, 0);
+  });
+  test('the switch: on for a row from before it existed, off only when saved off; a refusal claims nothing', async () => {
+    assert.equal(fonioCalls.FOLLOW_UP.callback, true);
+    for (const row of [null, {}, { follow_up: {} }, { follow_up: { enabled: true } }, { follow_up: { callback: true } }, { follow_up: { callback: 'no' } }]) assert.equal(fonioCalls.followUpSettings(row).callback, true, JSON.stringify(row));
+    assert.equal(fonioCalls.followUpSettings({ follow_up: { callback: false } }).callback, false);
+    const policy = { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1 };
+    assert.equal(fonioCalls.checkFollowUp(policy).value.callback, true, 'a form from before the switch leaves it on');
+    assert.equal(fonioCalls.checkFollowUp({ ...policy, callback: false }).value.callback, false);
+    assert.match(fonioCalls.checkFollowUp({ ...policy, callback: 'yes' }).error, /callback must be true or false/);
+
+    db.conn = CONN({ follow_up: { callback: false } });
+    const c = sentCall();
+    const out = await fonioCalls.callbackAfterResult(pool, WS, c, { day: { offset: 0 }, time: '15:00', minutes: null, said: 'heute 15:00' }, WED10);
+    assert.deepEqual(out, { status: 'off', date: '2026-11-04', time: '15:00', said: 'heute 15:00' });
+    assert.equal(callbacks().length, 0); assert.equal(c.follow_up_at, null, 'the delays may still book their retry');
+    assert.equal(fonioCalls.callbackLine(out), 'Rückruf gewünscht („heute 15:00“), aber nicht geplant: Rückrufe zur Wunschzeit sind ausgeschaltet');
+  });
+  test('the note\'s line for every way it can end', () => {
+    const line = (status, said = 'morgen') => fonioCalls.callbackLine({ status, date: null, time: null, said });
+    assert.equal(line('unreadable', 'später'), 'Rückruf gewünscht („später“), aber nicht geplant: die Zeit war nicht lesbar');
+    assert.equal(line('past'), 'Rückruf gewünscht („morgen“), aber nicht geplant: die Zeit liegt in der Vergangenheit');
+    assert.equal(line('too_far'), 'Rückruf gewünscht („morgen“), aber nicht geplant: die Zeit liegt mehr als 14 Tage entfernt');
+    assert.equal(line('night'), 'Rückruf gewünscht („morgen“), aber nicht geplant: zwischen 22 und 7 Uhr wird nicht angerufen');
+    assert.equal(line('limit'), 'Rückruf gewünscht („morgen“), aber nicht geplant: der Kontakt wurde schon 3-mal zurückgerufen');
+    assert.equal(line('waiting'), 'Rückruf gewünscht („morgen“), aber nicht geplant: für den Kontakt ist schon ein Anruf geplant');
+    assert.equal(line('something_new', null), 'Rückruf gewünscht (ohne Angabe), aber nicht geplant: ein Fehler im CRM');
+    assert.equal(fonioCalls.callbackLine(null), ''); assert.equal(fonioCalls.CALLBACK_MAX, 3);
+  });
+  test("another workspace's call is not this workspace's chain", async () => {
+    const c = sentCall({ workspace_id: OTHER_WS });
+    await fonioCalls.callbackAfterResult(pool, WS, c, { day: { offset: 0 }, time: '15:00', minutes: null, said: 'x' }, WED10);
+    const chain = db.log.find(l => l.sql.startsWith('WITH RECURSIVE chain'));
+    assert.deepEqual(chain.params, [c.id, WS], 'the chain is read inside the workspace');
+  });
+});
+
 describe('the table', () => {
   test('initDb() creates fonio_calls, its due index, and one waiting call per contact as a unique index', async () => {
     const fs = require('fs'), path = require('path');
@@ -549,7 +681,7 @@ describe('the table', () => {
     await loadDb(fs.readFileSync(path.join(ROOT, 'db.js'), 'utf8'), dbPool).initDb();
     const create = dbPool.find(/CREATE TABLE IF NOT EXISTS fonio_calls \(/);
     assert.ok(create);
-    assert.match(create.sql, /trigger TEXT NOT NULL CHECK \(trigger IN \('deal_manual','deal_webhook','follow_up'\)\)/);
+    assert.match(create.sql, /trigger TEXT NOT NULL CHECK \(trigger IN \('deal_manual','deal_webhook','follow_up','callback'\)\)/);
     assert.ok(dbPool.find(/CREATE INDEX IF NOT EXISTS fonio_calls_due_idx ON fonio_calls \(due_at\) WHERE status = 'scheduled'/));
     // the pre-check in scheduleForDeal is the quick path; this index is the guarantee when two deals arrive at once
     assert.ok(dbPool.find(/CREATE UNIQUE INDEX IF NOT EXISTS fonio_calls_one_waiting ON fonio_calls \(contact_id\) WHERE status IN \('scheduled','sending'\)/));
@@ -567,7 +699,7 @@ describe('the table', () => {
     }
     assert.ok(dbPool.find(/ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS follow_up JSONB NOT NULL DEFAULT '\{\}'::jsonb/));
     assert.ok(dbPool.find(/ALTER TABLE fonio_calls DROP CONSTRAINT IF EXISTS fonio_calls_trigger_check/));
-    assert.ok(dbPool.find(/ADD CONSTRAINT fonio_calls_trigger_check CHECK \(trigger IN \('deal_manual','deal_webhook','follow_up'\)\)/));
+    assert.ok(dbPool.find(/ADD CONSTRAINT fonio_calls_trigger_check CHECK \(trigger IN \('deal_manual','deal_webhook','follow_up','callback'\)\)/), 'and the callback a person asked for in a call (Part 35)');
     assert.ok(dbPool.find(/CREATE INDEX IF NOT EXISTS fonio_calls_unreported_idx ON fonio_calls \(sent_at\) WHERE status = 'sent' AND result_at IS NULL/));
   });
 });

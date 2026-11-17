@@ -189,19 +189,55 @@ function dvInlineEdit(btn, { value, type = 'text', size = '', label = '', parse 
    see) and a conflict is shown, with "Trotzdem buchen" still possible; "Buchen" posts it
    (POST /api/integrations/calcom/book), the server writes the entry at once and Cal.com
    sends the invitation. A contact without an email cannot be booked: the dialog says so
-   and offers the contact form. */
+   and offers the contact form.
+   CALENDLY (CALENDLY_CHANGES Part 4): a workspace books with Cal.com or with Calendly, never
+   both. While Calendly is the connected one, the same button opens the same dialog and books
+   there (GET /api/integrations/calendly/slots, POST …/calendly/book): its status rides along
+   on Cal.com's (`status.calendly`) and is read into Cal.com's words by dvCalendlyAsCal, so the
+   dialog has one way of reading a connection. What Calendly does not get here: a note for the
+   invitation, the Notetaker, reschedule and cancel. */
 let dvCalcomCache = { at: 0, data: null };
 // fresh: ask the server to re-read the event types from Cal.com first (the dialog does, in the background)
 async function dvCalcomStatus(fresh = false) {
   if (!fresh && Date.now() - dvCalcomCache.at < 60000) return dvCalcomCache.data;
   let data = null;
   try { data = await api.get('/api/integrations/calcom' + (fresh ? '?fresh=1' : '')); } catch { data = null; }
-  dvCalcomCache = { at: Date.now(), data: data && !data.error ? data : null };
+  data = data && !data.error ? data : null;
+  // without Cal.com, Calendly may be the workspace's booking service: its status is asked for and rides along
+  if (data && !data.connected) {
+    let cly = null;
+    try { cly = await api.get('/api/integrations/calendly'); } catch { cly = null; }
+    if (cly && !cly.error && cly.connected && cly.calendly) data = { ...data, calendly: cly.calendly };
+  }
+  dvCalcomCache = { at: Date.now(), data };
   return dvCalcomCache.data;
 }
 function dvCalcomReady(status) { return !!(status && status.connected && status.calcom && status.calcom.event_type); }
+function dvCalendlyReady(status) { return !!(status && status.calendly && status.calendly.event_type); }
+function dvBookReady(status) { return dvCalcomReady(status) || dvCalendlyReady(status); }
+// Calendly's connection in the words the dialog knows from Cal.com. An event type is named by its URI (`id`), its
+// length is `duration`; its places become { type: 'calendly', kind, text, index }, `index` being what the server is
+// told (the place's position in the type's list). A round-robin type has no place to choose: Calendly sets it.
+function dvCalendlyAsCal(c) {
+  const type = x => ({ id: x.uri, title: x.name, lengthInMinutes: x.duration || null,
+    locations: x.poolingType === 'round_robin' ? [] : (Array.isArray(x.locations) ? x.locations : []).map((l, i) => ({ type: 'calendly', kind: l.kind, text: l.location || '', index: i })) });
+  const types = (Array.isArray(c.event_types) ? c.event_types : []).map(type);
+  return { service: 'calendly', event_type: types.find(x => x.id === c.event_type.uri) || type(c.event_type), event_types: types, cal_name: c.name, cal_email: c.email, host_user_id: c.host_user_id ?? null };
+}
+// The connected booking service as the dialog reads it; null when neither is ready.
+function dvBookingCal(status) { return dvCalcomReady(status) ? status.calcom : dvCalendlyReady(status) ? dvCalendlyAsCal(status.calendly) : null; }
+// A Calendly place by name: the video app, else what kind of place it is, else the host's own text for it.
+const DV_CALENDLY_APPS = { google_conference: 'Google Meet', zoom_conference: 'Zoom', microsoft_teams_conference: 'Microsoft Teams', webex_conference: 'Webex', gotomeeting_conference: 'GoTo Meeting' };
+function dvCalendlyPlace(l) {
+  if (DV_CALENDLY_APPS[l.kind]) return DV_CALENDLY_APPS[l.kind];
+  if (l.kind === 'physical') return l.text ? tf('cal_loc_address', { address: l.text }) : t('cal_loc_address_plain');
+  if (l.kind === 'outbound_call') return t('cly_loc_outbound_call');
+  if (l.kind === 'inbound_call') return t('cly_loc_inbound_call');
+  if (l.kind === 'ask_invitee') return t('cly_loc_ask_invitee');
+  return l.text || t('cly_loc_other');
+}
 function dvBookButton(status, disabledTitle) {
-  if (!dvCalcomReady(status)) return '';
+  if (!dvBookReady(status)) return '';
   return `<button class="btn btn-secondary" data-act="book" ${disabledTitle ? `disabled title="${esc(disabledTitle)}"` : ''}>${icon('calendar')}${esc(t('cal_book_btn'))}</button>`;
 }
 function dvIsoDateIn(zone) { return new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
@@ -293,14 +329,17 @@ function dvNotetakerToast(n) {
 
 async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule = null } = {}) {
   const status = await dvCalcomStatus();
-  if (!dvCalcomReady(status) || !contact) { ui.toast(t('cal_status_none')); return; }
+  // moving a meeting is Cal.com's (only its entries have the button); booking goes to whichever service is connected
+  if (!(reschedule ? dvCalcomReady(status) : dvBookReady(status)) || !contact) { ui.toast(t('cal_status_none')); return; }
   if (!reschedule && !contact.email) {
     const m = ui.modal({ title: t('cal_book_btn'), size: 'sm', body: `<p class="sub">${esc(t('cal_book_no_email'))}</p>`,
       footer: `<button class="btn btn-secondary" data-close>${esc(t('btn_cancel'))}</button>${typeof openContactModal === 'function' ? `<button class="btn btn-primary" data-open-contact>${esc(t('cal_book_open_contact'))}</button>` : ''}` });
     on(m.el, 'click', '[data-open-contact]', () => { m.close(); currentContactType = contact.contact_type || 'contact'; openContactModal(contact.id); });
     return;
   }
-  let cal = status.calcom;
+  let cal = reschedule ? status.calcom : dvBookingCal(status);
+  const cly = cal.service === 'calendly';   // Calendly: its own two routes, a type named by its URI, no note, no Notetaker
+  const errText = r => (cly && typeof clyErrorText === 'function' ? clyErrorText(r) : r?.error || t('cal_err_generic'));
   let types = Array.isArray(cal.event_types) && cal.event_types.length ? cal.event_types : [cal.event_type];
   const zone = currentTimezone(), locale = currentLang === 'de' ? 'de-DE' : 'en-GB', todayIso = dvIsoDateIn(zone);
   // month: the month on the calendar ('YYYY-MM'); date: the chosen day; picked: the chosen slot's start (ISO);
@@ -324,9 +363,9 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
   const monthDays = () => Array.from({ length: daysInMonth(B.month) }, (_, i) => `${B.month}-${String(i + 1).padStart(2, '0')}`);
   const bookable = d => d >= todayIso && slotsOf(d).length > 0;
   // where it can happen: the type's locations a booker can choose (a video app, the host's address, link or phone)
-  const placesOf = () => (Array.isArray(typeOf().locations) ? typeOf().locations : []).filter(l => l && (l.type === 'integration' ? !!l.integration : ['address', 'link', 'phone'].includes(l.type)));
+  const placesOf = () => (Array.isArray(typeOf().locations) ? typeOf().locations : []).filter(l => l && (l.type === 'integration' ? !!l.integration : ['address', 'link', 'phone', 'calendly'].includes(l.type)));
   const APPS = { 'cal-video': 'Cal Video', 'google-meet': 'Google Meet', zoom: 'Zoom', 'office365-video': 'Microsoft Teams', jitsi: 'Jitsi', 'webex-video': 'Webex', 'whereby-video': 'Whereby' };
-  const placeLabel = l => l.type === 'integration' ? (APPS[l.integration] || l.integration) : l.type === 'address' ? (l.address ? tf('cal_loc_address', { address: l.address }) : t('cal_loc_address_plain')) : l.type === 'link' ? t('cal_loc_link') : t('cal_loc_phone');
+  const placeLabel = l => l.type === 'calendly' ? dvCalendlyPlace(l) : l.type === 'integration' ? (APPS[l.integration] || l.integration) : l.type === 'address' ? (l.address ? tf('cal_loc_address', { address: l.address }) : t('cal_loc_address_plain')) : l.type === 'link' ? t('cal_loc_link') : t('cal_loc_phone');
   const placeOf = () => placesOf()[B.loc] || null;
   // the Notetaker records Google Meet meetings: the box shows only for that place (utils/notetaker.js on the server)
   const isMeet = l => !!l && l.type === 'integration' && l.integration === 'google-meet';
@@ -338,7 +377,7 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
   function render() {
     const places = placesOf(), place = placeOf();
     const field = (id, labelKey, control) => `<div class="field"><label class="label" for="${id}">${esc(t(labelKey))}</label>${control}</div>`;
-    const typeSel = field('cal-book-type', 'cal_book_type', `<select class="select" id="cal-book-type">${types.map(x => `<option value="${Number(x.id)}"${x.id === B.typeId ? ' selected' : ''}>${esc(x.title)}${x.lengthInMinutes ? ` (${esc(tf('cal_minutes', { n: x.lengthInMinutes }))})` : ''}</option>`).join('')}</select>`);
+    const typeSel = field('cal-book-type', 'cal_book_type', `<select class="select" id="cal-book-type">${types.map(x => `<option value="${esc(x.id)}"${x.id === B.typeId ? ' selected' : ''}>${esc(x.title)}${x.lengthInMinutes ? ` (${esc(tf('cal_minutes', { n: x.lengthInMinutes }))})` : ''}</option>`).join('')}</select>`);
     const whereSel = places.length ? field('cal-book-where', 'cal_book_where', `<select class="select" id="cal-book-where">${places.map((l, i) => `<option value="${i}"${i === B.loc ? ' selected' : ''}>${esc(placeLabel(l))}</option>`).join('')}</select>`) : '';
     // what: the event type and, when the type offers a choice, where; a meeting being moved keeps both, so it shows its type and its current time instead
     const current = reschedule && reschedule.event_date ? toViewerClock(reschedule.event_date, reschedule.event_time || '00:00', reschedule.event_tz) : null;
@@ -371,8 +410,9 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
     const when = `<div class="cal-book-sec">${head}${grid}${timeSel}<p class="help">${esc(tf('cal_book_zone', { zone, host: cal.cal_name || cal.cal_email || '' }))}</p></div>`;
     // the check, the note, and the one accent: what will be booked
     const conflict = !B.picked ? '' : B.checking ? `<p class="help">${esc(t('cal_book_checking'))}</p>`
-      : B.conflicts.length ? `<div class="cal-book-conflict" role="alert">${B.conflicts.map(c => `<p>${esc(tf('cal_book_conflict', { time: c.time, title: c.title, who: c.who }))}</p>`).join('')}<p>${esc(t('cal_book_conflict_hint'))}</p></div>` : '';
-    const note = `<div class="cal-book-sec">${field('cal-book-note', reschedule ? 'cal_resched_reason' : 'cal_book_note', `<textarea class="textarea" id="cal-book-note" rows="2" placeholder="${esc(t(reschedule ? 'cal_resched_reason_ph' : 'cal_book_note_ph'))}">${esc(B.note)}</textarea>`)}</div>`;
+      : B.conflicts.length ? `<div class="cal-book-conflict" role="alert">${B.conflicts.map(c => `<p>${esc(tf('cal_book_conflict', { time: c.time, title: c.title, who: c.who }))}</p>`).join('')}<p>${esc(t(cly ? 'cly_book_conflict_hint' : 'cal_book_conflict_hint'))}</p></div>` : '';
+    // Calendly takes no note with a booking made for someone: the field is left out there
+    const note = cly ? '' : `<div class="cal-book-sec">${field('cal-book-note', reschedule ? 'cal_resched_reason' : 'cal_book_note', `<textarea class="textarea" id="cal-book-note" rows="2" placeholder="${esc(t(reschedule ? 'cal_resched_reason_ph' : 'cal_book_note_ph'))}">${esc(B.note)}</textarea>`)}</div>`;
     const slot = B.picked ? slotsOf(B.date).find(x => x.start === B.picked) || { start: B.picked } : null;
     const summary = slot ? `<div class="cal-book-summary">${icon('calendar')}<div><b>${esc(fmtDay(B.date))}, ${esc(tf('cal_book_slot', { from: fmtTime(slot.start), to: fmtTime(slotEnd(slot)), ampm: fmtAmPm(slot.start) }))}</b><span>${esc([place ? placeLabel(place) : '', !reschedule && B.record && B.nt === 'ok' && isMeet(place) ? t('cal_book_record_short') : '', !reschedule && sumOn && B.summary && isMeet(place) ? tf('cal_book_summary_short', { ai: dvAiName(B.ai) }) : '', tf('cal_book_with', { name: contact.name })].filter(Boolean).join(', '))}</span></div></div>` : '';
     host.innerHTML = `<p class="help">${esc(tf('cal_book_invite_to', { email: contact.email }))}</p>${what}${rec}${when}${conflict}${note}${summary}${B.err ? `<p class="cal-book-err" role="alert">${esc(B.err)}</p>` : ''}`;
@@ -398,9 +438,10 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
   // the whole month's free slots in one read; the first bookable day is preselected
   async function load() {
     B.loading = true; B.date = ''; B.picked = null; B.conflicts = []; render();
-    const r = await api.get(`/api/integrations/calcom/slots?from=${B.month}-01&days=${daysInMonth(B.month)}&event_type_id=${B.typeId}${reschedule ? '&reschedule_uid=' + encodeURIComponent(reschedule.calcom_uid) : ''}`);
+    const r = cly ? await api.get(`/api/integrations/calendly/slots?from=${B.month}-01&days=${daysInMonth(B.month)}&event_type=${encodeURIComponent(B.typeId)}`)
+      : await api.get(`/api/integrations/calcom/slots?from=${B.month}-01&days=${daysInMonth(B.month)}&event_type_id=${B.typeId}${reschedule ? '&reschedule_uid=' + encodeURIComponent(reschedule.calcom_uid) : ''}`);
     B.loading = false;
-    if (!r || r.error) { B.slots = {}; B.err = r?.error || t('cal_err_generic'); }
+    if (!r || r.error) { B.slots = {}; B.err = errText(r); }
     else { B.slots = r.slots || {}; B.err = ''; B.date = monthDays().find(bookable) || ''; }
     render();
   }
@@ -428,7 +469,7 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
     if (B.picked !== start) return;   // the pick changed while the calendar was read
     B.conflicts = found; B.checking = false; render();
   }
-  on(host, 'change', '#cal-book-type', (e, el) => { B.typeId = Number(el.value); B.loc = 0; load(); });
+  on(host, 'change', '#cal-book-type', (e, el) => { B.typeId = (types.find(x => String(x.id) === el.value) || typeOf()).id; B.loc = 0; load(); });   // Cal.com's ids are numbers, Calendly's are URIs
   on(host, 'change', '#cal-book-where', (e, el) => { B.loc = Number(el.value) || 0; render(); });
   on(host, 'change', '#cal-book-record', (e, el) => { B.record = el.checked; render(); });
   on(host, 'change', '#cal-book-summary', (e, el) => { B.summary = el.checked; render(); });
@@ -443,12 +484,13 @@ async function openCalcomBooking({ dealId = null, contact, onBooked, reschedule 
     const place = placeOf();
     const res = reschedule
       ? await api.post('/api/integrations/calcom/reschedule', { activity_id: reschedule.id, start: B.picked, reason: B.note })
+      : cly ? await api.post('/api/integrations/calendly/book', { deal_id: dealId, contact_id: contact.id, event_type: B.typeId, start: B.picked, location: place ? place.index : null })
       : await api.post('/api/integrations/calcom/book', { deal_id: dealId, contact_id: contact.id, event_type_id: B.typeId, start: B.picked, note: B.note, language: currentLang, location: place ? (place.type === 'integration' ? { type: 'integration', integration: place.integration } : { type: place.type }) : null, record: !!(B.record && B.nt === 'ok' && isMeet(place)), summary: !!(B.summary && B.ai && B.record && B.nt === 'ok' && isMeet(place)) });
     B.busy = false;
-    if (!res || res.error) { B.err = res?.error || t('cal_err_generic'); render(); return; }
+    if (!res || res.error) { B.err = errText(res); render(); return; }
     const when = `${fmtWhen(B.picked)} (${fmtAmPm(B.picked)})`;
     m.close();
-    ui.toast(reschedule ? tf('cal_resched_done', { when, name: contact.name }) : tf('cal_book_done', { when }));
+    ui.toast(reschedule ? tf('cal_resched_done', { when, name: contact.name }) : tf(cly ? 'cly_book_done' : 'cal_book_done', { when }));
     if (res.notetaker) dvNotetakerToast(res.notetaker);
     if (onBooked) await onBooked(res);
   });

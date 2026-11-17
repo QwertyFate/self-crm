@@ -1564,6 +1564,7 @@ function renderFonio() {
   val('fonio-follow-voicemail', follow.voicemail);
   val('fonio-follow-busy', follow.busy);
   val('fonio-follow-attempts', follow.max_attempts);
+  chk('fonio-callback-on', follow.callback !== false);   // a callback at the time asked for in the call: on unless switched off (Part 36)
   const tz = $('fonio-hours-tz');
   if (tz) tz.textContent = set && s.hours_tz ? tf('fonio_hours_tz', { tz: s.hours_tz }) : t('fonio_hours_tz_own');
   const seg = $('fonio-days');
@@ -1764,6 +1765,8 @@ async function saveFonioVars(btn) {
 // are the ones utils/fonio-result.js reads. The values in {{ }} are fonio's variables; the three in angle brackets
 // are picked in fonio through "Add Variable", under fonio's own labels. caller_name is a variable of the user's own
 // in fonio (it asks for a description): the name the person gave in the call, for the call log (Part 15).
+// callback_date and callback_time are two more of the user's own: when the person asked to be called back (Part 35);
+// their descriptions and the prompt's sentence are on the card to copy (index.html, "A callback asked for in the call").
 const FONIO_RESULT_BODY = JSON.stringify({
   crm_call_id: '{{crm_call_id}}',
   conversation_id: '{{conversationId}}',
@@ -1777,6 +1780,8 @@ const FONIO_RESULT_BODY = JSON.stringify({
   meeting_date: '{{meeting_date}}',
   meeting_time: '{{meeting_time}}',
   meeting_email: '{{meeting_email}}',
+  callback_date: '{{callback_date}}',
+  callback_time: '{{callback_time}}',
   duration: '<Duration>',
   summary: '<Summary>',
   transcript: '<Plain transcript>',
@@ -1861,6 +1866,8 @@ function readFonioForm(form) {
       voicemail: num(form.followVoicemail),
       busy: num(form.followBusy),
       max_attempts: num(form.followAttempts),
+      // the callback switch (Part 36) is sent only when the page has the box: without it the server keeps what is saved
+      ...(form.callbackOn === undefined ? {} : { callback: !!form.callbackOn }),
     },
   };
   const key = form.key.trim();
@@ -1912,6 +1919,7 @@ async function saveFonio(btn) {
     bookMeetings: c('fonio-book-meetings'),
     followOn: c('fonio-follow-on'), followNoAnswer: v('fonio-follow-no-answer'), followVoicemail: v('fonio-follow-voicemail'),
     followBusy: v('fonio-follow-busy'), followAttempts: v('fonio-follow-attempts'),
+    callbackOn: document.getElementById('fonio-callback-on') ? c('fonio-callback-on') : undefined,
   });
   showFonioDetail('');
   if (btn) { btn.disabled = true; btn.textContent = body.api_key ? t('fonio_checking') : t('fonio_btn_save'); }

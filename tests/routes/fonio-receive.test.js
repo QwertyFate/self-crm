@@ -113,8 +113,22 @@ const pool = {
       return { rows: c ? [{ delay_minutes: 5, active: true, country_code: '+49', hours_on: true, hours_days: [1, 2, 3, 4, 5],
         hours_from: '09:00:00', hours_to: '18:00:00', hours_tz: 'Europe/Berlin', follow_up: {}, ...c }] : [] };
     }
+    // Part 35: how many callbacks the chain a call belongs to has had, and a sweep's retry that becomes the callback
+    if (q.startsWith('WITH RECURSIVE chain AS ( SELECT id, follow_up_of, trigger FROM fonio_calls WHERE id = $1 AND workspace_id = $2 UNION ALL')) {
+      let n = 0;
+      for (let c = state.fonioCalls.find(x => x.id === params[0] && x.workspace_id === params[1]); c; c = state.fonioCalls.find(x => x.id === c.follow_up_of)) if (c.trigger === 'callback') n++;
+      return { rows: [{ callbacks: n }] };
+    }
+    if (q === "UPDATE fonio_calls SET trigger = 'callback', due_at = $2, follow_up_no = $3, updated_at = NOW() WHERE follow_up_of = $1 AND status = 'scheduled' RETURNING id, status, reason, due_at") {
+      const c = state.fonioCalls.find(x => x.follow_up_of === params[0] && x.status === 'scheduled');
+      if (!c) return { rows: [] };
+      Object.assign(c, { trigger: 'callback', due_at: params[1], follow_up_no: params[2] });
+      return { rows: [{ id: c.id, status: c.status, reason: c.reason, due_at: c.due_at }] };
+    }
     if (q.startsWith("INSERT INTO fonio_calls (workspace_id, deal_id, contact_id, trigger, status, raw_number, to_number, due_at, follow_up_of, follow_up_no)")) {
-      const row = { id: state.nextCall++, workspace_id: params[0], deal_id: params[1], contact_id: params[2], trigger: 'follow_up', status: 'scheduled',
+      // one waiting call per contact (fonio_calls_one_waiting)
+      if (state.fonioCalls.some(c => c.contact_id === params[2] && (c.status === 'scheduled' || c.status === 'sending'))) throw Object.assign(new Error('duplicate key'), { code: '23505' });
+      const row = { id: state.nextCall++, workspace_id: params[0], deal_id: params[1], contact_id: params[2], trigger: /VALUES \(\$1,\$2,\$3,'callback','scheduled'/.test(q) ? 'callback' : 'follow_up', status: 'scheduled',
         reason: null, raw_number: params[3], to_number: params[4], due_at: params[5], follow_up_of: params[6], follow_up_no: params[7],
         result_at: null, note_activity_id: null, follow_up_at: null, sent_at: null, conversation_id: null, conversation_link: null };
       state.fonioCalls.push(row);
@@ -616,6 +630,144 @@ describe('a call that reached nobody (Part 33)', () => {
     assert.equal(r.status, 200);
     assert.deepEqual([callOf(90).status, callOf(90).reason], ['cancelled', 'late_result']);
     assert.equal(followUps().length, 1, 'no second retry');
+  });
+});
+
+// ── Part 35: the person had no time and named one ───────────────────────────
+describe('a callback at the time the person asked for (Part 35)', () => {
+  const calcom = require(path.join(ROOT, 'utils', 'calcom.js'));
+  const policy = (over = {}) => ({ enabled: true, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1, ...over });
+  const rows = trigger => state.fonioCalls.filter(c => c.trigger === trigger);
+  // tomorrow on the workspace's clock: always ahead, always by day, whenever the tests run
+  const TOMORROW = calcom.wallClock(new Date(NOW + 24 * 3600000).toISOString(), 'Europe/Berlin').date;
+  const german = d => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
+  const at = time => calcom.utcFromWallClock(TOMORROW, time, 'Europe/Berlin');
+  const result = (over = {}) => ({ ...RESULT, conversation_id: 'conv-cb1', call_outcome: 'busy', callback_date: TOMORROW, callback_time: '15:00', ...over });
+
+  test('"call me tomorrow at three": one call waits for that time, the note says so, and the answer names it — with trying again switched off', async () => {
+    const r = await post(TOKEN, result());
+    assert.equal(r.status, 200);
+    const [c] = rows('callback');
+    assert.ok(c, 'a callback is planned');
+    assert.deepEqual([c.status, c.follow_up_of, c.follow_up_no, c.contact_id, c.deal_id, c.to_number], ['scheduled', 12, 0, 5, 13, '+491711234567']);
+    assert.equal(new Date(c.due_at).toISOString(), at('15:00'));
+    assert.deepEqual(r.body.callback, { status: 'planned', call_id: c.id, due_at: c.due_at });
+    assert.ok(notes()[0].content.endsWith(`\n\nRückruf gewünscht („${TOMORROW} 15:00“): geplant für ${german(TOMORROW)}, 15:00`), notes()[0].content.slice(-90));
+    assert.ok(callOf(12).follow_up_at, 'the call has its one follow-up');
+    assert.equal(rows('follow_up').length, 0);
+  });
+  test('the person\'s time, not the calling hours: 19:30 stays 19:30 although the hours end at 18:00', async () => {
+    await post(TOKEN, result({ callback_time: '19:30' }));
+    assert.equal(new Date(rows('callback')[0].due_at).toISOString(), at('19:30'));
+  });
+  test('with trying again on, a busy call that named a time gets the callback, not the busy delay as well', async () => {
+    state.conns[0].follow_up = policy();
+    await post(TOKEN, result());
+    assert.equal(rows('callback').length, 1);
+    assert.equal(rows('follow_up').length, 0);
+    assert.equal(callOf(12).call_outcome, 'busy');
+  });
+  test('an answered call that named a time is called back too', async () => {
+    await post(TOKEN, result({ call_outcome: 'answered', callback_date: 'morgen', callback_time: 'nachmittags' }));
+    const [c] = rows('callback');
+    assert.equal(new Date(c.due_at).toISOString(), at('15:00'), 'tomorrow afternoon is tomorrow at three');
+    assert.ok(notes()[0].content.endsWith(`Rückruf gewünscht („morgen nachmittags“): geplant für ${german(TOMORROW)}, 15:00`));
+  });
+  test('the switch off: nothing is planned for that time, the note says why, and the busy delay decides as before', async () => {
+    state.conns[0].hours_on = false;
+    state.conns[0].follow_up = policy({ callback: false });
+    const r = await post(TOKEN, result());
+    assert.equal(rows('callback').length, 0);
+    assert.deepEqual(r.body.callback, { status: 'off', call_id: null, due_at: null });
+    assert.ok(notes()[0].content.endsWith(`Rückruf gewünscht („${TOMORROW} 15:00“), aber nicht geplant: Rückrufe zur Wunschzeit sind ausgeschaltet`), notes()[0].content.slice(-110));
+    assert.equal(rows('follow_up').length, 1, 'the retry after a busy call');
+  });
+  test('a time this cannot read, one in the past, one at night: not planned, said in the note; the busy delay decides', async () => {
+    for (const [fields, status, why] of [
+      [{ callback_date: '', callback_time: 'später' }, 'unreadable', 'die Zeit war nicht lesbar'],
+      [{ callback_date: '2020-01-01', callback_time: '15:00' }, 'past', 'die Zeit liegt in der Vergangenheit'],
+      [{ callback_date: TOMORROW, callback_time: '23:15' }, 'night', 'zwischen 22 und 7 Uhr wird nicht angerufen'],
+      [{ callback_date: '2099-01-01', callback_time: '15:00' }, 'too_far', 'die Zeit liegt mehr als 14 Tage entfernt'],
+    ]) {
+      reset();
+      state.conns[0].hours_on = false;
+      state.conns[0].follow_up = policy();
+      const r = await post(TOKEN, result(fields));
+      assert.equal(r.body.callback.status, status);
+      assert.equal(rows('callback').length, 0, status);
+      assert.ok(notes()[0].content.endsWith(`aber nicht geplant: ${why}`), notes()[0].content.slice(-90));
+      assert.equal(rows('follow_up').length, 1, status + ': the busy delay still books its retry');
+    }
+  });
+  test('no time named (empty, "no", fonio\'s unfilled placeholders): nothing about a callback anywhere', async () => {
+    for (const fields of [{ callback_date: '', callback_time: '' }, { callback_date: 'no', callback_time: 'no' }, { callback_date: '{{callback_date}}', callback_time: '{{callback_time}}' }, { callback_date: undefined, callback_time: undefined }]) {
+      reset();
+      const r = await post(TOKEN, result(fields));
+      assert.equal(r.body.callback, undefined);
+      assert.equal(rows('callback').length, 0);
+      assert.doesNotMatch(notes()[0].content, /Rückruf/);
+    }
+  });
+  test('the same result delivered twice plans one callback', async () => {
+    await post(TOKEN, result());
+    const again = await post(TOKEN, result());
+    assert.equal(again.body.already, true);
+    assert.equal(rows('callback').length, 1);
+    assert.equal(notes().length, 1);
+    assert.equal(notes()[0].content.split('Rückruf gewünscht').length, 2, 'one line in the note');
+  });
+  test('the contact already has a call waiting: no second one, and the note says so', async () => {
+    state.fonioCalls.push({ id: 80, workspace_id: WS, contact_id: 5, deal_id: 12, trigger: 'deal_manual', status: 'scheduled', to_number: '+491711234567', sent_at: null, result_at: null, note_activity_id: null, due_at: ago(-30) });
+    const r = await post(TOKEN, result());
+    assert.equal(r.body.callback.status, 'waiting');
+    assert.equal(rows('callback').length, 0);
+    assert.ok(notes()[0].content.endsWith('aber nicht geplant: für den Kontakt ist schon ein Anruf geplant'));
+  });
+  test('the result came late and the sweep had booked a retry: that waiting call becomes the callback', async () => {
+    state.conns[0].follow_up = policy();
+    callOf(12).follow_up_at = ago(10);
+    state.fonioCalls.push({ id: 81, workspace_id: WS, contact_id: 5, deal_id: 13, trigger: 'follow_up', status: 'scheduled', reason: null,
+      follow_up_of: 12, follow_up_no: 1, to_number: '+491711234567', sent_at: null, result_at: null, note_activity_id: null, due_at: ago(-60) });
+    const r = await post(TOKEN, result());
+    assert.equal(r.body.callback.status, 'planned'); assert.equal(r.body.callback.call_id, 81);
+    assert.deepEqual([callOf(81).trigger, callOf(81).status, callOf(81).follow_up_no], ['callback', 'scheduled', 0]);
+    assert.equal(new Date(callOf(81).due_at).toISOString(), at('15:00'));
+    assert.equal(state.fonioCalls.filter(c => c.follow_up_of === 12).length, 1, 'no second call');
+  });
+  test('at most three callbacks in one chain of calls: the fourth wish is noted, not planned', async () => {
+    // 12 is itself the third callback: 12 ← 72 ← 71 ← 70 (the first call)
+    state.fonioCalls.push({ id: 70, workspace_id: WS, contact_id: 5, deal_id: 13, trigger: 'deal_manual', status: 'sent', follow_up_of: null },
+      { id: 71, workspace_id: WS, contact_id: 5, deal_id: 13, trigger: 'callback', status: 'sent', follow_up_of: 70 },
+      { id: 72, workspace_id: WS, contact_id: 5, deal_id: 13, trigger: 'callback', status: 'sent', follow_up_of: 71 });
+    Object.assign(callOf(12), { trigger: 'callback', follow_up_of: 72 });
+    const r = await post(TOKEN, result());
+    assert.equal(r.body.callback.status, 'limit');
+    assert.equal(rows('callback').filter(c => c.status === 'scheduled').length, 0);
+    assert.ok(notes()[0].content.endsWith('aber nicht geplant: der Kontakt wurde schon 3-mal zurückgerufen'));
+    // one fewer in the chain: planned
+    reset();
+    state.fonioCalls.push({ id: 70, workspace_id: WS, contact_id: 5, deal_id: 13, trigger: 'deal_manual', status: 'sent', follow_up_of: null },
+      { id: 71, workspace_id: WS, contact_id: 5, deal_id: 13, trigger: 'callback', status: 'sent', follow_up_of: 70 });
+    Object.assign(callOf(12), { trigger: 'callback', follow_up_of: 71 });
+    assert.equal((await post(TOKEN, result())).body.callback.status, 'planned');
+  });
+  test('a call that agreed a meeting plans no callback', async () => {
+    const fonioMeeting = require(path.join(ROOT, 'utils', 'fonio-meeting.js'));
+    const real = fonioMeeting.bookMeeting;
+    fonioMeeting.bookMeeting = async (_pool, args) => ({ status: 'not_connected', date: args.meeting.date, time: args.meeting.time, said: args.meeting.said });
+    try {
+      const r = await post(TOKEN, result({ meeting_booked: 'yes', meeting_date: TOMORROW, meeting_time: '14:00' }));
+      assert.equal(r.status, 200);
+      assert.equal(r.body.callback, undefined);
+      assert.equal(rows('callback').length, 0);
+      assert.doesNotMatch(notes()[0].content, /Rückruf/);
+    } finally { fonioMeeting.bookMeeting = real; }
+  });
+  test('an incoming call that names a time plans nothing (only calls the CRM started are called back)', async () => {
+    const r = await post(TOKEN, { ...result(), crm_call_id: undefined, direction: 'inbound', person_number: '+491511000001' });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.callback, undefined);
+    assert.equal(rows('callback').length, 0);
   });
 });
 

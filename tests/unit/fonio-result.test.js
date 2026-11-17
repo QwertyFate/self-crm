@@ -34,7 +34,7 @@ describe('readResult', () => {
     const r = fr.readResult({ crm_call_id: '17', conversation_id: 'conv_1', conversation_link: 'https://app.fonio.ai/c/1', direction: 'outbound',
       duration: '125', summary: ' Termin vereinbart. ', transcript: 'Agent: Hallo\r\nKunde: Hi', person_number: '+49 171 1234567', agent_number: OWN }, OWN);
     assert.deepEqual(r, { crmCallId: 17, conversationId: 'conv_1', link: 'https://app.fonio.ai/c/1', direction: 'outbound', inbound: false,
-      duration: '125', summary: 'Termin vereinbart.', transcript: 'Agent: Hallo\nKunde: Hi', numbers: ['+491711234567'], name: '', meeting: null, outcome: null });
+      duration: '125', summary: 'Termin vereinbart.', transcript: 'Agent: Hallo\nKunde: Hi', numbers: ['+491711234567'], name: '', meeting: null, outcome: null, callback: null });
   });
   test("fonio's own names and its default Body (the person's number as \"from\")", () => {
     const r = fr.readResult({ conversationId: 'c9', from: '+491711234567', to: OWN, conversationLink: 'https://app.fonio.ai/x', plainTranscript: 'T', summary: 'S' }, OWN);
@@ -71,7 +71,7 @@ describe('readResult', () => {
     for (const d of ['outbound', 'OUTGOING', '', '{{direction}}']) assert.equal(fr.readResult({ direction: d }, OWN).inbound, false, d);
   });
   test('nothing usable: all empty, never a throw', () => {
-    assert.deepEqual(fr.readResult(null, OWN), { crmCallId: null, conversationId: null, link: null, direction: '', inbound: false, duration: '', summary: '', transcript: '', numbers: [], name: '', meeting: null, outcome: null });
+    assert.deepEqual(fr.readResult(null, OWN), { crmCallId: null, conversationId: null, link: null, direction: '', inbound: false, duration: '', summary: '', transcript: '', numbers: [], name: '', meeting: null, outcome: null, callback: null });
   });
 });
 
@@ -168,5 +168,85 @@ describe('readMeeting: a meeting the assistant agreed in the call', () => {
   test('an email the lead gave in the call rides along, lower-cased; something that is no address does not', () => {
     assert.equal(m({ meeting_booked: 'yes', meeting_date: '2026-11-20', meeting_time: '14:00', meeting_email: ' Erika@Muster.de ' }).email, 'erika@muster.de');
     assert.equal(m({ meeting_booked: 'yes', meeting_date: '2026-11-20', meeting_time: '14:00', meeting_email: 'keine' }).email, null);
+  });
+});
+
+// ── Part 35: "no time now, call me this afternoon" ──────────────────────────
+describe('readCallback: when the person asked to be called back', () => {
+  const cb = (date, time) => fr.readCallback({ callback_date: date, callback_time: time });
+  const read = (date, time) => { const c = cb(date, time); return c && !c.unreadable ? [c.day, c.time, c.minutes] : c; };
+  test('a date and a time as the CRM asks for them; German dates, "Uhr", am/pm, seconds, a date-time in one field', () => {
+    assert.deepEqual(cb('2026-11-20', '15:00'), { day: { date: '2026-11-20' }, time: '15:00', minutes: null, said: '2026-11-20 15:00' });
+    for (const [date, time, want] of [
+      ['20.11.2026', '9.30 Uhr', [{ date: '2026-11-20' }, '09:30', null]],
+      ['2026-11-20', '15:00:00', [{ date: '2026-11-20' }, '15:00', null]],
+      ['2026-11-20T16:45:00', '', [{ date: '2026-11-20' }, '16:45', null]],
+      ['20.11.2026', '', [{ date: '2026-11-20' }, null, null]],
+      ['', '20.11.2026 14 Uhr', [{ date: '2026-11-20' }, '14:00', null]],
+      ['2026-11-20', '9:05 am', [{ date: '2026-11-20' }, '09:05', null]],
+      ['2026-11-20', '3 pm', [{ date: '2026-11-20' }, '15:00', null]],
+    ]) assert.deepEqual(read(date, time), want, `${date} | ${time}`);
+  });
+  test('today, tomorrow, the day after, "in 3 days", a weekday — left for the queue to resolve on the workspace\'s clock', () => {
+    for (const [date, time, want] of [
+      ['heute', '15:00', [{ offset: 0 }, '15:00', null]],
+      ['today', '15:30', [{ offset: 0 }, '15:30', null]],
+      ['morgen', '10 Uhr', [{ offset: 1 }, '10:00', null]],
+      ['tomorrow', '', [{ offset: 1 }, null, null]],
+      ['übermorgen', '11:00', [{ offset: 2 }, '11:00', null]],
+      ['in 3 Tagen', '11:00', [{ offset: 3 }, '11:00', null]],
+      ['Freitag', '14:30', [{ weekday: 5 }, '14:30', null]],
+      ['on Monday', '9', [{ weekday: 1 }, '09:00', null]],
+      ['sonntags', '', [{ weekday: 7 }, null, null]],
+    ]) assert.deepEqual(read(date, time), want, `${date} | ${time}`);
+  });
+  test('a part of the day stands for an hour: morning 10, midday 12, afternoon 15, evening 18', () => {
+    assert.deepEqual(fr.DAY_PARTS.map(p => p[1]), ['10:00', '12:00', '15:00', '18:00']);
+    for (const [date, time, want] of [
+      ['heute', 'nachmittags', [{ offset: 0 }, '15:00', null]],
+      ['', 'this afternoon', [{ offset: 0 }, '15:00', null]],
+      ['today', 'afternoon', [{ offset: 0 }, '15:00', null]],
+      ['morgen früh', '', [{ offset: 1 }, '10:00', null]],
+      ['heute morgen', '', [{ offset: 0 }, '10:00', null]],
+      ['am Morgen', '', [null, '10:00', null]],
+      ['morgen', 'vormittags', [{ offset: 1 }, '10:00', null]],
+      ['', 'mittags', [null, '12:00', null]],
+      ['', 'noon', [null, '12:00', null]],
+      ['heute abend', '', [{ offset: 0 }, '18:00', null]],
+      ['', 'tonight', [{ offset: 0 }, '18:00', null]],
+      ['friday', 'morning', [{ weekday: 5 }, '10:00', null]],
+    ]) assert.deepEqual(read(date, time), want, `${date} | ${time}`);
+    // "nachmittag" is not "mittag", "afternoon" is not "noon"
+    assert.equal(cb('', 'nachmittag').time, '15:00'); assert.equal(cb('', 'vormittag').time, '10:00'); assert.equal(cb('', 'afternoon').time, '15:00');
+  });
+  test('an exact time wins over the part of the day; an hour from 1 to 6 is the afternoon\'s unless it is marked as the morning\'s', () => {
+    for (const [date, time, want] of [
+      ['heute Nachmittag um 3', '', '15:00'], ['', 'um 3', '15:00'], ['', 'at 3', '15:00'], ['heute', '3', '15:00'], ['', '3 Uhr', '15:00'], ['', '6:30', '18:30'],
+      ['morgen', '6 Uhr morgens', '06:00'], ['', '5 am', '05:00'], ['Montag', 'vormittags um 11', '11:00'], ['heute', 'gegen 16 Uhr', '16:00'],
+      ['heute', '18', '18:00'], ['', '08:00', '08:00'], ['', '20:15', '20:15'], ['heute', '15.30.', '15:30'], ['tomorrow', '12:30 am', '00:30'],
+    ]) assert.equal(cb(date, time).time, want, `${date} | ${time}`);
+  });
+  test('"in 2 hours": minutes from now, nothing else', () => {
+    for (const [time, want] of [['in 2 Stunden', 120], ['in einer Stunde', 60], ['in 30 Minuten', 30], ['in einer halben Stunde', 30], ['in half an hour', 30], ['in 2 hours', 120], ['in an hour', 60], ['in 45 min', 45], ['in 3h', 180]]) {
+      assert.deepEqual(read('', time), [null, null, want], time);
+    }
+    assert.equal(cb('', 'in der Früh').minutes, null, '"in der Früh" is the morning');
+    assert.equal(cb('', 'in the afternoon').minutes, null);
+  });
+  test('none: empty, a plain no in every filled field, fonio\'s unfilled placeholders, a body without the fields', () => {
+    for (const [date, time] of [['', ''], ['no', 'no'], ['nein', ''], ['-', ''], ['none', 'none'], ['kein Rückruf', ''], ['{{callback_date}}', '{{callback_time}}'], [undefined, undefined]]) assert.equal(cb(date, time), null, `${date} | ${time}`);
+    assert.equal(fr.readCallback(null), null); assert.equal(fr.readCallback({ summary: 'x' }), null);
+    assert.equal(fr.readResult({ summary: 'x' }, OWN).callback, null);
+  });
+  test('something it cannot read is said as such, with the words for the note', () => {
+    assert.deepEqual(cb('', 'später'), { unreadable: true, said: 'später' });
+    assert.deepEqual(cb('next week', ''), { unreadable: true, said: 'next week' });
+    assert.deepEqual(cb('irgendwann', 'mal sehen'), { unreadable: true, said: 'irgendwann mal sehen' });
+  });
+  test('other names for the two fields; what was said is kept short', () => {
+    assert.deepEqual(fr.readCallback({ rueckruf_datum: 'heute', rueckruf_uhrzeit: '15 Uhr' }), { day: { offset: 0 }, time: '15:00', minutes: null, said: 'heute 15 Uhr' });
+    assert.equal(fr.readCallback({ callbackDate: 'morgen', callbackTime: '10:00' }).day.offset, 1);
+    assert.equal(fr.readCallback({ callback_time: 'heute ' + 'x'.repeat(200) }).said.length, 80);
+    assert.deepEqual(fr.readResult({ callback_date: 'heute', callback_time: '15:00' }, OWN).callback, { day: { offset: 0 }, time: '15:00', minutes: null, said: 'heute 15:00' });
   });
 });

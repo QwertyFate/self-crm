@@ -843,7 +843,8 @@ async function initDb() {
     )
   `);
   // fonio's calls (FONIO_CHANGES Parts 3–5; utils/fonio-calls.js): the queue AND the history, one row per call.
-  // trigger: deal_manual | deal_webhook | follow_up (the retry after a call that reached nobody, Part 33). status:
+  // trigger: deal_manual | deal_webhook | follow_up (the retry after a call that reached nobody, Part 33) | callback
+  // (a call at the time the person asked for in a call, Part 35). status:
   // scheduled (waiting for due_at) → sending → sent | failed; or
   // skipped (never callable: reason no_contact, no_phone, bad_number, number_not_allowed, already_scheduled) or
   // cancelled (reason inactive, disconnected, by_user). raw_number is the contact's number as saved, to_number as
@@ -855,7 +856,7 @@ async function initDb() {
       workspace_id  INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
       deal_id       INTEGER REFERENCES deals(id)    ON DELETE SET NULL,
       contact_id    INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
-      trigger       TEXT NOT NULL CHECK (trigger IN ('deal_manual','deal_webhook','follow_up')),
+      trigger       TEXT NOT NULL CHECK (trigger IN ('deal_manual','deal_webhook','follow_up','callback')),
       status        TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','sending','sent','failed','skipped','cancelled')),
       reason        TEXT,
       raw_number    TEXT,
@@ -939,11 +940,12 @@ async function initDb() {
   await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS follow_up_no  INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS follow_up_at  TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS fonio_calls_unreported_idx ON fonio_calls (sent_at) WHERE status = 'sent' AND result_at IS NULL`);
-  // An old table's trigger check names two values only; dropping and re-adding it every start keeps this idempotent
-  // (re-declared the same way as activities_source_check).
+  // An old table's trigger check names fewer values; dropping and re-adding it every start keeps this idempotent
+  // (re-declared the same way as activities_source_check). 'callback' (FONIO_CHANGES Part 35): a call at the time
+  // the person asked for in a call — follow_up_of the call it answers, follow_up_no unchanged (it is no retry).
   try {
     await pool.query(`ALTER TABLE fonio_calls DROP CONSTRAINT IF EXISTS fonio_calls_trigger_check`);
-    await pool.query(`ALTER TABLE fonio_calls ADD CONSTRAINT fonio_calls_trigger_check CHECK (trigger IN ('deal_manual','deal_webhook','follow_up'))`);
+    await pool.query(`ALTER TABLE fonio_calls ADD CONSTRAINT fonio_calls_trigger_check CHECK (trigger IN ('deal_manual','deal_webhook','follow_up','callback'))`);
   } catch (e) {
     if (e.code !== '42710') throw e;
   }

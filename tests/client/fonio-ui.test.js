@@ -38,6 +38,7 @@ describe('markup', () => {
       'fonio-hours-tz', 'fonio-actions', 'fonio-save-btn', 'fonio-remove-btn', 'fonio-msg', 'fonio-detail', 'fonio-calls-card', 'fonio-calls',
       'fonio-book-meetings',
       'fonio-follow-on', 'fonio-follow-no-answer', 'fonio-follow-voicemail', 'fonio-follow-busy', 'fonio-follow-attempts',
+      'fonio-callback-on', 'fonio-cb-date-desc', 'fonio-cb-time-desc', 'fonio-cb-prompt',
       'fonio-result-card', 'fonio-result-url', 'fonio-result-body', 'fonio-result-last', 'fonio-outcome-words',
       'fonio-vars-card', 'fonio-vars-prompt', 'fonio-vars-found', 'fonio-vars-rows', 'fonio-vars-out-wrap', 'fonio-vars-out', 'fonio-vars-msg'];
     for (const id of ids) assert.ok(pane.includes(`id="${id}"`), `missing #${id}`);
@@ -128,7 +129,9 @@ describe('every label the server can ask for, in both languages', () => {
     for (const s of statuses) assert.ok(both(`fonio_call_status_${s}`), s);
   });
   test('both triggers, and the follow-up a call that reached nobody starts (Part 33)', () => {
-    for (const tr of ['deal_manual', 'deal_webhook', 'follow_up']) assert.ok(both(`fonio_trigger_${tr}`), tr);
+    for (const tr of ['deal_manual', 'deal_webhook', 'follow_up', 'callback']) assert.ok(both(`fonio_trigger_${tr}`), tr);   // callback: Part 35
+    const check = /trigger\s+TEXT NOT NULL CHECK \(trigger IN \(([^)]+)\)\)/.exec(read('db.js'));
+    for (const m of check[1].matchAll(/'([a-z_]+)'/g)) assert.ok(both(`fonio_trigger_${m[1]}`), `every trigger the table allows has its label: ${m[1]}`);
     for (const k of ['fonio_trigger_follow_up_n', 'fonio_outcome_answered', 'fonio_outcome_no_answer', 'fonio_outcome_voicemail', 'fonio_outcome_busy']) assert.ok(both(k), k);
   });
   test('every reason the queue or the route writes', () => {
@@ -189,6 +192,12 @@ describe('readFonioForm: the form as the PUT body', () => {
       follow_up: { enabled: true, no_answer: 30, voicemail: 720, busy: 15, max_attempts: 2 },
     });
   });
+  test('the callback switch (Part 36) is sent as the box stands; a page without the box sends nothing, so the server keeps what is saved', () => {
+    assert.equal(F.readFonioForm({ ...form, callbackOn: true }).follow_up.callback, true);
+    assert.equal(F.readFonioForm({ ...form, callbackOn: false }).follow_up.callback, false);
+    assert.ok(!('callback' in F.readFonioForm(form).follow_up), 'not named: not touched');
+    assert.match(sliceFn(js, 'saveFonio', 'integrations.js'), /callbackOn: document\.getElementById\('fonio-callback-on'\) \? c\('fonio-callback-on'\) : undefined,/);
+  });
   test('the variables card says which free-time variables every call carries while a booking service is connected (Part 29)', () => {
     assert.match(pane, /<p class="settings-hint" data-i18n="fonio_vars_slots_hint">[^<]+<\/p>/);
     for (const lang of ['en', 'de']) for (const name of ['{{freie_termine}}', '{{freie_termine_json}}', '{{heute}}']) assert.ok(dict[lang].fonio_vars_slots_hint.includes(name), `${lang}: ${name}`);
@@ -248,6 +257,73 @@ describe('trying again after a call that reached nobody (Part 33)', () => {
     const body = F.readFonioForm({ key: '', from: '+4930', active: false, onManual: true, onWebhook: true, delay: '5', cc: '+49', prefixes: '',
       hoursOn: true, days: [1], hoursFrom: '09:00', hoursTo: '18:00', followOn: true, followNoAnswer: '', followVoicemail: '1440', followBusy: '120', followAttempts: '1' });
     assert.ok(Number.isNaN(body.follow_up.no_answer));
+  });
+});
+
+// ── Part 36: a callback at the time the contact asked for — the tab ──────────
+describe('a callback at the time asked for in the call (Part 36)', () => {
+  const fr = require('../../utils/fonio-result');
+  const calls = require('../../utils/fonio-calls');
+  test('markup: a switch of its own in the settings card, after the retry section and not gated by its switch', () => {
+    assert.match(pane, /<label class="switch-row"><input type="checkbox" id="fonio-callback-on" class="switch"> <span data-i18n="fonio_callback_on">/);
+    assert.ok(pane.indexOf('id="fonio-callback-on"') > pane.indexOf('id="fonio-follow-attempts"') && pane.indexOf('id="fonio-callback-on"') < pane.indexOf('id="fonio-actions"'), 'saved by the same Save button');
+    for (const k of ['fonio_callback_label', 'fonio_callback_hint', 'fonio_callback_on', 'fonio_callback_rules']) assert.ok(pane.includes(`data-i18n="${k}"`), k);
+    assert.doesNotMatch(sliceFn(js, 'updateFonioFollow', 'integrations.js'), /fonio-callback-on/, 'the retry switch greys out its delays only');
+  });
+  test('render: ticked unless it was saved off; a member sees it read-only like every input of the card', () => {
+    const r = sliceFn(js, 'renderFonio', 'integrations.js');
+    assert.match(r, /chk\('fonio-callback-on', follow\.callback !== false\);/);
+    assert.ok(r.indexOf("chk('fonio-callback-on'") < r.indexOf("card.querySelectorAll('input').forEach(el => { el.disabled = !manage; });"));
+  });
+  test('what the card says is what the server does: the hours of a part of the day, the night, the limit', () => {
+    assert.deepEqual(fr.DAY_PARTS.map(p => p[1]), ['10:00', '12:00', '15:00', '18:00']);
+    assert.deepEqual([calls.CALLBACK_NIGHT.from, calls.CALLBACK_NIGHT.to, calls.CALLBACK_MAX], ['22:00', '07:00', 3]);
+    for (const lang of ['en', 'de']) for (const word of ['10:00', '12:00', '15:00', '18:00', '22', '3']) assert.ok(dict[lang].fonio_callback_rules.includes(word), `${lang}: ${word}`);
+    assert.ok(dict.en.fonio_callback_rules.includes('07:00') && dict.de.fonio_callback_rules.includes('7 Uhr'));
+    assert.ok(dict.en.fonio_callback_rules.includes(dict.en.fonio_cb_label) && dict.de.fonio_callback_rules.includes(dict.de.fonio_cb_label), 'it names the section that says what to add in fonio');
+    assert.ok(dict.en.fonio_callback_rules.includes(dict.en.fonio_result_title) && dict.de.fonio_callback_rules.includes(dict.de.fonio_result_title));
+  });
+  test('the result card: both variables\' descriptions and the prompt\'s sentence, each in a block of its own with a Copy button', () => {
+    const section = pane.slice(pane.indexOf('data-i18n="fonio_cb_label"') - 200, pane.indexOf('id="fonio-result-last"'));
+    assert.ok(pane.indexOf('data-i18n="fonio_cb_label"') > pane.indexOf('id="fonio-outcome-words"'), 'after "How the call ended", in the result card');
+    for (const [id, key, head] of [['fonio-cb-date-desc', 'fonio_cb_date_desc', '<code>callback_date</code>'], ['fonio-cb-time-desc', 'fonio_cb_time_desc', '<code>callback_time</code>'], ['fonio-cb-prompt', 'fonio_cb_prompt', '<span data-i18n="fonio_cb_prompt_label">']]) {
+      assert.match(section, new RegExp(`<div class="intg-json-block">\\s*<div class="intg-json-header">\\s*${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]{0,120}?<button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson\\(this\\)" data-i18n="btn_copy">Copy</button>\\s*</div>\\s*<pre class="intg-code fonio-vars-out" id="${id}" data-i18n="${key}">`), id);
+    }
+    assert.equal(section.split('class="intg-json-block"').length - 1, 3);
+    assert.match(read('public/style.css'), /^\.fonio-vars-out \{ white-space: pre-wrap; overflow-wrap: anywhere;/m, 'a long description wraps instead of scrolling sideways');
+    assert.match(sliceFn(js, 'copyIntgJson', 'integrations.js'), /btn\.closest\('\.intg-json-block'\)\.querySelector\('pre'\)/, 'Copy takes the block\'s own text, in whatever language it shows');
+  });
+  test('the Body carries the two names, and the server reads what the descriptions tell the assistant to write', () => {
+    const body = JSON.parse(new Function(`${/const FONIO_RESULT_BODY = JSON\.stringify\(\{[\s\S]*?\}, null, 2\);/.exec(js)[0]} return FONIO_RESULT_BODY;`)());
+    assert.equal(body.callback_date, '{{callback_date}}'); assert.equal(body.callback_time, '{{callback_time}}');
+    assert.equal(fr.readResult(body, '+4930123456').callback, null, 'left as fonio\'s unfilled placeholders: no callback');
+    for (const lang of ['en', 'de']) for (const k of ['callback_date', 'callback_time']) {
+      assert.ok(dict[lang].fonio_result_body_hint.includes(k), `${lang}: the Body's hint names ${k}`);
+      assert.ok(dict[lang].fonio_cb_hint.includes(k), `${lang}: the section names ${k}`);
+    }
+    // every example word the two descriptions offer is one readCallback understands
+    const day = w => fr.readCallback({ callback_date: w, callback_time: '15:00' });
+    for (const w of ['today', 'tomorrow', 'heute', 'morgen']) assert.ok(Number.isInteger(day(w).day.offset), w);
+    const time = w => fr.readCallback({ callback_date: 'heute', callback_time: w });
+    for (const [w, want] of [['morning', '10:00'], ['midday', '12:00'], ['afternoon', '15:00'], ['evening', '18:00'], ['vormittags', '10:00'], ['mittags', '12:00'], ['nachmittags', '15:00'], ['abends', '18:00'], ['15:00', '15:00']]) {
+      assert.equal(time(w).time, want, w);
+      if (w !== '15:00') assert.ok(dict.en.fonio_cb_time_desc.includes(`"${w}"`) || dict.de.fonio_cb_time_desc.includes(`„${w}“`), `${w} is offered in a description`);
+    }
+    assert.equal(fr.readCallback({ callback_time: 'in two hours' }).minutes, 120); assert.equal(fr.readCallback({ callback_time: 'in zwei Stunden' }).minutes, 120);
+    assert.ok(dict.en.fonio_cb_time_desc.includes('in two hours') && dict.de.fonio_cb_time_desc.includes('in zwei Stunden'));
+    assert.ok(dict.en.fonio_cb_date_desc.includes('YYYY-MM-DD') && dict.de.fonio_cb_date_desc.includes('JJJJ-MM-TT'));
+  });
+  test('every new text in both languages, German impersonal towards the person at the screen, the page\'s defaults in English', () => {
+    const keys = ['fonio_callback_label', 'fonio_callback_hint', 'fonio_callback_on', 'fonio_callback_rules', 'fonio_cb_label', 'fonio_cb_hint', 'fonio_cb_date_desc', 'fonio_cb_time_desc', 'fonio_cb_prompt_label', 'fonio_cb_prompt', 'fonio_trigger_callback'];
+    for (const k of keys) {
+      assert.ok(both(k), k); assert.notEqual(dict.en[k], dict.de[k], k);
+      assert.doesNotMatch(dict.de[k], /\b(du|dich|dir|dein\w*|Sie|Ihnen|Ihr\w*)\b/, `${k}: ${dict.de[k]}`);
+      if (k !== 'fonio_trigger_callback') assert.ok(pane.includes(`data-i18n="${k}">${dict.en[k].replace(/&/g, '&amp;')}<`), `the page's default text of ${k} is the English one`);
+    }
+  });
+  test('the call list names such a call', () => {
+    const html = F.fonioCallHtml({ id: 9, trigger: 'callback', status: 'scheduled', reason: null, due_at: '2026-11-12T14:00:00.000Z', contact_name: 'Erika Muster', deal_title: 'Wohnung 3', follow_up_no: 0 }, true);
+    assert.match(html, /Callback at the time asked for/);
   });
 });
 
@@ -361,8 +437,8 @@ describe('the result card (Part 8): the link, the Body for fonio, the last deliv
     const filled = Object.fromEntries(Object.keys(body).map(k => [k, 'x']));
     Object.assign(filled, { crm_call_id: '7', conversation_link: 'https://app.fonio.ai/c/1', person_number: '+491711234567', agent_number: '+4930123456' });
     assert.deepEqual(fr.readResult(filled, '+4930123456'), { crmCallId: 7, conversationId: 'x', link: 'https://app.fonio.ai/c/1', direction: 'x', inbound: false,
-      duration: 'x', summary: 'x', transcript: 'x', numbers: ['+491711234567'], name: 'x', meeting: null, outcome: null });
-    assert.deepEqual(Object.keys(body), ['crm_call_id', 'conversation_id', 'conversation_link', 'direction', 'person_number', 'agent_number', 'caller_name', 'call_outcome', 'meeting_booked', 'meeting_date', 'meeting_time', 'meeting_email', 'duration', 'summary', 'transcript']);
+      duration: 'x', summary: 'x', transcript: 'x', numbers: ['+491711234567'], name: 'x', meeting: null, outcome: null, callback: { unreadable: true, said: 'x x' } });   // 'x' in callback_date/_time (Part 36) is a wish nobody can read
+    assert.deepEqual(Object.keys(body), ['crm_call_id', 'conversation_id', 'conversation_link', 'direction', 'person_number', 'agent_number', 'caller_name', 'call_outcome', 'meeting_booked', 'meeting_date', 'meeting_time', 'meeting_email', 'callback_date', 'callback_time', 'duration', 'summary', 'transcript']);
     // Part 33: the outcome is read from the same Body; a filled one says how the call ended
     assert.equal(fr.readResult({ ...filled, call_outcome: 'no_answer' }, '+4930123456').outcome, 'no_answer');
     assert.equal(body.call_outcome, '{{call_outcome}}');

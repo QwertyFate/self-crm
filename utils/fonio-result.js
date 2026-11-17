@@ -34,6 +34,14 @@
    queue uses it to decide whether the call is tried again (utils/fonio-calls.js
    followUpAfterResult).
 
+   A CALLBACK THE PERSON ASKED FOR (Part 35)  "No time now, call me this
+   afternoon." The Body may carry callback_date and callback_time, variables of
+   the workspace's own. readCallback() reads what the assistant wrote there —
+   a date, "heute" / "tomorrow", a weekday, a clock time, a part of the day, or
+   "in 2 hours" — and leaves everything that depends on today unresolved;
+   utils/fonio-calls.js callbackInstant() makes the instant of it on the
+   workspace's clock and callbackAfterResult() plans the call.
+
    resultNote() is the note's text, in German (the product's language; the
    Notetaker's notes are German by default too). Duration is shown as fonio
    sends it: its unit is not documented. The first line also says how the call
@@ -59,6 +67,9 @@ const FIELDS = {
   meetingEmail:   ['meeting_email', 'meetingEmail'],
   // how the call ended, a variable of the workspace's own (Part 33)
   callOutcome:    ['call_outcome', 'callOutcome', 'call_status', 'callStatus', 'outcome', 'ergebnis'],
+  // when the person asked to be called back (Part 35): the workspace's own variables in fonio
+  callbackDate:   ['callback_date', 'callbackDate', 'rueckruf_datum'],
+  callbackTime:   ['callback_time', 'callbackTime', 'rueckruf_uhrzeit'],
 };
 const MAX_SUMMARY = 4000, MAX_TRANSCRIPT = 200000;
 // What an AI writes into caller_name when the person never said their name (Part 15).
@@ -144,6 +155,84 @@ function readMeeting(b) {
   return { date, time, email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null, said: [rawDate, rawTime].filter(Boolean).join(' ').slice(0, 80) || null };
 }
 
+// ── a callback the person asked for (Part 35) ──
+// A word of its own in a sentence: \b does not know ä, ö, ü, ß, so the neighbours are named.
+const word = alts => new RegExp(`(?<![a-zäöüß0-9])(?:${alts})(?![a-zäöüß0-9])`, 'i');
+// The hour that stands for a part of the day when the person named no exact time (the workspace's choice, 2026-11-17).
+const DAY_PARTS = [
+  [word('vormittags?|morgens|am morgen|heute morgen|morgen früh|in der früh|morning'), '10:00'],
+  [word('mittags?|midday|noon|lunchtime'), '12:00'],
+  [word('nachmittags?|afternoon'), '15:00'],
+  [word('abends?|evening|tonight'), '18:00'],
+];
+const WEEKDAYS = [['montags?|mondays?', 1], ['dienstags?|tuesdays?', 2], ['mittwochs?|wednesdays?', 3], ['donnerstags?|thursdays?', 4], ['freitags?|fridays?', 5], ['samstags?|sonnabends?|saturdays?', 6], ['sonntags?|sundays?', 7]]
+  .map(([alts, n]) => [word(alts), n]);
+const COUNT_WORDS = { ein: 1, eine: 1, einer: 1, einem: 1, a: 1, an: 1, one: 1, zwei: 2, two: 2, drei: 3, three: 3, vier: 4, four: 4 };
+const countOf = s => (/^\d+$/.test(s) ? +s : COUNT_WORDS[s.toLowerCase()] || 0);
+// "in 30 Minuten", "in einer Stunde", "in 2 hours", "in einer halben Stunde", "in half an hour" → minutes; else null.
+function minutesFromNow(text) {
+  if (/(?<![a-zäöüß])in\s+(?:einer\s+halben\s+stunde|half\s+an\s+hour)/i.test(text)) return 30;
+  const m = /(?<![a-zäöüß])in\s+(\d{1,3}|[a-z]+)\s*(min\w*|std\w*|stunden?|hours?|h)(?![a-zäöüß])/i.exec(text);
+  if (!m) return null;
+  const n = countOf(m[1]);
+  const minutes = /^min/i.test(m[2]) ? n : n * 60;
+  return minutes >= 1 && minutes <= 14 * 24 * 60 ? minutes : null;
+}
+// "in 2 Tagen", "in three days" → the days from today; else null.
+function daysFromNow(text) {
+  const m = /(?<![a-zäöüß])in\s+(\d{1,2}|[a-z]+)\s*(tag(?:en|e)?|days?)(?![a-zäöüß])/i.exec(text);
+  const n = m ? countOf(m[1]) : 0;
+  return n >= 1 && n <= 14 ? n : null;
+}
+// A clock time anywhere in a sentence: "15:30", "15.30 Uhr", "15 Uhr", "3 pm", "um 3", "at 3". An hour from 1 to 6
+// that is not marked as the morning's is the afternoon's: nobody asks to be called at three at night.
+function clockIn(text, morning) {
+  const m = /(?<![\d.:])(\d{1,2})[:.](\d{2})(?::\d{2}(?:\.\d+)?)?(?!\d|[.:]\d)\s*(am|pm)?/i.exec(text)
+    || /(?<![\d.:])(\d{1,2})()\s*(uhr|am|pm|h)(?![a-zäöüß])/i.exec(text)
+    || /(?<![a-zäöüß])(?:um|gegen|ab|at|around|by)\s+(\d{1,2})()()(?![\d.:])/i.exec(text)
+    || /^(\d{1,2})()()$/.exec(text.trim());
+  if (!m) return null;
+  let h = +m[1]; const min = m[2] ? +m[2] : 0, mark = (m[3] || '').toLowerCase();
+  if (h > 23 || min > 59) return null;
+  if (mark === 'pm' && h < 12) h += 12;
+  else if (mark === 'am' && h === 12) h = 0;
+  else if (mark !== 'am' && !morning && h >= 1 && h <= 6) h += 12;
+  return `${pad(h)}:${pad(min)}`;
+}
+// What the result says about a callback: null when it names none (empty, a plain "no"); { unreadable: true, said }
+// when it names one this cannot read ("later"); else { day, time, minutes, said }:
+//   minutes  from now ("in 2 hours"), or null
+//   day      { date: 'YYYY-MM-DD' } | { offset: n } (0 today, 1 tomorrow, … "in 3 days") | { weekday: 1–7 } | null
+//   time     'HH:MM': the clock time, else the hour of the part of the day named, else null
+// `said` is what fonio wrote, for the note. Both fields are read as one sentence, so "morgen 15 Uhr" in one of them
+// is understood too.
+function readCallback(body) {
+  const b = asObject(body) || {};
+  const rawDate = pick(b, FIELDS.callbackDate), rawTime = pick(b, FIELDS.callbackTime);
+  const said = [rawDate, rawTime].filter(Boolean).join(' ').replace(/\s+/g, ' ').slice(0, 80);
+  if (!said || [rawDate, rawTime].filter(Boolean).every(s => NO.test(s))) return null;
+  const minutes = minutesFromNow(said);
+  if (minutes) return { day: null, time: null, minutes, said };
+  const date = readDate(rawDate) || readDate(rawTime);
+  // the sentence without its date, so "20.11." is not taken for a time ("15.30." is no date: there is no month 30)
+  const text = said.replace(/\d{4}-\d{1,2}-\d{1,2}[T ]?/g, ' ')
+    .replace(/(?<!\d)(\d{1,2})[./](\d{1,2})[./](\d{4}|\d{2})?(?!\d)/g, (all, d, mo) => (+d >= 1 && +d <= 31 && +mo >= 1 && +mo <= 12 ? ' ' : all));
+  const part = DAY_PARTS.find(([re]) => re.test(text));
+  const iso = /^\d{4}-\d{1,2}-\d{1,2}[T ]\d/.test(rawDate) ? readTime(rawDate) : null;   // a date-time in the date field
+  const morning = !!part && part[1] === '10:00';
+  // the time field alone is tried too: a bare "18" there is an hour, in a sentence it could be anything
+  const time = iso || clockIn(text, morning) || clockIn(rawTime, morning) || (part ? part[1] : null);
+  const inDays = daysFromNow(text);
+  let day = null;
+  if (date) day = { date };
+  else if (inDays) day = { offset: inDays };
+  else if (word('heute|today|tonight|this morning|this afternoon|this evening').test(text)) day = { offset: 0 };
+  else if (word('übermorgen|uebermorgen|day after tomorrow').test(text)) day = { offset: 2 };
+  else if (word('morgen|tomorrow').test(text.replace(word('am morgen'), ' '))) day = { offset: 1 };   // "am Morgen" is the morning, not tomorrow
+  else { const w = WEEKDAYS.find(([re]) => re.test(text)); if (w) day = { weekday: w[1] }; }
+  return day || time ? { day, time, minutes: null, said } : { unreadable: true, said };
+}
+
 // How the call ended, as the assistant wrote it (Part 33): 'answered', 'no_answer', 'voicemail', 'busy', or null when
 // fonio said nothing this can be sure of (nothing is guessed from a summary). The order matters: "unanswered" holds
 // "answer", "nicht erreicht" holds "erreicht", so the refusals are read before the answer.
@@ -194,6 +283,7 @@ function readResult(body, ownNumber) {
     name:           NO_NAME.test(name) ? '' : name,   // the caller's name as fonio's assistant understood it
     meeting:        readMeeting(b),                    // a meeting agreed in the call, or null (Part 28)
     outcome:        readOutcome(b),                    // answered, no_answer, voicemail, busy, or null (Part 33)
+    callback:       readCallback(b),                   // when the person asked to be called back, or null (Part 35)
   };
 }
 
@@ -215,4 +305,4 @@ function resultNote(r) {
   return parts.join('\n\n');
 }
 
-module.exports = { FIELDS, MAX_SUMMARY, MAX_TRANSCRIPT, NOT_RECORDED, OUTCOME_WORDS, parseBody, readResult, readOutcome, readMeeting, readDate, readTime, fieldNames, resultNote };
+module.exports = { FIELDS, MAX_SUMMARY, MAX_TRANSCRIPT, NOT_RECORDED, OUTCOME_WORDS, DAY_PARTS, parseBody, readResult, readOutcome, readMeeting, readCallback, readDate, readTime, fieldNames, resultNote };

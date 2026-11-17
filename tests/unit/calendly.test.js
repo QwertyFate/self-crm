@@ -188,6 +188,19 @@ describe('booking and cancelling (kept for booking from a deal, Part 3)', () => 
     assert.equal(calendly.bookingLocation({ poolingType: 'round_robin', locations: [{ kind: 'zoom_conference' }] }, '1'), null);
     assert.equal(calendly.bookingLocation(undefined, '1'), null);
   });
+  test('bookingLocation by position (the booking dialog\'s choice, Part 4), and placeName for the notification', () => {
+    const type = { uri: 'T', poolingType: null, locations: [{ kind: 'google_conference' }, { kind: 'outbound_call' }, { kind: 'physical', location: 'Hauptstr. 1' }, { kind: 'custom' }] };
+    assert.deepEqual(calendly.bookingLocation(type, '+4917', 0), { kind: 'google_conference' });
+    assert.deepEqual(calendly.bookingLocation(type, '+4917', 1), { kind: 'outbound_call', location: '+4917' });
+    assert.deepEqual(calendly.bookingLocation(type, '+4917', 2), { kind: 'physical', location: 'Hauptstr. 1' });
+    assert.deepEqual(calendly.bookingLocation(type, '+4917', 3), { kind: 'custom' });
+    assert.equal(calendly.bookingLocation(type, '+4917', 4), null, 'no such place');
+    assert.equal(calendly.bookingLocation({ ...type, poolingType: 'round_robin' }, '+4917', 2), null, 'a round robin never names one');
+    assert.equal(calendly.placeName({ kind: 'google_conference' }), 'Google Meet');
+    assert.equal(calendly.placeName({ kind: 'physical', location: 'Hauptstr. 1' }), 'Hauptstr. 1');
+    assert.equal(calendly.placeName({ kind: 'outbound_call', location: '+4917' }), '+4917');
+    assert.equal(calendly.placeName({ kind: 'custom' }), null); assert.equal(calendly.placeName(null), null);
+  });
   test('a refusal names what was wrong: Calendly\'s details ride along with its message (seen 2026-11-12: every tracking key is wanted)', async () => {
     fake(() => ({ status: 400, body: { title: 'Invalid Argument', message: 'The supplied parameters are invalid.', details: [{ parameter: 'tracking.utm_campaign', message: 'is missing' }, { message: 'start_time is not available' }] } }));
     await assert.rejects(calendly.createInvitee(TOKEN, { eventType: 'T', start: 's', name: 'n', email: 'e', timezone: 'z' }), e => e.message === 'The supplied parameters are invalid. (tracking.utm_campaign: is missing; start_time is not available)');

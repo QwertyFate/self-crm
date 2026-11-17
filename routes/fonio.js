@@ -40,7 +40,11 @@
    Cal.com or Calendly when one is connected (utils/fonio-meeting.js); the
    note's last line says what came of it. The call's outcome as the assistant
    wrote it (call_outcome, Part 33) decides whether the contact is called
-   again: utils/fonio-calls.js followUpAfterResult books that retry. Every
+   again: utils/fonio-calls.js followUpAfterResult books that retry. A time
+   the person asked to be called back at (callback_date, callback_time;
+   Part 35) comes before that: callbackAfterResult plans one call for it, the
+   note's last line says what came of it, and the answer carries
+   callback { status, call_id, due_at }. Every
    delivery is remembered in last_delivery (when, the outcome,
    the body's field names), so the page can show what fonio sends.
    server.js gives this path its raw bytes (1 MB, a whole transcript) and the
@@ -378,8 +382,15 @@ router.post('/receive/:token', async (req, res, next) => {
     if (out.outcome === 'noted') await fonioCalls.keepResultBody(pool, 'call', out.call_id, body);
     await remember(out.outcome, out.call_id ?? null);
     if (out.outcome === 'gone') return res.json({ ignored: true, reason: out.outcome });
+    // a time the person asked to be called back at (Part 35): what came of it is the note's last line; a failure to
+    // write that line changes nothing about the call that was planned
+    if (out.callback && out.activity_id) {
+      await pool.query('UPDATE activities SET content = content || $3 WHERE id = $1 AND workspace_id = $2',
+        [out.activity_id, conn.workspace_id, '\n\n' + fonioCalls.callbackLine(out.callback)]).catch(() => {});
+    }
     const meeting = out.outcome === 'noted' ? await meetingFromCall(conn.workspace_id, r, out.activity_id, bookMeetings) : null;
-    res.json({ success: true, already: out.outcome === 'already', call_id: out.call_id, activity_id: out.activity_id ?? null, ...(meeting ? { meeting } : {}) });
+    res.json({ success: true, already: out.outcome === 'already', call_id: out.call_id, activity_id: out.activity_id ?? null, ...(meeting ? { meeting } : {}),
+      ...(out.callback ? { callback: { status: out.callback.status, call_id: out.callback.call_id ?? null, due_at: out.callback.due_at ?? null } } : {}) });
   } catch (err) { next(err); }
 });
 

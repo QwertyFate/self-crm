@@ -98,8 +98,8 @@ function fonioLogRowHtml(e) {
     : dash;
 
   // what came of it: the summary of a kept call; for a call the CRM sent, whether fonio's result is in
-  // a call still to come (Part 24) has no result yet
-  const state = e.planned ? t('fcl_planned_waiting') : e.by_crm ? t(!e.result ? 'fcl_no_result' : e.noted ? 'fcl_noted' : 'fcl_result_no_note')
+  // a call still to come (Part 24) has no result yet; one the contact asked for in a call says so (Part 36)
+  const state = e.planned ? t(e.trigger === 'callback' ? 'fcl_planned_callback' : 'fcl_planned_waiting') : e.by_crm ? t(!e.result ? 'fcl_no_result' : e.noted ? 'fcl_noted' : 'fcl_result_no_note')
     : e.summary ? '' : t(e.noted ? 'fcl_noted' : 'fcl_no_summary');
   const extras = [
     e.duration ? esc(tf('fcl_duration', { d: e.duration })) : '',

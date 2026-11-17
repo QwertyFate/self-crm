@@ -68,6 +68,22 @@
    waiting call per contact as for every call. Only calls the CRM started get
    follow-ups, and nothing is ever guessed from a summary.
 
+   A CALLBACK AT THE TIME THE PERSON ASKED FOR (Part 35)  "No time now, call
+   me this afternoon": the Body's callback_date / callback_time
+   (utils/fonio-result.js readCallback) come BEFORE the delays above.
+   callbackInstant() makes the instant on the workspace's clock (hours_tz;
+   "today", a weekday, "in 2 hours" and a part of the day are resolved here)
+   and callbackAfterResult() plans one call for it: a normal row, trigger
+   'callback', follow_up_of the call it answers. It is the person's own time,
+   so the calling hours do not move it — neither here nor when it is sent —
+   but nothing is planned between 22:00 and 07:00, in the past, or more than
+   CALLBACK_DAYS ahead; then the note says why and the delays above decide as
+   if no time had been named. A switch of its own (follow_up.callback, ON
+   unless switched off) that works while "trying again" is off. At most
+   CALLBACK_MAX callbacks in one chain of calls, so nobody is called for ever;
+   a callback does not use up a follow-up. A call that agreed a meeting plans
+   no callback. callbackLine() says the outcome in the call's note.
+
    Every function takes the pool, so the routes' pool (and a test's fake)
    is the one used.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -89,10 +105,16 @@ const CONTACT_FIELDS = ['name', 'email', 'phone', 'company', 'rechtsform', 'ust_
 // no_answer delay. max_attempts bounds the chain: follow_up_no counts how many follow-ups a contact already got,
 // so 1 means one retry after the first call. enabled is false until the workspace saves the card: nothing changes
 // for an existing connection by itself.
-const FOLLOW_UP = { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1 };
+// callback (Part 35): call back at the time the person named in the call. A switch of its own, ON unless switched off,
+// and independent of `enabled`: it does nothing until the workspace's Body in fonio carries callback_date/_time.
+const FOLLOW_UP = { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1, callback: true };
 const FOLLOW_UP_OUTCOMES = ['no_answer', 'voicemail', 'busy'];
 const FOLLOW_UP_MAX_MINUTES = 7 * 24 * 60;
 const FOLLOW_UP_MAX_ATTEMPTS = 3;
+const CALLBACK_MAX  = 3;            // callbacks in one chain of calls
+const CALLBACK_DAYS = 14;           // how far ahead a callback may lie
+const CALLBACK_DAY_TIME = '10:00';  // a day named without a time ("tomorrow")
+const CALLBACK_NIGHT = { from: '22:00', to: '07:00' };   // nobody is rung in between, whatever was understood
 const UNREPORTED_MINUTES = 60;
 const UNREPORTED_HOURS = 24;   // a call older than this is history, not a call waiting for its retry
 
@@ -302,6 +324,7 @@ function followUpSettings(row) {
   }
   const max = saved.max_attempts;
   out.max_attempts = Number.isInteger(max) && max >= 0 && max <= FOLLOW_UP_MAX_ATTEMPTS ? max : FOLLOW_UP.max_attempts;
+  out.callback = saved.callback !== false;   // on unless switched off (Part 35); a row from before has no such field
   return out;
 }
 
@@ -323,7 +346,123 @@ function checkFollowUp(value) {
     return { error: `Follow-up calls are a whole number from 0 to ${FOLLOW_UP_MAX_ATTEMPTS}` };
   }
   out.max_attempts = max;
+  // the callback switch (Part 35): a form from before it does not send it, and leaves it on
+  if (value.callback !== undefined && typeof value.callback !== 'boolean') return { error: 'callback must be true or false' };
+  out.callback = value.callback !== false;
   return { value: out };
+}
+
+// ── a callback at the time the person asked for (Part 35) ──
+const addDays = (date, n) => { const d = new Date(date + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+
+// What readCallback() understood, as an instant on the workspace's clock: { at: Date, date, time, zone } (date and
+// time as that clock shows them), or the same with `why` it cannot be planned: unreadable, past, too_far, night.
+//   "in 2 hours"            from now
+//   a date, today/tomorrow  that day; a weekday its next occurrence (today when the time is still ahead)
+//   a time without a day    its next occurrence: today when still ahead, else tomorrow
+//   a day without a time    CALLBACK_DAY_TIME
+function callbackInstant(cb, zone, now = new Date()) {
+  if (!cb || cb.unreadable) return { why: 'unreadable' };
+  const nowMs = new Date(now).getTime();
+  const here = calcom.wallClock(new Date(nowMs).toISOString(), zone);
+  if (!here) return { why: 'unreadable' };
+  let at;
+  if (cb.minutes) at = nowMs + cb.minutes * 60000;
+  else {
+    const time = cb.time || CALLBACK_DAY_TIME;
+    let date;
+    if (cb.day && cb.day.date) date = cb.day.date;
+    else if (cb.day && Number.isInteger(cb.day.offset)) date = addDays(here.date, cb.day.offset);
+    else if (cb.day && cb.day.weekday) {
+      const today = new Date(here.date + 'T00:00:00Z').getUTCDay() || 7;   // Sunday is 0 in JavaScript, 7 here
+      const ahead = (cb.day.weekday - today + 7) % 7;
+      date = addDays(here.date, ahead === 0 && time <= here.time ? 7 : ahead);
+    }
+    else date = time > here.time ? here.date : addDays(here.date, 1);
+    const iso = calcom.utcFromWallClock(date, time, here.zone);
+    at = iso ? Date.parse(iso) : NaN;
+  }
+  if (!Number.isFinite(at)) return { why: 'unreadable' };
+  const when = calcom.wallClock(new Date(at).toISOString(), here.zone);
+  const out = { at: new Date(at), date: when.date, time: when.time, zone: when.zone };
+  if (at <= nowMs) return { ...out, why: 'past' };
+  if (at > nowMs + CALLBACK_DAYS * 24 * 3600000) return { ...out, why: 'too_far' };
+  if (when.time >= CALLBACK_NIGHT.from || when.time < CALLBACK_NIGHT.to) return { ...out, why: 'night' };
+  return out;
+}
+
+// After a call in which the person named a time to be called back at: plan that call. `cb` is readCallback()'s
+// answer. Answers what came of it, for the note: { status: 'planned', call_id, due_at, date, time, said }, or a
+// status that says why nothing was planned — off (the switch), unreadable, past, too_far, night, limit (CALLBACK_MAX
+// callbacks in this chain already), waiting (the contact has another call waiting, or this call's retry has gone
+// out). null when there is nothing to say (no callback named, no contact, fonio switched off). Never throws.
+// One follow-up per call, as for a retry (follow_up_at): when the sweep has already booked this call's retry because
+// fonio's result was late, that waiting call becomes the callback.
+async function callbackAfterResult(pool, wid, call, cb, now = new Date()) {
+  try {
+    if (!cb || !call || !call.id || !call.contact_id) return null;
+    const conn = await loadConnection(pool, wid);
+    if (!conn || !conn.active) return null;
+    const said = cb.said || null;
+    const when = callbackInstant(cb, conn.hours_tz, now);
+    const told = { date: when.date || null, time: when.time || null, said };
+    if (!followUpSettings(conn).callback) return { status: 'off', ...told };
+    if (when.why) return { status: when.why, ...told };
+    // how many callbacks this chain of calls has had: the call itself and everything it followed
+    const { rows: [chain] } = await pool.query(
+      `WITH RECURSIVE chain AS (
+         SELECT id, follow_up_of, trigger FROM fonio_calls WHERE id = $1 AND workspace_id = $2
+         UNION ALL
+         SELECT f.id, f.follow_up_of, f.trigger FROM fonio_calls f JOIN chain c ON f.id = c.follow_up_of
+       )
+       SELECT COUNT(*) FILTER (WHERE trigger = 'callback')::int AS callbacks FROM chain`, [call.id, wid]
+    );
+    if (Number(chain && chain.callbacks) >= CALLBACK_MAX) return { status: 'limit', ...told };
+    const no = Number(call.follow_up_no || 0);   // a callback is not a retry: the chain's count of those stays
+    const due = when.at.toISOString();
+    const { rows: [claimed] } = await pool.query(
+      `UPDATE fonio_calls SET follow_up_at = NOW(), updated_at = NOW() WHERE id = $1 AND follow_up_at IS NULL RETURNING id`, [call.id]
+    );
+    let row;
+    if (claimed) {
+      try {
+        ({ rows: [row] } = await pool.query(
+          `INSERT INTO fonio_calls (workspace_id, deal_id, contact_id, trigger, status, raw_number, to_number, due_at, follow_up_of, follow_up_no)
+           VALUES ($1,$2,$3,'callback','scheduled',$4,$5,$6,$7,$8)
+           RETURNING id, status, reason, due_at`,
+          [wid, call.deal_id || null, call.contact_id, call.raw_number || null, call.to_number || null, due, call.id, no]
+        ));
+      } catch (err) {
+        if (err && err.code === '23505') return { status: 'waiting', ...told };   // this contact already has a call waiting
+        throw err;
+      }
+    } else {
+      // the sweep booked this call's retry before fonio's result came: that waiting call is now the callback
+      ({ rows: [row] } = await pool.query(
+        `UPDATE fonio_calls SET trigger = 'callback', due_at = $2, follow_up_no = $3, updated_at = NOW()
+          WHERE follow_up_of = $1 AND status = 'scheduled' RETURNING id, status, reason, due_at`, [call.id, due, no]
+      ));
+    }
+    if (!row) return { status: 'waiting', ...told };
+    return { status: 'planned', call_id: row.id, due_at: row.due_at, ...told };
+  } catch (err) {
+    console.error('fonio: planning the callback failed:', err?.message || err);
+    return null;
+  }
+}
+
+// The callback's outcome as a line for the call's note, in German like the note itself.
+const CALLBACK_WHY = {
+  off: 'Rückrufe zur Wunschzeit sind ausgeschaltet', unreadable: 'die Zeit war nicht lesbar', past: 'die Zeit liegt in der Vergangenheit',
+  too_far: `die Zeit liegt mehr als ${CALLBACK_DAYS} Tage entfernt`, night: 'zwischen 22 und 7 Uhr wird nicht angerufen',
+  limit: `der Kontakt wurde schon ${CALLBACK_MAX}-mal zurückgerufen`, waiting: 'für den Kontakt ist schon ein Anruf geplant',
+};
+function callbackLine(c) {
+  if (!c) return '';
+  const said = c.said ? `„${c.said}“` : 'ohne Angabe';
+  const when = c.date && c.time ? `${c.date.slice(8, 10)}.${c.date.slice(5, 7)}.${c.date.slice(0, 4)}, ${c.time}` : null;
+  if (c.status === 'planned') return `Rückruf gewünscht (${said}): geplant für ${when}`;
+  return `Rückruf gewünscht (${said}), aber nicht geplant: ${CALLBACK_WHY[c.status] || 'ein Fehler im CRM'}`;
 }
 
 // After a call ended, book its retry when the workspace asked for one (Part 33). call is the row the result (or the
@@ -418,7 +557,8 @@ async function sendCall(pool, id, now = new Date()) {
     conn = await loadConnection(pool, call.workspace_id);
     if (!conn) return done('cancelled', { reason: 'disconnected' });
     if (!conn.active) return done('cancelled', { reason: 'inactive' });
-    const at = fonio.nextCallTime(now, conn);
+    // a callback goes out at the time the person asked for (Part 35): the calling hours do not move it
+    const at = call.trigger === 'callback' ? new Date(now) : fonio.nextCallTime(now, conn);
     if (!at) return done('skipped', { reason: 'no_hours' });
     // the hours were changed since: wait for them (that claim was no attempt)
     if (at.getTime() > new Date(now).getTime()) return done('scheduled', { dueAt: at.toISOString(), giveBack: true });
@@ -567,10 +707,13 @@ async function saveResult(pool, wid, r, content, now = new Date()) {
   if (!created) return { outcome: 'already', call_id: call.id, activity_id: null };   // a delivery running alongside won
   await pool.query('UPDATE fonio_calls SET note_activity_id = $1, call_outcome = COALESCE($3, call_outcome) WHERE id = $2',
     [created.id, call.id, r.outcome || null]);
+  // a time the person asked to be called back at comes first (Part 35) — unless the call agreed a meeting, which
+  // needs no second call. Planned, it is this call's one follow-up, and the delays below are not asked.
+  const callback = r.callback && !r.meeting ? await callbackAfterResult(pool, wid, call, r.callback, now) : null;
   // how it ended decides whether the contact is called again (Part 33); a result without call_outcome is no guess,
   // and never throws, never undoes the note
-  await followUpAfterResult(pool, wid, call, r.outcome || null, now);
-  return { outcome: 'noted', call_id: call.id, activity_id: created.id };
+  if (!callback || callback.status !== 'planned') await followUpAfterResult(pool, wid, call, r.outcome || null, now);
+  return { outcome: 'noted', call_id: call.id, activity_id: created.id, ...(callback ? { callback } : {}) };
 }
 
 // A conversation the CRM did not start (Part 15) — an incoming call, or an outgoing one no call above fits — kept in
@@ -693,7 +836,7 @@ async function listLog(pool, wid, { limit = 100 } = {}) {
     ),
     // the calls still to come (Part 24): the soonest first
     pool.query(
-      `SELECT f.id, f.due_at AS at, f.to_number AS number, f.contact_id, c.name AS contact_name, f.deal_id, d.title AS deal_title
+      `SELECT f.id, f.due_at AS at, f.to_number AS number, f.contact_id, c.name AS contact_name, f.deal_id, d.title AS deal_title, f.trigger
          FROM fonio_calls f LEFT JOIN contacts c ON c.id = f.contact_id LEFT JOIN deals d ON d.id = f.deal_id
         WHERE f.workspace_id = $1 AND f.status IN ('scheduled','sending')
         ORDER BY f.due_at, f.id LIMIT $2`, [wid, limit]
@@ -706,7 +849,8 @@ async function listLog(pool, wid, { limit = 100 } = {}) {
     duration: by_crm ? null : r.duration || null, summary: by_crm ? null : r.summary || null, link: r.link || null,
     result: by_crm ? !!r.result_at : true, noted: r.note_activity_id != null,
   });
-  const planned = waiting.rows.map(r => ({ ...entry(r, true), planned: true }));
+  // what started a planned call rides along (Part 36): the page names a callback the contact asked for
+  const planned = waiting.rows.map(r => ({ ...entry(r, true), planned: true, trigger: r.trigger || null }));
   return [...planned, ...[...sent.rows.map(r => entry(r, true)), ...other.rows.map(r => entry(r, false))]
     .sort((a, b) => new Date(b.at) - new Date(a.at) || (a.key < b.key ? 1 : -1)).slice(0, limit)];
 }
@@ -746,6 +890,7 @@ module.exports = {
   RETRY_MINUTES, MAX_ATTEMPTS, STUCK_MINUTES, RESULT_HOURS, TRIGGERS, CONTACT_FIELDS,
   FOLLOW_UP, FOLLOW_UP_OUTCOMES, FOLLOW_UP_MAX_MINUTES, FOLLOW_UP_MAX_ATTEMPTS, UNREPORTED_MINUTES,
   followUpSettings, checkFollowUp, followUpAfterResult, sweepUnreported,
+  CALLBACK_MAX, CALLBACK_DAYS, CALLBACK_DAY_TIME, CALLBACK_NIGHT, callbackInstant, callbackAfterResult, callbackLine,
   VALUE_SOURCES, MAX_VARIABLES, checkVariables,
   freeTimeValues, SLOT_NAMES,
   scheduleForDeal, callContext, plainKey, requestDate, sendCall, runDue, startWorker, cancelWaiting, cancelOne, listCalls, checkNumber, saveResult,

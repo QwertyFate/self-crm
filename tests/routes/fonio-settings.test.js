@@ -100,7 +100,7 @@ describe('reading', () => {
       country_code: '+49', number_prefixes: [], hours_on: true, hours_days: [1, 2, 3, 4, 5],
       hours_from: '09:00', hours_to: '18:00', hours_tz: 'Europe/Berlin',
       book_meetings: true,
-      follow_up: { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1 },
+      follow_up: { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1, callback: true },
     });
     assert.equal(r.body.can_manage, true);
     assert.equal((await member.request('GET', '/api/integrations/fonio')).body.can_manage, false);
@@ -317,7 +317,7 @@ describe('later saves', () => {
 
 // ── Part 33: trying again after a call that reached nobody ──────────────────
 describe('trying again after a call that reached nobody (Part 33)', () => {
-  const POLICY = { enabled: true, no_answer: 30, voicemail: 720, busy: 15, max_attempts: 2 };
+  const POLICY = { enabled: true, no_answer: 30, voicemail: 720, busy: 15, max_attempts: 2, callback: true };
   test('the policy is saved with the settings, read back by everyone, on the row as it was sent', async () => {
     const r = await save(owner, { ...FIRST, follow_up: POLICY });
     assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -327,13 +327,26 @@ describe('trying again after a call that reached nobody (Part 33)', () => {
   });
   test('off until it is saved: a connection saved without it answers the defaults', async () => {
     const r = await save(owner, FIRST);
-    assert.deepEqual(r.body.settings.follow_up, { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1 });
+    assert.deepEqual(r.body.settings.follow_up, { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1, callback: true });
   });
   test('a later save names only what it changes: the switch alone keeps the delays', async () => {
     await save(owner, { ...FIRST, follow_up: POLICY });
     const r = await save(admin, { follow_up: { enabled: false } });
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.deepEqual(r.body.settings.follow_up, { ...POLICY, enabled: false });
+  });
+  test('the callback switch (Part 35): on by default, saved off on its own, kept by a save that does not name it, refused unless true or false', async () => {
+    await save(owner, FIRST);
+    const off = await save(admin, { follow_up: { callback: false } });
+    assert.equal(off.status, 200, JSON.stringify(off.body));
+    assert.deepEqual(off.body.settings.follow_up, { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1, callback: false });
+    assert.equal(state.row.follow_up.callback, false);
+    const later = await save(admin, { follow_up: { enabled: true } });
+    assert.equal(later.body.settings.follow_up.callback, false, 'a save that names only the retry switch leaves the callback switch');
+    assert.equal((await member.request('GET', '/api/integrations/fonio')).body.settings.follow_up.callback, false, 'everyone reads it');
+    const bad = await save(admin, { follow_up: { callback: 'no' } });
+    assert.equal(bad.status, 400); assert.equal(bad.body.reason, 'follow_up');
+    assert.equal(state.row.follow_up.callback, false, 'nothing written');
   });
 });
 

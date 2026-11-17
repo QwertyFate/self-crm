@@ -25,6 +25,11 @@
    Part 3 (FONIO_CHANGES Part 34): "Only note bookings on contacts the CRM
    already has" — a switch of its own beside the event type. The server does
    the work (an unknown email is only logged); here it is only shown and saved.
+
+   Part 4: booking from a deal or a contact is not on this card: it is the
+   "Book meeting" dialog in detail-views.js. This file gives it clyErrorText()
+   (the booking's own refusals are in CLY_ERROR_KEYS) and the log line for a
+   booking made from the CRM.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 let calendlyData = null;
@@ -44,13 +49,16 @@ function clyTypeLabel(x) {
   return s;
 }
 
-// The server's refusal, in the page's language. An unknown code falls back to the general line.
-const CLY_ERROR_KEYS = { token_shape: 'cly_err_token_shape', calcom_connected: 'cly_blocked', rejected: 'cly_err_rejected', unreachable: 'cly_err_unreachable', not_connected: 'cly_none', event_type: 'cly_err_event_type', reseal: 'cly_err_reseal' };
-const CLY_LOG_KEYS = { BOOKING_CREATED: 'cal_log_BOOKING_CREATED', BOOKING_RESCHEDULED: 'cal_log_BOOKING_RESCHEDULED', BOOKING_CANCELLED: 'cal_log_BOOKING_CANCELLED' };
+// The server's refusal, in the page's language. An unknown code falls back to the general line. The second row is
+// what booking from a deal or a contact can be refused for (Part 4; the dialog in detail-views.js says it).
+const CLY_ERROR_KEYS = { token_shape: 'cly_err_token_shape', calcom_connected: 'cly_blocked', rejected: 'cly_err_rejected', unreachable: 'cly_err_unreachable', not_connected: 'cly_none', event_type: 'cly_err_event_type', reseal: 'cly_err_reseal',
+  start: 'cly_err_start', contact: 'cly_err_contact', no_email: 'cal_book_no_email', no_phone: 'cly_err_no_phone', location: 'cly_err_location' };
+const CLY_LOG_KEYS = { BOOKING_CREATED: 'cal_log_BOOKING_CREATED', BOOKING_RESCHEDULED: 'cal_log_BOOKING_RESCHEDULED', BOOKING_CANCELLED: 'cal_log_BOOKING_CANCELLED', BOOKED_FROM_CRM: 'cal_log_BOOKED_FROM_CRM' };
 function clyErrorText(res) {
   if (!res) return t('cal_err_generic');
   if (res.code === 'scope') return tf('cly_err_scope', { scopes: (Array.isArray(res.scopes) ? res.scopes : []).join(', ') });
   if (res.code === 'calendly_error') return tf('cly_err_answer', { detail: res.detail || '' });
+  if (res.code === 'refused') return tf('cly_err_refused', { detail: res.detail || '' });
   if (res.code === 'webhook') return tf('cly_err_webhook', { detail: res.detail || '' });
   return t(CLY_ERROR_KEYS[res.code] || 'cal_err_generic');
 }

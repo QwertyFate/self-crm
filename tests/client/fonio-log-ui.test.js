@@ -206,7 +206,13 @@ describe('the list', () => {
     F.__set('fonioLogManage', false);
     const c = sliceFn(js, 'fonioLogCancel', 'fonio-log.js');
     assert.match(c, /api\.post\(`\/api\/integrations\/fonio\/calls\/\$\{Number\(id\)\}\/cancel`, \{\}\)/); assert.match(c, /await loadFonioLog\(\);/);
-    for (const k of ['fcl_filter_planned', 'fcl_planned', 'fcl_planned_waiting']) { assert.equal(typeof dict.en[k], 'string'); assert.equal(typeof dict.de[k], 'string'); }
+    for (const k of ['fcl_filter_planned', 'fcl_planned', 'fcl_planned_waiting', 'fcl_planned_callback']) { assert.equal(typeof dict.en[k], 'string'); assert.equal(typeof dict.de[k], 'string'); }
+    // Part 36: a call the contact asked for in a call says so instead of "waiting for its time"
+    const callback = F.fonioLogRowHtml({ ...planned, trigger: 'callback' });
+    assert.match(callback, /<span class="badge badge-warning">Planned<\/span>/);
+    assert.match(callback, /<span class="muted">callback at the time asked for in the call<\/span>/); assert.doesNotMatch(callback, /waiting for its time/);
+    assert.match(F.fonioLogRowHtml({ ...planned, trigger: 'follow_up' }), /waiting for its time/, 'any other planned call as before');
+    assert.equal(dict.de.fcl_planned_callback, 'Rückruf zur im Gespräch gewünschten Zeit');
   });
   test('a filter with no match says so, differently from an empty log', () => {
     fill([sent]);

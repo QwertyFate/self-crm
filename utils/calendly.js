@@ -163,7 +163,7 @@ async function listEventTypes(token, userUri) {
 }
 
 // The free start times of an event type between two instants (at most a week apart, the start not in the
-// past), as ISO strings in Calendly's order. Read only; the booking dialog will offer them (Part 3).
+// past), as ISO strings in Calendly's order. Read only; the booking dialog offers them (routes/calendly.js GET /slots).
 async function listAvailableTimes(token, { eventType, start, end }) {
   const json = await clyFetch(token, '/event_type_available_times', { query: { event_type: eventType, start_time: start, end_time: end } });
   return (Array.isArray(json?.collection) ? json.collection : [])
@@ -187,13 +187,13 @@ async function createInvitee(token, { eventType, start, name, email, timezone, l
   return { uri: str(r.uri), eventUri: str(r.event), cancelUrl: str(r.cancel_url), rescheduleUrl: str(r.reschedule_url) };
 }
 
-// The place to book an event type at: the first one it offers, in the shape POST /invitees takes. A place that
-// is a text of the host's (physical, custom) is sent back as it is; one the invitee fills in (the number the host
-// calls, "ask the invitee") gets `phone`. null when the type offers none, or is round robin (Calendly wants no
-// location then).
-function bookingLocation(type, phone) {
+// The place to book an event type at, in the shape POST /invitees takes: the `index`-th one it offers (the booking
+// dialog's choice, Part 4), the first when nobody chose. A place that is a text of the host's (physical, custom) is
+// sent back as it is; one the invitee fills in (the number the host calls, "ask the invitee") gets `phone`. null when
+// the type offers none there, or is round robin (Calendly wants no location then).
+function bookingLocation(type, phone, index = 0) {
   if (!type || type.poolingType === 'round_robin') return null;
-  const first = (Array.isArray(type.locations) ? type.locations : []).find(l => l && typeof l.kind === 'string' && l.kind);
+  const first = (Array.isArray(type.locations) ? type.locations : []).filter(l => l && typeof l.kind === 'string' && l.kind)[index];
   if (!first) return null;
   if (first.kind === 'physical' || first.kind === 'custom') return first.location ? { kind: first.kind, location: first.location } : { kind: first.kind };
   if (first.kind === 'outbound_call' || first.kind === 'ask_invitee') return { kind: first.kind, location: String(phone || '') };
@@ -260,6 +260,9 @@ const isoOrNull  = v => { const s = str(v); if (!s) return null; const d = new D
 const urlOrNull  = v => { const s = str(v); return s && /^https?:\/\/\S+$/i.test(s) ? s : null; };
 // Calendly's location kinds as people know them, for a place without a link or a text of its own.
 const LOCATION_NAMES = { google_conference: 'Google Meet', zoom_conference: 'Zoom', microsoft_teams_conference: 'Microsoft Teams', webex_conference: 'Webex', gotomeeting_conference: 'GoTo Meeting' };
+// A place a booking was made at ({ kind, location? }, bookingLocation's answer) as words for a notification: the
+// app's name, else the text that goes with it (an address, a number). null when there is neither.
+const placeName = loc => (loc && (LOCATION_NAMES[loc.kind] || str(loc.location))) || null;
 
 // What the receiver needs from a webhook body, in the shape the Cal.com receiver's helpers take.
 // Any other event comes back as { trigger: null, ignored: <its name> }. The customer is the invitee
@@ -303,7 +306,7 @@ function inviteeToActivity(b, zone) {
 }
 
 module.exports = {
-  CalendlyError, isTokenShaped, getMe, listEventTypes, listAvailableTimes, createInvitee, bookingLocation, cancelEvent, normaliseLocations,
+  CalendlyError, isTokenShaped, getMe, listEventTypes, listAvailableTimes, createInvitee, bookingLocation, placeName, cancelEvent, normaliseLocations,
   uuidOf, createWebhook, deleteWebhook, signatureHeader, verifySignature, parseInvitee, inviteeToActivity,
   WEBHOOK_EVENTS, SIGNATURE_TOLERANCE_S,
 };

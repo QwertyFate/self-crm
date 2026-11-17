@@ -138,7 +138,8 @@ describe('booking from a deal or a contact', () => {
     assert.match(book, /render\(\); load\(\);\s*\/\/ meanwhile[^\n]*\n\s*dvCalcomStatus\(true\)\.then\(fresh => \{\s*if \(!dvCalcomReady\(fresh\) \|\| !host\.isConnected\) return;\s*cal = fresh\.calcom; types = /, 'the dialog opens at once and re-reads the event types in the background, so a location added in Cal.com shows on the next open');
     assert.match(read('routes/integrations.js'), /calRefreshStaleTypes\(req\.workspaceId, await loadCalRow\(req\.workspaceId\), req\.query\.fresh === '1'\)/);
     assert.match(book, /function dvCalcomReady\(status\) \{ return !!\(status && status\.connected && status\.calcom && status\.calcom\.event_type\); \}/);
-    assert.match(book, /function dvBookButton\(status, disabledTitle\) \{\s*if \(!dvCalcomReady\(status\)\) return '';/, 'no button without Cal.com');
+    assert.match(book, /function dvBookButton\(status, disabledTitle\) \{\s*if \(!dvBookReady\(status\)\) return '';/, 'no button without a booking service');
+    assert.match(book, /function dvBookReady\(status\) \{ return dvCalcomReady\(status\) \|\| dvCalendlyReady\(status\); \}/, 'Cal.com, or Calendly (CALENDLY_CHANGES Part 4, tests/client/calendly-booking-ui.test.js)');
     assert.match(book, /data-act="book"[\s\S]{0,120}\$\{icon\('calendar'\)\}\$\{esc\(t\('cal_book_btn'\)\)\}/);
     assert.match(book, /if \(!reschedule && !contact\.email\) \{[\s\S]*t\('cal_book_no_email'\)[\s\S]*data-open-contact[\s\S]*openContactModal\(contact\.id\)/, 'the no-email path offers the contact form (a reschedule keeps the attendee, so it needs none)');
   });
@@ -188,13 +189,13 @@ describe('booking from a deal or a contact', () => {
     assert.match(book, /const t0 = mins\(v\.time\), t1 = t0 \+ 30;\s*if \(t0 < s1 && t1 > s0\)/, 'a CRM entry counts as 30 minutes, as the calendar draws it');
     assert.match(book, /go\.textContent = B\.busy \? t\(reschedule \? 'cal_resched_busy' : 'cal_book_booking'\) : B\.conflicts\.length \? t\('cal_book_anyway'\) : t\(reschedule \? 'cal_resched_submit' : 'cal_book_submit'\);/, 'a conflict warns; booking (or moving) anyway stays possible');
     assert.match(book, /api\.post\('\/api\/integrations\/calcom\/book', \{ deal_id: dealId, contact_id: contact\.id, event_type_id: B\.typeId, start: B\.picked, note: B\.note, language: currentLang, location: /);
-    assert.match(book, /m\.close\(\);\s*ui\.toast\(reschedule \? tf\('cal_resched_done', \{ when, name: contact\.name \}\) : tf\('cal_book_done', \{ when \}\)\);\s*if \(res\.notetaker\) dvNotetakerToast\(res\.notetaker\);\s*if \(onBooked\) await onBooked\(res\);/);
+    assert.match(book, /m\.close\(\);\s*ui\.toast\(reschedule \? tf\('cal_resched_done', \{ when, name: contact\.name \}\) : tf\(cly \? 'cly_book_done' : 'cal_book_done', \{ when \}\)\);\s*if \(res\.notetaker\) dvNotetakerToast\(res\.notetaker\);\s*if \(onBooked\) await onBooked\(res\);/);
     assert.match(book, /go\.disabled = !B\.picked \|\| B\.busy \|\| B\.checking;/);
     // Part 6: where it happens
-    assert.match(book, /const placesOf = \(\) => \(Array\.isArray\(typeOf\(\)\.locations\) \? typeOf\(\)\.locations : \[\]\)\.filter\(l => l && \(l\.type === 'integration' \? !!l\.integration : \['address', 'link', 'phone'\]\.includes\(l\.type\)\)\);/, 'the type\'s locations a booker can choose');
+    assert.match(book, /const placesOf = \(\) => \(Array\.isArray\(typeOf\(\)\.locations\) \? typeOf\(\)\.locations : \[\]\)\.filter\(l => l && \(l\.type === 'integration' \? !!l\.integration : \['address', 'link', 'phone', 'calendly'\]\.includes\(l\.type\)\)\);/, 'the type\'s locations a booker can choose (a Calendly type\'s places come as type calendly)');
     assert.match(book, /const APPS = \{ 'cal-video': 'Cal Video', 'google-meet': 'Google Meet', zoom: 'Zoom', 'office365-video': 'Microsoft Teams'/, 'the video apps by name');
     assert.match(book, /const whereSel = places\.length \? field\('cal-book-where', 'cal_book_where', `<select class="select" id="cal-book-where">/, 'a Where dropdown, only when the type has somewhere to choose');
-    assert.match(book, /on\(host, 'change', '#cal-book-type', \(e, el\) => \{ B\.typeId = Number\(el\.value\); B\.loc = 0; load\(\); \}\);\s*on\(host, 'change', '#cal-book-where', \(e, el\) => \{ B\.loc = Number\(el\.value\) \|\| 0; render\(\); \}\);/);
+    assert.match(book, /on\(host, 'change', '#cal-book-type', \(e, el\) => \{ B\.typeId = \(types\.find\(x => String\(x\.id\) === el\.value\) \|\| typeOf\(\)\)\.id; B\.loc = 0; load\(\); \}\);[^\n]*\n\s*on\(host, 'change', '#cal-book-where', \(e, el\) => \{ B\.loc = Number\(el\.value\) \|\| 0; render\(\); \}\);/);
     assert.match(book, /location: place \? \(place\.type === 'integration' \? \{ type: 'integration', integration: place\.integration \} : \{ type: place\.type \}\) : null, record: !!\(B\.record && B\.nt === 'ok' && isMeet\(place\)\), summary: !!\(B\.summary && B\.ai && B\.record && B\.nt === 'ok' && isMeet\(place\)\) \}\)/, 'the chosen place goes with the booking; none means the type\'s default; the Notetaker box rides along (Google Meet only, once the Notetaker said it is there)');
     for (const k of ['cal_book_where', 'cal_loc_address', 'cal_loc_address_plain', 'cal_loc_link', 'cal_loc_phone']) { assert.ok(dict.en[k], 'en.' + k); assert.ok(dict.de[k], 'de.' + k); }
     assert.equal(dict.de.cal_book_where, 'Wo');
@@ -234,8 +235,10 @@ describe('a booked meeting: reschedule, cancel, delete', () => {
     assert.match(dialog, /const what = reschedule\s*\? `<div class="cal-book-sec"><div class="field-row">\$\{field\('cal-book-type', 'cal_book_type', `<input type="text" id="cal-book-type" class="input" readonly value="\$\{esc\(typeOf\(\)\.title \|\| ''\)\}">`\)\}<div class="field"><span class="label">\$\{esc\(t\('cal_resched_current'\)\)\}<\/span>/, 'the type and the current time, read-only');
     assert.match(dialog, /\$\{reschedule \? '&reschedule_uid=' \+ encodeURIComponent\(reschedule\.calcom_uid\) : ''\}/);
     assert.match(dialog, /if \(reschedule && e\.kind !== 'task' && e\.id === reschedule\.id\) continue;/, 'the meeting being moved is not its own conflict');
-    assert.match(dialog, /const res = reschedule\s*\? await api\.post\('\/api\/integrations\/calcom\/reschedule', \{ activity_id: reschedule\.id, start: B\.picked, reason: B\.note \}\)\s*: await api\.post\('\/api\/integrations\/calcom\/book'/);
-    assert.match(dialog, /ui\.toast\(reschedule \? tf\('cal_resched_done', \{ when, name: contact\.name \}\) : tf\('cal_book_done', \{ when \}\)\);/);
+    assert.match(dialog, /const res = reschedule\s*\? await api\.post\('\/api\/integrations\/calcom\/reschedule', \{ activity_id: reschedule\.id, start: B\.picked, reason: B\.note \}\)\s*: cly \? await api\.post\('\/api\/integrations\/calendly\/book', [^\n]*\n\s*: await api\.post\('\/api\/integrations\/calcom\/book'/, 'moving first (Cal.com only), then Calendly\'s booking, then Cal.com\'s');
+    assert.match(dialog, /if \(!\(reschedule \? dvCalcomReady\(status\) : dvBookReady\(status\)\) \|\| !contact\) \{ ui\.toast\(t\('cal_status_none'\)\); return; \}/, 'moving needs Cal.com itself: a Cal.com entry in a workspace that has since connected Calendly is not moved through Calendly');
+    assert.match(dialog, /let cal = reschedule \? status\.calcom : dvBookingCal\(status\);/);
+    assert.match(dialog, /ui\.toast\(reschedule \? tf\('cal_resched_done', \{ when, name: contact\.name \}\) : tf\(cly \? 'cly_book_done' : 'cal_book_done', \{ when \}\)\);/);
     assert.match(dialog, /t\(reschedule \? 'cal_resched_submit' : 'cal_book_submit'\)/);
   });
   test('the deal view, the contact view, the Activities page and the calendar: the buttons on live meetings, the guarded delete, the handlers that reload after', () => {

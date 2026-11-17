@@ -20,7 +20,7 @@ function reset() {
       { id: 12, workspace_id: WS, status: 'sent', sent_at: '2026-11-10T10:00:00.000Z', to_number: '+491711234567', contact_id: 40, deal_id: 60, conversation_link: 'https://app.fonio.ai/c/12', result_at: '2026-11-10T10:02:00.000Z', note_activity_id: 77 },
       { id: 13, workspace_id: WS, status: 'sent', sent_at: '2026-11-11T08:00:00.000Z', to_number: '+491722222222', contact_id: null, deal_id: null, conversation_link: null, result_at: null, note_activity_id: null },
       { id: 14, workspace_id: WS, status: 'scheduled', sent_at: null, due_at: '2026-11-12T05:30:00.000Z', to_number: '+491733333333', contact_id: 40, deal_id: 60 },
-      { id: 15, workspace_id: WS, status: 'scheduled', sent_at: null, due_at: '2026-11-12T05:00:00.000Z', to_number: '+491734444444', contact_id: 40, deal_id: 60 },
+      { id: 15, workspace_id: WS, status: 'scheduled', sent_at: null, due_at: '2026-11-12T05:00:00.000Z', to_number: '+491734444444', contact_id: 40, deal_id: 60, trigger: 'callback' },
       { id: 16, workspace_id: WS, status: 'cancelled', sent_at: null, due_at: '2026-11-12T04:00:00.000Z', to_number: '+491735555555', contact_id: 40, deal_id: 60 },
       { id: 21, workspace_id: OTHER_WS, status: 'sent', sent_at: '2026-11-11T09:00:00.000Z', to_number: '+491744444444', contact_id: 50, deal_id: null },
     ],
@@ -46,8 +46,9 @@ const pool = {
     }
     // Part 24: the calls still to come, the soonest first
     if (q.startsWith('SELECT f.id, f.due_at AS at, f.to_number AS number,') && q.includes("WHERE f.workspace_id = $1 AND f.status IN ('scheduled','sending') ORDER BY f.due_at, f.id LIMIT $2")) {
+      assert.match(q, /d\.title AS deal_title, f\.trigger FROM fonio_calls f/, 'what started the planned call is read too (Part 36)');
       return { rows: state.fonioCalls.filter(c => c.workspace_id === params[0] && (c.status === 'scheduled' || c.status === 'sending')).sort((a, b) => new Date(a.due_at) - new Date(b.due_at)).slice(0, params[1])
-        .map(c => ({ id: c.id, at: c.due_at, number: c.to_number, contact_id: c.contact_id, contact_name: nameOf(c.contact_id), deal_id: c.deal_id, deal_title: titleOf(c.deal_id) })) };
+        .map(c => ({ id: c.id, at: c.due_at, number: c.to_number, contact_id: c.contact_id, contact_name: nameOf(c.contact_id), deal_id: c.deal_id, deal_title: titleOf(c.deal_id), trigger: c.trigger })) };
     }
     if (q.startsWith('SELECT o.id, o.created_at AS at, o.direction, o.number, o.caller_name,') && q.includes('WHERE o.workspace_id = $1 ORDER BY o.created_at DESC, o.id DESC LIMIT $2')) {
       assert.doesNotMatch(q, /transcript/);
@@ -116,8 +117,10 @@ describe('GET /log', () => {
     const { entries } = await (await fetch(`${base}/log`)).json();
     assert.deepEqual(entries.find(e => e.key === 'call:15'), { key: 'call:15', id: 15, by_crm: true, direction: 'outbound', at: '2026-11-12T05:00:00.000Z', number: '+491734444444',
       caller_name: null, contact_id: 40, contact_name: 'Erika Muster', deal_id: 60, deal_title: 'Wohnung 3', duration: null, summary: null, link: null, result: false, noted: false,
-      planned: true });
+      planned: true, trigger: 'callback' });
     assert.equal(entries.find(e => e.key === 'call:14').planned, true);
+    assert.equal(entries.find(e => e.key === 'call:14').trigger, null, 'a row without one (the fake\'s) says null, never undefined');
+    assert.equal(entries.find(e => e.key === 'call:12').trigger, undefined, 'only planned calls carry it');
     assert.ok(!entries.some(e => e.key === 'call:16')); assert.equal(entries.find(e => e.key === 'call:12').planned, undefined);
   });
   test('a call the CRM sent: outgoing, its contact and deal, whether the result and the note are there', async () => {

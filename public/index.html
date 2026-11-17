@@ -1747,6 +1747,17 @@
                   </div>
                 </div>
               </div>
+              <!-- A callback at the time the contact named in the call (FONIO_CHANGES Parts 35 and 36): a switch of its own, not gated by the retry switch above. -->
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_callback_label">When the contact asks for a callback</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_callback_hint">"No time now, call me this afternoon": the next call goes out at the time named in the call instead of after the delays above. It is a normal call in the list below, where it can be cancelled.</p>
+                </div>
+                <div class="intg-fields">
+                  <label class="switch-row"><input type="checkbox" id="fonio-callback-on" class="switch"> <span data-i18n="fonio_callback_on">Call back at the time asked for in the call</span></label>
+                  <p class="help" data-i18n="fonio_callback_rules">That time counts outside the calling hours too, but nobody is called between 22:00 and 07:00. Without an exact time: morning 10:00, midday 12:00, afternoon 15:00, evening 18:00. At most 3 callbacks in a row per contact. The assistant has to report the time: see "A callback asked for in the call" under "Call results".</p>
+                </div>
+              </div>
               <div class="settings-card-actions hidden" id="fonio-actions">
                 <button class="btn btn-primary btn-sm" id="fonio-save-btn" onclick="saveFonio(this)" data-i18n="fonio_btn_save">Save</button>
                 <button class="btn btn-sm btn-danger hidden" id="fonio-remove-btn" onclick="removeFonio()" data-i18n="fonio_btn_remove">Remove</button>
@@ -1794,6 +1805,34 @@
                 <div class="intg-url-box">
                   <input type="text" id="fonio-outcome-words" readonly class="intg-url-input" value="answered | no_answer | voicemail | busy" />
                   <button class="btn btn-sm" onclick="copyIntgText(this, document.getElementById('fonio-outcome-words').value)" data-i18n="btn_copy">Copy</button>
+                </div>
+              </div>
+              <!-- What to add in fonio so the assistant reports a callback time (FONIO_CHANGES Part 36): the two variables' descriptions and the prompt's sentence, each to copy. -->
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_cb_label">A callback asked for in the call</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_cb_hint">For a callback at the time the person names, the assistant has to report that time. In fonio, add two variables of your own (Add Variable) called callback_date and callback_time, each with its description below. The Body above carries both already. Then put the sentence into the assistant's prompt.</p>
+                </div>
+                <div class="intg-json-block">
+                  <div class="intg-json-header">
+                    <code>callback_date</code>
+                    <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)" data-i18n="btn_copy">Copy</button>
+                  </div>
+                  <pre class="intg-code fonio-vars-out" id="fonio-cb-date-desc" data-i18n="fonio_cb_date_desc">Fill in only when the person has no time now and asks to be called back: the day as "today", "tomorrow", a weekday or a date (YYYY-MM-DD). Otherwise leave empty.</pre>
+                </div>
+                <div class="intg-json-block">
+                  <div class="intg-json-header">
+                    <code>callback_time</code>
+                    <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)" data-i18n="btn_copy">Copy</button>
+                  </div>
+                  <pre class="intg-code fonio-vars-out" id="fonio-cb-time-desc" data-i18n="fonio_cb_time_desc">Fill in only when a callback was asked for: the time in 24-hour format, for example 15:00. Without an exact time: "morning", "midday", "afternoon" or "evening". For "in two hours" write exactly that. Otherwise leave empty.</pre>
+                </div>
+                <div class="intg-json-block">
+                  <div class="intg-json-header">
+                    <span data-i18n="fonio_cb_prompt_label">Sentence for the prompt</span>
+                    <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)" data-i18n="btn_copy">Copy</button>
+                  </div>
+                  <pre class="intg-code fonio-vars-out" id="fonio-cb-prompt" data-i18n="fonio_cb_prompt">If the person has no time right now, ask when a callback suits (day and time), confirm the time briefly and end the call politely. Do not agree a meeting in that case.</pre>
                 </div>
               </div>
               <p class="help" id="fonio-result-last"></p>

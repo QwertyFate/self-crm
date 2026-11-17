@@ -52,6 +52,7 @@ describe('the markup', () => {
     const keys = new Set([...pane.matchAll(/data-i18n(?:-ph)?="(\w+)"/g)].map(m => m[1]));
     keys.add(rail.match(/data-tab="calendly"[^>]*data-i18n="(\w+)"/)[1]);
     for (const m of js.matchAll(/\bt[f]?\('(\w+)'(?=[,)])/g)) keys.add(m[1]);
+    for (const m of read('public/js/detail-views.js').matchAll(/'(cly_\w+)'/g)) keys.add(m[1]);   // the booking dialog's Calendly words (Part 4)
     for (const k of [...Object.values(new Function(sliceConst('public/js/calendly.js', 'CLY_ERROR_KEYS').replace(/^[^{]*/, 'return '))()), ...Object.values(new Function(sliceConst('public/js/calendly.js', 'CLY_LOG_KEYS').replace(/^[^{]*/, 'return '))()), 'src_calendly', ...js.match(/'cly_guide_\w+'/g).map(s => s.slice(1, -1)), 'cal_err_calendly']) keys.add(k);
     assert.ok(keys.size >= 40, `keys used: ${keys.size}`);
     for (const k of keys) { assert.ok(dict.en[k], `en.${k}`); assert.ok(dict.de[k], `de.${k}`); }
@@ -124,8 +125,12 @@ describe('the pure functions', () => {
   test('clyErrorText: every code the routes answer has its sentence; scope lists the permissions; anything else is the general line', () => {
     const routes = read('routes/calendly.js');
     const codes = new Set([...routes.matchAll(/code: '(\w+)'/g)].map(m => m[1]));
-    assert.deepEqual([...codes].sort(), ['calcom_connected', 'calendly_error', 'event_type', 'not_connected', 'rejected', 'reseal', 'scope', 'token_shape', 'unreachable', 'webhook']);
+    assert.deepEqual([...codes].sort(), ['calcom_connected', 'calendly_error', 'contact', 'event_type', 'location', 'no_email', 'no_phone', 'not_connected', 'refused', 'rejected', 'reseal', 'scope', 'start', 'token_shape', 'unreachable', 'webhook']);
     for (const code of codes) assert.notEqual(F.clyErrorText({ error: 'x', code, scopes: ['a'], detail: 'd' }), 'cal_err_generic', code);
+    // booking from a deal or a contact (Part 4): Calendly's own no to a booking is said in its words
+    assert.equal(F.clyErrorText({ error: 'x', code: 'refused', detail: 'The time is no longer available' }), 'cly_err_refused:The time is no longer available');
+    assert.equal(F.clyErrorText({ error: 'x', code: 'no_email' }), 'cal_book_no_email', 'the sentence the dialog already has for it');
+    assert.equal(F.clyErrorText({ error: 'x', code: 'no_phone' }), 'cly_err_no_phone');
     assert.equal(F.clyErrorText({ error: 'x', code: 'scope', scopes: ['users:read', 'webhooks:write'] }), 'cly_err_scope:users:read, webhooks:write');
     assert.equal(F.clyErrorText({ error: 'x', code: 'calendly_error', detail: 'boom' }), 'cly_err_answer:boom');
     assert.equal(F.clyErrorText({ error: 'x', code: 'calcom_connected' }), 'cly_blocked');
