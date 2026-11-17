@@ -438,7 +438,7 @@ field endpoint for the platform admin.
 
 One transaction does all of it: seed the workspace from `platform_settings` (the same defaults
 signup uses), insert the custom fields, create the owner (`users` + `user_workspaces`, role
-`owner`), and create the first `workspace_webhook` row (`Webhook 1`, the first of up to three) with
+`owner`), and create the first `workspace_webhook` row (`Webhook 1`, the first of up to five) with
 its key, a `field_map` that already covers the custom contact fields, the owner as
 `default_assignee_id`, and the first pipeline + first stage when `create_deal` is on.
 
@@ -739,9 +739,9 @@ and workspace in `break_scores`, their best game. Scores come from the browser: 
 |---|---|---|---|
 | GET | `/` | member | The ten best of `req.workspaceId`, current members only: `[{ name, score, lines, level, at, mine }]` |
 | POST | `/` | member | `{ score (1–10,000,000), lines (0–100,000), level (1–10,000) }`, whole numbers; kept only if it beats the caller's best; answers with the board |
-### `/api/integrations` — inbound lead webhooks (up to three per workspace)
+### `/api/integrations` — inbound lead webhooks (up to five per workspace)
 
-Each workspace can have **three** lead webhooks (`workspace_webhook`, `LEAD_WEBHOOK_CHANGES.md`): one
+Each workspace can have **five** lead webhooks (`workspace_webhook`, `LEAD_WEBHOOK_CHANGES.md`): one
 row per address, each with its own key, `field_map`, auto-deal pipeline/stage, assignee, on/off switch
 and a name the team gives it. The **oldest** row is the first webhook — bookings from Cal.com/Calendly
 that create a contact use its pipeline, stage and assignee. Every write below is scoped to one id; the
@@ -749,8 +749,8 @@ oldest row's key and settings from before the change are untouched.
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/settings` | member | **Creates the first** webhook (named `Webhook 1`) with a fresh key when the workspace has none; returns `{webhooks[], max_webhooks: 3, pipelines, stages, contact_fields, members, base_url}` for the card |
-| POST | `/settings` | member | `{name?}` → a new webhook (201), named `Webhook N` when omitted; 409 `limit` past three, 409 `name_taken` (case-blind), 400 `invalid_name` |
+| GET | `/settings` | member | **Creates the first** webhook (named `Webhook 1`) with a fresh key when the workspace has none; returns `{webhooks[], max_webhooks: 5, pipelines, stages, contact_fields, members, base_url}` for the card |
+| POST | `/settings` | member | `{name?}` → a new webhook (201), named `Webhook N` when omitted; 409 `limit` past five, 409 `name_taken` (case-blind), 400 `invalid_name` |
 | PATCH | `/settings/:id` | member | Any of `{name, field_map, create_deal, pipeline_id, stage_id, default_assignee_id, active}`; only that webhook changes, 404 for an id of another workspace |
 | POST | `/settings/:id/regenerate-key` | member | New 20-byte key for that webhook; its old URL stops working immediately |
 | DELETE | `/settings/:id` | member | Removes one webhook (its leads' log rows keep the historical name as NULL); 409 `last_webhook` for the last one — switch it off instead |

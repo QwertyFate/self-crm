@@ -1798,7 +1798,7 @@ input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
 .intg-map-add-row { display: flex; gap: var(--sp-2); align-items: center; margin-top: var(--sp-2); }
 .intg-add-select { min-width: 180px; max-width: 320px; }
 
-/* Up to three lead webhooks per workspace: one tab per webhook, above the card (LEAD_WEBHOOK_CHANGES Part 1) */
+/* Up to five lead webhooks per workspace: one tab per webhook, above the card; they wrap (LEAD_WEBHOOK_CHANGES Parts 1 and 6) */
 .intg-webhook-tabs { display: flex; flex-wrap: wrap; gap: var(--sp-15); align-items: center; }
 .intg-webhook-tab {
   display: inline-flex; align-items: center; gap: var(--sp-15); max-width: 220px;

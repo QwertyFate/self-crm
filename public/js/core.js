@@ -307,8 +307,8 @@ const TRANSLATIONS = {
     intg_no_activity:'No leads received yet. Send a test from your platform and it will show up here.',
     intg_fields_missing:'Not found in the payload:', intg_fields_missing_hint:'Check that the mapping keys match the incoming data.', intg_view_raw:'View raw payload',
     intg_log_success:'Lead received', intg_log_test:'Test delivery', intg_test_title:'Test delivery', intg_test_hint:'Send one delivery from the tool that will send the leads. The CRM keeps it as a sample for setting up the mapping and creates no contact from it.', intg_test_start:'Listen for a test delivery', intg_test_stop:'Stop listening', intg_test_listening:'Listening: send one delivery to the address above within {minutes} minutes. It will not become a contact.', intg_test_received:'Test delivery received.', intg_sample_when:'Sample received {date}', intg_sample_discard:'Discard sample', intg_sample_last:'Use the last delivery', intg_err_no_delivery:'No delivery has arrived at this webhook yet.', intg_map_first_name:'First name (when there is no full name)', intg_map_last_name:'Last name (when there is no full name)', intg_pick_none:'Do not fill', intg_pick_missing:'{key} (not in the sample)', intg_pick_type:'Type the key by hand', intg_pick_aria:'Value from the sample', intg_preview_title:'What the sample would become', intg_preview_new:'A new contact', intg_preview_update:'Updates the contact {name}', intg_preview_rejected:'Would be rejected', intg_preview_rejected_hint:'Neither a name nor an email is filled. Connect at least one of them.', intg_preview_skipped:'Not in the sample: {fields}', intg_preview_deal:'A deal is created in {pipeline}, stage {stage}.', intg_preview_name_from_email:'{email} (the email is used as the name)', intg_preview_empty:'not filled', intg_log_error:'Rejected',
-    // Up to three named lead webhooks per workspace (LEAD_WEBHOOK_CHANGES Part 1)
-    intg_webhooks_title:'Your webhooks', intg_webhooks_hint:'Up to three, each with its own URL, field mapping and auto-deal settings. Pick one to edit it.',
+    // Up to five named lead webhooks per workspace (LEAD_WEBHOOK_CHANGES Parts 1 and 6)
+    intg_webhooks_title:'Your webhooks', intg_webhooks_hint:'Up to five, each with its own URL, field mapping and auto-deal settings. Pick one to edit it.',
     intg_webhook_default_hint:'Bookings from Cal.com or Calendly that create a new contact use the pipeline, stage and assignee of this first webhook.',
     intg_webhook_name_label:'Webhook name', intg_webhook_name_hint:'A label for the team — it shows on every lead this webhook receives, in Recent leads.',
     intg_webhook_name_ph:'e.g. Facebook leads', intg_webhook_untitled:'Untitled webhook',
@@ -317,7 +317,7 @@ const TRANSLATIONS = {
     intg_msg_webhook_deleted:'Webhook deleted',
     intg_last_webhook_hint:'The last webhook cannot be deleted — switch it off instead.',
     intg_err_last_webhook:'The last webhook cannot be deleted. Switch it off instead.',
-    intg_err_limit:'A workspace can have at most three lead webhooks.',
+    intg_err_limit:'A workspace can have at most five lead webhooks.',
     intg_err_name_taken:'Another webhook already has this name.',
     intg_err_invalid_name:'Give the webhook a name of 1 to 60 characters.',
     intg_err_generic:'Something went wrong. Try again.',
@@ -920,8 +920,8 @@ const TRANSLATIONS = {
     intg_no_activity:'Noch keine Leads empfangen. Sende einen Test aus deiner Plattform, dann erscheint er hier.',
     intg_fields_missing:'Nicht im Payload gefunden:', intg_fields_missing_hint:'Prüfe, ob die Zuordnungsschlüssel zu den eingehenden Daten passen.', intg_view_raw:'Rohdaten anzeigen',
     intg_log_success:'Lead empfangen', intg_log_test:'Testlieferung', intg_test_title:'Testlieferung', intg_test_hint:'Eine Lieferung aus dem Tool senden, das später die Leads schickt. Das CRM behält sie als Muster für die Zuordnung und legt daraus keinen Kontakt an.', intg_test_start:'Auf eine Testlieferung warten', intg_test_stop:'Nicht mehr warten', intg_test_listening:'Wartet: innerhalb von {minutes} Minuten eine Lieferung an die Adresse oben senden. Daraus wird kein Kontakt.', intg_test_received:'Testlieferung angekommen.', intg_sample_when:'Muster empfangen {date}', intg_sample_discard:'Muster verwerfen', intg_sample_last:'Letzte Lieferung verwenden', intg_err_no_delivery:'An diesem Webhook ist noch keine Lieferung angekommen.', intg_map_first_name:'Vorname (wenn es keinen vollen Namen gibt)', intg_map_last_name:'Nachname (wenn es keinen vollen Namen gibt)', intg_pick_none:'Nicht füllen', intg_pick_missing:'{key} (nicht im Muster)', intg_pick_type:'Schlüssel von Hand eintippen', intg_pick_aria:'Wert aus dem Muster', intg_preview_title:'Was aus dem Muster würde', intg_preview_new:'Ein neuer Kontakt', intg_preview_update:'Aktualisiert den Kontakt {name}', intg_preview_rejected:'Würde abgelehnt', intg_preview_rejected_hint:'Weder Name noch E-Mail sind gefüllt. Mindestens eines der beiden verbinden.', intg_preview_skipped:'Nicht im Muster: {fields}', intg_preview_deal:'Ein Deal wird in {pipeline} angelegt, Phase {stage}.', intg_preview_name_from_email:'{email} (die E-Mail dient als Name)', intg_preview_empty:'nicht gefüllt', intg_log_error:'Abgelehnt',
-    // Bis zu drei benannte Lead-Webhooks pro Arbeitsbereich (LEAD_WEBHOOK_CHANGES Part 1)
-    intg_webhooks_title:'Deine Webhooks', intg_webhooks_hint:'Bis zu drei, jeder mit eigener URL, Feldzuordnung und Auto-Deal-Einstellungen. Wähle einen zum Bearbeiten.',
+    // Bis zu fünf benannte Lead-Webhooks pro Arbeitsbereich (LEAD_WEBHOOK_CHANGES Parts 1 und 6)
+    intg_webhooks_title:'Deine Webhooks', intg_webhooks_hint:'Bis zu fünf, jeder mit eigener URL, Feldzuordnung und Auto-Deal-Einstellungen. Wähle einen zum Bearbeiten.',
     intg_webhook_default_hint:'Buchungen aus Cal.com oder Calendly, aus denen ein neuer Kontakt entsteht, nutzen Pipeline, Phase und Zuständigkeit des ersten Webhooks.',
     intg_webhook_name_label:'Name des Webhooks', intg_webhook_name_hint:'Nur ein Label fürs Team — es erscheint bei jedem Lead dieses Webhooks unter Letzte Leads.',
     intg_webhook_name_ph:'z. B. Facebook-Leads', intg_webhook_untitled:'Unbenannter Webhook',
@@ -930,7 +930,7 @@ const TRANSLATIONS = {
     intg_msg_webhook_deleted:'Webhook gelöscht',
     intg_last_webhook_hint:'Der letzte Webhook lässt sich nicht löschen — schalte ihn stattdessen aus.',
     intg_err_last_webhook:'Der letzte Webhook lässt sich nicht löschen. Schalte ihn stattdessen aus.',
-    intg_err_limit:'Ein Arbeitsbereich kann höchstens drei Lead-Webhooks haben.',
+    intg_err_limit:'Ein Arbeitsbereich kann höchstens fünf Lead-Webhooks haben.',
     intg_err_name_taken:'Ein anderer Webhook hat bereits diesen Namen.',
     intg_err_invalid_name:'Gib dem Webhook einen Namen mit 1 bis 60 Zeichen.',
     intg_err_generic:'Etwas ist schiefgelaufen. Versuche es erneut.',

@@ -475,7 +475,7 @@ router.post('/provision', requireAdmin, async (req, res, next) => {
       for (const f of createdContactFields) fieldMap[f.field_key] = f.field_key;
 
       const webhookKey = crypto.randomBytes(20).toString('hex');
-      // The first of up to three lead webhooks the owner can have (LEAD_WEBHOOK_CHANGES Part 1); the other two are
+      // The first of up to five lead webhooks the owner can have (LEAD_WEBHOOK_CHANGES Parts 1 and 6); the others are
       // added on the Integrations page, each with its own key and settings. The column's default names it "Webhook 1".
       await client.query(
         `INSERT INTO workspace_webhook
@@ -552,8 +552,8 @@ router.post('/provision', requireAdmin, async (req, res, next) => {
  *
  * The webhook key comes back so an admin can re-send a customer their
  * integration URL — the provisioning response is the only other place it
- * appears. It is the FIRST of the up to three webhooks a workspace can have
- * (LEAD_WEBHOOK_CHANGES Part 1), so a second or third key is not shown here.
+ * appears. It is the FIRST of the up to five webhooks a workspace can have
+ * (LEAD_WEBHOOK_CHANGES Parts 1 and 6), so the keys of the others are not shown here.
  * The owner's PASSWORD is not here and cannot be: only its bcrypt hash
  * is ever stored.
  */

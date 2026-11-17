@@ -35,13 +35,13 @@
    logged with status 'test', and makes no contact. One delivery ends the
    listening. A webhook that is switched off still takes its test delivery.
 
-   UP TO THREE WEBHOOKS PER WORKSPACE (LEAD_WEBHOOK_CHANGES Part 1)
+   UP TO FIVE WEBHOOKS PER WORKSPACE (LEAD_WEBHOOK_CHANGES Parts 1 and 6)
      Each row is one address with its own key, field map, auto-deal pipeline,
      stage, assignee and on/off switch, plus a name the team gives it. The
      workspace's OLDEST row is the first webhook: bookings from Cal.com and
      Calendly that create a contact use its pipeline, stage and assignee (see
      calContactFor below). GET /settings creates the first row on first view,
-     POST /settings adds the second and third (409 beyond that), and every
+     POST /settings adds the others (409 beyond the fifth), and every
      write below is scoped to one id — never to the whole workspace.
 
    GET /settings CREATES the first workspace_webhook row and its key on first
@@ -118,7 +118,7 @@ router.use('/logs',     requireAuth);
 // Each row is one public address with its own key, field map, auto-deal settings and assignee; `name` is how the team
 // tells them apart. The workspace's oldest row is "the first webhook": a booking from Cal.com/Calendly that creates a
 // contact lands in its pipeline, stage and assignee (calContactFor below, shared with routes/calendly.js).
-const MAX_WEBHOOKS = 3;
+const MAX_WEBHOOKS = 5;    // three until Part 6; the cap lives here only, no schema depends on it
 const TEST_MINUTES = 10;   // how long a webhook listens for its test delivery (Part 2)
 
 // A label the team can read in a tab: 1–60 characters, runs of whitespace collapsed. null when unusable.
@@ -233,7 +233,7 @@ router.get('/settings', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Add the second or third webhook. The count is checked inside the INSERT, so a double click cannot make a fourth;
+// Add another webhook. The count is checked inside the INSERT, so a double click cannot make one past the cap;
 // the unique index on (workspace_id, lower(name)) turns a duplicate name into a 409 the card can explain.
 router.post('/settings', async (req, res, next) => {
   try {

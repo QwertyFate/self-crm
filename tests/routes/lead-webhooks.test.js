@@ -1,7 +1,7 @@
-// ROUTE tests: up to three named lead webhooks per workspace (LEAD_WEBHOOK_CHANGES Part 1).
+// ROUTE tests: up to five named lead webhooks per workspace (LEAD_WEBHOOK_CHANGES Part 1; five since Part 6).
 //
 // The card's whole contract lives here: GET /settings lists them oldest first (and creates the first on first view),
-// POST /settings adds one (409 past three, 409 on a name already used), PATCH/DELETE are scoped to one id — never to
+// POST /settings adds one (409 past five, 409 on a name already used), PATCH/DELETE are scoped to one id — never to
 // the workspace — and /logs names the webhook a lead came in through. The last one cannot be deleted, a legacy row
 // keeps its key and settings, and Cal.com/Calendly keep using the OLDEST row for a booking that creates a contact.
 const { test, describe, before, after } = require('node:test');
@@ -130,7 +130,7 @@ describe('GET/POST /api/integrations/settings: the list and the cap', () => {
   test('a workspace with one webhook gets it back oldest first, untouched, and no second row is made', async () => {
     const r = await server.request('GET', '/api/integrations/settings');
     assert.equal(r.status, 200);
-    assert.equal(r.body.max_webhooks, 3);
+    assert.equal(r.body.max_webhooks, 5);
     assert.equal(r.body.webhooks.length, 1);
     assert.equal(r.body.webhooks[0].id, 1);
     assert.equal(r.body.webhooks[0].webhook_key, 'old-key', 'the key already in Zapier keeps working');
@@ -166,16 +166,31 @@ describe('GET/POST /api/integrations/settings: the list and the cap', () => {
     assert.equal(blank.body.webhook.name, 'Webhook 3');
   });
 
-  test('a fourth webhook is refused with 409 limit, and a too-long name is refused before any row is made', async () => {
+  test('a fourth and a fifth are accepted, each with the next free name and a key of its own', async () => {
+    const fourth = await server.request('POST', '/api/integrations/settings', {});
+    assert.equal(fourth.status, 201);
+    assert.equal(fourth.body.webhook.name, 'Webhook 4');
+
+    const fifth = await server.request('POST', '/api/integrations/settings', {});
+    assert.equal(fifth.status, 201);
+    assert.equal(fifth.body.webhook.name, 'Webhook 5');
+
+    assert.equal(db.state.webhooks.length, 5);
+    assert.equal(new Set(db.state.webhooks.map(w => w.webhook_key)).size, 5, 'five different keys');
+    assert.equal(db.state.webhooks[0].webhook_key, 'old-key', 'the first one is untouched');
+  });
+
+  test('a sixth webhook is refused with 409 limit, and a too-long name is refused before any row is made', async () => {
     const r = await server.request('POST', '/api/integrations/settings', { name: 'One more' });
     assert.equal(r.status, 409);
     assert.equal(r.body.reason, 'limit');
-    assert.equal(db.state.webhooks.length, 3);
+    assert.match(r.body.error, /at most 5 lead webhooks/);
+    assert.equal(db.state.webhooks.length, 5);
 
     const tooLong = await server.request('POST', '/api/integrations/settings', { name: 'x'.repeat(61) });
     assert.equal(tooLong.status, 400);
     assert.equal(tooLong.body.reason, 'invalid_name');
-    assert.equal(db.state.webhooks.length, 3);
+    assert.equal(db.state.webhooks.length, 5);
   });
 });
 

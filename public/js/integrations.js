@@ -324,7 +324,7 @@ function intgWebhookOrigin() {
 function renderIntgWebhookTabs() {
   const el = document.getElementById('intg-webhook-list');
   if (!el) return;
-  const max = intgData?.max_webhooks || 3;
+  const max = intgData?.max_webhooks || 5;
 
   const tabs = intgWebhooks.map(w => `
     <button type="button" class="intg-webhook-tab${w.id === currentWebhookId ? ' active' : ''}${w.active ? '' : ' off'}"
@@ -798,7 +798,7 @@ async function saveIntegration(silent = false, tip = true) {
   if (!wh) return;
   const fieldMap = getIntgFieldMap();
 
-  // Scoped to the selected webhook: the other two keep their own mapping and pipeline (LEAD_WEBHOOK_CHANGES Part 1).
+  // Scoped to the selected webhook: the others keep their own mapping and pipeline (LEAD_WEBHOOK_CHANGES Part 1).
   const res = await api.patch(`/api/integrations/settings/${wh.id}`, {
     field_map:   fieldMap,
     create_deal: document.getElementById('intg-create-deal').checked,

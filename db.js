@@ -373,9 +373,10 @@ async function initDb() {
     )
   `);
 
-  // Inbound lead webhooks: up to three per workspace (LEAD_WEBHOOK_CHANGES Part 1), each row one address with its
-  // own key, field map, auto-deal settings and assignee. `name` is what tells them apart in the UI. The old UNIQUE
-  // on workspace_id is dropped below, so a workspace that had one webhook can add two — its row keeps key and settings.
+  // Inbound lead webhooks: up to five per workspace (LEAD_WEBHOOK_CHANGES Parts 1 and 6; the cap itself is
+  // MAX_WEBHOOKS in routes/integrations.js), each row one address with its own key, field map, auto-deal settings and
+  // assignee. `name` is what tells them apart in the UI. The old UNIQUE on workspace_id is dropped below, so a
+  // workspace that had one webhook can add more — its row keeps key and settings.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS workspace_webhook (
       id           SERIAL PRIMARY KEY,
@@ -406,7 +407,7 @@ async function initDb() {
 
   await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS captured JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE workspace_webhook ADD COLUMN IF NOT EXISTS default_assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
-  // A second and third lead webhook per workspace (LEAD_WEBHOOK_CHANGES Part 1). The UNIQUE that used to live on the
+  // More than one lead webhook per workspace (LEAD_WEBHOOK_CHANGES Part 1). The UNIQUE that used to live on the
   // column is dropped by name — the one row a workspace has keeps its id, key and every setting, so an URL already
   // pasted into Zapier/Make keeps working. Names are the team's own, unique per workspace (case-blind).
   await pool.query(`ALTER TABLE workspace_webhook DROP CONSTRAINT IF EXISTS workspace_webhook_workspace_id_key`);

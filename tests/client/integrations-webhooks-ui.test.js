@@ -1,6 +1,6 @@
-// CLIENT tests for the lead-webhook card: up to three named webhooks (LEAD_WEBHOOK_CHANGES Part 1). The markup
-// builders run against a tiny fake DOM, and the calls that write are checked for being scoped to ONE webhook id —
-// a save that still went to /settings would rewrite all three, which is exactly the failure this feature must avoid.
+// CLIENT tests for the lead-webhook card: up to five named webhooks (LEAD_WEBHOOK_CHANGES Part 1; five since Part 6).
+// The markup builders run against a tiny fake DOM, and the calls that write are checked for being scoped to ONE webhook
+// id — a save that still went to /settings would rewrite all of them, which is exactly the failure this feature must avoid.
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const { read, sliceFn, loadFns } = require('../helpers/client-fn');
@@ -35,8 +35,10 @@ function loadCard(names, state) {
 
 describe('renderIntgWebhookTabs: one tab per webhook, plus the add button until the cap', () => {
   const load = () => loadCard(['intgWebhook', 'renderIntgWebhookTabs'], {
-    intgWebhooks: WEBHOOKS, currentWebhookId: 2, intgData: { max_webhooks: 3 },
+    intgWebhooks: WEBHOOKS, currentWebhookId: 2, intgData: { max_webhooks: 5 },
   });
+  // The two above plus as many more as it takes to have `n` (LEAD_WEBHOOK_CHANGES Part 6: the cap is five).
+  const upTo = n => [...WEBHOOKS, ...Array.from({ length: n - WEBHOOKS.length }, (_, i) => ({ id: 3 + i, name: `Source ${3 + i}`, active: true }))];
 
   test('the selected webhook is marked active, the inactive one dimmed, and both names are printed', () => {
     const F = load();
@@ -48,17 +50,54 @@ describe('renderIntgWebhookTabs: one tab per webhook, plus the add button until 
     assert.match(out, />Webhook 1</);
     assert.match(out, />Facebook</);
     assert.match(out, /onclick="selectIntgWebhook\(1\)"/);
-    assert.match(out, /onclick="addIntgWebhook\(\)"/, 'room for a third');
+    assert.match(out, /onclick="addIntgWebhook\(\)"/, 'room for more');
+  });
+
+  test('four webhooks still leave room for a fifth', () => {
+    const F = load();
+    F.__set('intgWebhooks', upTo(4));
+    F.renderIntgWebhookTabs();
+    const out = F.dom['intg-webhook-list'].innerHTML;
+
+    assert.equal((out.match(/data-webhook="/g) || []).length, 4, 'one tab each');
+    assert.match(out, /onclick="addIntgWebhook\(\)"/);
+    assert.doesNotMatch(out, /intg-webhook-count/);
   });
 
   test('at the cap the add button is gone and the card says why', () => {
     const F = load();
-    F.__set('intgWebhooks', [...WEBHOOKS, { id: 3, name: 'Google', active: true }]);
+    F.__set('intgWebhooks', upTo(5));
     F.renderIntgWebhookTabs();
     const out = F.dom['intg-webhook-list'].innerHTML;
 
+    assert.equal((out.match(/data-webhook="/g) || []).length, 5);
     assert.doesNotMatch(out, /addIntgWebhook/);
     assert.match(out, /class="intg-webhook-count">intg_add_webhook_max</);
+  });
+
+  test('a page that was not told the cap assumes five, the server\'s own number', () => {
+    const F = load();
+    F.__set('intgData', {});
+    F.__set('intgWebhooks', upTo(4));
+    F.renderIntgWebhookTabs();
+    assert.match(F.dom['intg-webhook-list'].innerHTML, /addIntgWebhook/);
+
+    F.__set('intgWebhooks', upTo(5));
+    F.renderIntgWebhookTabs();
+    assert.doesNotMatch(F.dom['intg-webhook-list'].innerHTML, /addIntgWebhook/);
+
+    const route = read('routes/integrations.js');
+    assert.match(route, /^const MAX_WEBHOOKS = 5;/m, 'the cap the server enforces');
+  });
+
+  test('both languages name five, in the hint and in the refusal', () => {
+    const core = read('public/js/core.js');
+    assert.match(core, /intg_webhooks_hint:'Up to five,/);
+    assert.match(core, /intg_webhooks_hint:'Bis zu fünf,/);
+    assert.match(core, /intg_err_limit:'A workspace can have at most five lead webhooks\.'/);
+    assert.match(core, /intg_err_limit:'Ein Arbeitsbereich kann höchstens fünf Lead-Webhooks haben\.'/);
+    assert.match(html, /data-i18n="intg_webhooks_hint">Up to five,/);
+    assert.doesNotMatch(core, /intg_(webhooks_hint|err_limit):'[^']*(three|drei)/);
   });
 
   test('the "bookings use the first webhook" note shows only while the first is selected', () => {
