@@ -199,6 +199,30 @@ describe('BOOKING_CREATED', () => {
     const a = state.activities[0]; assert.equal(a.contact_id, c.id); assert.equal(a.deal_id, d.id);
     assert.deepEqual([state.logs[0].contact_id, state.logs[0].deal_id, state.logs[0].captured.created_contact, state.logs[0].captured.created_deal], [c.id, d.id, true, true]);
   });
+  test('an unknown attendee while the workspace only notes its own contacts: no contact, no deal, no entry; the delivery is logged and answered as ignored', async () => {
+    CONN.existing_contacts_only = true;
+    try {
+      const [raw, h] = signed(withPayload({ uid: 'u6', attendees: [{ email: 'Fremd@Example.de', name: 'Fremder Gast' }] }));
+      const r = await srv.post(TOKEN, raw, h);
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.deepEqual(r.body, { ignored: true, reason: 'unknown_contact' });
+      assert.ok(!state.calls.some(c => c.sql.startsWith('INSERT INTO contacts')), 'no contact made');
+      assert.ok(!state.calls.some(c => c.sql.startsWith('INSERT INTO deals')), 'no deal made');
+      assert.equal(state.activities.length, 0, 'no meeting entry');
+      assert.equal(state.told.length, 0, 'nobody told');
+      assert.deepEqual([state.logs[0].status, state.logs[0].captured.skipped, state.logs[0].contact_id, state.logs[0].deal_id], ['success', 'unknown_contact', null, null]);
+    } finally { CONN.existing_contacts_only = false; }
+  });
+  test('a guest the CRM knows is noted as before while the rule is on', async () => {
+    CONN.existing_contacts_only = true;
+    try {
+      const [raw, h] = signed(BOOKING);   // Jana Weber's email is contact 5's
+      const r = await srv.post(TOKEN, raw, h);
+      assert.equal(r.body.success, true);
+      assert.equal(r.body.contact_id, 5); assert.equal(r.body.created_contact, false);
+      assert.equal(state.activities.length, 1);
+    } finally { CONN.existing_contacts_only = false; }
+  });
   test('an unknown attendee with no lead webhook settings: the first pipeline\'s first stage; with no pipeline at all: the contact only', async () => {
     state.webhook = null;
     const [raw, h] = signed(withPayload({ uid: 'u4', attendees: [{ email: 'a@example.de', name: 'A' }] }));
@@ -262,7 +286,7 @@ describe('server.js', () => {
   });
   test('GET /logs stays a lead log; GET /calcom/logs is the Cal.com log', () => {
     const r = require('fs').readFileSync(path.join(ROOT, 'routes', 'integrations.js'), 'utf8');
-    assert.match(r, /WHERE l\.workspace_id=\$1 AND l\.source='lead'\s*ORDER BY l\.created_at DESC LIMIT 50/);
+    assert.match(r, /WHERE l\.workspace_id=\$1 AND l\.source='lead'\s*AND \(\$2::int IS NULL OR l\.webhook_id=\$2\)\s*ORDER BY l\.created_at DESC LIMIT 50/);
     assert.match(r, /router\.get\('\/calcom\/logs', requireAuth,[\s\S]*?WHERE l\.workspace_id=\$1 AND l\.source='calcom'\s*ORDER BY l\.created_at DESC LIMIT 30/);
     assert.match(r, /router\.post\('\/calcom\/receive\/:token', async \(req, res\) => \{/, 'no requireAuth on the receiver');
   });

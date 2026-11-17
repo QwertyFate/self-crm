@@ -3,8 +3,9 @@
 
    ONE CONNECTION PER WORKSPACE (workspace_fonio): the company's fonio API key
    and fonio number, an active switch, the delay in minutes, which new deals
-   trigger a call (created by hand, through the lead link), the number rules
-   and the calling hours — db.js has the meaning of each column. Everyone may
+   trigger a call (created by hand, through the lead link), the number rules,
+   the calling hours and whether a call that reached nobody is tried again
+   (follow_up, Part 33) — db.js has the meaning of each column. Everyone may
    read the settings; saving and removing them are owner/admin only, as for
    Cal.com. The key is sealed like the Cal.com key (utils/calcom.js) and never
    leaves the server again: owners and admins see its last four characters.
@@ -37,7 +38,10 @@
    does not count it as failed. A result that names a meeting agreed in the
    call (meeting_booked, meeting_date, meeting_time; Part 28) has it booked at
    Cal.com or Calendly when one is connected (utils/fonio-meeting.js); the
-   note's last line says what came of it. Every delivery is remembered in last_delivery (when, the outcome,
+   note's last line says what came of it. The call's outcome as the assistant
+   wrote it (call_outcome, Part 33) decides whether the contact is called
+   again: utils/fonio-calls.js followUpAfterResult books that retry. Every
+   delivery is remembered in last_delivery (when, the outcome,
    the body's field names), so the page can show what fonio sends.
    server.js gives this path its raw bytes (1 MB, a whole transcript) and the
    webhook limits.
@@ -80,8 +84,10 @@ const DEFAULTS = {
   from_number: '', active: false, delay_minutes: 5, on_deal_manual: true, on_deal_webhook: true,
   country_code: '+49', number_prefixes: [], hours_on: true, hours_days: [1, 2, 3, 4, 5],
   hours_from: '09:00', hours_to: '18:00', hours_tz: 'Europe/Berlin',
+  book_meetings: true,                        // who books a meeting agreed in the call (Part 34): the CRM until switched off
+  follow_up: { ...fonioCalls.FOLLOW_UP },   // retrying a call that reached nobody (Part 33): off until saved
 };
-const SETTING_KEYS = Object.keys(DEFAULTS).filter(k => k !== 'hours_tz');
+const SETTING_KEYS = Object.keys(DEFAULTS).filter(k => k !== 'hours_tz' && k !== 'follow_up');
 const HOURS_KEYS = ['hours_on', 'hours_days', 'hours_from', 'hours_to'];
 const LINK = /^[0-9a-f]{64}$/;   // receive_token: two random UUIDs without their dashes (db.js)
 
@@ -99,19 +105,23 @@ async function loadRow(wid) {
   const { rows: [row] } = await pool.query(
     `SELECT f.from_number, f.active, f.delay_minutes, f.on_deal_manual, f.on_deal_webhook, f.country_code,
             f.number_prefixes, f.hours_on, f.hours_days, f.hours_from, f.hours_to, f.hours_tz, f.key_hint,
-            f.receive_token, f.last_delivery, f.variables, f.saved_by, f.saved_at, u.name AS saved_by_name
+            f.receive_token, f.last_delivery, f.variables, f.follow_up, f.book_meetings, f.saved_by, f.saved_at,
+            u.name AS saved_by_name
        FROM workspace_fonio f LEFT JOIN users u ON u.id = f.saved_by
       WHERE f.workspace_id = $1`, [wid]
   );
   return row || null;
 }
 
-// The saved settings as the API speaks them (TIME comes back as HH:MM:SS).
+// The saved settings as the API speaks them (TIME comes back as HH:MM:SS). follow_up always has every field, filled
+// from the defaults for a row saved before the card existed (Part 33); a column added later (book_meetings, Part 34)
+// reads as its default when a row predates it.
 function settingsOf(row) {
   const s = {};
-  for (const k of Object.keys(DEFAULTS)) s[k] = row[k];
+  for (const k of Object.keys(DEFAULTS)) s[k] = row[k] ?? DEFAULTS[k];
   s.hours_from = String(row.hours_from).slice(0, 5);
   s.hours_to   = String(row.hours_to).slice(0, 5);
+  s.follow_up  = fonioCalls.followUpSettings(row);
   return s;
 }
 
@@ -140,7 +150,7 @@ function checkSettings(s) {
   if (!fonio.isE164(from)) return { reason: 'from_number', error: 'The fonio number must start with + and the country code, e.g. +4930123456' };  if (!Number.isInteger(s.delay_minutes) || s.delay_minutes < 0 || s.delay_minutes > MAX_DELAY) {
     return { reason: 'delay', error: `The delay is a whole number of minutes from 0 to ${MAX_DELAY}` };
   }
-  for (const k of ['active', 'on_deal_manual', 'on_deal_webhook', 'hours_on']) {
+  for (const k of ['active', 'on_deal_manual', 'on_deal_webhook', 'hours_on', 'book_meetings']) {
     if (typeof s[k] !== 'boolean') return { reason: k, error: `${k} must be true or false` };
   }
   const cc = fonio.compactNumber(s.country_code);
@@ -156,7 +166,9 @@ function checkSettings(s) {
   if (!HHMM.test(s.hours_from) || !HHMM.test(s.hours_to) || s.hours_from >= s.hours_to) {
     return { reason: 'hours', error: 'Calling hours are HH:MM, the start before the end' };
   }
-  return { value: { ...s, from_number: from, country_code: cc, number_prefixes: prefixes, hours_days: days } };
+  const follow = fonioCalls.checkFollowUp(s.follow_up);
+  if (!follow.value) return { reason: 'follow_up', error: follow.error };
+  return { value: { ...s, from_number: from, country_code: cc, number_prefixes: prefixes, hours_days: days, follow_up: follow.value } };
 }
 
 router.get('/', requireAuth, async (req, res, next) => {
@@ -174,8 +186,15 @@ router.put('/', requireAuth, requireManage, async (req, res, next) => {
     if (!saved && !key) return res.status(400).json({ error: 'Paste the fonio API key', reason: 'key_required' });
     if (key && !keyShaped(key)) return res.status(400).json({ error: 'That does not look like a fonio API key', reason: 'key_shape' });
 
-    const merged = saved ? settingsOf(saved) : { ...DEFAULTS };
+    const merged = saved ? settingsOf(saved) : { ...DEFAULTS, follow_up: { ...DEFAULTS.follow_up } };
     for (const k of SETTING_KEYS) if (body[k] !== undefined) merged[k] = body[k];
+    // the follow-up policy is merged field by field, so the switch alone can be sent (Part 33)
+    if (body.follow_up !== undefined) {
+      if (!body.follow_up || typeof body.follow_up !== 'object' || Array.isArray(body.follow_up)) {
+        return res.status(400).json({ error: 'The follow-up settings are an object', reason: 'follow_up' });
+      }
+      merged.follow_up = { ...(merged.follow_up || {}), ...body.follow_up };
+    }
     if (!saved || HOURS_KEYS.some(k => body[k] !== undefined)) merged.hours_tz = req.userTimezone || DEFAULTS.hours_tz;
     const checked = checkSettings(merged);
     if (!checked.value) return res.status(400).json({ error: checked.error, reason: checked.reason });
@@ -198,6 +217,7 @@ router.put('/', requireAuth, requireManage, async (req, res, next) => {
       req.workspaceId, key ? calcom.sealKey(key) : null, key ? key.slice(-4) : null, s.from_number, s.active,
       s.delay_minutes, s.on_deal_manual, s.on_deal_webhook, s.country_code, JSON.stringify(s.number_prefixes),
       s.hours_on, JSON.stringify(s.hours_days), s.hours_from, s.hours_to, s.hours_tz, req.userId,
+      JSON.stringify(s.follow_up), s.book_meetings,
     ];
     if (saved) {
       await pool.query(
@@ -205,22 +225,22 @@ router.put('/', requireAuth, requireManage, async (req, res, next) => {
            api_key_sealed = COALESCE($2, api_key_sealed), key_hint = COALESCE($3, key_hint), from_number = $4,
            active = $5, delay_minutes = $6, on_deal_manual = $7, on_deal_webhook = $8, country_code = $9,
            number_prefixes = $10::jsonb, hours_on = $11, hours_days = $12::jsonb, hours_from = $13, hours_to = $14,
-           hours_tz = $15, saved_by = $16, saved_at = NOW()
+           hours_tz = $15, saved_by = $16, follow_up = $17::jsonb, book_meetings = $18, saved_at = NOW()
          WHERE workspace_id = $1`, params
       );
     } else {
       await pool.query(
         `INSERT INTO workspace_fonio (workspace_id, api_key_sealed, key_hint, from_number, active, delay_minutes,
            on_deal_manual, on_deal_webhook, country_code, number_prefixes, hours_on, hours_days, hours_from, hours_to,
-           hours_tz, saved_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12::jsonb,$13,$14,$15,$16)
+           hours_tz, saved_by, follow_up, book_meetings)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12::jsonb,$13,$14,$15,$16,$17::jsonb,$18)
          ON CONFLICT (workspace_id) DO UPDATE SET
            api_key_sealed = EXCLUDED.api_key_sealed, key_hint = EXCLUDED.key_hint, from_number = EXCLUDED.from_number,
            active = EXCLUDED.active, delay_minutes = EXCLUDED.delay_minutes, on_deal_manual = EXCLUDED.on_deal_manual,
            on_deal_webhook = EXCLUDED.on_deal_webhook, country_code = EXCLUDED.country_code,
            number_prefixes = EXCLUDED.number_prefixes, hours_on = EXCLUDED.hours_on, hours_days = EXCLUDED.hours_days,
            hours_from = EXCLUDED.hours_from, hours_to = EXCLUDED.hours_to, hours_tz = EXCLUDED.hours_tz,
-           saved_by = EXCLUDED.saved_by, saved_at = NOW()`, params
+           saved_by = EXCLUDED.saved_by, follow_up = EXCLUDED.follow_up, book_meetings = EXCLUDED.book_meetings, saved_at = NOW()`, params
       );
     }
     if (variables) await pool.query('UPDATE workspace_fonio SET variables = $2::jsonb WHERE workspace_id = $1', [req.workspaceId, JSON.stringify(variables)]);
@@ -300,13 +320,17 @@ router.post('/log/:id/contact', requireAuth, async (req, res, next) => {
 // A meeting agreed in the call (Part 28): booked for the note's contact at the connected booking service, the
 // outcome added to the note as its last line, and somebody told — the assignee of the deal (else of the contact)
 // hears of the booked meeting like of any other, and of one that could not be booked so a person can see to it.
-// Never throws and never fails fonio's delivery; answers what came of it, or null when the call named no meeting.
-async function meetingFromCall(wid, r, noteId) {
+// With book_meetings off the workspace books in fonio itself (Part 34): nothing is booked here and nobody is told,
+// the note only keeps what was agreed. Never throws and never fails fonio's delivery; answers what came of it, or
+// null when the call named no meeting.
+async function meetingFromCall(wid, r, noteId, bookMeetings = true) {
   if (!r.meeting || !noteId) return null;
   try {
     const { rows: [note] } = await pool.query('SELECT contact_id, deal_id FROM activities WHERE id = $1 AND workspace_id = $2', [noteId, wid]);
     if (!note) return null;
-    const m = await fonioMeeting.bookMeeting(pool, { wid, contactId: note.contact_id, dealId: note.deal_id, meeting: r.meeting });
+    const m = bookMeetings
+      ? await fonioMeeting.bookMeeting(pool, { wid, contactId: note.contact_id, dealId: note.deal_id, meeting: r.meeting })
+      : fonioMeeting.leaveToAssistant(r.meeting);
     if (!m) return null;
     await pool.query("UPDATE activities SET content = content || $3 WHERE id = $1 AND workspace_id = $2", [noteId, wid, '\n\n' + fonioMeeting.noteLine(m)]);
     if (m.status === 'booked' && m.inserted) {
@@ -329,8 +353,10 @@ router.post('/receive/:token', async (req, res, next) => {
   const token = String(req.params.token || '');
   if (!LINK.test(token)) return res.status(404).json({ error: 'Unknown link' });
   try {
-    const { rows: [conn] } = await pool.query('SELECT workspace_id, from_number, country_code FROM workspace_fonio WHERE receive_token = $1', [token]);
+    const { rows: [conn] } = await pool.query('SELECT workspace_id, from_number, country_code, book_meetings FROM workspace_fonio WHERE receive_token = $1', [token]);
     if (!conn) return res.status(404).json({ error: 'Unknown link' });
+    // the workspace may book in fonio itself (Part 34): an old row (undefined) still books here
+    const bookMeetings = conn.book_meetings !== false;
     const body = fonioResult.parseBody(req.body);
     const remember = (outcome, callId = null) => pool.query(
       'UPDATE workspace_fonio SET last_delivery = $2::jsonb WHERE workspace_id = $1',
@@ -346,13 +372,13 @@ router.post('/receive/:token', async (req, res, next) => {
       if (o.outcome === 'noted' || o.outcome === 'logged') await fonioCalls.keepResultBody(pool, 'other', o.other_id, body);
       await remember(o.outcome);
       if (o.outcome === 'no_match') return res.json({ ignored: true, reason: o.outcome });
-      const meeting = o.outcome === 'noted' ? await meetingFromCall(conn.workspace_id, r, o.activity_id) : null;
+      const meeting = o.outcome === 'noted' ? await meetingFromCall(conn.workspace_id, r, o.activity_id, bookMeetings) : null;
       return res.json({ success: true, already: o.outcome === 'already', call_id: null, other_id: o.other_id, activity_id: o.activity_id ?? null, ...(meeting ? { meeting } : {}) });
     }
     if (out.outcome === 'noted') await fonioCalls.keepResultBody(pool, 'call', out.call_id, body);
     await remember(out.outcome, out.call_id ?? null);
     if (out.outcome === 'gone') return res.json({ ignored: true, reason: out.outcome });
-    const meeting = out.outcome === 'noted' ? await meetingFromCall(conn.workspace_id, r, out.activity_id) : null;
+    const meeting = out.outcome === 'noted' ? await meetingFromCall(conn.workspace_id, r, out.activity_id, bookMeetings) : null;
     res.json({ success: true, already: out.outcome === 'already', call_id: out.call_id, activity_id: out.activity_id ?? null, ...(meeting ? { meeting } : {}) });
   } catch (err) { next(err); }
 });

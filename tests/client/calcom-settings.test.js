@@ -32,6 +32,8 @@ describe('the markup', () => {
     assert.match(pane, /<p class="empty-inline hidden" id="cal-none" data-i18n="cal_none">/);
     assert.match(pane, /<div class="intg-section hidden" id="cal-account-section">[\s\S]*<div id="cal-facts"><\/div>/);
     assert.match(pane, /<div class="intg-section hidden" id="cal-type-section">[\s\S]*<select id="cal-event-type" class="form-control" onchange="saveCalcomEventType\(\)"><\/select>\s*<input type="text" id="cal-type-readonly" class="form-control hidden" readonly \/>/, 'members read the event type from a read-only field');
+    assert.match(pane, /<label class="switch-row"><input type="checkbox" id="cal-existing-only" class="switch" onchange="saveCalcomExistingOnly\(\)"> <span data-i18n="cal_existing_only">/, 'the rule for guests the CRM does not know, off until switched on (FONIO_CHANGES Part 34)');
+    assert.match(pane, /<p class="help" data-i18n="cal_existing_only_hint">/);
     assert.match(pane, /<div class="intg-section hidden" id="cal-log-section">[\s\S]*<div id="cal-log" class="intg-logs"><p class="empty-inline" data-i18n="cal_log_none">/, 'the booking log, in the lead log\'s clothes');
     assert.match(pane, /<div class="settings-card-actions" id="cal-actions">\s*<button class="btn btn-primary btn-sm hidden" id="cal-connect-btn" onclick="connectCalcom\(this\)" data-i18n="cal_btn_connect">[^<]*<\/button>\s*<button class="btn btn-sm hidden" id="cal-refresh-btn" onclick="refreshCalcomEventTypes\(this\)" data-i18n="cal_btn_refresh">[^<]*<\/button>\s*<button class="btn btn-sm hidden" id="cal-register-btn" onclick="registerCalcomWebhook\(this\)" data-i18n="cal_btn_register">[^<]*<\/button>\s*<button class="btn btn-sm btn-danger hidden" id="cal-disconnect-btn" onclick="disconnectCalcom\(\)" data-i18n="cal_btn_disconnect">[^<]*<\/button>\s*<span id="cal-msg" class="workspace-name-msg hidden"><\/span>\s*<\/div>/, 'one actions row: the three buttons, each shown by the script, and the message pill beside them');
     assert.match(read('public/style.css'), /^\.settings-tab\[data-tab="calcom"\]::before \{ --ico: url\("data:image\/svg\+xml;charset=utf-8,%3Csvg[^"]*stroke='black'[^"]*rect x='3' y='5'[^"]*"\); \}$/m, 'the rail icon: a calendar');
@@ -72,6 +74,7 @@ describe('the script', () => {
     assert.match(r, /status\.className = 'badge' \+ \(connected \? ' badge-success' : ''\)/);
     assert.match(r, /currentLang === 'de' \? 'de-DE' : 'en-GB'/, 'dates follow the language');
     assert.match(r, /if \(manage\) \{[\s\S]*sel\.classList\.remove\('hidden'\); ro\.classList\.add\('hidden'\);[\s\S]*\} else \{[\s\S]*ro\.value = c\.event_type \? calTypeLabel\(c\.event_type\) : t\('cal_no_event_types'\);/);
+    assert.match(r, /only\.checked = !!c\.existing_contacts_only; only\.disabled = !manage;/, 'the unknown-guest switch follows the server and is read-only for members');
     assert.doesNotMatch(r, /api_key|sealed|receive_token|webhook_secret/);
     assert.match(sliceFn(js, 'calTypeLabel', 'integrations.js'), /tf\('cal_minutes', \{ n: x\.lengthInMinutes \}\)/);
   });
@@ -84,7 +87,10 @@ describe('the script', () => {
     assert.match(d, /await ui\.confirm\(\{ title: t\('cal_btn_disconnect'\), message: t\('cal_confirm_disconnect'\), confirmLabel: t\('cal_btn_disconnect'\), danger: true \}\)/);
     assert.match(d, /if \(!ok\) return;\s*const res = await api\.del\('\/api\/integrations\/calcom'\);/);
     const s = sliceFn(js, 'saveCalcomEventType', 'integrations.js');
-    assert.match(s, /api\.patch\('\/api\/integrations\/calcom', \{ event_type_id: id \}\)/); assert.match(s, /if \(!id\) return;/);
+    assert.match(s, /await saveCalcomSettings\(\{ event_type_id: id \}\)/); assert.match(s, /if \(!id\) return;/);
+    const only = sliceFn(js, 'saveCalcomExistingOnly', 'integrations.js');
+    assert.match(only, /await saveCalcomSettings\(\{ existing_contacts_only: !!document\.getElementById\('cal-existing-only'\)\?\.checked \}\)/);
+    assert.match(sliceFn(js, 'saveCalcomSettings', 'integrations.js'), /api\.patch\('\/api\/integrations\/calcom', body\)/);
   });
 });
 

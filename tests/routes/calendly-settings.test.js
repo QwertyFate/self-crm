@@ -40,6 +40,7 @@ const pool = {
       return { rows: [], rowCount: 1 };
     }
     if (text.startsWith('UPDATE workspace_calendly SET event_type_uri=$1')) { if (state.row) state.row = { ...state.row, event_type_uri: params[0] }; return { rowCount: 1, rows: [] }; }
+    if (text.startsWith('UPDATE workspace_calendly SET existing_contacts_only=$1')) { if (state.row) state.row = { ...state.row, existing_contacts_only: params[0] }; return { rowCount: 1, rows: [] }; }
     if (text.startsWith('UPDATE workspace_calendly SET event_types=$1::jsonb')) { if (state.row) state.row = { ...state.row, event_types: JSON.parse(params[0]), event_type_uri: params[1], last_error: null }; return { rowCount: 1, rows: [] }; }
     if (text.startsWith('UPDATE workspace_calendly SET last_error=$1')) { if (state.row) state.row = { ...state.row, last_error: params[0] }; return { rowCount: 1, rows: [] }; }
     if (text.startsWith('UPDATE workspace_calendly SET webhook_uri=$1, last_error=NULL')) { if (state.row) state.row = { ...state.row, webhook_uri: params[0], last_error: null }; return { rowCount: 1, rows: [] }; }
@@ -212,6 +213,19 @@ describe('PATCH /api/integrations/calendly', () => {
     const ok = await owner.request('PATCH', BASE, { event_type: T1 });
     assert.equal(ok.status, 200); assert.equal(ok.body.calendly.event_type.uri, T1);
     assert.deepEqual(state.calls.find(c => c.sql.startsWith('UPDATE workspace_calendly SET event_type_uri=$1')).params, [T1, 7]); noSecrets(ok.body);
+  });
+  test('the rule for unknown invitees: off until switched on, saved on its own, refused when it is not a boolean', async () => {
+    await connectAsOwner();
+    assert.equal((await owner.request('GET', BASE)).body.calendly.existing_contacts_only, false, 'off by default');
+    const on = await owner.request('PATCH', BASE, { existing_contacts_only: true });
+    assert.equal(on.status, 200, JSON.stringify(on.body));
+    assert.equal(on.body.calendly.existing_contacts_only, true);
+    assert.equal(state.row.existing_contacts_only, true);
+    assert.equal(on.body.calendly.event_type.uri, T2, 'the chosen event type is untouched');
+    assert.ok(!state.calls.some(c => c.sql.startsWith('UPDATE workspace_calendly SET event_type_uri=$1') && c.params[0] === ''), 'the type is not cleared');
+    const bad = await owner.request('PATCH', BASE, { existing_contacts_only: 'yes' });
+    assert.equal(bad.status, 400); assert.equal(bad.body.reason, 'existing_contacts_only');
+    assert.equal((await member.request('PATCH', BASE, { existing_contacts_only: true })).status, 403);
   });
 });
 

@@ -44,13 +44,14 @@
                disconnectCalcom, loadCalcomLogs, showCalMsg
      notetaker loadNotetakerAi, ntAiName, renderNotetakerAi, pickNotetakerAi, showNtAiMsg,
                showNtAiDetail, ntAiErrorText, saveNotetakerAi, removeNotetakerAi
-     fonio     loadFonio, renderFonio, updateFonioActive, toggleFonioDay, renderFonioDays, readFonioForm, fonioErrorText, showFonioMsg,
+     fonio     loadFonio, renderFonio, updateFonioActive, updateFonioFollow, toggleFonioDay, renderFonioDays, readFonioForm, fonioErrorText, showFonioMsg,
                showFonioDetail, saveFonio, removeFonio, loadFonioCalls, fonioCallHtml, cancelFonioCall
      clipboard copyIntgText, copyIntgJson, fallbackCopy
 
    3. CAL.COM ("calcom" tab) — one account per workspace. The server says
-      can_manage; connect, the event type, refresh and disconnect are shown to
-      owners/admins only, members get the account and the event type read-only.
+      can_manage; connect, the event type, the rule for guests the CRM does not
+      know, refresh and disconnect are shown to owners/admins only, members get
+      the account and the event type read-only.
       The key is sent once (POST /calcom/connect) and never comes back.
 
    4. NOTETAKER ("notetaker" tab) — the AI that writes the summary of a recorded
@@ -67,11 +68,16 @@
       and the Body to paste into fonio, so a call's summary and transcript
       come back as a note, and the workspace's own variables for the
       assistant's prompt (a name → a CRM value, sent with every call). Below it, the calls (GET /fonio/calls) with
-      cancel for a waiting one (owner/admin).
+      cancel for a waiting one (owner/admin). A meeting the assistant agreed is booked by the CRM — or by fonio
+      itself, with "Book the agreed meeting in the CRM" off (FONIO_CHANGES Part 34).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 let intgData = null;
 let currentIntgTab = 'webhook';   // remembered for the session, like the Settings rail
+// The workspace's lead webhooks, oldest first, and the one the card is editing (LEAD_WEBHOOK_CHANGES Part 1). The
+// first row is the webhook bookings from Cal.com/Calendly use for a new contact; the rest are just more addresses.
+let intgWebhooks = [];
+let currentWebhookId = null;
 
 // The page reuses the Settings rail markup. Scoped to this page so the two rails
 // (same class names) never toggle each other.
@@ -83,8 +89,12 @@ function switchIntgTab(tab) {
   root.querySelectorAll('.settings-pane').forEach(pane => pane.classList.toggle('active', pane.id === `intg-pane-${tab}`));
 }
 
+// placeholder: the key a field is read from until the webhook says otherwise. The two name parts have none: they
+// are filled only when chosen, and the server joins them when a delivery brings no full name (Part 3).
 const INTG_BUILTIN_FIELDS = [
-  { key: 'name',    labelKey: 'lbl_name',    placeholder: 'full_name'     },
+  { key: 'name',       labelKey: 'lbl_name',            placeholder: 'full_name'  },
+  { key: 'first_name', labelKey: 'intg_map_first_name', placeholder: ''           },
+  { key: 'last_name',  labelKey: 'intg_map_last_name',  placeholder: ''           },
   { key: 'email',   labelKey: 'lbl_email',   placeholder: 'email'         },
   { key: 'phone',   labelKey: 'lbl_phone',   placeholder: 'phone_number'  },
   { key: 'company', labelKey: 'lbl_company', placeholder: 'company'       },
@@ -268,7 +278,7 @@ function showIntgGuide(id) {
 }
 
 // The Engine card loads on its own and the remembered rail tab is re-applied first, so neither is
-// blocked by the lead-webhook early return below.
+// blocked by the lead-webhook loader below.
 async function loadIntegrations() {
   loadEngineSettings();
   switchIntgTab(currentIntgTab);
@@ -280,39 +290,332 @@ async function loadIntegrations() {
   if (intgFieldMap) intgFieldMap.innerHTML = '';
 
   await ensureMembers();
+  await reloadIntgSettings();
+}
+
+// GET /settings returns every lead webhook of the workspace (oldest first) with its catalogs and the cap. A reload
+// keeps the webhook the card was editing unless it was just deleted; `selectId` picks a specific one.
+async function reloadIntgSettings(selectId) {
   const data = await api.get('/api/integrations/settings');
   if (!data || data.error) return;
   intgData = data;
+  intgWebhooks = Array.isArray(data.webhooks) ? data.webhooks : [];
 
-  const { webhook, pipelines } = data;
-  const origin = data.base_url || window.location.origin;
+  const wanted = selectId ?? currentWebhookId;
+  currentWebhookId = intgWebhooks.some(w => w.id === wanted) ? wanted : (intgWebhooks[0]?.id ?? null);
 
-  document.getElementById('intg-url').value =
-    `${origin}/api/integrations/receive/${webhook.webhook_key}`;
-  document.getElementById('intg-active').checked = webhook.active;
+  renderIntgWebhookTabs();
+  renderIntgWebhookForm();
+  renderIntgPlatforms();
+  showIntgGuide(activeGuideId || 'make');   // re-render the open guide too (language switch re-runs this loader)
+  watchIntgTest();
+  await loadIntgLogs();
+}
+
+function intgWebhook() {
+  return intgWebhooks.find(w => w.id === currentWebhookId) || intgWebhooks[0] || null;
+}
+
+function intgWebhookOrigin() {
+  return intgData?.base_url || window.location.origin;
+}
+
+// The tabs above the card: one per webhook (its dot filled while it is active), then "Add webhook" until the cap.
+function renderIntgWebhookTabs() {
+  const el = document.getElementById('intg-webhook-list');
+  if (!el) return;
+  const max = intgData?.max_webhooks || 3;
+
+  const tabs = intgWebhooks.map(w => `
+    <button type="button" class="intg-webhook-tab${w.id === currentWebhookId ? ' active' : ''}${w.active ? '' : ' off'}"
+      data-webhook="${w.id}" onclick="selectIntgWebhook(${w.id})" title="${esc(w.name || '')}">
+      <span class="intg-webhook-dot" aria-hidden="true"></span>
+      <span class="intg-webhook-tab-name">${esc(w.name || t('intg_webhook_untitled'))}</span>
+    </button>`).join('');
+
+  el.innerHTML = tabs + (intgWebhooks.length < max
+    ? `<button type="button" class="intg-webhook-tab intg-webhook-add" onclick="addIntgWebhook()">${UI_ICON.plus}<span>${esc(t('intg_btn_add_webhook'))}</span></button>`
+    : `<span class="intg-webhook-count">${esc(t('intg_add_webhook_max').replace('{n}', String(max)))}</span>`);
+
+  // Only the first webhook feeds Cal.com/Calendly bookings, so the note appears while it is the selected one.
+  const hint = document.getElementById('intg-webhook-default-hint');
+  if (hint) hint.classList.toggle('hidden', intgWebhooks[0]?.id !== currentWebhookId);
+}
+
+function selectIntgWebhook(id) {
+  if (!intgWebhooks.some(w => w.id === id) || id === currentWebhookId) return;
+  // Whatever is in the form belongs to the webhook being left: store it before the card redraws for the other one.
+  saveIntegration(true, false);
+  currentWebhookId = id;
+  renderIntgWebhookTabs();
+  renderIntgWebhookForm();
+}
+
+// The selected webhook's own settings, laid into the card exactly where the single webhook's used to be.
+function renderIntgWebhookForm() {
+  const wh = intgWebhook();
+  if (!wh || !intgData) return;
+
+  document.getElementById('intg-webhook-name').value = wh.name || '';
+  document.getElementById('intg-url').value = `${intgWebhookOrigin()}/api/integrations/receive/${wh.webhook_key}`;
+  document.getElementById('intg-active').checked = wh.active;
 
   activeCustomKeys = [];
-  renderIntgFieldMap(webhook.field_map || {});
+  renderIntgFieldMap(wh.field_map || {});
 
-  document.getElementById('intg-create-deal').checked = webhook.create_deal;
-  document.getElementById('intg-deal-options').classList.toggle('hidden', !webhook.create_deal);
+  document.getElementById('intg-create-deal').checked = wh.create_deal;
+  document.getElementById('intg-deal-options').classList.toggle('hidden', !wh.create_deal);
 
   const pipelineEl = document.getElementById('intg-pipeline');
-  pipelineEl.innerHTML = pipelines.map(p =>
-    `<option value="${p.id}" ${webhook.pipeline_id == p.id ? 'selected' : ''}>${esc(p.name)}</option>`
+  pipelineEl.innerHTML = (intgData.pipelines || []).map(p =>
+    `<option value="${p.id}" ${wh.pipeline_id == p.id ? 'selected' : ''}>${esc(p.name)}</option>`
   ).join('');
 
-  renderIntgStageOptions(webhook.stage_id);
+  renderIntgStageOptions(wh.stage_id);
 
   const assigneeEl = document.getElementById('intg-assignee');
   assigneeEl.innerHTML = `<option value="">${esc(t('opt_assignee_self'))}</option>` +
-    members.map(m =>
-      `<option value="${m.id}" ${webhook.default_assignee_id == m.id ? 'selected' : ''}>${esc(m.name)}</option>`
+    (intgData.members || []).map(m =>
+      `<option value="${m.id}" ${wh.default_assignee_id == m.id ? 'selected' : ''}>${esc(m.name)}</option>`
     ).join('');
 
-  renderIntgPlatforms();
-  showIntgGuide(activeGuideId || 'make');   // re-render the open guide too (language switch re-runs this loader)
-  loadIntgLogs();
+  renderIntgTest();
+  loadIntgPreview();
+
+  // The last webhook cannot be deleted (the server answers 409): it is switched off instead.
+  const del = document.getElementById('intg-delete-btn');
+  if (del) {
+    const last = intgWebhooks.length <= 1;
+    del.disabled = last;
+    del.title = last ? t('intg_last_webhook_hint') : '';
+  }
+}
+
+// ── A test delivery (LEAD_WEBHOOK_CHANGES Part 2) ─────────────────────────────
+// "Listen for a test delivery" makes the webhook keep its next delivery as a sample instead of making a contact (ten
+// minutes, the server's clock). While any webhook listens, the page asks every three seconds whether the delivery has
+// come and then shows the sample; only the test's own fields are taken over, so nothing typed in the card is lost.
+let intgTestTimer = null;
+const INTG_TEST_FIELDS = ['testing', 'test_seconds_left', 'test_until', 'sample', 'sample_at', 'sample_fields'];
+
+function renderIntgTest() {
+  const wh = intgWebhook();
+  const btn = document.getElementById('intg-test-btn'), status = document.getElementById('intg-test-status');
+  if (!wh || !btn) return;
+  btn.textContent = t(wh.testing ? 'intg_test_stop' : 'intg_test_start');
+  if (status) status.textContent = wh.testing ? tf('intg_test_listening', { minutes: Math.max(1, Math.ceil((wh.test_seconds_left || 0) / 60)) }) : '';
+  const has = wh.sample !== null && wh.sample !== undefined;
+  document.getElementById('intg-sample-wrap')?.classList.toggle('hidden', !has);
+  if (!has) return;
+  const when = document.getElementById('intg-sample-when'), pre = document.getElementById('intg-sample');
+  if (when) when.textContent = tf('intg_sample_when', { date: wh.sample_at ? new Date(wh.sample_at).toLocaleString(currentLang === 'de' ? 'de-DE' : 'en-GB') : '' });
+  if (pre) pre.textContent = JSON.stringify(wh.sample, null, 2);   // as text: a payload is never markup
+}
+
+// Take the server's word on one webhook's test fields; true when a sample arrived with it.
+function intgTakeTest(fresh) {
+  const wh = intgWebhooks.find(w => w.id === fresh?.id);
+  if (!wh) return false;
+  const arrived = !!fresh.sample_at && fresh.sample_at !== wh.sample_at;
+  for (const k of INTG_TEST_FIELDS) wh[k] = fresh[k];
+  return arrived;
+}
+
+function watchIntgTest() {
+  clearInterval(intgTestTimer); intgTestTimer = null;
+  if (!intgWebhooks.some(w => w.testing)) return;
+  intgTestTimer = setInterval(async () => {
+    const data = await apiFetchSilent('/api/integrations/settings');
+    if (!data || data.error || !Array.isArray(data.webhooks)) return;
+    const arrived = data.webhooks.map(intgTakeTest).some(Boolean);
+    if (arrived) { intgSampleChanged(); intgFlash(t('intg_test_received')); loadIntgLogs(); }
+    else renderIntgTest();
+    if (!intgWebhooks.some(w => w.testing)) { clearInterval(intgTestTimer); intgTestTimer = null; }
+  }, 3000);
+}
+
+async function toggleIntgTest(btn) {
+  const wh = intgWebhook(); if (!wh) return;
+  if (btn) btn.disabled = true;
+  try {
+    const url = `/api/integrations/settings/${wh.id}/test`;
+    const res = wh.testing ? await api.del(url) : await api.post(url, {});
+    if (!res || res.error || !res.webhook) { intgFlash(intgErrorText(res), true); return; }
+    intgTakeTest(res.webhook);
+    renderIntgTest();
+    watchIntgTest();
+  } finally { if (btn) btn.disabled = false; }
+}
+
+async function discardIntgSample() {
+  const wh = intgWebhook(); if (!wh) return;
+  const res = await api.del(`/api/integrations/settings/${wh.id}/sample`);
+  if (!res || res.error || !res.webhook) { intgFlash(intgErrorText(res), true); return; }
+  intgTakeTest(res.webhook);
+  intgSampleChanged();
+}
+
+// The last delivery this webhook got (a lead, a rejected one, a test) as its sample: the way to set the mapping
+// right after a lead came through wrong, without sending anything again (Part 3).
+async function useIntgLastDelivery(btn) {
+  const wh = intgWebhook(); if (!wh) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api.post(`/api/integrations/settings/${wh.id}/sample/last`, {});
+    if (!res || res.error || !res.webhook) { intgFlash(intgErrorText(res), true); return; }
+    intgTakeTest(res.webhook);
+    intgSampleChanged();
+  } finally { if (btn) btn.disabled = false; }
+}
+
+// A sample came, went or was replaced: the mapping's rows offer its values (or go back to typed keys), and the
+// preview follows. The rows are drawn from the form as it stands, so nothing typed is lost.
+function intgSampleChanged() {
+  renderIntgTest();
+  renderIntgFieldMap(getIntgFieldMap());
+  loadIntgPreview();
+}
+
+// ── Choosing a field's value from the sample (LEAD_WEBHOOK_CHANGES Part 3) ────
+// The server reads the sample and names every value by the path that reaches it (sample_fields: path + example).
+// With a sample, each row of the mapping is a list of those; "Type the key by hand" brings the text field back for
+// a key the sample does not have. Without a sample the rows are the typed keys they always were.
+const INTG_PICK_TYPE = '::type-the-key::';   // the list's last entry; no delivery has a value under this name
+const INTG_PICK_EXAMPLE = 48;
+
+function intgSampleFields() {
+  const wh = intgWebhook();
+  return Array.isArray(wh?.sample_fields) ? wh.sample_fields : [];
+}
+
+// A field map's saved path for one CRM field: '' is "do not fill", null is "nothing saved yet".
+function intgSavedPath(map, key) {
+  return map && Object.prototype.hasOwnProperty.call(map, key) && typeof map[key] === 'string' ? map[key] : null;
+}
+
+function intgPickHtml(crmKey, value, fields) {
+  const opt = (v, label, sel) => `<option value="${esc(v)}"${sel ? ' selected' : ''}>${esc(label)}</option>`;
+  const known = value === '' || fields.some(f => f.path === value);
+  const example = f => (f.value === '' ? f.path : `${f.path}: ${f.value.length > INTG_PICK_EXAMPLE ? f.value.slice(0, INTG_PICK_EXAMPLE) + '…' : f.value}`);
+  return `<select class="form-control intg-map-pick" data-crm="${esc(crmKey)}" onchange="intgPickField(this)" aria-label="${esc(t('intg_pick_aria'))}">`
+    + opt('', t('intg_pick_none'), value === '')
+    + (known ? '' : opt(value, tf('intg_pick_missing', { key: value }), true))
+    + fields.map(f => opt(f.path, example(f), f.path === value)).join('')
+    + opt(INTG_PICK_TYPE, t('intg_pick_type'), false)
+    + '</select>';
+}
+
+// A value was chosen: it is the row's key from now on, saved at once like the card's other lists.
+async function intgPickField(sel) {
+  const box = sel.closest('.intg-key-field');
+  const input = box?.querySelector('.intg-key-input'), btn = box?.querySelector('.intg-key-edit-btn');
+  if (!input) return;
+  if (sel.value === INTG_PICK_TYPE) {   // by hand: the text field comes back, ready to type in
+    input.classList.remove('hidden'); btn?.classList.remove('hidden');
+    input.removeAttribute('readonly'); input.focus(); input.select();
+    return;
+  }
+  input.value = sel.value;
+  input.classList.add('hidden'); btn?.classList.add('hidden');
+  refreshGuideJson();
+  await saveIntegration(true);
+}
+
+// ── What the sample would become (LEAD_WEBHOOK_CHANGES Part 4) ────────────────
+// Asked from the server with the mapping as the form has it right now (saved or not), so the answer is exactly
+// what the receiver would do with that delivery. Nothing is written. Only the newest answer is shown.
+let intgPreviewSeq = 0;
+
+function intgPreviewDeal() {
+  if (!document.getElementById('intg-create-deal')?.checked) return null;
+  const chosen = id => { const s = document.getElementById(id); return s?.options?.[s.selectedIndex]?.textContent || ''; };
+  return { pipeline: chosen('intg-pipeline'), stage: chosen('intg-stage') };
+}
+
+function intgPreviewHtml(p, deal, contactFields) {
+  const fieldName = key => (contactFields || []).find(f => f.field_key === key)?.name || key;
+  const row = (label, value) => `<tr><td class="strong">${esc(label)}</td><td>${value ? esc(value) : `<span class="muted">${esc(t('intg_preview_empty'))}</span>`}</td></tr>`;
+  const c = p.contact || {};
+  const verdict = p.rejected ? `<span class="badge badge-danger">${esc(t('intg_preview_rejected'))}</span>`
+    : p.existing ? `<span class="badge badge-info">${esc(tf('intg_preview_update', { name: p.existing.name || '' }))}</span>`
+    : `<span class="badge badge-success">${esc(t('intg_preview_new'))}</span>`;
+  const name = c.name || (c.email ? tf('intg_preview_name_from_email', { email: c.email }) : '');
+  const rows = [row(t('lbl_name'), name), row(t('lbl_email'), c.email), row(t('lbl_phone'), c.phone), row(t('lbl_company'), c.company),
+    ...(p.custom || []).map(f => row(fieldName(f.key), f.value))].join('');
+  const note = text => `<p class="intg-preview-note">${esc(text)}</p>`;
+  return `<div class="intg-preview-head"><span>${esc(t('intg_preview_title'))}</span>${verdict}</div>
+    <table class="table compact"><tbody>${rows}</tbody></table>`
+    + (p.rejected ? note(t('intg_preview_rejected_hint')) : '')
+    + ((p.skipped || []).length ? note(tf('intg_preview_skipped', { fields: p.skipped.map(f => fieldName(f.key)).join(', ') })) : '')
+    + (!p.rejected && deal ? note(tf('intg_preview_deal', deal)) : '');
+}
+
+async function loadIntgPreview() {
+  const el = document.getElementById('intg-preview'), wh = intgWebhook();
+  if (!el) return;
+  const hide = () => { el.classList.add('hidden'); el.innerHTML = ''; };
+  const seq = ++intgPreviewSeq;
+  if (!wh || wh.sample === null || wh.sample === undefined) { hide(); return; }
+  const res = await api.post(`/api/integrations/settings/${wh.id}/preview`, { field_map: getIntgFieldMap() });
+  if (seq !== intgPreviewSeq) return;   // a newer one is on its way
+  if (!res || res.error || !res.has_sample) { hide(); return; }
+  el.innerHTML = intgPreviewHtml(res, intgPreviewDeal(), intgData?.contact_fields);
+  el.classList.remove('hidden');
+}
+
+// One place for the card's short "Saved" notice and its errors.
+let intgFlashTimer = null;
+function intgFlash(text, isError = false) {
+  const el = document.getElementById('intg-msg');
+  if (!el) return;
+  el.textContent = text;
+  el.className = `workspace-name-msg ${isError ? 'error' : 'success'}`;
+  el.classList.remove('hidden');
+  clearTimeout(intgFlashTimer);
+  intgFlashTimer = setTimeout(() => el.classList.add('hidden'), 2500);
+}
+
+// The server's `reason` is the same in every language, so the card can answer in the user's.
+function intgErrorText(res) {
+  const keys = { limit: 'intg_err_limit', name_taken: 'intg_err_name_taken', last_webhook: 'intg_err_last_webhook', invalid_name: 'intg_err_invalid_name', no_delivery: 'intg_err_no_delivery' };
+  const key = res?.reason && keys[res.reason];
+  return key ? t(key) : (res?.error || t('intg_err_generic'));
+}
+
+async function addIntgWebhook() {
+  await saveIntegration(true, false);   // the form's unsaved edits belong to the webhook that stops being selected
+  const res = await api.post('/api/integrations/settings', {});
+  if (res.error) { intgFlash(intgErrorText(res), true); return; }
+  await reloadIntgSettings(res.webhook?.id);
+  document.getElementById('intg-webhook-name')?.focus();
+}
+
+async function renameIntgWebhook() {
+  const el = document.getElementById('intg-webhook-name');
+  const wh = intgWebhook();
+  if (!el || !wh) return;
+  const name = el.value.trim().replace(/\s+/g, ' ');
+  if (!name) { el.value = wh.name || ''; return; }
+  if (name === wh.name) return;
+
+  const res = await api.patch(`/api/integrations/settings/${wh.id}`, { name });
+  if (res.error) { intgFlash(intgErrorText(res), true); el.value = wh.name || ''; return; }
+  if (res.webhook?.name) wh.name = res.webhook.name;
+  renderIntgWebhookTabs();
+  await loadIntgLogs();   // every lead's badge carries the webhook's name
+  intgFlash(t('msg_saved'));
+}
+
+async function deleteIntgWebhook() {
+  const wh = intgWebhook();
+  if (!wh) return;
+  if (intgWebhooks.length <= 1) { intgFlash(t('intg_err_last_webhook'), true); return; }
+  if (!confirm(t('intg_confirm_delete_webhook').replace('{name}', wh.name || t('intg_webhook_untitled')))) return;
+
+  const res = await api.del(`/api/integrations/settings/${wh.id}`);
+  if (res.error) { intgFlash(intgErrorText(res), true); return; }
+  await reloadIntgSettings(null);
+  intgFlash(t('intg_msg_webhook_deleted'));
 }
 
 let activeCustomKeys = [];
@@ -328,13 +631,13 @@ function renderIntgFieldMap(fieldMap) {
 
   el.innerHTML = `
     <div class="intg-map-section-label">${esc(t('intg_builtin_fields'))}</div>
-    ${INTG_BUILTIN_FIELDS.map(f => renderFieldRow(f.key, t(f.labelKey), f.placeholder, fieldMap[f.key] || '', false)).join('')}
+    ${INTG_BUILTIN_FIELDS.map(f => renderFieldRow(f.key, t(f.labelKey), f.placeholder, intgSavedPath(fieldMap, f.key), false)).join('')}
 
     ${activeCustomKeys.length ? `<div class="intg-map-section-label">${esc(t('intg_custom_fields'))}</div>` : ''}
     ${activeCustomKeys.map(key => {
       const cf = customFields.find(f => f.field_key === key);
       if (!cf) return '';
-      return renderFieldRow(key, cf.name, key, fieldMap[key] || '', true);
+      return renderFieldRow(key, cf.name, key, intgSavedPath(fieldMap, key), true);
     }).join('')}
 
     <div class="intg-map-add-row">
@@ -349,8 +652,12 @@ function renderIntgFieldMap(fieldMap) {
     </div>`;
 }
 
+// value: the saved path ('' = do not fill), or null when nothing is saved yet and the field's usual key stands in.
+// With a sample the row is a list of the sample's values (intgPickHtml) and the text field waits behind it.
 function renderFieldRow(key, label, placeholder, value, isCustom) {
-  const displayVal = value || placeholder;
+  const displayVal = value === null || value === undefined ? placeholder : value;
+  const fields = intgSampleFields();
+  const picking = fields.length > 0;
   const removeBtn  = isCustom
     ? `<span class="intg-map-end"><span class="intg-map-custom-tag">${esc(t('intg_custom_tag'))}</span><button class="intg-map-remove" onclick="intgRemoveField('${key}')" title="${esc(t('btn_delete'))}" aria-label="${esc(t('btn_delete'))}">${UI_ICON.remove}</button></span>`
     : '<span></span>';
@@ -359,13 +666,15 @@ function renderFieldRow(key, label, placeholder, value, isCustom) {
       <div class="intg-map-crm"><span class="intg-map-label" title="${esc(label)}">${esc(label)}</span></div>
       <span class="intg-map-arrow">←</span>
       <div class="intg-key-field">
-        <input class="intg-map-input intg-key-input" type="text"
+        ${picking ? intgPickHtml(key, displayVal, fields) : ''}
+        <input class="intg-map-input intg-key-input${picking ? ' hidden' : ''}" type="text"
           data-crm="${key}"
           value="${esc(displayVal)}"
+          placeholder="${esc(t('intg_pick_none'))}"
           readonly
           onblur="intgKeyBlur(this)"
           oninput="refreshGuideJson()" />
-        <button class="btn btn-sm btn-icon intg-key-edit-btn" onclick="intgToggleKeyEdit(this)" title="${esc(t('intg_edit_key'))}" aria-label="${esc(t('intg_edit_key'))}">${UI_ICON.edit}</button>
+        <button class="btn btn-sm btn-icon intg-key-edit-btn${picking ? ' hidden' : ''}" onclick="intgToggleKeyEdit(this)" title="${esc(t('intg_edit_key'))}" aria-label="${esc(t('intg_edit_key'))}">${UI_ICON.edit}</button>
       </div>
       ${removeBtn}
     </div>`;
@@ -391,12 +700,21 @@ function intgKeyBlur(input) {
     const crmKey  = input.dataset.crm;
     const builtin = INTG_BUILTIN_FIELDS.find(f => f.key === crmKey);
     const cf      = intgData?.contact_fields?.find(f => f.field_key === crmKey);
-    input.value   = builtin?.placeholder || cf?.field_key || crmKey;
+    input.value   = builtin ? builtin.placeholder : (cf?.field_key || crmKey);   // the two name parts have no usual key: they stay empty
   }
   input.setAttribute('readonly', '');
   const btn = input.closest('.intg-key-field')?.querySelector('.intg-key-edit-btn');
   if (btn) btn.classList.remove('active');
   refreshGuideJson();
+  // typed by hand while a sample is there (Part 3): the list takes the key over. A moment later, so that someone
+  // going straight on to the list is not handed a new list under the pointer: their choice there decides instead.
+  const pick = input.closest('.intg-key-field')?.querySelector('.intg-map-pick');
+  if (pick) setTimeout(() => {
+    if (document.activeElement === pick || !pick.isConnected) return;
+    pick.outerHTML = intgPickHtml(input.dataset.crm, input.value.trim(), intgSampleFields());
+    input.classList.add('hidden'); btn?.classList.add('hidden');
+    saveIntegration(true);   // saved at once, as a value chosen from the list is; the preview follows the save
+  }, 0);
 }
 
 async function intgAddField() {
@@ -421,8 +739,9 @@ async function intgRemoveField(key) {
 
 function getIntgFieldMap() {
   const map = {};
+  // every row, an empty one too: '' is "do not fill", which a later render must not turn back into the usual key
   document.querySelectorAll('#intg-field-map .intg-key-input').forEach(inp => {
-    if (inp.value.trim()) map[inp.dataset.crm] = inp.value.trim();
+    map[inp.dataset.crm] = inp.value.trim();
   });
   return map;
 }
@@ -474,10 +793,13 @@ function toggleIntgDeal() {
   renderIntgStageOptions(document.getElementById('intg-stage').value);
 }
 
-async function saveIntegration(silent = false) {
+async function saveIntegration(silent = false, tip = true) {
+  const wh = intgWebhook();
+  if (!wh) return;
   const fieldMap = getIntgFieldMap();
 
-  const res = await api.patch('/api/integrations/settings', {
+  // Scoped to the selected webhook: the other two keep their own mapping and pipeline (LEAD_WEBHOOK_CHANGES Part 1).
+  const res = await api.patch(`/api/integrations/settings/${wh.id}`, {
     field_map:   fieldMap,
     create_deal: document.getElementById('intg-create-deal').checked,
     pipeline_id: document.getElementById('intg-pipeline').value  || null,
@@ -486,8 +808,14 @@ async function saveIntegration(silent = false) {
     active:      document.getElementById('intg-active').checked,
   });
 
+  if (res.webhook) {
+    Object.assign(wh, res.webhook);   // keep the tab's dot and name in step with what was saved
+    renderIntgWebhookTabs();
+  }
+  loadIntgPreview();   // the mapping or the deal settings may have changed (Part 4)
+
   if (silent) {
-    const el = document.getElementById('intg-field-map');
+    const el = tip ? document.getElementById('intg-field-map') : null;
     if (el) {
       const tip = document.createElement('div');
       tip.className = 'intg-autosaved';
@@ -497,16 +825,8 @@ async function saveIntegration(silent = false) {
     }
     return;
   }
-  const msgEl = document.getElementById('intg-msg');
-  if (res.error) {
-    msgEl.textContent = res.error;
-    msgEl.className   = 'workspace-name-msg error';
-  } else {
-    msgEl.textContent = t('msg_saved');
-    msgEl.className   = 'workspace-name-msg success';
-  }
-  msgEl.classList.remove('hidden');
-  setTimeout(() => msgEl.classList.add('hidden'), 2500);
+  if (res.error) intgFlash(intgErrorText(res), true);
+  else intgFlash(t('msg_saved'));
 }
 
 function copyWebhookUrl() {
@@ -520,17 +840,32 @@ function copyWebhookUrl() {
 }
 
 async function regenerateWebhookKey() {
+  const wh = intgWebhook();
+  if (!wh) return;
   if (!confirm(t('intg_confirm_regen_url'))) return;
-  const res = await api.post('/api/integrations/settings/regenerate-key', {});
-  if (res.error) { alert(res.error); return; }
-  const origin = intgData?.base_url || window.location.origin;
-  document.getElementById('intg-url').value = `${origin}/api/integrations/receive/${res.webhook_key}`;
-  if (intgData?.webhook) intgData.webhook.webhook_key = res.webhook_key;
+  const res = await api.post(`/api/integrations/settings/${wh.id}/regenerate-key`, {});
+  if (res.error) { intgFlash(intgErrorText(res), true); return; }
+  wh.webhook_key = res.webhook_key;
+  document.getElementById('intg-url').value = `${intgWebhookOrigin()}/api/integrations/receive/${res.webhook_key}`;
+  refreshGuideJson();
+}
+
+// The "Webhook" filter lists every webhook the workspace has; the selection survives a reload of the list.
+function renderIntgLogFilter() {
+  const el = document.getElementById('intg-log-filter');
+  if (!el) return;
+  const current = el.value;
+  el.innerHTML = `<option value="">${esc(t('intg_log_all_webhooks'))}</option>` +
+    intgWebhooks.map(w => `<option value="${w.id}">${esc(w.name || t('intg_webhook_untitled'))}</option>`).join('');
+  el.value = intgWebhooks.some(w => String(w.id) === current) ? current : '';
 }
 
 async function loadIntgLogs() {
-  const data = await api.get('/api/integrations/logs');
+  renderIntgLogFilter();
+  const filter = document.getElementById('intg-log-filter')?.value || '';
+  const data = await api.get('/api/integrations/logs' + (filter ? `?webhook_id=${encodeURIComponent(filter)}` : ''));
   const el   = document.getElementById('intg-logs');
+  if (!el) return;
   if (!data || data.error || !data.logs.length) {
     el.innerHTML = `<p class="empty-inline">${esc(t('intg_no_activity'))}</p>`;
     return;
@@ -544,6 +879,7 @@ async function loadIntgLogs() {
     return `<div class="intg-log-entry${l.status === 'error' ? ' error' : ''}">
       <div class="intg-log-entry-header">
         <span class="intg-log-badge ${l.status}">${esc(t('intg_log_' + l.status))}</span>
+        ${l.webhook_id ? `<span class="intg-log-webhook">${esc(l.webhook_name || t('intg_webhook_deleted'))}</span>` : ''}
         <span class="intg-log-time">${new Date(l.created_at).toLocaleString(currentLang === 'de' ? 'de-DE' : 'en-GB')}</span>
         <span class="intg-log-contact">${l.contact_name ? esc(l.contact_name) : (l.error ? esc(l.error) : '—')}</span>
       </div>
@@ -912,6 +1248,9 @@ function renderCalcom() {
   ];
   const facts_el = document.getElementById('cal-facts');
   if (facts_el) facts_el.innerHTML = `<table class="table compact"><tbody>${facts.map(([k, v]) => `<tr><td class="strong">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>`;
+  // the rule for guests the CRM does not know (FONIO_CHANGES Part 34): everyone sees it, owners and admins switch it
+  const only = document.getElementById('cal-existing-only');
+  if (only) { only.checked = !!c.existing_contacts_only; only.disabled = !manage; }
   const sel = document.getElementById('cal-event-type'), ro = document.getElementById('cal-type-readonly');
   if (!sel || !ro) return;
   if (manage) {
@@ -952,14 +1291,25 @@ async function connectCalcom(btn) {
   }
 }
 
+// Both fields of the card save through one PATCH (FONIO_CHANGES Part 34): the event type and whether a guest the CRM
+// does not know may make a contact and a deal.
+async function saveCalcomSettings(body) {
+  const res = await api.patch('/api/integrations/calcom', body);
+  if (!res || res.error) { showCalMsg(res?.error || t('cal_err_generic'), false); renderCalcom(); return; }
+  calcomData = res; renderCalcom();
+  showCalMsg(t('cal_saved'), true);
+}
+
 async function saveCalcomEventType() {
   const sel = document.getElementById('cal-event-type');
   const id = Number(sel?.value);
   if (!id) return;
-  const res = await api.patch('/api/integrations/calcom', { event_type_id: id });
-  if (!res || res.error) { showCalMsg(res?.error || t('cal_err_generic'), false); renderCalcom(); return; }
-  calcomData = res; renderCalcom();
-  showCalMsg(t('cal_saved'), true);
+  await saveCalcomSettings({ event_type_id: id });
+}
+
+// The switch for unknown guests only: the chosen event type stays as it is.
+async function saveCalcomExistingOnly() {
+  await saveCalcomSettings({ existing_contacts_only: !!document.getElementById('cal-existing-only')?.checked });
 }
 
 async function refreshCalcomEventTypes(btn) {
@@ -1201,12 +1551,19 @@ function renderFonio() {
   chk('fonio-active', s.active);
   chk('fonio-on-manual', s.on_deal_manual);
   chk('fonio-on-webhook', s.on_deal_webhook);
+  chk('fonio-book-meetings', s.book_meetings);   // who books a meeting agreed in the call (FONIO_CHANGES Part 34)
   val('fonio-delay', s.delay_minutes);
   val('fonio-cc', s.country_code);
   val('fonio-prefixes', (s.number_prefixes || []).join(', '));
   chk('fonio-hours-on', s.hours_on);
   val('fonio-hours-from', s.hours_from);
   val('fonio-hours-to', s.hours_to);
+  const follow = s.follow_up || {};
+  chk('fonio-follow-on', follow.enabled);
+  val('fonio-follow-no-answer', follow.no_answer);
+  val('fonio-follow-voicemail', follow.voicemail);
+  val('fonio-follow-busy', follow.busy);
+  val('fonio-follow-attempts', follow.max_attempts);
   const tz = $('fonio-hours-tz');
   if (tz) tz.textContent = set && s.hours_tz ? tf('fonio_hours_tz', { tz: s.hours_tz }) : t('fonio_hours_tz_own');
   const seg = $('fonio-days');
@@ -1217,6 +1574,7 @@ function renderFonio() {
   }
   card.querySelectorAll('input').forEach(el => { el.disabled = !manage; });
   updateFonioActive();
+  updateFonioFollow();
   renderFonioResult();
   renderFonioVars();
   const facts = $('fonio-facts');
@@ -1414,6 +1772,7 @@ const FONIO_RESULT_BODY = JSON.stringify({
   person_number: '{{personNumber}}',
   agent_number: '{{agentNumber}}',
   caller_name: '{{caller_name}}',
+  call_outcome: '{{call_outcome}}',
   meeting_booked: '{{meeting_booked}}',
   meeting_date: '{{meeting_date}}',
   meeting_time: '{{meeting_time}}',
@@ -1458,6 +1817,17 @@ function updateFonioActive() {
   document.getElementById('fonio-paused-hint')?.classList.toggle('hidden', active);
 }
 
+// The retry switch is the gate for the delays: while it is off they are greyed out, but keep what was typed, so
+// switching it on again brings the values back (Part 33).
+function updateFonioFollow() {
+  const on = !!document.getElementById('fonio-follow-on')?.checked;
+  const manage = !!fonioData?.can_manage;
+  for (const id of ['fonio-follow-no-answer', 'fonio-follow-voicemail', 'fonio-follow-busy', 'fonio-follow-attempts']) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !manage || !on;
+  }
+}
+
 function toggleFonioDay(n) {
   fonioDays = fonioDays.includes(n) ? fonioDays.filter(x => x !== n) : [...fonioDays, n].sort((a, b) => a - b);
   renderFonioDays();
@@ -1468,8 +1838,10 @@ function renderFonioDays() {
   document.querySelectorAll('#fonio-days [data-day]').forEach(b => b.setAttribute('aria-pressed', String(fonioDays.includes(Number(b.dataset.day)))));
 }
 
-// The form as the PUT body. The key is sent only when one is typed; the number starts are split on commas.
+// The form as the PUT body. The key is sent only when one is typed; the number starts are split on commas; a delay
+// field left empty is sent as not-a-number, so the server refuses it instead of reading 0.
 function readFonioForm(form) {
+  const num = v => (String(v ?? '').trim() === '' ? NaN : Number(v));
   const body = {
     from_number: form.from.trim(),
     active: !!form.active,
@@ -1482,6 +1854,14 @@ function readFonioForm(form) {
     hours_days: [...form.days].sort((a, b) => a - b),
     hours_from: form.hoursFrom,
     hours_to: form.hoursTo,
+    book_meetings: !!form.bookMeetings,
+    follow_up: {
+      enabled: !!form.followOn,
+      no_answer: num(form.followNoAnswer),
+      voicemail: num(form.followVoicemail),
+      busy: num(form.followBusy),
+      max_attempts: num(form.followAttempts),
+    },
   };
   const key = form.key.trim();
   if (key) body.api_key = key;
@@ -1499,6 +1879,7 @@ function fonioErrorText(res) {
     prefixes:     t('fonio_err_prefixes'),
     hours_days:   t('fonio_err_hours_days'),
     hours:        t('fonio_err_hours'),
+    follow_up:    t('fonio_err_follow_up'),
     variables:    t('fonio_err_variables'),
     key:          t('fonio_err_key'),
     refused:      t('fonio_err_refused'),
@@ -1528,6 +1909,9 @@ async function saveFonio(btn) {
     key: v('fonio-key'), from: v('fonio-from'), active: c('fonio-active'), onManual: c('fonio-on-manual'),
     onWebhook: c('fonio-on-webhook'), delay: v('fonio-delay'), cc: v('fonio-cc'), prefixes: v('fonio-prefixes'),
     hoursOn: c('fonio-hours-on'), days: fonioDays, hoursFrom: v('fonio-hours-from'), hoursTo: v('fonio-hours-to'),
+    bookMeetings: c('fonio-book-meetings'),
+    followOn: c('fonio-follow-on'), followNoAnswer: v('fonio-follow-no-answer'), followVoicemail: v('fonio-follow-voicemail'),
+    followBusy: v('fonio-follow-busy'), followAttempts: v('fonio-follow-attempts'),
   });
   showFonioDetail('');
   if (btn) { btn.disabled = true; btn.textContent = body.api_key ? t('fonio_checking') : t('fonio_btn_save'); }
@@ -1581,9 +1965,14 @@ function fonioCallHtml(c, manage) {
   const when = c.status === 'scheduled' ? tf('fonio_call_due', { date: fmt(c.due_at) }) : fmt(c.sent_at || c.created_at);
   const who = [c.contact_name, c.deal_title && c.deal_title !== c.contact_name ? c.deal_title : ''].filter(Boolean).join(' · ');
   const reason = c.reason ? (c.reason === 'by_user' && c.cancelled_by_name ? tf('fonio_reason_by_name', { name: c.cancelled_by_name }) : t('fonio_reason_' + c.reason)) : '';
+  const trigger = c.trigger === 'follow_up'
+    ? tf('fonio_trigger_follow_up_n', { n: c.follow_up_no || 1 })
+    : t('fonio_trigger_' + c.trigger);
+  const outcome = c.call_outcome ? t('fonio_outcome_' + c.call_outcome) : '';
   const fields = [
     c.to_number || c.raw_number,
-    t('fonio_trigger_' + c.trigger),
+    trigger,
+    outcome,
     reason,
     c.message ? tf('fonio_detail', { detail: c.message }) : '',
   ].filter(Boolean);

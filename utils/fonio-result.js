@@ -27,9 +27,17 @@
    the workspace's own in fonio, filled by the assistant. readMeeting() reads
    them forgivingly (20.11.2026, "14 Uhr"); utils/fonio-meeting.js books it.
 
+   HOW THE CALL ENDED (Part 33)  The Body may carry call_outcome, a variable of
+   the workspace's own: answered, no_answer, voicemail or busy. readOutcome()
+   reads it forgivingly (German words and near misses too) and returns null for
+   anything it cannot be sure of, so nothing is guessed from the summary. The
+   queue uses it to decide whether the call is tried again (utils/fonio-calls.js
+   followUpAfterResult).
+
    resultNote() is the note's text, in German (the product's language; the
    Notetaker's notes are German by default too). Duration is shown as fonio
-   sends it: its unit is not documented.
+   sends it: its unit is not documented. The first line also says how the call
+   ended when fonio said so.
    ═══════════════════════════════════════════════════════════════════════════ */
 'use strict';
 
@@ -49,6 +57,8 @@ const FIELDS = {
   meetingDate:    ['meeting_date', 'meetingDate', 'termin_datum'],
   meetingTime:    ['meeting_time', 'meetingTime', 'termin_uhrzeit'],
   meetingEmail:   ['meeting_email', 'meetingEmail'],
+  // how the call ended, a variable of the workspace's own (Part 33)
+  callOutcome:    ['call_outcome', 'callOutcome', 'call_status', 'callStatus', 'outcome', 'ergebnis'],
 };
 const MAX_SUMMARY = 4000, MAX_TRANSCRIPT = 200000;
 // What an AI writes into caller_name when the person never said their name (Part 15).
@@ -134,6 +144,24 @@ function readMeeting(b) {
   return { date, time, email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null, said: [rawDate, rawTime].filter(Boolean).join(' ').slice(0, 80) || null };
 }
 
+// How the call ended, as the assistant wrote it (Part 33): 'answered', 'no_answer', 'voicemail', 'busy', or null when
+// fonio said nothing this can be sure of (nothing is guessed from a summary). The order matters: "unanswered" holds
+// "answer", "nicht erreicht" holds "erreicht", so the refusals are read before the answer.
+const OUTCOME_WORDS = { answered: 'angenommen', no_answer: 'nicht abgenommen', voicemail: 'Mailbox', busy: 'besetzt' };
+const OUTCOME_PATTERNS = [
+  ['voicemail', /voicemail|voice_mail|voice_message|mailbox|answering_machine|anrufbeantworter|sprachnachricht/],
+  ['busy', /busy|engaged|besetzt/],
+  ['no_answer', /no_answer|noanswer|unanswered|not_answered|did_not_answer|no_response|no_reply|not_reached|unreachable|declined|missed|keine_antwort|nicht_abgenommen|nicht_erreicht|niemand/],
+  ['answered', /answer|accepted|connected|completed|success|reached|angenommen|abgenommen|erreicht|ja$|yes$|true$/],
+];
+function readOutcome(body) {
+  const raw = pick(asObject(body) || {}, FIELDS.callOutcome).toLowerCase();
+  if (!raw) return null;
+  const s = raw.replace(/[\s\-–/]+/g, '_').replace(/^_+|_+$/g, '');
+  for (const [outcome, re] of OUTCOME_PATTERNS) if (re.test(s)) return outcome;
+  return null;
+}
+
 // Every top-level value that is an international phone number, but the workspace's own fonio number.
 function numbersIn(body, ownNumber) {
   const own = fonio.compactNumber(ownNumber);
@@ -165,6 +193,7 @@ function readResult(body, ownNumber) {
     numbers:        numbersIn(b, ownNumber),
     name:           NO_NAME.test(name) ? '' : name,   // the caller's name as fonio's assistant understood it
     meeting:        readMeeting(b),                    // a meeting agreed in the call, or null (Part 28)
+    outcome:        readOutcome(b),                    // answered, no_answer, voicemail, busy, or null (Part 33)
   };
 }
 
@@ -174,7 +203,9 @@ const fieldNames = body => Object.keys(asObject(body) || {}).slice(0, 30).map(k 
 const cut = (s, max, marker) => (s.length > max ? `${s.slice(0, max)}\n… (${marker})` : s);
 
 function resultNote(r) {
-  const parts = [(r.inbound ? 'Eingehender fonio-Anruf' : 'fonio-Anruf') + (r.duration ? ` · Dauer ${r.duration}` : '')];
+  const parts = [(r.inbound ? 'Eingehender fonio-Anruf' : 'fonio-Anruf')
+    + (r.outcome && OUTCOME_WORDS[r.outcome] ? ` · ${OUTCOME_WORDS[r.outcome]}` : '')
+    + (r.duration ? ` · Dauer ${r.duration}` : '')];
   if (r.summary) parts.push(`Zusammenfassung\n${cut(r.summary, MAX_SUMMARY, 'gekürzt')}`);
   if (r.transcript) parts.push(`Transkript\n${cut(r.transcript, MAX_TRANSCRIPT, 'Transkript gekürzt')}`);
   // nothing recorded: fonio keeps neither when the person declines the recording (its "Recording declined"), and has
@@ -184,4 +215,4 @@ function resultNote(r) {
   return parts.join('\n\n');
 }
 
-module.exports = { FIELDS, MAX_SUMMARY, MAX_TRANSCRIPT, NOT_RECORDED, parseBody, readResult, readMeeting, readDate, readTime, fieldNames, resultNote };
+module.exports = { FIELDS, MAX_SUMMARY, MAX_TRANSCRIPT, NOT_RECORDED, OUTCOME_WORDS, parseBody, readResult, readOutcome, readMeeting, readDate, readTime, fieldNames, resultNote };

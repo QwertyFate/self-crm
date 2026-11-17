@@ -14,12 +14,17 @@
 
      loadCalendly, renderCalendly, clyTypeLabel, clyErrorText, renderCalendlyGuide,
      toggleCalendlyGuide, showClyMsg, connectCalendly, saveCalendlyEventType,
-     refreshCalendlyEventTypes, registerCalendlyWebhook, loadCalendlyLogs, disconnectCalendly
+     saveCalendlyExistingOnly, refreshCalendlyEventTypes, registerCalendlyWebhook,
+     loadCalendlyLogs, disconnectCalendly
 
    Part 2: the card says whether Calendly reports bookings to this CRM (the
    booking webhook), offers to register it again while it is missing, and lists
    the last deliveries — in the Cal.com log's words, since the server names
    them alike.
+
+   Part 3 (FONIO_CHANGES Part 34): "Only note bookings on contacts the CRM
+   already has" — a switch of its own beside the event type. The server does
+   the work (an unknown email is only logged); here it is only shown and saved.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 let calendlyData = null;
@@ -116,6 +121,9 @@ function renderCalendly() {
   ];
   const facts_el = document.getElementById('cly-facts');
   if (facts_el) facts_el.innerHTML = `<table class="table compact"><tbody>${facts.map(([k, v]) => `<tr><td class="strong">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>`;
+  // the rule for invitees the CRM does not know (FONIO_CHANGES Part 34): everyone sees it, owners and admins switch it
+  const only = document.getElementById('cly-existing-only');
+  if (only) { only.checked = !!c.existing_contacts_only; only.disabled = !manage; }
   const sel = document.getElementById('cly-event-type'), ro = document.getElementById('cly-type-readonly');
   if (!sel || !ro) return;
   if (manage) {
@@ -155,14 +163,25 @@ async function connectCalendly(btn) {
   }
 }
 
+// Both fields of the card save through one PATCH (FONIO_CHANGES Part 34): the event type and whether an invitee the
+// CRM does not know may make a contact and a deal.
+async function saveCalendlySettings(body) {
+  const res = await api.patch('/api/integrations/calendly', body);
+  if (!res || res.error) { showClyMsg(clyErrorText(res), false); renderCalendly(); return; }
+  calendlyData = res; renderCalendly();
+  showClyMsg(t('cal_saved'), true);
+}
+
 async function saveCalendlyEventType() {
   const sel = document.getElementById('cly-event-type');
   const uri = sel ? sel.value : '';
   if (!uri) return;
-  const res = await api.patch('/api/integrations/calendly', { event_type: uri });
-  if (!res || res.error) { showClyMsg(clyErrorText(res), false); renderCalendly(); return; }
-  calendlyData = res; renderCalendly();
-  showClyMsg(t('cal_saved'), true);
+  await saveCalendlySettings({ event_type: uri });
+}
+
+// The switch for unknown invitees only: the chosen event type stays as it is.
+async function saveCalendlyExistingOnly() {
+  await saveCalendlySettings({ existing_contacts_only: !!document.getElementById('cly-existing-only')?.checked });
 }
 
 async function refreshCalendlyEventTypes(btn) {

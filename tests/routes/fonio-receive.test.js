@@ -24,7 +24,7 @@ const ago = min => new Date(NOW - min * 60000).toISOString();
 const state = {};
 function reset() {
   Object.assign(state, {
-    calls: [], nextActivity: 500,
+    calls: [], nextActivity: 500, nextCall: 90,
     conns: [
       { workspace_id: WS, from_number: OWN, receive_token: TOKEN, last_delivery: null },
       { workspace_id: OTHER_WS, from_number: '+4940999999', receive_token: OTHER_TOKEN, last_delivery: null },
@@ -52,7 +52,9 @@ function reset() {
   });
 }
 const callOf = id => state.fonioCalls.find(c => c.id === id);
-const fields = c => ({ id: c.id, contact_id: c.contact_id, deal_id: c.deal_id, result_at: c.result_at, note_activity_id: c.note_activity_id });
+const fields = c => ({ id: c.id, contact_id: c.contact_id, deal_id: c.deal_id, result_at: c.result_at, note_activity_id: c.note_activity_id,
+  sent_at: c.sent_at || null, trigger: c.trigger || 'deal_manual', raw_number: c.raw_number || null, to_number: c.to_number || null,
+  follow_up_no: c.follow_up_no || 0, follow_up_at: c.follow_up_at || null });
 
 const pool = {
   query: async (sql, params = []) => {
@@ -63,9 +65,9 @@ const pool = {
     if (q === 'UPDATE activities SET content = content || $3 WHERE id = $1 AND workspace_id = $2') { const a = state.activities.find(x => x.id === params[0] && x.workspace_id === params[1]); if (a) a.content += params[2]; return { rowCount: a ? 1 : 0, rows: [] }; }
     if (q === 'SELECT assigned_to FROM deals WHERE id=$1 AND workspace_id=$2') return { rows: [{ assigned_to: params[0] === 13 ? 9 : null }] };
     if (q === 'SELECT assigned_to FROM contacts WHERE id=$1 AND workspace_id=$2') return { rows: [{ assigned_to: null }] };
-    if (q === 'SELECT workspace_id, from_number, country_code FROM workspace_fonio WHERE receive_token = $1') {
+    if (q === 'SELECT workspace_id, from_number, country_code, book_meetings FROM workspace_fonio WHERE receive_token = $1') {
       const c = state.conns.find(x => x.receive_token === params[0]);
-      return { rows: c ? [{ workspace_id: c.workspace_id, from_number: c.from_number, country_code: '+49' }] : [] };
+      return { rows: c ? [{ workspace_id: c.workspace_id, from_number: c.from_number, country_code: '+49', book_meetings: c.book_meetings !== false }] : [] };
     }
     if (q === 'UPDATE workspace_fonio SET last_delivery = $2::jsonb WHERE workspace_id = $1') {
       state.conns.find(x => x.workspace_id === params[0]).last_delivery = JSON.parse(params[1]);
@@ -75,11 +77,11 @@ const pool = {
       const c = state.fonioCalls.find(x => x.workspace_id === params[0] && x.conversation_id === params[1]);
       return { rows: c ? [{ id: c.id, note_activity_id: c.note_activity_id }] : [] };
     }
-    if (q === "SELECT id, contact_id, deal_id, result_at, note_activity_id FROM fonio_calls WHERE id = $1 AND workspace_id = $2 AND status = 'sent'") {
+    if (q === "SELECT id, contact_id, deal_id, result_at, note_activity_id, sent_at, trigger, raw_number, to_number, follow_up_no, follow_up_at FROM fonio_calls WHERE id = $1 AND workspace_id = $2 AND status = 'sent'") {
       const c = state.fonioCalls.find(x => x.id === params[0] && x.workspace_id === params[1] && x.status === 'sent');
       return { rows: c ? [fields(c)] : [] };
     }
-    if (q === "SELECT id, contact_id, deal_id, result_at, note_activity_id FROM fonio_calls WHERE workspace_id = $1 AND status = 'sent' AND result_at IS NULL AND to_number = ANY($2::text[]) AND sent_at > $3 ORDER BY sent_at DESC, id DESC LIMIT 1") {
+    if (q === "SELECT id, contact_id, deal_id, result_at, note_activity_id, sent_at, trigger, raw_number, to_number, follow_up_no, follow_up_at FROM fonio_calls WHERE workspace_id = $1 AND status = 'sent' AND result_at IS NULL AND to_number = ANY($2::text[]) AND sent_at > $3 ORDER BY sent_at DESC, id DESC LIMIT 1") {
       const since = new Date(params[2]).getTime();
       const c = state.fonioCalls
         .filter(x => x.workspace_id === params[0] && x.status === 'sent' && !x.result_at && params[1].includes(x.to_number) && x.sent_at && new Date(x.sent_at).getTime() > since)
@@ -100,6 +102,35 @@ const pool = {
     if (q === 'UPDATE fonio_calls SET result_body = $2::jsonb WHERE id = $1') { callOf(params[0]).result_body = JSON.parse(params[1]); return { rows: [] }; }
     if (q === 'UPDATE fonio_other_calls SET result_body = $2::jsonb WHERE id = $1') { state.others.find(o => o.id === params[0]).result_body = JSON.parse(params[1]); return { rows: [] }; }
     if (q === 'UPDATE fonio_calls SET note_activity_id = $1 WHERE id = $2') { callOf(params[1]).note_activity_id = params[0]; return { rows: [] }; }
+    // Part 33: the note keeps how the call ended, and a call that reached nobody books one retry
+    if (q === 'UPDATE fonio_calls SET note_activity_id = $1, call_outcome = COALESCE($3, call_outcome) WHERE id = $2') {
+      const c = callOf(params[1]);
+      if (c) { c.note_activity_id = params[0]; if (params[2]) c.call_outcome = params[2]; }
+      return { rows: [] };
+    }
+    if (q === 'SELECT * FROM workspace_fonio WHERE workspace_id = $1') {
+      const c = state.conns.find(x => x.workspace_id === params[0]);
+      return { rows: c ? [{ delay_minutes: 5, active: true, country_code: '+49', hours_on: true, hours_days: [1, 2, 3, 4, 5],
+        hours_from: '09:00:00', hours_to: '18:00:00', hours_tz: 'Europe/Berlin', follow_up: {}, ...c }] : [] };
+    }
+    if (q.startsWith("INSERT INTO fonio_calls (workspace_id, deal_id, contact_id, trigger, status, raw_number, to_number, due_at, follow_up_of, follow_up_no)")) {
+      const row = { id: state.nextCall++, workspace_id: params[0], deal_id: params[1], contact_id: params[2], trigger: 'follow_up', status: 'scheduled',
+        reason: null, raw_number: params[3], to_number: params[4], due_at: params[5], follow_up_of: params[6], follow_up_no: params[7],
+        result_at: null, note_activity_id: null, follow_up_at: null, sent_at: null, conversation_id: null, conversation_link: null };
+      state.fonioCalls.push(row);
+      return { rows: [{ id: row.id, status: row.status, reason: row.reason, due_at: row.due_at }] };
+    }
+    if (q === 'UPDATE fonio_calls SET follow_up_at = NOW(), updated_at = NOW() WHERE id = $1 AND follow_up_at IS NULL RETURNING id') {
+      const c = callOf(params[0]);
+      if (!c || c.follow_up_at) return { rows: [] };
+      c.follow_up_at = new Date().toISOString();
+      return { rows: [{ id: c.id }] };
+    }
+    if (q.startsWith("UPDATE fonio_calls SET status = 'cancelled', reason = 'late_result'")) {
+      let n = 0;
+      for (const c of state.fonioCalls) if (c.follow_up_of === params[0] && c.status === 'scheduled') { c.status = 'cancelled'; c.reason = 'late_result'; n++; }
+      return { rowCount: n, rows: [] };
+    }
     if (q === 'SELECT id, note_activity_id FROM fonio_other_calls WHERE workspace_id = $1 AND conversation_id = $2') {
       const o = state.others.find(x => x.workspace_id === params[0] && x.conversation_id === params[1]);
       return { rows: o ? [{ id: o.id, note_activity_id: o.note_activity_id }] : [] };
@@ -458,6 +489,21 @@ describe('a meeting agreed in the call (Part 28)', () => {
     const r = await post(TOKEN, { conversation_id: 'in-10', direction: 'inbound', person_number: '+491519999999', agent_number: OWN, summary: 'x', meeting_booked: 'yes', meeting_date: '2026-11-20', meeting_time: '14:00' });
     assert.equal(r.status, 200); assert.equal(r.body.meeting, undefined); assert.equal(asked.length, 0);
   });
+  test('book_meetings off (Part 34): fonio books the meeting itself, so nothing is asked of a booking service and nobody is told; the note says so', async () => {
+    state.conns.find(c => c.workspace_id === WS).book_meetings = false;
+    const r = await post(TOKEN, MEET);
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.meeting, { status: 'self_booked', service: null, reason: null, activity_id: null });
+    assert.equal(asked.length, 0, 'bookMeeting is never asked');
+    assert.ok(notes()[0].content.endsWith('\n\nTermin im Gespräch vereinbart: 20.11.2026, 14:00 — die Buchung übernimmt fonio'), notes()[0].content.slice(-130));
+    assert.equal(told.length, 0); assert.equal(announced.length, 0);
+  });
+  test('a row saved before the switch existed (no book_meetings column) books as before: only an explicit false keeps the CRM out', async () => {
+    delete state.conns.find(c => c.workspace_id === WS).book_meetings;
+    const r = await post(TOKEN, MEET);
+    assert.equal(r.body.meeting.status, 'booked');
+    assert.equal(asked.length, 1);
+  });
 });
 
 describe('refused', () => {
@@ -467,7 +513,7 @@ describe('refused', () => {
     }
     assert.equal(state.calls.length, 0);
     assert.equal((await post('ef'.repeat(32), RESULT)).status, 404);
-    assert.deepEqual(state.calls.map(c => c.sql), ['SELECT workspace_id, from_number, country_code FROM workspace_fonio WHERE receive_token = $1']);
+    assert.deepEqual(state.calls.map(c => c.sql), ['SELECT workspace_id, from_number, country_code, book_meetings FROM workspace_fonio WHERE receive_token = $1']);
     assert.equal(notes().length, 0);
   });
   test('a body that is not JSON: 400, remembered as such', async () => {
@@ -498,6 +544,78 @@ describe('the settings answer', () => {
     assert.equal('receive_url' in r.settings, false);
     assert.equal('last_delivery' in r.settings, false);
     assert.equal('key_hint' in r.settings, false);
+  });
+});
+
+// ── Part 33: a call that reached nobody is tried again ──────────────────────
+describe('a call that reached nobody (Part 33)', () => {
+  const policy = (over = {}) => ({ enabled: true, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1, ...over });
+  const followUps = () => state.fonioCalls.filter(c => c.trigger === 'follow_up');
+  const result = (over = {}) => ({ ...RESULT, conversation_id: 'conv-n1', call_outcome: 'no_answer', ...over });
+
+  test('not answered: the note says so, and one follow-up call waits, due the delay after the call itself', async () => {
+    state.conns[0].hours_on = false;
+    state.conns[0].follow_up = policy();
+    const sentAt = new Date(callOf(12).sent_at).getTime();
+    const r = await post(TOKEN, result());
+    assert.equal(r.status, 200);
+    assert.ok(notes()[0].content.startsWith('fonio-Anruf · nicht abgenommen · Dauer 125'), notes()[0].content.slice(0, 60));
+    assert.equal(callOf(12).call_outcome, 'no_answer');
+    const [f] = followUps();
+    assert.deepEqual([f.status, f.follow_up_of, f.follow_up_no, f.contact_id, f.deal_id, f.to_number],
+      ['scheduled', 12, 1, 5, 13, '+491711234567']);
+    assert.equal(new Date(f.due_at).getTime(), sentAt + 120 * 60000, 'counted from the call, not from the result');
+    assert.ok(callOf(12).follow_up_at, 'the call knows it has its retry');
+  });
+  test('mailbox: a day later; busy: two hours; the outcome is kept on the call', async () => {
+    state.conns[0].hours_on = false;
+    state.conns[0].follow_up = policy();
+    const sentAt = new Date(callOf(12).sent_at).getTime();
+    await post(TOKEN, result({ call_outcome: 'voicemail' }));
+    assert.equal(new Date(followUps()[0].due_at).getTime(), sentAt + 1440 * 60000);
+    reset();
+    state.conns[0].hours_on = false;
+    state.conns[0].follow_up = policy();
+    const sent2 = new Date(callOf(12).sent_at).getTime();
+    await post(TOKEN, result({ call_outcome: 'busy' }));
+    assert.equal(new Date(followUps()[0].due_at).getTime(), sent2 + 120 * 60000);
+  });
+  test('answered: nothing booked; without call_outcome nothing is guessed', async () => {
+    state.conns[0].follow_up = policy();
+    await post(TOKEN, result({ call_outcome: 'answered' }));
+    assert.equal(callOf(12).call_outcome, 'answered');
+    assert.equal(followUps().length, 0);
+    reset();
+    state.conns[0].follow_up = policy();
+    await post(TOKEN, result({ call_outcome: undefined }));
+    assert.equal(callOf(12).call_outcome, undefined);
+    assert.equal(followUps().length, 0);
+  });
+  test('while the card is off (the default): no retry', async () => {
+    await post(TOKEN, result());
+    assert.equal(notes().length, 1, 'the note is written as before');
+    assert.equal(followUps().length, 0);
+  });
+  test('the chain stops at max_attempts, and a call whose retry is booked books no second one', async () => {
+    state.conns[0].follow_up = policy({ max_attempts: 1 });
+    callOf(12).follow_up_no = 1;
+    await post(TOKEN, result());
+    assert.equal(followUps().length, 0);
+    reset();
+    state.conns[0].follow_up = policy();
+    callOf(12).follow_up_at = ago(5);
+    await post(TOKEN, result());
+    assert.equal(followUps().length, 0);
+  });
+  test('an answered result arriving after the sweep booked a retry cancels that retry, not a call that already rang', async () => {
+    state.conns[0].follow_up = policy();
+    callOf(12).follow_up_at = ago(10);
+    state.fonioCalls.push({ id: 90, workspace_id: WS, contact_id: 5, deal_id: 13, trigger: 'follow_up', status: 'scheduled', reason: null,
+      follow_up_of: 12, follow_up_no: 1, to_number: '+491711234567', sent_at: null, result_at: null, note_activity_id: null, due_at: ago(-60) });
+    const r = await post(TOKEN, result({ call_outcome: 'answered' }));
+    assert.equal(r.status, 200);
+    assert.deepEqual([callOf(90).status, callOf(90).reason], ['cancelled', 'late_result']);
+    assert.equal(followUps().length, 1, 'no second retry');
   });
 });
 

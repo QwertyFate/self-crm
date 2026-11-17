@@ -438,9 +438,9 @@ field endpoint for the platform admin.
 
 One transaction does all of it: seed the workspace from `platform_settings` (the same defaults
 signup uses), insert the custom fields, create the owner (`users` + `user_workspaces`, role
-`owner`), and create the `workspace_webhook` row with its key, a `field_map` that already covers
-the custom contact fields, the owner as `default_assignee_id`, and the first pipeline + first
-stage when `create_deal` is on.
+`owner`), and create the first `workspace_webhook` row (`Webhook 1`, the first of up to three) with
+its key, a `field_map` that already covers the custom contact fields, the owner as
+`default_assignee_id`, and the first pipeline + first stage when `create_deal` is on.
 
 `field_key` is slugged from `name` when not given (`"Lead Source"` → `lead_source`); `type`
 defaults to `text` and is checked against `VALID_TYPES` in
@@ -739,15 +739,26 @@ and workspace in `break_scores`, their best game. Scores come from the browser: 
 |---|---|---|---|
 | GET | `/` | member | The ten best of `req.workspaceId`, current members only: `[{ name, score, lines, level, at, mine }]` |
 | POST | `/` | member | `{ score (1–10,000,000), lines (0–100,000), level (1–10,000) }`, whole numbers; kept only if it beats the caller's best; answers with the board |
-### `/api/integrations` — inbound webhook
+### `/api/integrations` — inbound lead webhooks (up to three per workspace)
+
+Each workspace can have **three** lead webhooks (`workspace_webhook`, `LEAD_WEBHOOK_CHANGES.md`): one
+row per address, each with its own key, `field_map`, auto-deal pipeline/stage, assignee, on/off switch
+and a name the team gives it. The **oldest** row is the first webhook — bookings from Cal.com/Calendly
+that create a contact use its pipeline, stage and assignee. Every write below is scoped to one id; the
+oldest row's key and settings from before the change are untouched.
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/settings` | member | **Creates** the `workspace_webhook` row with a fresh key on first view, and returns the pipelines, stages, custom fields and members the mapping UI needs |
-| PATCH | `/settings` | member | `{field_map, create_deal, pipeline_id, stage_id, default_assignee_id, active}` |
-| POST | `/settings/regenerate-key` | member | New 20-byte key; the old URL stops working immediately |
-| GET | `/logs` | member | Last 50 `webhook_logs` rows |
-| POST | `/receive/:key` | **public** | **120 / 15 min per IP** and **120 / min per key** (both in `server.js`). Resolves the key → workspace, maps the payload through `field_map` (dot paths supported), upserts the contact by email, optionally creates a deal, and always writes a `webhook_logs` row. 404 unknown/inactive key, 422 when neither name nor email could be mapped |
+| GET | `/settings` | member | **Creates the first** webhook (named `Webhook 1`) with a fresh key when the workspace has none; returns `{webhooks[], max_webhooks: 3, pipelines, stages, contact_fields, members, base_url}` for the card |
+| POST | `/settings` | member | `{name?}` → a new webhook (201), named `Webhook N` when omitted; 409 `limit` past three, 409 `name_taken` (case-blind), 400 `invalid_name` |
+| PATCH | `/settings/:id` | member | Any of `{name, field_map, create_deal, pipeline_id, stage_id, default_assignee_id, active}`; only that webhook changes, 404 for an id of another workspace |
+| POST | `/settings/:id/regenerate-key` | member | New 20-byte key for that webhook; its old URL stops working immediately |
+| DELETE | `/settings/:id` | member | Removes one webhook (its leads' log rows keep the historical name as NULL); 409 `last_webhook` for the last one — switch it off instead |
+| GET | `/logs` | member | Last 50 `webhook_logs` rows, each with `webhook_id`/`webhook_name`; `?webhook_id=` narrows to one |
+| POST | `/receive/:key` | **public** | **120 / 15 min per IP** and **120 / min per key** (both in `server.js`). Resolves the key → that webhook, maps the payload through `field_map` (dot paths supported), upserts the contact by email, optionally creates a deal, and always writes a `webhook_logs` row naming the webhook. 404 unknown/inactive key, 422 when neither name nor email could be mapped |
+
+`PATCH /settings` and `POST /settings/regenerate-key` (no id) still work and act on the oldest webhook,
+for a page cached from before the change.
 
 > Note the role gap: `/settings` and `/settings/regenerate-key` are **member**-level. Any member
 > can repoint or rotate the inbound webhook. If that is wrong for us, it is a one-line fix
@@ -772,7 +783,7 @@ share the prefix.
 | GET | `/calcom/slots` | member | `?from=YYYY-MM-DD&days=1..14&event_type_id=` → the free slots per day (ISO instants) in the viewer's zone, from Cal.com's `GET /v2/slots` |
 | POST | `/calcom/book` | member | `{start, event_type_id?, deal_id? \| contact_id?, note?, language?}` → books at Cal.com (`POST /v2/bookings`, the contact as attendee, our ids in the metadata), writes the `meeting` activity at once (same uid as the later webhook), logs it; 400 for a missing email / unknown record, 409 when Cal.com refuses the slot, 502 unreachable |
 | | | | Part 12: the deal's assignee (else the contact's) rides along as a Cal.com guest (never the host or the attendee; dropped with one retry when the event type refuses guests) and gets one bell notification (`notifyUser`, category `activities`); the answer carries `booking.guests` and `told` |
-| POST | `/calcom/receive/:token` | **public** | Cal.com's booking webhook. `server.js` hands this path the raw body (`express.raw` before the global json parser) and the same two rate limits as the lead receiver; the route verifies `x-cal-signature-256` (HMAC-SHA256 over the raw bytes with the workspace's `webhook_secret`), then writes one `meeting` activity per booking (`calcom_uid`), moves it on reschedule, marks it (`cancelled_at`) on cancellation. An unknown attendee creates the contact and a deal by the lead webhook's settings. 404 unknown token, 401 bad signature (logged), 200 `{ignored}` for other triggers |
+| POST | `/calcom/receive/:token` | **public** | Cal.com's booking webhook. `server.js` hands this path the raw body (`express.raw` before the global json parser) and the same two rate limits as the lead receiver; the route verifies `x-cal-signature-256` (HMAC-SHA256 over the raw bytes with the workspace's `webhook_secret`), then writes one `meeting` activity per booking (`calcom_uid`), moves it on reschedule, marks it (`cancelled_at`) on cancellation. An unknown attendee creates the contact and a deal by the settings of the workspace's first (oldest) lead webhook. 404 unknown token, 401 bad signature (logged), 200 `{ignored}` for other triggers |
 | | | | Part 12: the link is read from `metadata.videoCallUrl`, `videoCallData.url` or `location`; the assignee is told of a NEW booking (`xmax = 0`), a move that found the old uid, a cancellation that found a live row — never of what the CRM did itself |
 
 ### `/api/engine` — outbound "Upgrads Engine"
@@ -849,12 +860,16 @@ external form  → POST /api/integrations/receive/<webhook_key>     (public, rat
    routes/integrations.js
      ├─ workspace_webhook WHERE webhook_key AND active       → 404 if not found
      ├─ pick() maps payload through field_map (supports "a.b.c" dot paths)
-     ├─ neither name nor email? → log status='error' + 422
+     ├─ neither name nor email? → log status='error' (webhook_id) + 422
      ├─ unmapped keys → custom_data; what was dropped is recorded under captured._skipped
      ├─ email known?  UPDATE contacts   : INSERT contacts (assigned_to = default_assignee_id)
      ├─ create_deal && pipeline_id → INSERT deals (stage = configured, else the first stage)
-     └─ INSERT webhook_logs (payload + captured + ids)        → GET /api/integrations/logs
+     └─ INSERT webhook_logs (payload + captured + ids + webhook_id)  → GET /api/integrations/logs
 ```
+
+Which webhook received the lead is on the log row, so "Recent leads" names it (and can be filtered
+by it). A booking from Cal.com/Calendly that creates a contact uses the workspace's **oldest** webhook
+for its pipeline, stage and assignee (`calContactFor`, shared with `routes/calendly.js`).
 
 The same "fall back to the pipeline's first stage" rule lives in `POST /api/contacts/import`.
 If you change one, change both — they are the two bulk entry points for deals.

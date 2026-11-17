@@ -67,12 +67,42 @@ const pool = {
     if (t.startsWith('SELECT id FROM fonio_calls WHERE workspace_id = $1 AND contact_id = $2')) {
       return { rows: db.calls.filter(c => c.workspace_id === p[0] && c.contact_id === p[1] && waitingStatus(c.status)).slice(0, 1).map(c => ({ id: c.id })) };
     }
+    // Part 33: a retry booked after a call that reached nobody
+    if (t.startsWith("INSERT INTO fonio_calls (workspace_id, deal_id, contact_id, trigger, status, raw_number, to_number, due_at, follow_up_of, follow_up_no)")) {
+      if (db.calls.some(c => c.contact_id === p[2] && waitingStatus(c.status))) throw Object.assign(new Error('duplicate key'), { code: '23505' });
+      const row = { id: db.nextCall++, workspace_id: p[0], deal_id: p[1], contact_id: p[2], trigger: 'follow_up', status: 'scheduled', reason: null, raw_number: p[3],
+        to_number: p[4], due_at: new Date(p[5]), follow_up_of: p[6], follow_up_no: p[7], message: null, sent_at: null, attempts: 0, cancelled_by: null,
+        created_at: new Date(), updated_at: new Date() };
+      db.calls.push(row);
+      return { rows: [{ id: row.id, status: row.status, reason: row.reason, due_at: row.due_at }] };
+    }
     if (t.startsWith('INSERT INTO fonio_calls')) {
       if (waitingStatus(p[4]) && db.calls.some(c => c.contact_id === p[2] && waitingStatus(c.status))) throw Object.assign(new Error('duplicate key'), { code: '23505' });
       const row = { id: db.nextCall++, workspace_id: p[0], deal_id: p[1], contact_id: p[2], trigger: p[3], status: p[4], reason: p[5], raw_number: p[6],
         to_number: p[7], due_at: p[8] ? new Date(p[8]) : new Date(), message: null, sent_at: null, attempts: 0, cancelled_by: null, created_at: new Date(), updated_at: new Date() };
       db.calls.push(row);
       return { rows: [{ id: row.id, status: row.status, reason: row.reason, due_at: row.due_at }] };
+    }
+    if (t === 'UPDATE fonio_calls SET follow_up_at = NOW(), updated_at = NOW() WHERE id = $1 AND follow_up_at IS NULL RETURNING id') {
+      const c = call(p[0]);
+      if (!c || c.follow_up_at) return { rows: [] };
+      c.follow_up_at = new Date();
+      return { rows: [{ id: c.id }] };
+    }
+    if (t.startsWith("UPDATE fonio_calls SET status = 'cancelled', reason = 'late_result'")) {
+      let n = 0;
+      for (const c of db.calls) if (c.follow_up_of === p[0] && c.status === 'scheduled') { Object.assign(c, { status: 'cancelled', reason: 'late_result' }); n++; }
+      return { rowCount: n, rows: [] };
+    }
+    if (t.startsWith('SELECT f.id, f.workspace_id, f.contact_id, f.deal_id, f.raw_number, f.to_number, f.sent_at, f.follow_up_no, f.follow_up_at FROM fonio_calls f JOIN workspace_fonio w')) {
+      if (!db.conn || db.conn.workspace_id !== WS || !db.conn.active || db.conn.follow_up?.enabled !== true) return { rows: [] };
+      const cut = new Date(p[0]).getTime();
+      const oldest = new Date(p[2]).getTime();
+      const rows = db.calls
+        .filter(c => c.status === 'sent' && !c.result_at && !c.follow_up_at && c.sent_at
+          && new Date(c.sent_at).getTime() < cut && new Date(c.sent_at).getTime() > oldest)
+        .sort((a, b) => new Date(a.sent_at) - new Date(b.sent_at) || a.id - b.id).slice(0, p[1]);
+      return { rows };
     }
     // the claim and the stuck-row sweep are answered only when their guard is in the statement: the fake cannot
     // honour a WHERE it does not read, so a statement without it is "unexpected" and the test fails
@@ -383,6 +413,132 @@ describe("the booking service's free times go with the call, for the assistant (
   });
 });
 
+// ── Part 33: trying again after a call that reached nobody ──────────────────
+describe('trying again after a call that reached nobody (Part 33)', () => {
+  const follow = (over = {}) => ({ enabled: true, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1, ...over });
+  // a call fonio made 90 minutes before WED10 and never reported
+  const sentCall = (over = {}) => {
+    const c = { id: db.nextCall++, workspace_id: WS, deal_id: 100, contact_id: 10, trigger: 'deal_manual', status: 'sent', reason: null,
+      raw_number: '0171 1234567', to_number: '+491711234567', due_at: minutes(WED10, -95), sent_at: minutes(WED10, -90),
+      result_at: null, follow_up_no: 0, follow_up_at: null, attempts: 1, created_at: minutes(WED10, -95), updated_at: minutes(WED10, -90) };
+    Object.assign(c, over);
+    db.calls.push(c);
+    return c;
+  };
+  const followUps = () => db.calls.filter(c => c.trigger === 'follow_up');
+
+  test('the sweep books one retry for a call older than an hour: due sent_at + the not-answered delay, inside the hours', async () => {
+    db.conn.follow_up = follow();
+    const c = sentCall();
+    assert.equal(await fonioCalls.sweepUnreported(pool, WED10), 1);
+    const [f] = followUps();
+    assert.deepEqual([f.status, f.follow_up_of, f.follow_up_no, f.contact_id, f.deal_id, f.to_number], ['scheduled', c.id, 1, 10, 100, '+491711234567']);
+    assert.equal(f.due_at.toISOString(), minutes(WED10, 30).toISOString(), '90 minutes ago + 120 minutes: half an hour from now');
+    assert.ok(c.follow_up_at, 'the call knows it has its retry');
+  });
+  test('the sweep leaves alone: a call younger than an hour, older than a day, with a result, or with its retry booked', async () => {
+    db.conn.follow_up = follow();
+    sentCall({ sent_at: minutes(WED10, -10) });
+    sentCall({ sent_at: minutes(WED10, -25 * 60) });
+    sentCall({ result_at: new Date(), sent_at: minutes(WED10, -120) });
+    const booked = sentCall({ sent_at: minutes(WED10, -120) });
+    booked.follow_up_at = new Date();
+    assert.equal(await fonioCalls.sweepUnreported(pool, WED10), 0);
+    assert.equal(followUps().length, 0);
+  });
+  test('nothing is retried while the card is off (a row saved before it existed) or the connection is inactive', async () => {
+    sentCall();
+    assert.equal(await fonioCalls.sweepUnreported(pool, WED10), 0, '{} means off');
+    db.conn.follow_up = follow();
+    db.conn.active = false;
+    assert.equal(await fonioCalls.sweepUnreported(pool, WED10), 0);
+    assert.equal(followUps().length, 0);
+  });
+  test('the chain stops at max_attempts: a retry that was itself not answered is not retried past the limit', async () => {
+    db.conn.follow_up = follow({ max_attempts: 1 });
+    sentCall({ trigger: 'follow_up', follow_up_no: 1 });
+    assert.equal(await fonioCalls.sweepUnreported(pool, WED10), 0);
+    db.calls.length = 0;
+    db.conn.follow_up = follow({ max_attempts: 2 });
+    sentCall({ trigger: 'follow_up', follow_up_no: 1 });
+    assert.equal(await fonioCalls.sweepUnreported(pool, WED10), 1);
+    assert.equal(followUps().at(-1).follow_up_no, 2);
+  });
+  test('one retry per call: the next tick finds nothing to book', async () => {
+    db.conn.follow_up = follow();
+    sentCall();
+    assert.equal(await fonioCalls.sweepUnreported(pool, WED10), 1);
+    assert.equal(await fonioCalls.sweepUnreported(pool, WED10), 0);
+    assert.equal(followUps().length, 1);
+  });
+  test('runDue carries the sweep, so the worker needs no second timer', async () => {
+    db.conn.follow_up = follow();
+    sentCall();
+    await fonioCalls.runDue(pool, { now: WED10 });
+    assert.equal(followUps().length, 1);
+    assert.equal(followUps()[0].status, 'scheduled', 'due in half an hour: not sent yet');
+  });
+});
+
+describe('the outcome decides the delay, and an answered result takes the retry back (Part 33)', () => {
+  const follow = (over = {}) => ({ enabled: true, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1, ...over });
+  const sentCall = (over = {}) => {
+    const c = { id: db.nextCall++, workspace_id: WS, deal_id: 100, contact_id: 10, trigger: 'deal_manual', status: 'sent', reason: null,
+      raw_number: '0171 1234567', to_number: '+491711234567', due_at: minutes(WED10, -95), sent_at: minutes(WED10, -90),
+      result_at: null, follow_up_no: 0, follow_up_at: null, attempts: 1, created_at: minutes(WED10, -95), updated_at: minutes(WED10, -90) };
+    Object.assign(c, over);
+    db.calls.push(c);
+    return c;
+  };
+  const followUps = () => db.calls.filter(c => c.trigger === 'follow_up');
+
+  test('no answer and unreported 120 minutes, mailbox a day, busy 120 — all counted from sent_at, moved into the hours', async () => {
+    db.conn.follow_up = follow();
+    const due = { no_answer: '2026-11-04T09:30:00.000Z', voicemail: '2026-11-05T08:00:00.000Z', busy: '2026-11-04T09:30:00.000Z' };
+    for (const outcome of ['no_answer', 'voicemail', 'busy', 'unreported']) {
+      db.calls.length = 0;
+      const c = sentCall();
+      assert.ok(await fonioCalls.followUpAfterResult(pool, WS, c, outcome, WED10), outcome);
+      assert.equal(followUps()[0].due_at.toISOString(), due[outcome === 'unreported' ? 'no_answer' : outcome], outcome);
+    }
+  });
+  test('an answered result, or none at all, books nothing', async () => {
+    db.conn.follow_up = follow();
+    for (const outcome of ['answered', null]) {
+      const c = sentCall();
+      assert.equal(await fonioCalls.followUpAfterResult(pool, WS, c, outcome, WED10), null, String(outcome));
+    }
+    assert.equal(followUps().length, 0);
+  });
+  test('a late answered result cancels the retry the sweep booked — unless it has gone out', async () => {
+    db.conn.follow_up = follow();
+    const c = sentCall();
+    c.follow_up_at = new Date();
+    const f = { id: db.nextCall++, workspace_id: WS, deal_id: 100, contact_id: 10, trigger: 'follow_up', status: 'scheduled', reason: null,
+      follow_up_of: c.id, follow_up_no: 1, due_at: minutes(WED10, 30), sent_at: null, attempts: 0, created_at: new Date(), updated_at: new Date() };
+    db.calls.push(f);
+    assert.equal(await fonioCalls.followUpAfterResult(pool, WS, c, 'answered', WED10), null);
+    assert.deepEqual([f.status, f.reason], ['cancelled', 'late_result']);
+    f.status = 'sent';
+    await fonioCalls.followUpAfterResult(pool, WS, c, 'answered', WED10);
+    assert.equal(f.status, 'sent', 'a call that already rang is not taken back');
+  });
+  test('a contact with a call waiting gets none — and the call is settled, not retried later; one retry per call', async () => {
+    db.conn.follow_up = follow();
+    const c = sentCall();
+    db.calls.push({ id: db.nextCall++, workspace_id: WS, deal_id: 100, contact_id: 10, trigger: 'deal_webhook', status: 'scheduled', reason: null,
+      due_at: minutes(WED10, 5), sent_at: null, follow_up_no: 0, follow_up_at: null, attempts: 0, created_at: new Date(), updated_at: new Date() });
+    assert.equal(await fonioCalls.followUpAfterResult(pool, WS, c, 'no_answer', WED10), null);
+    assert.equal(followUps().length, 0);
+    assert.ok(c.follow_up_at, 'the contact is being called anyway: this call needs no retry of its own');
+    db.calls = db.calls.filter(x => x.status !== 'scheduled');
+    const c2 = sentCall({ id: db.nextCall++ });
+    assert.ok(await fonioCalls.followUpAfterResult(pool, WS, c2, 'no_answer', WED10));
+    assert.equal(await fonioCalls.followUpAfterResult(pool, WS, c2, 'no_answer', WED10), null);
+    assert.equal(followUps().length, 1);
+  });
+});
+
 describe('the table', () => {
   test('initDb() creates fonio_calls, its due index, and one waiting call per contact as a unique index', async () => {
     const fs = require('fs'), path = require('path');
@@ -393,10 +549,26 @@ describe('the table', () => {
     await loadDb(fs.readFileSync(path.join(ROOT, 'db.js'), 'utf8'), dbPool).initDb();
     const create = dbPool.find(/CREATE TABLE IF NOT EXISTS fonio_calls \(/);
     assert.ok(create);
-    assert.match(create.sql, /trigger TEXT NOT NULL CHECK \(trigger IN \('deal_manual','deal_webhook'\)\)/);
+    assert.match(create.sql, /trigger TEXT NOT NULL CHECK \(trigger IN \('deal_manual','deal_webhook','follow_up'\)\)/);
     assert.ok(dbPool.find(/CREATE INDEX IF NOT EXISTS fonio_calls_due_idx ON fonio_calls \(due_at\) WHERE status = 'scheduled'/));
     // the pre-check in scheduleForDeal is the quick path; this index is the guarantee when two deals arrive at once
     assert.ok(dbPool.find(/CREATE UNIQUE INDEX IF NOT EXISTS fonio_calls_one_waiting ON fonio_calls \(contact_id\) WHERE status IN \('scheduled','sending'\)/));
+  });
+  test('initDb() adds the follow-up columns, widens an old trigger check and indexes the unreported calls (Part 33)', async () => {
+    const fs = require('fs'), path = require('path');
+    const { createFakePool } = require('../helpers/fake-pool');
+    const { loadDb } = require('../helpers/load-db');
+    const { ROOT } = require('../helpers/load-route');
+    const dbPool = createFakePool([{ match: /COUNT\(\*\)::int AS n/, reply: () => ({ rows: [{ n: 1 }] }) }]);
+    await loadDb(fs.readFileSync(path.join(ROOT, 'db.js'), 'utf8'), dbPool).initDb();
+    for (const col of ['call_outcome TEXT', 'follow_up_of INTEGER REFERENCES fonio_calls\\(id\\) ON DELETE SET NULL',
+      'follow_up_no INTEGER NOT NULL DEFAULT 0', 'follow_up_at TIMESTAMPTZ']) {
+      assert.ok(dbPool.find(new RegExp(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS ${col}`)), col);
+    }
+    assert.ok(dbPool.find(/ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS follow_up JSONB NOT NULL DEFAULT '\{\}'::jsonb/));
+    assert.ok(dbPool.find(/ALTER TABLE fonio_calls DROP CONSTRAINT IF EXISTS fonio_calls_trigger_check/));
+    assert.ok(dbPool.find(/ADD CONSTRAINT fonio_calls_trigger_check CHECK \(trigger IN \('deal_manual','deal_webhook','follow_up'\)\)/));
+    assert.ok(dbPool.find(/CREATE INDEX IF NOT EXISTS fonio_calls_unreported_idx ON fonio_calls \(sent_at\) WHERE status = 'sent' AND result_at IS NULL/));
   });
 });
 

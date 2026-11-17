@@ -185,6 +185,9 @@ app.use('/api/notetaker/webhook', express.raw({ type: '*/*', limit: '5mb' }));
 app.use('/api/integrations/fonio/receive', express.raw({ type: '*/*', limit: '1mb' }));
 // Calendly's booking webhooks are signed over the raw body (Calendly-Webhook-Signature), as Cal.com's are.
 app.use('/api/integrations/calendly/receive', express.raw({ type: '*/*', limit: '1mb' }));
+// A lead webhook takes what any tool sends (LEAD_WEBHOOK_CHANGES Part 5): besides JSON (read by express.json()
+// below, as before) a form post, a multipart form, and JSON sent as text or with no content type at all.
+app.use('/api/integrations/receive', ...require('./utils/lead-mapping').bodyParsers(express));
 app.use(express.json());
 // Engine API paths: a malformed or oversized body is a body-parser error BEFORE the routers run.
 // Answer the Engine's { fehler } shape (400 / 413) instead of the browser's { error } — and never a crash.

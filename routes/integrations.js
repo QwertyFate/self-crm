@@ -21,11 +21,32 @@
      5. upsert the contact BY EMAIL; with no email it always inserts.
      6. optionally create a deal — with no configured stage it falls back to
         the pipeline's FIRST stage, the same rule as the CSV import.
-     7. always write a webhook_logs row, success or failure.
+     7. always write a webhook_logs row, success or failure, naming the webhook.
 
-   GET /settings CREATES the workspace_webhook row and its key on first view,
-   and returns the pipelines, stages, custom fields and members the mapping UI
-   needs in one response.
+   WHERE A VALUE IS (LEAD_WEBHOOK_CHANGES Parts 3–5)  The field map's paths, the
+   list of a sample's fields and the preview are utils/lead-mapping.js: nested
+   keys, list entries, name/value pairs (field_data[name=email].values), keys
+   with dots or brackets in their names. The body may be JSON, a form post, a
+   multipart form, or JSON sent as text (server.js mounts the parsers).
+
+   A TEST DELIVERY (LEAD_WEBHOOK_CHANGES Part 2)  While a webhook is listening
+   (POST /settings/:id/test, ten minutes), the next delivery stops after step 1:
+   it is kept as the webhook's `sample` for the mapping to be chosen from,
+   logged with status 'test', and makes no contact. One delivery ends the
+   listening. A webhook that is switched off still takes its test delivery.
+
+   UP TO THREE WEBHOOKS PER WORKSPACE (LEAD_WEBHOOK_CHANGES Part 1)
+     Each row is one address with its own key, field map, auto-deal pipeline,
+     stage, assignee and on/off switch, plus a name the team gives it. The
+     workspace's OLDEST row is the first webhook: bookings from Cal.com and
+     Calendly that create a contact use its pipeline, stage and assignee (see
+     calContactFor below). GET /settings creates the first row on first view,
+     POST /settings adds the second and third (409 beyond that), and every
+     write below is scoped to one id — never to the whole workspace.
+
+   GET /settings CREATES the first workspace_webhook row and its key on first
+   view, and returns the pipelines, stages, custom fields and members the
+   mapping UI needs in one response (plus max_webhooks).
 
    ⚠ /settings and /settings/regenerate-key are MEMBER level — any member can
      repoint or rotate the inbound webhook. The equivalent Engine routes
@@ -42,10 +63,13 @@
    ENDPOINTS
      GET   /settings · PATCH /settings · POST /settings/regenerate-key
      GET   /logs                       last 50 deliveries
-     POST  /receive/:key               PUBLIC
+     POST  /settings/:id/test          listen for one test delivery · DELETE: stop (LEAD_WEBHOOK_CHANGES Part 2)
+     POST  /settings/:id/sample/last   the last delivery as the sample · DELETE /settings/:id/sample: discard it (Part 3)
+     POST  /settings/:id/preview       what the sample would become with { field_map }; writes nothing (Part 4)
+     POST  /receive/:key               PUBLIC; JSON, a form post, a multipart form, or JSON sent as text (Part 5)
      GET   /calcom                     status (everyone); ?fresh=1 re-reads the event types from Cal.com first
      POST  /calcom/connect             { api_key }        owner/admin; 409 calendly_connected while Calendly is connected
-     PATCH /calcom                     { event_type_id }  owner/admin
+     PATCH /calcom                     { event_type_id } | { existing_contacts_only }  owner/admin
      POST  /calcom/refresh             re-fetch the event types, owner/admin
      POST  /calcom/register-webhook    (re)register the booking webhook at Cal.com, owner/admin
      DELETE /calcom                    disconnect (and remove the webhook at Cal.com), owner/admin
@@ -82,6 +106,7 @@ const { masterDataChanges } = require('../utils/kunde');
 const calcom      = require('../utils/calcom');            // the Cal.com client and the sealing of its key
 const notetaker   = require('../utils/notetaker');         // the Notetaker recording bot for Google Meet (2026-10-20)
 const llmCheck    = require('../utils/llm-check');         // the Notetaker's summary AI: does it take the key? (2026-11-05)
+const leadMapping = require('../utils/lead-mapping');      // a delivery's values by the webhook's field map (LEAD_WEBHOOK_CHANGES Parts 3–5)
 const fonioCalls  = require('../utils/fonio-calls');       // fonio calls a lead's new deal (FONIO_CHANGES Part 3)
 const baseUrl     = require('../utils/base-url');          // the public origin Cal.com must reach for the booking webhook
 const { notifyUser } = require('../notifications');         // the assignee of a deal or a contact is told of a meeting (Part 12)
@@ -89,23 +114,100 @@ const { notifyUser } = require('../notifications');         // the assignee of a
 router.use('/settings', requireAuth);
 router.use('/logs',     requireAuth);
 
+// ── The lead webhooks: up to MAX_WEBHOOKS per workspace (LEAD_WEBHOOK_CHANGES Part 1) ───────────────
+// Each row is one public address with its own key, field map, auto-deal settings and assignee; `name` is how the team
+// tells them apart. The workspace's oldest row is "the first webhook": a booking from Cal.com/Calendly that creates a
+// contact lands in its pipeline, stage and assignee (calContactFor below, shared with routes/calendly.js).
+const MAX_WEBHOOKS = 3;
+const TEST_MINUTES = 10;   // how long a webhook listens for its test delivery (Part 2)
+
+// A label the team can read in a tab: 1–60 characters, runs of whitespace collapsed. null when unusable.
+function cleanWebhookName(raw) {
+  const s = typeof raw === 'string' ? raw.trim().replace(/\s+/g, ' ') : '';
+  return s.length >= 1 && s.length <= 60 ? s : null;
+}
+
+// The first free "Webhook N", so a new one needs no typing; the card lets the team rename it right away. A workspace
+// that renamed its webhooks gets "Webhook 1"; one called "webhook 2" counts as taken (names are case-blind).
+async function nextWebhookName(wid) {
+  const { rows } = await pool.query('SELECT name FROM workspace_webhook WHERE workspace_id=$1', [wid]);
+  const taken = new Set(rows.map(r => String(r.name || '').trim().toLowerCase()));
+  for (let n = 1; n <= MAX_WEBHOOKS; n++) if (!taken.has(`webhook ${n}`)) return `Webhook ${n}`;
+  return 'Webhook';
+}
+
+// One webhook as the card needs it: its own columns plus the pipeline/stage names shown next to the selects.
+const WEBHOOK_SELECT = `
+  SELECT w.*, p.name AS pipeline_name, ps.name AS stage_name
+  FROM workspace_webhook w
+  LEFT JOIN pipelines p ON p.id = w.pipeline_id
+  LEFT JOIN pipeline_stages ps ON ps.id = w.stage_id`;
+
+async function webhooksOf(wid) {
+  const { rows } = await pool.query(`${WEBHOOK_SELECT} WHERE w.workspace_id=$1 ORDER BY w.id ASC`, [wid]);
+  return rows;
+}
+
+function webhookIdOf(raw) {
+  const id = Number(raw);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function sendWebhookError(res, error) {
+  if (error === 'not_found')    return res.status(404).json({ error: 'Webhook not found' });
+  if (error === 'invalid_name') return res.status(400).json({ error: 'Name must be 1 to 60 characters.', reason: 'invalid_name' });
+  if (error === 'name_taken')   return res.status(409).json({ error: 'Another webhook already has this name.', reason: 'name_taken' });
+  if (error === 'empty')        return res.status(400).json({ error: 'Nothing to update.' });
+  return res.status(500).json({ error: 'Internal error' });
+}
+
+// Applies the card's fields to ONE webhook. Only the keys present in the body change, so a rename need not send the
+// whole form (the card's save still sends all of them, exactly as before). The WHERE carries the workspace: an id
+// from another workspace is a 404, never an edit.
+async function updateWebhook(wid, id, body) {
+  const { field_map, create_deal, pipeline_id, stage_id, default_assignee_id, active, name } = body || {};
+  const fields = [];
+  const params = [];
+  const push = (col, val) => { params.push(val); fields.push(`${col}=$${params.length}`); };
+
+  if (name !== undefined) {
+    const clean = cleanWebhookName(name);
+    if (!clean) return { error: 'invalid_name' };
+    push('name', clean);
+  }
+  if (field_map !== undefined)           push('field_map', JSON.stringify(field_map || {}));
+  if (create_deal !== undefined)         push('create_deal', create_deal === true);
+  if (pipeline_id !== undefined)         push('pipeline_id', pipeline_id || null);
+  if (stage_id !== undefined)            push('stage_id', stage_id || null);
+  if (default_assignee_id !== undefined) push('default_assignee_id', default_assignee_id || null);
+  if (active !== undefined)              push('active', active !== false);
+  if (!fields.length) return { error: 'empty' };
+
+  params.push(id, wid);
+  const { rows: [row] } = await pool.query(
+    `UPDATE workspace_webhook SET ${fields.join(', ')}
+      WHERE id=$${params.length - 1} AND workspace_id=$${params.length}
+      RETURNING *`,
+    params
+  );
+  return row ? { webhook: row } : { error: 'not_found' };
+}
+
 router.get('/settings', async (req, res, next) => {
   try {
     const wid = req.workspaceId;
-    let { rows: [wh] } = await pool.query(
-      `SELECT w.*, p.name AS pipeline_name, ps.name AS stage_name
-       FROM workspace_webhook w
-       LEFT JOIN pipelines p ON p.id = w.pipeline_id
-       LEFT JOIN pipeline_stages ps ON ps.id = w.stage_id
-       WHERE w.workspace_id=$1`, [wid]
-    );
-    if (!wh) {
+    let webhooks = await webhooksOf(wid);
+    if (!webhooks.length) {
+      // A workspace with none gets its first on first view, as before, so the URL exists the moment the page opens.
+      // The WHERE NOT EXISTS keeps two tabs opened at once from minting two keys.
       const key = crypto.randomBytes(20).toString('hex');
-      const { rows: [created] } = await pool.query(
-        `INSERT INTO workspace_webhook (workspace_id, webhook_key) VALUES ($1,$2) RETURNING *`,
+      await pool.query(
+        `INSERT INTO workspace_webhook (workspace_id, webhook_key)
+         SELECT $1,$2
+          WHERE NOT EXISTS (SELECT 1 FROM workspace_webhook WHERE workspace_id=$1)`,
         [wid, key]
       );
-      wh = created;
+      webhooks = await webhooksOf(wid);
     }
 
     const { rows: pipelines } = await pool.query(
@@ -127,56 +229,250 @@ router.get('/settings', async (req, res, next) => {
        WHERE uw.workspace_id=$1 ORDER BY u.name`, [wid]
     );
 
-    res.json({ webhook: wh, pipelines, stages, contact_fields, members, base_url: process.env.APP_URL || null });
+    res.json({ webhooks: webhooks.map(webhookView), max_webhooks: MAX_WEBHOOKS, pipelines, stages, contact_fields, members, base_url: process.env.APP_URL || null });
   } catch (err) { next(err); }
 });
 
+// Add the second or third webhook. The count is checked inside the INSERT, so a double click cannot make a fourth;
+// the unique index on (workspace_id, lower(name)) turns a duplicate name into a 409 the card can explain.
+router.post('/settings', async (req, res, next) => {
+  try {
+    const wid  = req.workspaceId;
+    const want = req.body?.name;
+    const name = (want === undefined || want === null || String(want).trim() === '')
+      ? await nextWebhookName(wid)
+      : cleanWebhookName(want);
+    if (!name) return sendWebhookError(res, 'invalid_name');
+
+    const key = crypto.randomBytes(20).toString('hex');
+    const { rows: [created] } = await pool.query(
+      `INSERT INTO workspace_webhook (workspace_id, webhook_key, name)
+       SELECT $1,$2,$3
+        WHERE (SELECT COUNT(*) FROM workspace_webhook WHERE workspace_id=$1) < $4
+       RETURNING *`,
+      [wid, key, name, MAX_WEBHOOKS]
+    );
+    if (!created) return res.status(409).json({ error: `A workspace can have at most ${MAX_WEBHOOKS} lead webhooks.`, reason: 'limit' });
+    res.status(201).json({ webhook: created });
+  } catch (err) {
+    if (err?.code === '23505') return sendWebhookError(res, 'name_taken');
+    next(err);
+  }
+});
+
+router.patch('/settings/:id', async (req, res, next) => {
+  try {
+    const id = webhookIdOf(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Webhook id must be a positive integer.' });
+    const result = await updateWebhook(req.workspaceId, id, req.body);
+    if (result.error) return sendWebhookError(res, result.error);
+    res.json({ success: true, webhook: result.webhook });
+  } catch (err) {
+    if (err?.code === '23505') return sendWebhookError(res, 'name_taken');
+    next(err);
+  }
+});
+
+// The pre-Part-1 path, kept for a page cached from before the upgrade: it edits the first webhook — the only one a
+// workspace had back then — so a save or key rotation from that tab still lands somewhere sane.
 router.patch('/settings', async (req, res, next) => {
   try {
-    const { field_map, create_deal, pipeline_id, stage_id, default_assignee_id, active } = req.body;
-    await pool.query(
-      `UPDATE workspace_webhook
-       SET field_map=$1, create_deal=$2, pipeline_id=$3, stage_id=$4, default_assignee_id=$5, active=$6
-       WHERE workspace_id=$7`,
-      [
-        JSON.stringify(field_map || {}),
-        create_deal === true,
-        pipeline_id || null,
-        stage_id    || null,
-        default_assignee_id || null,
-        active !== false,
-        req.workspaceId,
-      ]
+    const { rows: [first] } = await pool.query(
+      'SELECT id FROM workspace_webhook WHERE workspace_id=$1 ORDER BY id ASC LIMIT 1', [req.workspaceId]
     );
-    res.json({ success: true });
+    if (!first) return res.status(404).json({ error: 'Webhook not found' });
+    const result = await updateWebhook(req.workspaceId, first.id, req.body);
+    if (result.error) return sendWebhookError(res, result.error);
+    res.json({ success: true, webhook: result.webhook });
+  } catch (err) {
+    if (err?.code === '23505') return sendWebhookError(res, 'name_taken');
+    next(err);
+  }
+});
+
+router.post('/settings/:id/regenerate-key', async (req, res, next) => {
+  try {
+    const id = webhookIdOf(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Webhook id must be a positive integer.' });
+    const key = crypto.randomBytes(20).toString('hex');
+    const { rows: [row] } = await pool.query(
+      `UPDATE workspace_webhook SET webhook_key=$1
+        WHERE id=$2 AND workspace_id=$3
+        RETURNING id, webhook_key`,
+      [key, id, req.workspaceId]
+    );
+    if (!row) return res.status(404).json({ error: 'Webhook not found' });
+    res.json({ webhook_id: row.id, webhook_key: row.webhook_key });
   } catch (err) { next(err); }
 });
 
+// Pre-Part-1 key rotation: the first webhook's key (see PATCH /settings above).
 router.post('/settings/regenerate-key', async (req, res, next) => {
   try {
     const key = crypto.randomBytes(20).toString('hex');
-    await pool.query(
-      `UPDATE workspace_webhook SET webhook_key=$1 WHERE workspace_id=$2`,
+    const { rows: [row] } = await pool.query(
+      `UPDATE workspace_webhook SET webhook_key=$1
+        WHERE id = (SELECT id FROM workspace_webhook WHERE workspace_id=$2 ORDER BY id ASC LIMIT 1)
+        RETURNING id, webhook_key`,
       [key, req.workspaceId]
     );
-    res.json({ webhook_key: key });
+    if (!row) return res.json({ webhook_key: key });
+    res.json({ webhook_id: row.id, webhook_key: row.webhook_key });
+  } catch (err) { next(err); }
+});
+
+// ── A test delivery, for setting the mapping up (LEAD_WEBHOOK_CHANGES Part 2) ──
+// POST   /settings/:id/test    listen: for TEST_MINUTES the next delivery to this webhook is kept as its sample and
+//                              makes no contact; that one delivery ends the listening
+// DELETE /settings/:id/test    stop listening
+// DELETE /settings/:id/sample  discard the kept sample
+// POST   /settings/:id/sample/last   Part 3: take the last delivery this webhook got (a lead, a rejected one or a
+//                              test) as its sample; 404 {reason:'no_delivery'} when none has arrived
+// POST   /settings/:id/preview Part 4: what the sample would become with { field_map } (the saved one when the body
+//                              names none): the contact's values, the custom fields, what the sample lacks, whether
+//                              it would be rejected, and the contact it would update. Nothing is written.
+// All of them but the preview answer the webhook as the card knows it, with `testing`, the seconds left and the
+// sample's fields.
+function webhookView(row) {
+  const until = row.test_until ? new Date(row.test_until).getTime() : 0;
+  const left = Math.max(0, Math.ceil((until - Date.now()) / 1000));
+  // the sample's values, each with the path that reaches it: what the mapping is chosen from (Part 3)
+  const fields = row.sample === null || row.sample === undefined ? [] : leadMapping.flatten(row.sample);
+  return { ...row, testing: left > 0, test_seconds_left: left, sample_fields: fields };
+}
+async function setWebhookTest(req, res, next, sql) {
+  try {
+    const id = webhookIdOf(req.params.id);
+    if (!id) return sendWebhookError(res, 'not_found');
+    const { rows: [row] } = await pool.query(sql, [id, req.workspaceId]);
+    if (!row) return sendWebhookError(res, 'not_found');
+    res.json({ webhook: webhookView(row) });
+  } catch (err) { next(err); }
+}
+router.post('/settings/:id/test', (req, res, next) => setWebhookTest(req, res, next,
+  `UPDATE workspace_webhook SET test_until = NOW() + INTERVAL '${TEST_MINUTES} minutes' WHERE id=$1 AND workspace_id=$2 RETURNING *`));
+router.delete('/settings/:id/test', (req, res, next) => setWebhookTest(req, res, next,
+  'UPDATE workspace_webhook SET test_until = NULL WHERE id=$1 AND workspace_id=$2 RETURNING *'));
+router.delete('/settings/:id/sample', (req, res, next) => setWebhookTest(req, res, next,
+  'UPDATE workspace_webhook SET sample = NULL, sample_at = NULL WHERE id=$1 AND workspace_id=$2 RETURNING *'));
+
+router.post('/settings/:id/sample/last', async (req, res, next) => {
+  try {
+    const id = webhookIdOf(req.params.id), wid = req.workspaceId;
+    if (!id) return sendWebhookError(res, 'not_found');
+    // deliveries from before the webhooks had names carry no webhook: they belong to the workspace's first one
+    const { rows: [first] } = await pool.query('SELECT id FROM workspace_webhook WHERE workspace_id=$1 ORDER BY id ASC LIMIT 1', [wid]);
+    const { rows: [row] } = await pool.query(
+      `UPDATE workspace_webhook w SET sample = l.payload, sample_at = l.created_at
+         FROM (SELECT payload, created_at FROM webhook_logs
+                WHERE workspace_id=$2 AND source='lead' AND payload IS NOT NULL
+                  AND (webhook_id=$1 OR ($3::boolean AND webhook_id IS NULL))
+                ORDER BY created_at DESC, id DESC LIMIT 1) l
+        WHERE w.id=$1 AND w.workspace_id=$2
+        RETURNING w.*`,
+      [id, wid, !!first && first.id === id]
+    );
+    if (row) return res.json({ webhook: webhookView(row) });
+    const { rows: [mine] } = await pool.query('SELECT id FROM workspace_webhook WHERE id=$1 AND workspace_id=$2', [id, wid]);
+    if (!mine) return sendWebhookError(res, 'not_found');
+    res.status(404).json({ error: 'No delivery has arrived at this webhook yet.', reason: 'no_delivery' });
+  } catch (err) { next(err); }
+});
+
+router.post('/settings/:id/preview', async (req, res, next) => {
+  try {
+    const id = webhookIdOf(req.params.id), wid = req.workspaceId;
+    if (!id) return sendWebhookError(res, 'not_found');
+    const { rows: [wh] } = await pool.query('SELECT id, field_map, sample FROM workspace_webhook WHERE id=$1 AND workspace_id=$2', [id, wid]);
+    if (!wh) return sendWebhookError(res, 'not_found');
+    if (wh.sample === null || wh.sample === undefined) return res.json({ has_sample: false });
+    const sent = req.body?.field_map;
+    const map = sent && typeof sent === 'object' && !Array.isArray(sent) ? sent : (wh.field_map || {});
+    const m = leadMapping.mapPayload(wh.sample, map);
+    const rejected = !m.name?.trim() && !m.email?.trim();
+    const email = m.email ? m.email.toLowerCase().trim() : null;
+    let existing = null;
+    if (!rejected && email) {
+      const { rows: [c] } = await pool.query('SELECT id, name FROM contacts WHERE workspace_id=$1 AND email=$2', [wid, email]);
+      existing = c ? { id: c.id, name: c.name } : null;
+    }
+    res.json({
+      has_sample: true, rejected,
+      contact: { name: m.name || null, email, phone: m.phone, company: m.company },
+      custom:  Object.entries(m.customData).map(([key, value]) => ({ key, value })),
+      skipped: Object.keys(m.skipped).map(key => ({ key, incoming: String(map[key]) })),
+      existing,
+    });
+  } catch (err) { next(err); }
+});
+
+router.delete('/settings/:id', async (req, res, next) => {
+  try {
+    const id = webhookIdOf(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Webhook id must be a positive integer.' });
+    const wid = req.workspaceId;
+
+    const { rows: [found] } = await pool.query(
+      'SELECT id FROM workspace_webhook WHERE id=$1 AND workspace_id=$2', [id, wid]
+    );
+    if (!found) return res.status(404).json({ error: 'Webhook not found' });
+
+    // The last one stays, so the workspace always has an address: switch it off instead. The count sits in the
+    // DELETE itself, so two tabs deleting the two remaining webhooks cannot leave the workspace with none.
+    const { rows: [deleted] } = await pool.query(
+      `DELETE FROM workspace_webhook
+        WHERE id=$1 AND workspace_id=$2
+          AND (SELECT COUNT(*) FROM workspace_webhook WHERE workspace_id=$2) > 1
+       RETURNING id`,
+      [id, wid]
+    );
+    if (!deleted) return res.status(409).json({ error: 'The last webhook cannot be deleted. Switch it off instead.', reason: 'last_webhook' });
+    res.json({ success: true });
   } catch (err) { next(err); }
 });
 
 router.get('/logs', async (req, res, next) => {
   try {
+    // ?webhook_id= narrows "Recent leads" to one webhook; without it, all of them.
+    let webhookId = null;
+    if (req.query.webhook_id !== undefined && req.query.webhook_id !== '') {
+      webhookId = webhookIdOf(req.query.webhook_id);
+      if (!webhookId) return res.status(400).json({ error: 'webhook_id must be a positive integer.' });
+    }
     const { rows } = await pool.query(
       `SELECT l.id, l.status, l.payload, l.captured, l.error, l.created_at,
-              c.name AS contact_name, l.contact_id, l.deal_id
+              c.name AS contact_name, l.contact_id, l.deal_id,
+              l.webhook_id, w.name AS webhook_name
        FROM webhook_logs l
        LEFT JOIN contacts c ON c.id = l.contact_id
+       LEFT JOIN workspace_webhook w ON w.id = l.webhook_id
        WHERE l.workspace_id=$1 AND l.source='lead'
+         AND ($2::int IS NULL OR l.webhook_id=$2)
        ORDER BY l.created_at DESC LIMIT 50`,
-      [req.workspaceId]
+      [req.workspaceId, webhookId]
     );
     res.json({ logs: rows });
   } catch (err) { next(err); }
 });
+
+// Keep a delivery as the webhook's sample. The UPDATE is the claim: of two deliveries arriving together one is the
+// sample, the other a lead as usual. The delivery is also written to the log (status 'test'), so nothing that was
+// sent is ever lost from view. true when this delivery was taken.
+const TEST_ANSWER = { success: true, test: true, message: 'Kept as a test delivery. No contact was created.' };
+async function captureTestDelivery(wh, payload) {
+  const { rows: [got] } = await pool.query(
+    'UPDATE workspace_webhook SET sample=$2::jsonb, sample_at=NOW(), test_until=NULL WHERE id=$1 AND test_until > NOW() RETURNING id',
+    [wh.id, JSON.stringify(payload)]
+  );
+  if (!got) return false;
+  await pool.query(
+    `INSERT INTO webhook_logs (workspace_id, webhook_id, status, payload, captured, error)
+     VALUES ($1,$2,'test',$3,$4,$5)`,
+    [wh.workspace_id, wh.id, JSON.stringify(payload), JSON.stringify({ payload_keys: Object.keys(payload).slice(0, 50) }),
+     'Test delivery: kept as the sample for the mapping, no contact was created.']
+  ).catch(() => {});
+  return true;
+}
 
 router.post('/receive/:key', async (req, res) => {
   const { key } = req.params;
@@ -184,48 +480,35 @@ router.post('/receive/:key', async (req, res) => {
     const { rows: [wh] } = await pool.query(
       `SELECT * FROM workspace_webhook WHERE webhook_key=$1 AND active=true`, [key]
     );
-    if (!wh) return res.status(404).json({ error: 'Webhook not found or inactive' });
+    if (!wh) {
+      // a webhook that is switched off still takes its test delivery, so it can be set up before it goes live
+      const { rows: [off] } = await pool.query(
+        'SELECT id, workspace_id FROM workspace_webhook WHERE webhook_key=$1 AND active=false AND test_until > NOW()', [key]
+      );
+      if (off && await captureTestDelivery(off, leadMapping.asPayload(req.body))) return res.json(TEST_ANSWER);
+      return res.status(404).json({ error: 'Webhook not found or inactive' });
+    }
+    // listening for a test delivery (Part 2): this one is kept as the sample and makes no contact
+    if (wh.test_until && new Date(wh.test_until).getTime() > Date.now() && await captureTestDelivery(wh, leadMapping.asPayload(req.body))) return res.json(TEST_ANSWER);
 
-    const payload   = req.body || {};
+    const payload   = leadMapping.asPayload(req.body);
     const fieldMap  = wh.field_map || {};
     const wid       = wh.workspace_id;
 
-    function pick(key) {
-      if (!key) return null;
-      return key.split('.').reduce((o, k) => (o && o[k] !== undefined ? o[k] : null), payload);
-    }
-
-    let name = pick(fieldMap.name) || '';
-    if (!name && (fieldMap.first_name || fieldMap.last_name)) {
-      name = [pick(fieldMap.first_name), pick(fieldMap.last_name)].filter(Boolean).join(' ');
-    }
-    const email   = pick(fieldMap.email)   || null;
-    const phone   = pick(fieldMap.phone)   || null;
-    const company = pick(fieldMap.company) || null;
+    // Each CRM field's value, read from where the field map says it is (utils/lead-mapping.js: nested keys, list
+    // entries, name/value pairs). name falls back to first_name + last_name; what is not a built-in is a custom field.
+    const { name, email, phone, company, customData, skipped } = leadMapping.mapPayload(payload, fieldMap);
 
     if (!name?.trim() && !email?.trim()) {
       await pool.query(
-        `INSERT INTO webhook_logs (workspace_id, status, payload, captured, error) VALUES ($1,'error',$2,$3,$4)`,
-        [wid, JSON.stringify(payload), JSON.stringify({ field_map_keys: Object.keys(fieldMap), payload_keys: Object.keys(payload) }),
+        `INSERT INTO webhook_logs (workspace_id, webhook_id, status, payload, captured, error)
+         VALUES ($1,$2,'error',$3,$4,$5)`,
+        [wid, wh.id, JSON.stringify(payload), JSON.stringify({ field_map_keys: Object.keys(fieldMap), payload_keys: Object.keys(payload) }),
          'Payload rejected: neither name nor email found. Check your field mapping matches the incoming keys.']
       );
       return res.status(422).json({
         error: 'Payload rejected: the webhook must include at least a name or email. Check your field mapping.',
       });
-    }
-
-    const BUILTIN = new Set(['name', 'first_name', 'last_name', 'email', 'phone', 'company']);
-    const customData = {};
-    const skipped    = {};
-    for (const [crmKey, incomingKey] of Object.entries(fieldMap)) {
-      if (!BUILTIN.has(crmKey) && incomingKey) {
-        const val = pick(incomingKey);
-        if (val !== null && val !== undefined && String(val).trim() !== '') {
-          customData[crmKey] = String(val);
-        } else {
-          skipped[crmKey] = `incoming key "${incomingKey}" not found or empty in payload`;
-        }
-      }
     }
 
     const captured = {
@@ -309,9 +592,9 @@ router.post('/receive/:key', async (req, res) => {
     }
 
     await pool.query(
-      `INSERT INTO webhook_logs (workspace_id, status, payload, captured, contact_id, deal_id)
-       VALUES ($1,'success',$2,$3,$4,$5)`,
-      [wid, JSON.stringify(payload), JSON.stringify(captured), contact.id, dealId]
+      `INSERT INTO webhook_logs (workspace_id, webhook_id, status, payload, captured, contact_id, deal_id)
+       VALUES ($1,$2,'success',$3,$4,$5,$6)`,
+      [wid, wh.id, JSON.stringify(payload), JSON.stringify(captured), contact.id, dealId]
     );
 
     res.json({ success: true, contact_id: contact.id, deal_id: dealId });
@@ -355,6 +638,8 @@ function calView(row, manage) {
     event_type: chosen ? { id: chosen.id, slug: chosen.slug, title: chosen.title, lengthInMinutes: chosen.lengthInMinutes } : null,
     webhook_registered: !!row.webhook_id,
     host_user_id: row.host_user_id ?? null,   // the CRM user whose email is the connected account's: the booking dialog checks their calendar too
+    // bookings from emails the CRM does not know only get a note while this is on (FONIO_CHANGES Part 34)
+    existing_contacts_only: !!row.existing_contacts_only,
     connected_by: row.connected_by, connected_by_name: row.connected_by_name || null,
     connected_at: row.connected_at, updated_at: row.updated_at, last_error: row.last_error || null,
   };
@@ -479,10 +764,20 @@ router.patch('/calcom', requireAuth, requireManageCal, async (req, res, next) =>
     const wid = req.workspaceId;
     const row = await loadCalRow(wid);
     if (!row) return res.status(404).json({ error: 'Cal.com is not connected' });
-    const id = Number(req.body?.event_type_id);
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    // the rule for guests the CRM does not know (FONIO_CHANGES Part 34): a field of its own, saved beside the event type
+    const only = body.existing_contacts_only;
+    if (only !== undefined && typeof only !== 'boolean') {
+      return res.status(400).json({ error: 'existing_contacts_only must be true or false', reason: 'existing_contacts_only' });
+    }
     const types = Array.isArray(row.event_types) ? row.event_types : [];
-    if (!Number.isInteger(id) || !types.some(t => t.id === id)) return res.status(400).json({ error: 'Choose one of the connected account\'s event types' });
-    await pool.query('UPDATE workspace_calcom SET event_type_id=$1, updated_at=NOW() WHERE workspace_id=$2', [id, wid]);
+    const id = body.event_type_id !== undefined ? Number(body.event_type_id) : null;
+    if (id !== null && (!Number.isInteger(id) || !types.some(t => t.id === id))) {
+      return res.status(400).json({ error: 'Choose one of the connected account\'s event types' });
+    }
+    if (only === undefined && id === null) return res.status(400).json({ error: 'Choose one of the connected account\'s event types' });
+    if (only !== undefined) await pool.query('UPDATE workspace_calcom SET existing_contacts_only=$1, updated_at=NOW() WHERE workspace_id=$2', [only, wid]);
+    if (id !== null) await pool.query('UPDATE workspace_calcom SET event_type_id=$1, updated_at=NOW() WHERE workspace_id=$2', [id, wid]);
     res.json(calAnswer(await loadCalRow(wid), req.userRole));
   } catch (err) { next(err); }
 });
@@ -548,7 +843,9 @@ router.delete('/calcom', requireAuth, requireManageCal, async (req, res, next) =
 // in webhook_logs with source 'calcom'. The rules behind it (decided 2026-10-13): our own
 // metadata (a booking made from the CRM) names the contact and the deal; else the attendee's
 // email finds the contact; an unknown email creates the contact AND a deal in the lead
-// webhook's pipeline, stage and assignee (else the first pipeline's first stage), then logs;
+// webhook's pipeline, stage and assignee (else the first pipeline's first stage), then logs — unless the workspace
+// only notes bookings on its own contacts (existing_contacts_only, FONIO_CHANGES Part 34), when an unknown email is
+// only logged and answered { ignored: true, reason: 'unknown_contact' };
 // a cancelled booking stays visible as cancelled; the host's email names the owner, else
 // whoever connected Cal.com.
 
@@ -606,7 +903,8 @@ async function calTellAssignee(wid, actorId, { kind, dealId, contactId, title, s
   } catch (err) { console.error('Cal.com: telling the assignee failed:', err?.message || err); return null; }
 }
 
-// The contact for the booking, and the deal an unknown attendee gets.
+// The contact for the booking, and the deal an unknown attendee gets. null as the contact when the guest's email
+// matches nobody and the workspace only notes bookings on contacts it has (FONIO_CHANGES Part 34).
 async function calContactFor(wid, b, conn) {
   if (b.contactId) {
     const { rows: [c] } = await pool.query('SELECT id, name FROM contacts WHERE id=$1 AND workspace_id=$2', [b.contactId, wid]);
@@ -618,7 +916,15 @@ async function calContactFor(wid, b, conn) {
     const { rows: [c] } = await pool.query('SELECT id, name FROM contacts WHERE workspace_id=$1 AND lower(email)=$2', [wid, email]);
     if (c) return { contact: c, createdContact: false, createdDealId: null };
   }
-  const { rows: [wh] } = await pool.query('SELECT pipeline_id, stage_id, default_assignee_id FROM workspace_webhook WHERE workspace_id=$1', [wid]);
+  // A workspace that books in fonio itself (FONIO_CHANGES Part 34) only notes bookings for people it already has:
+  // an unknown guest makes no contact and no deal, and the receiver only logs the delivery.
+  if (conn?.existing_contacts_only) return { contact: null, createdContact: false, createdDealId: null };
+  // The workspace's FIRST webhook (oldest row) supplies the pipeline, stage and assignee for a guest the CRM does not
+  // know yet — the same rules as before, when a workspace had only one (LEAD_WEBHOOK_CHANGES Part 1).
+  const { rows: [wh] } = await pool.query(
+    'SELECT pipeline_id, stage_id, default_assignee_id FROM workspace_webhook WHERE workspace_id=$1 ORDER BY id ASC LIMIT 1',
+    [wid]
+  );
   const name = b.attendee?.name || email || 'Cal.com';
   const { rows: [c] } = await pool.query(
     `INSERT INTO contacts (workspace_id, name, email, phone, company, contact_type, custom_data, assigned_to)
@@ -974,6 +1280,11 @@ router.post('/calcom/receive/:token', async (req, res) => {
     }
 
     const { contact, createdContact, createdDealId } = await calContactFor(wid, b, conn);
+    if (!contact) {   // an email the CRM does not know, and this workspace only notes bookings on its own contacts (Part 34)
+      captured.skipped = 'unknown_contact';
+      await calLog(wid, 'success', body, captured, null, null, null);
+      return res.json({ ignored: true, reason: 'unknown_contact' });
+    }
     let dealId = createdDealId;
     if (!dealId && b.dealId) {
       const { rows: [d] } = await pool.query('SELECT id FROM deals WHERE id=$1 AND workspace_id=$2', [b.dealId, wid]);

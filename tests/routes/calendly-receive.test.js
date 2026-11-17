@@ -172,6 +172,27 @@ describe('a booking arrives', () => {
     assert.deepEqual([a.contact_id, a.deal_id, a.content.split('\n')[0]], [c.id, d.id, 'Erstgespräch: Nora Neu']);
     assert.equal(state.logs[0].captured.created_contact, true); assert.equal(state.logs[0].captured.created_deal, true);
   });
+  test('an unknown invitee while the workspace only notes its own contacts: no contact, no deal, no entry; the delivery is logged and answered as ignored', async () => {
+    CONN.existing_contacts_only = true;
+    try {
+      const r = await srv.post(TOKEN, ...signed(invitee(4, { email: 'Fremd@Example.de', name: 'Fremder Gast' })));
+      assert.equal(r.status, 200, JSON.stringify(r.body));
+      assert.deepEqual(r.body, { ignored: true, reason: 'unknown_contact' });
+      assert.ok(!state.calls.some(c => c.sql.startsWith('INSERT INTO contacts')), 'no contact made');
+      assert.ok(!state.calls.some(c => c.sql.startsWith('INSERT INTO deals')), 'no deal made');
+      assert.equal(state.activities.length, 0, 'no meeting entry');
+      assert.equal(state.told.length, 0, 'nobody told');
+      assert.deepEqual([state.logs[0].status, state.logs[0].captured.skipped, state.logs[0].contact_id, state.logs[0].deal_id], ['success', 'unknown_contact', null, null]);
+    } finally { CONN.existing_contacts_only = false; }
+  });
+  test('a known invitee is noted as before while the rule is on', async () => {
+    CONN.existing_contacts_only = true;
+    try {
+      const r = await srv.post(TOKEN, ...signed(invitee(5)));
+      assert.equal(r.body.success, true); assert.equal(r.body.contact_id, 5);
+      assert.equal(state.activities.length, 1);
+    } finally { CONN.existing_contacts_only = false; }
+  });
   test('a host who is no CRM user: owned by whoever connected Calendly; no link and a physical place: the title alone', async () => {
     await srv.post(TOKEN, ...signed(invitee(3, {}, { event_memberships: [{ user_email: 'extern@example.de', user_name: 'Ex Tern' }], location: { type: 'physical', location: 'Hauptstr. 1, Berlin' } })));
     assert.equal(state.activities[0].created_by, 1); assert.equal(state.activities[0].content, 'Erstgespräch: Jana Weber');

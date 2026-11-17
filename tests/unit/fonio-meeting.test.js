@@ -152,6 +152,13 @@ describe('the note\'s line and who is told', () => {
     assert.equal(meeting.noteLine({ status: 'not_connected', date: '2026-11-20', time: '14:00' }), 'Im Gespräch vereinbarter Termin: 20.11.2026, 14:00');
     assert.equal(meeting.noteLine({ status: 'failed', service: 'calendly', reason: 'no_email', date: '2026-11-20', time: '14:00' }), 'Termin im Gespräch vereinbart (20.11.2026, 14:00), aber nicht gebucht: der Kontakt hat keine E-Mail-Adresse');
   });
+  test('a meeting fonio books itself: leaveToAssistant says what was agreed, the note names the date and fonio (Part 34)', () => {
+    const m = meeting.leaveToAssistant(MEETING);
+    assert.deepEqual(m, { status: 'self_booked', service: null, reason: null, date: '2026-11-20', time: '14:00', said: '2026-11-20 14:00' });
+    assert.equal(meeting.noteLine(m), 'Termin im Gespräch vereinbart: 20.11.2026, 14:00 — die Buchung übernimmt fonio');
+    assert.deepEqual(meeting.leaveToAssistant(null), { status: 'self_booked', service: null, reason: null, date: null, time: null, said: null });
+    assert.equal(meeting.noteLine(meeting.leaveToAssistant({ said: 'nächsten Donnerstag' })), 'Termin im Gespräch vereinbart: nächsten Donnerstag — die Buchung übernimmt fonio');
+  });
   test('assigneeOf: the deal\'s assignee, else the contact\'s, else nobody', async () => {
     db.dealAssignee = 9; db.contactAssignee = 4;
     assert.equal(await meeting.assigneeOf(pool, 7, 13, 5), 9);

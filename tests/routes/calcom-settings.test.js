@@ -32,6 +32,7 @@ const pool = {
       return { rows: [state.row] };
     }
     if (text.startsWith('UPDATE workspace_calcom SET event_type_id=$1')) { if (state.row) state.row = { ...state.row, event_type_id: params[0] }; return { rowCount: 1, rows: [] }; }
+    if (text.startsWith('UPDATE workspace_calcom SET existing_contacts_only=$1')) { if (state.row) state.row = { ...state.row, existing_contacts_only: params[0] }; return { rowCount: 1, rows: [] }; }
     if (text.startsWith('UPDATE workspace_calcom SET event_types=$1::jsonb')) { if (state.row) state.row = { ...state.row, event_types: JSON.parse(params[0]), event_type_id: params[1], last_error: null }; return { rowCount: 1, rows: [] }; }
     if (text.startsWith('UPDATE workspace_calcom SET last_error=$1')) { if (state.row) state.row = { ...state.row, last_error: params[0] }; return { rowCount: 1, rows: [] }; }
     if (text.startsWith('UPDATE workspace_calcom SET webhook_id=$1, last_error=NULL')) { if (state.row) state.row = { ...state.row, webhook_id: params[0], last_error: null }; return { rowCount: 1, rows: [] }; }
@@ -264,6 +265,20 @@ describe('PATCH /api/integrations/calcom', () => {
     assert.equal(ok.status, 200); assert.equal(ok.body.calcom.event_type.id, 8);
     const upd = state.calls.find(c => c.sql.startsWith('UPDATE workspace_calcom SET event_type_id=$1'));
     assert.deepEqual(upd.params, [8, 7]); noSecrets(ok.body);
+  });
+  test('the rule for unknown guests: off until switched on, saved on its own, refused when it is not a boolean', async () => {
+    await connectAsOwner();
+    assert.equal((await owner.request('GET', '/api/integrations/calcom')).body.calcom.existing_contacts_only, false, 'off by default: nothing changes until it is switched on');
+    const on = await owner.request('PATCH', '/api/integrations/calcom', { existing_contacts_only: true });
+    assert.equal(on.status, 200, JSON.stringify(on.body));
+    assert.equal(on.body.calcom.existing_contacts_only, true);
+    assert.equal(state.row.existing_contacts_only, true);
+    assert.equal(on.body.calcom.event_type.id, 7, 'the chosen event type is untouched');
+    const off = await owner.request('PATCH', '/api/integrations/calcom', { existing_contacts_only: false });
+    assert.equal(off.status, 200); assert.equal(off.body.calcom.existing_contacts_only, false);
+    const bad = await owner.request('PATCH', '/api/integrations/calcom', { existing_contacts_only: 'yes' });
+    assert.equal(bad.status, 400); assert.equal(bad.body.reason, 'existing_contacts_only');
+    assert.equal((await member.request('PATCH', '/api/integrations/calcom', { existing_contacts_only: true })).status, 403);
   });
 });
 

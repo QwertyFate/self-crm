@@ -35,6 +35,7 @@ const pool = {
       from_number: p[3], active: p[4], delay_minutes: p[5], on_deal_manual: p[6], on_deal_webhook: p[7],
       country_code: p[8], number_prefixes: JSON.parse(p[9]), hours_on: p[10], hours_days: JSON.parse(p[11]),
       hours_from: `${p[12]}:00`, hours_to: `${p[13]}:00`, hours_tz: p[14], saved_by: p[15],
+      follow_up: JSON.parse(p[16]), book_meetings: p[17],
     });
     if (text === 'UPDATE workspace_fonio SET variables = $2::jsonb WHERE workspace_id = $1') {
       if (state.row?.workspace_id === params[0]) state.row = { ...state.row, variables: JSON.parse(params[1]) };
@@ -98,6 +99,8 @@ describe('reading', () => {
       from_number: '', active: false, delay_minutes: 5, on_deal_manual: true, on_deal_webhook: true,
       country_code: '+49', number_prefixes: [], hours_on: true, hours_days: [1, 2, 3, 4, 5],
       hours_from: '09:00', hours_to: '18:00', hours_tz: 'Europe/Berlin',
+      book_meetings: true,
+      follow_up: { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1 },
     });
     assert.equal(r.body.can_manage, true);
     assert.equal((await member.request('GET', '/api/integrations/fonio')).body.can_manage, false);
@@ -184,6 +187,7 @@ describe('the first save', () => {
       [{ on_deal_manual: 1 }, 'on_deal_manual'],
       [{ on_deal_webhook: null }, 'on_deal_webhook'],
       [{ hours_on: 'true' }, 'hours_on'],
+      [{ book_meetings: 'yes' }, 'book_meetings'],
       [{ country_code: '49' }, 'country_code'],
       [{ country_code: '+04' }, 'country_code'],
       [{ number_prefixes: '+49' }, 'prefixes'],
@@ -196,6 +200,14 @@ describe('the first save', () => {
       [{ hours_to: '24:00' }, 'hours'],
       [{ hours_from: '18:00', hours_to: '09:00' }, 'hours'],
       [{ hours_from: '10:00', hours_to: '10:00' }, 'hours'],
+      [{ follow_up: null }, 'follow_up'],
+      [{ follow_up: 'on' }, 'follow_up'],
+      [{ follow_up: [] }, 'follow_up'],
+      [{ follow_up: { enabled: 'yes' } }, 'follow_up'],
+      [{ follow_up: { enabled: true, no_answer: -1 } }, 'follow_up'],
+      [{ follow_up: { enabled: true, voicemail: 7 * 24 * 60 + 1 } }, 'follow_up'],
+      [{ follow_up: { enabled: true, busy: 1.5 } }, 'follow_up'],
+      [{ follow_up: { enabled: true, max_attempts: 4 } }, 'follow_up'],
     ];
     for (const [change, reason] of bad) {
       const r = await save(owner, { ...FIRST, ...change });
@@ -209,6 +221,18 @@ describe('the first save', () => {
   test('with the hours off, an empty day list is fine', async () => {
     const r = await save(owner, { ...FIRST, hours_on: false, hours_days: [] });
     assert.equal(r.status, 200, JSON.stringify(r.body));
+  });
+
+  test('book_meetings is on until switched off, and only a save changes it (Part 34)', async () => {
+    const first = await save(owner, FIRST);
+    assert.equal(first.body.settings.book_meetings, true, 'on by default: the CRM books the agreed meeting');
+    const off = await save(admin, { book_meetings: false });
+    assert.equal(off.status, 200, JSON.stringify(off.body));
+    assert.equal(off.body.settings.book_meetings, false);
+    assert.equal(state.row.book_meetings, false, 'kept on the row');
+    assert.equal((await member.request('GET', '/api/integrations/fonio')).body.settings.book_meetings, false, 'everyone reads it');
+    assert.equal((await save(owner, { delay_minutes: 20 })).body.settings.book_meetings, false, 'a save without it keeps it off');
+    assert.equal((await save(owner, { book_meetings: true })).body.settings.book_meetings, true);
   });
 
   test('number starts and days are tidied: spaces out, duplicates out, days in order', async () => {
@@ -288,6 +312,28 @@ describe('later saves', () => {
     assert.equal(r.status, 200);
     assert.equal(r.body.configured, false);
     assert.equal(state.row, null);
+  });
+});
+
+// ── Part 33: trying again after a call that reached nobody ──────────────────
+describe('trying again after a call that reached nobody (Part 33)', () => {
+  const POLICY = { enabled: true, no_answer: 30, voicemail: 720, busy: 15, max_attempts: 2 };
+  test('the policy is saved with the settings, read back by everyone, on the row as it was sent', async () => {
+    const r = await save(owner, { ...FIRST, follow_up: POLICY });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body.settings.follow_up, POLICY);
+    assert.deepEqual((await member.request('GET', '/api/integrations/fonio')).body.settings.follow_up, POLICY);
+    assert.deepEqual(state.row.follow_up, POLICY);
+  });
+  test('off until it is saved: a connection saved without it answers the defaults', async () => {
+    const r = await save(owner, FIRST);
+    assert.deepEqual(r.body.settings.follow_up, { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1 });
+  });
+  test('a later save names only what it changes: the switch alone keeps the delays', async () => {
+    await save(owner, { ...FIRST, follow_up: POLICY });
+    const r = await save(admin, { follow_up: { enabled: false } });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body.settings.follow_up, { ...POLICY, enabled: false });
   });
 });
 

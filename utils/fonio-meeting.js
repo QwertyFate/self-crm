@@ -23,6 +23,12 @@
    The agreed time is read as the wall clock of the connected account's zone.
    The entry is written here at once; the service's webhook then lands on the
    same row (the booking's id is unique per workspace), so nobody is told twice.
+
+   Part 34: a workspace whose fonio books the meeting itself (the assistant's
+   own Cal.com or Calendly connection) switches the CRM's booking off. Then
+   nobody here calls bookMeeting(): leaveToAssistant() says what was agreed and
+   noteLine() writes it as 'self_booked', so the call's note keeps the meeting
+   without a second booking and without a second invitation.
    ═══════════════════════════════════════════════════════════════════════════ */
 'use strict';
 
@@ -114,10 +120,15 @@ const WHY = {
   no_time: 'Datum oder Uhrzeit waren nicht lesbar', past: 'die Zeit liegt in der Vergangenheit', no_contact: 'der Anruf gehört zu keinem Kontakt',
   no_email: 'der Kontakt hat keine E-Mail-Adresse', no_event_type: 'es ist keine Terminart gewählt', error: 'ein Fehler im CRM',
 };
+// The meeting stays with fonio (Part 34): the workspace books in fonio itself, so nothing is asked of Cal.com or
+// Calendly here. Shaped like bookMeeting()'s answers, so the note and fonio's delivery answer read the same.
+const leaveToAssistant = meeting => ({ status: 'self_booked', service: null, reason: null,
+  date: meeting?.date || null, time: meeting?.time || null, said: meeting?.said || null });
 // The outcome as a line for the call's note.
 function noteLine(m) {
   if (!m) return '';
   if (m.status === 'booked') return `Termin gebucht: ${whenText(m)} (${SERVICE_NAMES[m.service]})`;
+  if (m.status === 'self_booked') return `Termin im Gespräch vereinbart: ${whenText(m)} — die Buchung übernimmt fonio`;
   if (m.status === 'not_connected') return `Im Gespräch vereinbarter Termin: ${whenText(m)}`;
   const why = m.reason === 'refused' ? `${SERVICE_NAMES[m.service] || 'der Buchungsdienst'} hat abgelehnt: ${m.detail || 'ohne Angabe'}` : (WHY[m.reason] || WHY.error);
   return `Termin im Gespräch vereinbart (${whenText(m)}), aber nicht gebucht: ${why}`;
@@ -136,4 +147,4 @@ async function assigneeOf(pool, wid, dealId, contactId) {
   return null;
 }
 
-module.exports = { bookMeeting, noteLine, assigneeOf, whenText, SERVICE_NAMES };
+module.exports = { bookMeeting, leaveToAssistant, noteLine, assigneeOf, whenText, SERVICE_NAMES };

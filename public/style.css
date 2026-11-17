@@ -1798,6 +1798,26 @@ input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
 .intg-map-add-row { display: flex; gap: var(--sp-2); align-items: center; margin-top: var(--sp-2); }
 .intg-add-select { min-width: 180px; max-width: 320px; }
 
+/* Up to three lead webhooks per workspace: one tab per webhook, above the card (LEAD_WEBHOOK_CHANGES Part 1) */
+.intg-webhook-tabs { display: flex; flex-wrap: wrap; gap: var(--sp-15); align-items: center; }
+.intg-webhook-tab {
+  display: inline-flex; align-items: center; gap: var(--sp-15); max-width: 220px;
+  padding: var(--sp-15) var(--sp-25); cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+  font-size: var(--fs-sm); font-weight: 560; color: var(--ink);
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.intg-webhook-tab:hover { border-color: var(--line-strong); }
+.intg-webhook-tab.active { border-color: var(--brand); background: var(--brand-subtle); box-shadow: 0 0 0 1px var(--brand); }
+.intg-webhook-tab:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.intg-webhook-tab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.intg-webhook-dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; background: var(--success); }
+.intg-webhook-tab.off .intg-webhook-dot { background: var(--ink-subtle); }
+.intg-webhook-tab.off .intg-webhook-tab-name { color: var(--ink-muted); }
+.intg-webhook-add { border-style: dashed; color: var(--ink-muted); font-weight: 600; }
+.intg-webhook-add:hover { color: var(--brand-ink); border-color: var(--brand); background: var(--brand-subtle); }
+.intg-webhook-count { font-size: var(--fs-2xs); color: var(--ink-muted); }
+
 /* Recent incoming leads and Engine deliveries: one entry per event */
 .intg-logs, .engine-deliveries { display: flex; flex-direction: column; gap: var(--sp-2); }
 .intg-log-entry {
@@ -1815,7 +1835,26 @@ input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
   font-size: var(--fs-3xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
 }
 .intg-log-badge.success { background: var(--success-subtle); color: var(--success-ink); }
+.intg-log-badge.test    { background: var(--info-subtle); color: var(--info-ink); }
+.intg-test-status { font-size: var(--fs-sm); color: var(--ink-secondary); }
+.intg-sample-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.intg-sample-when { font-size: var(--fs-xs); color: var(--ink-muted); }
+.intg-sample { max-height: 260px; overflow: auto; margin: 0; }
+.intg-map-pick { flex: 1; min-width: 0; font-size: var(--fs-sm); }
+.intg-preview { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--line); border-radius: var(--r-md); }
+.intg-preview-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); font-size: var(--fs-sm); font-weight: 600; }
+.intg-preview-note { margin: 0; font-size: var(--fs-xs); color: var(--ink-muted); }
 .intg-log-badge.error   { background: var(--danger-subtle);  color: var(--danger-ink); }
+/* Which webhook a lead came in through, and the filter above the list */
+.intg-log-webhook {
+  padding: 1px var(--sp-15); max-width: 160px; border-radius: var(--r-xs);
+  background: var(--surface-sunken); border: 1px solid var(--line);
+  font-size: var(--fs-3xs); font-weight: 620; color: var(--ink-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.intg-log-toolbar { display: flex; align-items: center; gap: var(--sp-15); margin-left: auto; }
+.intg-log-filter-label { font-size: var(--fs-2xs); font-weight: 600; color: var(--ink-muted); }
+.intg-log-filter { min-width: 140px; max-width: 220px; padding: var(--sp-15) var(--sp-2); font-size: var(--fs-xs); }
 .intg-log-time { font-size: var(--fs-2xs); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .intg-log-contact { font-size: var(--fs-sm); font-weight: 570; }
 .intg-log-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--sp-15) var(--sp-3); padding: var(--sp-25) var(--sp-3); }

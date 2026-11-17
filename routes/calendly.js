@@ -33,7 +33,9 @@
    of type 'meeting', source 'calendly', named by its invitee URI, under the
    Cal.com receiver's own rules (routes/integrations.js router.booking): the
    invitee's email finds the contact; an unknown email creates the contact
-   AND a deal in the lead link's pipeline; the assignee is told; a cancelled
+   AND a deal in the lead link's pipeline (unless the card's
+   existing_contacts_only is on — FONIO_CHANGES Part 34 — when the delivery
+   is only logged); the assignee is told; a cancelled
    booking stays visible as cancelled. A reschedule is Calendly's pair of
    deliveries: a canceled with rescheduled: true (acknowledged, changes
    nothing) and a created whose old_invitee names the entry to move. Every
@@ -44,7 +46,7 @@
    ENDPOINTS
      GET    /                  status (everyone): { connected, calendly, can_manage, blocked_by }
      POST   /connect           { token }       owner/admin; registers the booking webhook
-     PATCH  /                  { event_type }  the URI of one of the account's event types, owner/admin
+     PATCH  /                  { event_type } | { existing_contacts_only }  owner/admin
      POST   /refresh           re-fetch the event types, owner/admin
      POST   /register-webhook  (re)register the booking webhook at Calendly, owner/admin
      DELETE /                  disconnect (and remove the webhook at Calendly), owner/admin
@@ -96,6 +98,8 @@ function view(row, manage) {
     event_types: types,
     webhook_registered: !!row.webhook_uri,
     host_user_id: row.host_user_id ?? null,   // the CRM user whose email is the connected account's
+    // bookings from emails the CRM does not know only get a note while this is on (FONIO_CHANGES Part 34)
+    existing_contacts_only: !!row.existing_contacts_only,
     connected_by: row.connected_by, connected_by_name: row.connected_by_name || null,
     connected_at: row.connected_at, updated_at: row.updated_at, last_error: row.last_error || null,
     can_manage: manage,
@@ -205,10 +209,20 @@ router.patch('/', requireAuth, requireManage, async (req, res, next) => {
     const wid = req.workspaceId;
     const row = await loadRow(wid);
     if (!row) return res.status(404).json(NOT_CONNECTED);
-    const uri   = typeof req.body?.event_type === 'string' ? req.body.event_type.trim() : '';
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    // the rule for invitees the CRM does not know (FONIO_CHANGES Part 34): a field of its own, saved beside the type
+    const only = body.existing_contacts_only;
+    if (only !== undefined && typeof only !== 'boolean') {
+      return res.status(400).json({ error: 'existing_contacts_only must be true or false', reason: 'existing_contacts_only' });
+    }
+    const uri   = typeof body.event_type === 'string' ? body.event_type.trim() : '';
     const types = Array.isArray(row.event_types) ? row.event_types : [];
-    if (!uri || !types.some(t => t.uri === uri)) return res.status(400).json({ error: 'Choose one of the connected account\'s event types', code: 'event_type' });
-    await pool.query('UPDATE workspace_calendly SET event_type_uri=$1, updated_at=NOW() WHERE workspace_id=$2', [uri, wid]);
+    const picked = body.event_type !== undefined;   // the event type is touched only when the body names one
+    if (picked || only === undefined) {
+      if (!uri || !types.some(t => t.uri === uri)) return res.status(400).json({ error: 'Choose one of the connected account\'s event types', code: 'event_type' });
+    }
+    if (only !== undefined) await pool.query('UPDATE workspace_calendly SET existing_contacts_only=$1, updated_at=NOW() WHERE workspace_id=$2', [only, wid]);
+    if (picked) await pool.query('UPDATE workspace_calendly SET event_type_uri=$1, updated_at=NOW() WHERE workspace_id=$2', [uri, wid]);
     res.json(await answer(wid, await loadRow(wid), req.userRole));
   } catch (err) { next(err); }
 });
@@ -344,6 +358,11 @@ router.post('/receive/:token', async (req, res) => {
 
     captured.trigger = 'BOOKING_CREATED';
     const { contact, createdContact, createdDealId } = await booking.contactFor(wid, b, conn);
+    if (!contact) {   // an email the CRM does not know, and this workspace only notes bookings on its own contacts (Part 34)
+      captured.skipped = 'unknown_contact';
+      await logDelivery(wid, 'success', body, captured, null, null, null);
+      return res.json({ ignored: true, reason: 'unknown_contact' });
+    }
     const dealId = createdDealId;
     const createdBy = await booking.ownerFor(wid, b, conn);
     const { rows: [row] } = await pool.query(

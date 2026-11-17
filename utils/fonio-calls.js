@@ -53,6 +53,21 @@
    was already noted. The note goes on the call's deal and contact, with no
    author and source 'fonio' (the timelines sign it "fonio").
 
+   TRYING AGAIN (Part 33)  A call that ended as no_answer, voicemail or busy
+   (call_outcome in the Body, utils/fonio-result.js readOutcome) books one
+   follow-up call for the same contact and deal: a normal row (trigger
+   'follow_up', follow_up_of the call it repeats, follow_up_no one deeper),
+   due sent_at + the delay the workspace chose for that outcome, moved into the
+   calling hours. An 'answered' result books nothing, and when it arrives after
+   the sweep below had already booked a retry, that retry is cancelled
+   ('late_result') unless it has gone out. A call fonio never reported at all
+   is treated as not answered after an hour (sweepUnreported in runDue): fonio
+   may never fire its HTTP Request when no conversation happened. A call older
+   than a day is history and is left alone. One retry per
+   call (follow_up_at), no more than follow_up.max_attempts per chain, and one
+   waiting call per contact as for every call. Only calls the CRM started get
+   follow-ups, and nothing is ever guessed from a summary.
+
    Every function takes the pool, so the routes' pool (and a test's fake)
    is the one used.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -68,6 +83,18 @@ const STUCK_MINUTES = 2;
 const RESULT_HOURS  = 6;
 const TRIGGERS = ['deal_manual', 'deal_webhook'];
 const CONTACT_FIELDS = ['name', 'email', 'phone', 'company', 'rechtsform', 'ust_id', 'handelsregisternummer', 'webseite', 'quelle', 'strasse', 'plz', 'ort'];
+
+// Retrying a call that reached nobody (Part 33). The delay is minutes from the attempt's sent_at, per outcome as
+// fonio's assistant writes it; a call fonio never reported at all ('unreported', after UNREPORTED_MINUTES) follows the
+// no_answer delay. max_attempts bounds the chain: follow_up_no counts how many follow-ups a contact already got,
+// so 1 means one retry after the first call. enabled is false until the workspace saves the card: nothing changes
+// for an existing connection by itself.
+const FOLLOW_UP = { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1 };
+const FOLLOW_UP_OUTCOMES = ['no_answer', 'voicemail', 'busy'];
+const FOLLOW_UP_MAX_MINUTES = 7 * 24 * 60;
+const FOLLOW_UP_MAX_ATTEMPTS = 3;
+const UNREPORTED_MINUTES = 60;
+const UNREPORTED_HOURS = 24;   // a call older than this is history, not a call waiting for its retry
 
 async function loadConnection(pool, wid) {
   const { rows: [c] } = await pool.query('SELECT * FROM workspace_fonio WHERE workspace_id = $1', [wid]);
@@ -264,6 +291,110 @@ async function freeTimeValues(pool, wid, now) {
   } catch { return null; }
 }
 
+// The saved follow-up policy as the code works with it (Part 33): the defaults for anything the row does not hold (or
+// holds badly), so a hand-edited JSONB cannot break the worker. Never throws.
+function followUpSettings(row) {
+  const saved = row && row.follow_up && typeof row.follow_up === 'object' && !Array.isArray(row.follow_up) ? row.follow_up : {};
+  const out = { enabled: saved.enabled === true };
+  for (const k of FOLLOW_UP_OUTCOMES) {
+    const v = saved[k];
+    out[k] = Number.isInteger(v) && v >= 0 && v <= FOLLOW_UP_MAX_MINUTES ? v : FOLLOW_UP[k];
+  }
+  const max = saved.max_attempts;
+  out.max_attempts = Number.isInteger(max) && max >= 0 && max <= FOLLOW_UP_MAX_ATTEMPTS ? max : FOLLOW_UP.max_attempts;
+  return out;
+}
+
+// The follow-up policy the form sent, checked as a whole: { value } or { error } (routes/fonio.js says why in the page's
+// language, so the message here is short and in English).
+function checkFollowUp(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { error: 'The follow-up settings are an object' };
+  if (typeof value.enabled !== 'boolean') return { error: 'enabled must be true or false' };
+  const out = { enabled: value.enabled };
+  for (const k of FOLLOW_UP_OUTCOMES) {
+    const n = value[k];
+    if (!Number.isInteger(n) || n < 0 || n > FOLLOW_UP_MAX_MINUTES) {
+      return { error: `The ${k} delay is a whole number of minutes from 0 to ${FOLLOW_UP_MAX_MINUTES}` };
+    }
+    out[k] = n;
+  }
+  const max = value.max_attempts;
+  if (!Number.isInteger(max) || max < 0 || max > FOLLOW_UP_MAX_ATTEMPTS) {
+    return { error: `Follow-up calls are a whole number from 0 to ${FOLLOW_UP_MAX_ATTEMPTS}` };
+  }
+  out.max_attempts = max;
+  return { value: out };
+}
+
+// After a call ended, book its retry when the workspace asked for one (Part 33). call is the row the result (or the
+// sweep) found; outcome is what fonio said — answered, no_answer, voicemail, busy, or 'unreported' when fonio sent
+// nothing at all. The due time counts from sent_at, not from the result's arrival, and is moved into the calling hours
+// like any call. An answered result cancels the retry the sweep booked for this call, unless it has gone out already
+// (a row in 'sending' may already be ringing).
+// One retry per call (follow_up_at) and none past max_attempts; a contact with a call waiting gets none (the unique
+// index has the last word). Never throws: a retry that cannot be booked must not cost the note.
+async function followUpAfterResult(pool, wid, call, outcome, now = new Date()) {
+  try {
+    if (!call || !call.id) return null;
+    if (outcome === 'answered') {
+      if (call.follow_up_at) await pool.query(
+        `UPDATE fonio_calls SET status = 'cancelled', reason = 'late_result', updated_at = NOW()
+          WHERE follow_up_of = $1 AND status = 'scheduled'`, [call.id]
+      );
+      return null;
+    }
+    if (!outcome || !(FOLLOW_UP_OUTCOMES.includes(outcome) || outcome === 'unreported')) return null;
+    if (!call.contact_id) return null;          // nobody to call (the call's contact is gone)
+    if (call.follow_up_at) return null;         // this call has its retry already (the sweep may have booked it)
+    const conn = await loadConnection(pool, wid);
+    if (!conn || !conn.active) return null;
+    const f = followUpSettings(conn);
+    if (!f.enabled || f.max_attempts <= 0) return null;
+    const no = Number(call.follow_up_no || 0);
+    if (no >= f.max_attempts) return null;
+    const from = call.sent_at ? new Date(call.sent_at) : new Date(now);
+    const delay = outcome === 'voicemail' ? f.voicemail : outcome === 'busy' ? f.busy : f.no_answer;
+    const due = fonio.nextCallTime(new Date(Math.max(from.getTime() + delay * 60000, new Date(now).getTime())), conn);
+    if (!due) return null;
+    // claim the retry on the call first: two deliveries (or a delivery and the sweep) book one
+    const { rows: [claimed] } = await pool.query(
+      `UPDATE fonio_calls SET follow_up_at = NOW(), updated_at = NOW() WHERE id = $1 AND follow_up_at IS NULL RETURNING id`, [call.id]
+    );
+    if (!claimed) return null;
+    try {
+      const { rows: [row] } = await pool.query(
+        `INSERT INTO fonio_calls (workspace_id, deal_id, contact_id, trigger, status, raw_number, to_number, due_at, follow_up_of, follow_up_no)
+         VALUES ($1,$2,$3,'follow_up','scheduled',$4,$5,$6,$7,$8)
+         RETURNING id, status, reason, due_at`,
+        [wid, call.deal_id || null, call.contact_id, call.raw_number || null, call.to_number || null, due.toISOString(), call.id, no + 1]
+      );
+      return row || null;
+    } catch (err) {
+      if (err && err.code === '23505') return null;   // this contact already has a call waiting
+      throw err;
+    }
+  } catch (err) {
+    return null;
+  }
+}
+
+// The calls fonio never reported: sent, no result, no retry booked, older than UNREPORTED_MINUTES but not older than
+// UNREPORTED_HOURS (a call from last week is history, not one waiting for its retry) — in a workspace that turned
+// follow-ups on. Each is tried again as not answered (Part 33). The count of retries booked.
+async function sweepUnreported(pool, now = new Date(), limit = 20) {
+  const { rows } = await pool.query(
+    `SELECT f.id, f.workspace_id, f.contact_id, f.deal_id, f.raw_number, f.to_number, f.sent_at, f.follow_up_no, f.follow_up_at
+       FROM fonio_calls f JOIN workspace_fonio w ON w.workspace_id = f.workspace_id
+      WHERE f.status = 'sent' AND f.result_at IS NULL AND f.follow_up_at IS NULL AND f.sent_at IS NOT NULL
+        AND f.sent_at < $1 AND f.sent_at > $3 AND w.active AND (w.follow_up->>'enabled')::boolean
+      ORDER BY f.sent_at, f.id LIMIT $2`,
+    [new Date(new Date(now).getTime() - UNREPORTED_MINUTES * 60000), limit, new Date(new Date(now).getTime() - UNREPORTED_HOURS * 3600000)]
+  );
+  let booked = 0;
+  for (const call of rows) if (await followUpAfterResult(pool, call.workspace_id, call, 'unreported', now)) booked++;
+  return booked;
+}
+
 // One due call, claimed and decided now. null when another tick has it already.
 async function sendCall(pool, id, now = new Date()) {
   const { rows: [call] } = await pool.query(
@@ -323,6 +454,9 @@ async function runDue(pool, { now = new Date(), limit = 20 } = {}) {
     `UPDATE fonio_calls SET status = 'failed', reason = 'interrupted', updated_at = NOW()
       WHERE status = 'sending' AND updated_at < $1`, [new Date(new Date(now).getTime() - STUCK_MINUTES * 60000)]
   );
+  // the calls fonio never reported get their retry here too (Part 33); a failure here never holds the due calls back
+  try { await sweepUnreported(pool, now, limit); }
+  catch (err) { console.error('fonio: the unreported sweep failed:', err?.message || err); }
   const { rows } = await pool.query(
     `SELECT id FROM fonio_calls WHERE status = 'scheduled' AND due_at <= $1 ORDER BY due_at, id LIMIT $2`, [now, limit]
   );
@@ -372,7 +506,8 @@ async function cancelOne(pool, wid, id, userId) {
 async function listCalls(pool, wid, { limit = 50 } = {}) {
   const { rows } = await pool.query(
     `SELECT f.id, f.trigger, f.status, f.reason, f.raw_number, f.to_number, f.message, f.due_at, f.sent_at, f.attempts,
-            f.created_at, f.deal_id, f.contact_id, c.name AS contact_name, d.title AS deal_title, u.name AS cancelled_by_name
+            f.created_at, f.deal_id, f.contact_id, f.call_outcome, f.follow_up_of, f.follow_up_no, c.name AS contact_name,
+            d.title AS deal_title, u.name AS cancelled_by_name
        FROM fonio_calls f
        LEFT JOIN contacts c ON c.id = f.contact_id
        LEFT JOIN deals d ON d.id = f.deal_id
@@ -396,13 +531,15 @@ async function saveResult(pool, wid, r, content, now = new Date()) {
   let call = null;
   if (r.crmCallId) {
     ({ rows: [call] } = await pool.query(
-      `SELECT id, contact_id, deal_id, result_at, note_activity_id FROM fonio_calls
+      `SELECT id, contact_id, deal_id, result_at, note_activity_id, sent_at, trigger, raw_number, to_number, follow_up_no, follow_up_at
+         FROM fonio_calls
         WHERE id = $1 AND workspace_id = $2 AND status = 'sent'`, [r.crmCallId, wid]
     ));
   }
   if (!call && r.numbers.length) {
     ({ rows: [call] } = await pool.query(
-      `SELECT id, contact_id, deal_id, result_at, note_activity_id FROM fonio_calls
+      `SELECT id, contact_id, deal_id, result_at, note_activity_id, sent_at, trigger, raw_number, to_number, follow_up_no, follow_up_at
+         FROM fonio_calls
         WHERE workspace_id = $1 AND status = 'sent' AND result_at IS NULL AND to_number = ANY($2::text[]) AND sent_at > $3
         ORDER BY sent_at DESC, id DESC LIMIT 1`, [wid, r.numbers, new Date(new Date(now).getTime() - RESULT_HOURS * 3600000)]
     ));
@@ -428,7 +565,11 @@ async function saveResult(pool, wid, r, content, now = new Date()) {
     throw err;
   }
   if (!created) return { outcome: 'already', call_id: call.id, activity_id: null };   // a delivery running alongside won
-  await pool.query('UPDATE fonio_calls SET note_activity_id = $1 WHERE id = $2', [created.id, call.id]);
+  await pool.query('UPDATE fonio_calls SET note_activity_id = $1, call_outcome = COALESCE($3, call_outcome) WHERE id = $2',
+    [created.id, call.id, r.outcome || null]);
+  // how it ended decides whether the contact is called again (Part 33); a result without call_outcome is no guess,
+  // and never throws, never undoes the note
+  await followUpAfterResult(pool, wid, call, r.outcome || null, now);
   return { outcome: 'noted', call_id: call.id, activity_id: created.id };
 }
 
@@ -519,7 +660,8 @@ async function callDetail(pool, wid, kind, id) {
   const { rows: [row] } = kind === 'call'
     ? await pool.query(
       `SELECT id, deal_id, contact_id, trigger, status, reason, raw_number, to_number, message, attempts, due_at, sent_at, result_at,
-              conversation_id, conversation_link, note_activity_id, created_at, updated_at, request, response, result_body
+              conversation_id, conversation_link, note_activity_id, call_outcome, follow_up_of, follow_up_no, follow_up_at,
+              created_at, updated_at, request, response, result_body
          FROM fonio_calls WHERE id = $1 AND workspace_id = $2`, [id, wid])
     : await pool.query(
       `SELECT id, direction, number, caller_name, contact_id, deal_id, conversation_id, conversation_link, duration, summary,
@@ -602,6 +744,8 @@ async function connectOther(pool, wid, id, contactId, noteOf) {
 module.exports = {
   saveOther, listLog, connectOther, keepResultBody, callDetail,
   RETRY_MINUTES, MAX_ATTEMPTS, STUCK_MINUTES, RESULT_HOURS, TRIGGERS, CONTACT_FIELDS,
+  FOLLOW_UP, FOLLOW_UP_OUTCOMES, FOLLOW_UP_MAX_MINUTES, FOLLOW_UP_MAX_ATTEMPTS, UNREPORTED_MINUTES,
+  followUpSettings, checkFollowUp, followUpAfterResult, sweepUnreported,
   VALUE_SOURCES, MAX_VARIABLES, checkVariables,
   freeTimeValues, SLOT_NAMES,
   scheduleForDeal, callContext, plainKey, requestDate, sendCall, runDue, startWorker, cancelWaiting, cancelOne, listCalls, checkNumber, saveResult,

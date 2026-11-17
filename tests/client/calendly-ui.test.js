@@ -36,6 +36,8 @@ describe('the markup', () => {
     assert.match(pane, /<p class="empty-inline hidden" id="cly-none" data-i18n="cly_none">/);
     assert.match(pane, /<div class="intg-section hidden" id="cly-account-section">[\s\S]*<div id="cly-facts"><\/div>/);
     assert.match(pane, /<div class="intg-section hidden" id="cly-type-section">[\s\S]*<select id="cly-event-type" class="form-control" onchange="saveCalendlyEventType\(\)"><\/select>\s*<input type="text" id="cly-type-readonly" class="form-control hidden" readonly \/>/);
+    assert.match(pane, /<label class="switch-row"><input type="checkbox" id="cly-existing-only" class="switch" onchange="saveCalendlyExistingOnly\(\)"> <span data-i18n="cal_existing_only">/, 'the rule for invitees the CRM does not know (FONIO_CHANGES Part 34)');
+    assert.match(pane, /<p class="help" data-i18n="cal_existing_only_hint">/);
     assert.match(pane, /<div class="settings-card-actions" id="cly-actions">\s*<button class="btn btn-primary btn-sm hidden" id="cly-connect-btn" onclick="connectCalendly\(this\)" data-i18n="cal_btn_connect">[^<]*<\/button>\s*<button class="btn btn-sm hidden" id="cly-refresh-btn" onclick="refreshCalendlyEventTypes\(this\)" data-i18n="cal_btn_refresh">[^<]*<\/button>\s*<button class="btn btn-sm hidden" id="cly-register-btn" onclick="registerCalendlyWebhook\(this\)" data-i18n="cal_btn_register">[^<]*<\/button>\s*<button class="btn btn-sm btn-danger hidden" id="cly-disconnect-btn" onclick="disconnectCalendly\(\)" data-i18n="cal_btn_disconnect">[^<]*<\/button>\s*<span id="cly-msg" class="workspace-name-msg hidden"><\/span>\s*<\/div>/);
     assert.match(pane, /<div class="intg-section hidden" id="cly-log-section">[\s\S]*<div id="cly-log" class="intg-logs"><p class="empty-inline" data-i18n="cal_log_none">/, 'the booking log, as on the Cal.com card (Part 2)');
     assert.doesNotMatch(pane, /id="cal-|engine-|webhook_secret|receive_token/, 'nothing of the other tabs, nothing secret');
@@ -83,6 +85,7 @@ describe('the script', () => {
     assert.match(r, /<option value="\$\{esc\(x\.uri\)\}"\$\{c\.event_type && c\.event_type\.uri === x\.uri \? ' selected' : ''\}>\$\{esc\(clyTypeLabel\(x\)\)\}<\/option>/, 'the option value is the type\'s URI, escaped');
     assert.match(r, /facts\.map\(\(\[k, v\]\) => `<tr><td class="strong">\$\{esc\(k\)\}<\/td><td>\$\{esc\(v\)\}<\/td><\/tr>`\)/, 'the account facts are escaped');
     assert.match(r, /\} else \{[\s\S]*ro\.value = c\.event_type \? clyTypeLabel\(c\.event_type\) : t\('cal_no_event_types'\);/, 'members read the type from a read-only field');
+    assert.match(r, /only\.checked = !!c\.existing_contacts_only; only\.disabled = !manage;/, 'the unknown-invitee switch follows the server and is read-only for members');
     assert.match(r, /\[t\('cal_fact_webhook'\),\s*c\.webhook_registered \? t\('cal_webhook_on'\) : t\('cal_webhook_off'\) \+ \(c\.last_error \? ', ' \+ c\.last_error : ''\) \+ '\. ' \+ t\('cly_webhook_hint'\)\]/, 'the webhook row says registered, or why not');
     assert.match(r, /if \(!connected\) return;\s*loadCalendlyLogs\(\);/);
     const logs = sliceFn(js, 'loadCalendlyLogs', 'calendly.js');
@@ -98,7 +101,10 @@ describe('the script', () => {
     assert.match(d, /await ui\.confirm\(\{ title: t\('cal_btn_disconnect'\), message: t\('cly_confirm_disconnect'\), confirmLabel: t\('cal_btn_disconnect'\), danger: true \}\)/);
     assert.match(d, /if \(!ok\) return;\s*const res = await api\.del\('\/api\/integrations\/calendly'\);/);
     const s = sliceFn(js, 'saveCalendlyEventType', 'calendly.js');
-    assert.match(s, /if \(!uri\) return;\s*const res = await api\.patch\('\/api\/integrations\/calendly', \{ event_type: uri \}\);/);
+    assert.match(s, /if \(!uri\) return;\s*await saveCalendlySettings\(\{ event_type: uri \}\);/);
+    const only = sliceFn(js, 'saveCalendlyExistingOnly', 'calendly.js');
+    assert.match(only, /await saveCalendlySettings\(\{ existing_contacts_only: !!document\.getElementById\('cly-existing-only'\)\?\.checked \}\)/);
+    assert.match(sliceFn(js, 'saveCalendlySettings', 'calendly.js'), /api\.patch\('\/api\/integrations\/calendly', body\)/);
   });
   test('the Cal.com card: its connect says why while Calendly is connected, and each card re-reads the other after a connect or a disconnect', () => {
     const c = sliceFn(intg, 'connectCalcom', 'integrations.js');

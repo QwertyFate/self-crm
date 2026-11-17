@@ -373,11 +373,15 @@ async function initDb() {
     )
   `);
 
+  // Inbound lead webhooks: up to three per workspace (LEAD_WEBHOOK_CHANGES Part 1), each row one address with its
+  // own key, field map, auto-deal settings and assignee. `name` is what tells them apart in the UI. The old UNIQUE
+  // on workspace_id is dropped below, so a workspace that had one webhook can add two — its row keeps key and settings.
   await pool.query(`
     CREATE TABLE IF NOT EXISTS workspace_webhook (
       id           SERIAL PRIMARY KEY,
-      workspace_id INTEGER NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
       webhook_key  TEXT NOT NULL UNIQUE,
+      name         TEXT NOT NULL DEFAULT 'Webhook 1',
       field_map    JSONB NOT NULL DEFAULT '{"name":"full_name","email":"email","phone":"phone_number","company":"company"}',
       create_deal  BOOLEAN NOT NULL DEFAULT false,
       pipeline_id  INTEGER REFERENCES pipelines(id) ON DELETE SET NULL,
@@ -402,6 +406,21 @@ async function initDb() {
 
   await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS captured JSONB NOT NULL DEFAULT '{}'`);
   await pool.query(`ALTER TABLE workspace_webhook ADD COLUMN IF NOT EXISTS default_assignee_id INTEGER REFERENCES users(id) ON DELETE SET NULL`);
+  // A second and third lead webhook per workspace (LEAD_WEBHOOK_CHANGES Part 1). The UNIQUE that used to live on the
+  // column is dropped by name — the one row a workspace has keeps its id, key and every setting, so an URL already
+  // pasted into Zapier/Make keeps working. Names are the team's own, unique per workspace (case-blind).
+  await pool.query(`ALTER TABLE workspace_webhook DROP CONSTRAINT IF EXISTS workspace_webhook_workspace_id_key`);
+  await pool.query(`ALTER TABLE workspace_webhook ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT 'Webhook 1'`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS workspace_webhook_ws_name_key ON workspace_webhook (workspace_id, lower(name))`);
+  // Which webhook a lead came in through, so "Recent leads" can name it (NULL for rows from before this, and for the
+  // Cal.com/Calendly logs, which have their own source). Deleting a webhook keeps its history: the FK sets NULL.
+  await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS webhook_id INTEGER REFERENCES workspace_webhook(id) ON DELETE SET NULL`);
+  // A test delivery for setting the mapping up (LEAD_WEBHOOK_CHANGES Part 2): while test_until lies ahead, the next
+  // delivery to this webhook is kept as `sample` (the payload as it came, sample_at when) instead of becoming a
+  // contact, and test_until is cleared by that same delivery. The sample is what the mapping is chosen from.
+  await pool.query(`ALTER TABLE workspace_webhook ADD COLUMN IF NOT EXISTS test_until TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE workspace_webhook ADD COLUMN IF NOT EXISTS sample     JSONB`);
+  await pool.query(`ALTER TABLE workspace_webhook ADD COLUMN IF NOT EXISTS sample_at  TIMESTAMPTZ`);
 
   // Cal.com (utils/calcom.js, routes/integrations.js /calcom): ONE connection per workspace, the
   // sealed API key of a personal Cal.com account. receive_token names the public receiver for
@@ -437,6 +456,11 @@ async function initDb() {
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS calcom_event_type_id INTEGER`);   // the booking's event type: a reschedule asks for its slots
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_calcom_uid ON activities (workspace_id, calcom_uid) WHERE calcom_uid IS NOT NULL`);
+  // Bookings for people the CRM does not know yet (FONIO_CHANGES Part 34, 2026-11-17; routes/integrations.js
+  // calContactFor): with existing_contacts_only on, a guest whose email matches no contact is only logged — no contact
+  // and no deal are made and the Engine hears nothing. OFF until the workspace switches it on: every booking with a new
+  // email has made a contact and a deal since Step 2.
+  await pool.query(`ALTER TABLE workspace_calcom ADD COLUMN IF NOT EXISTS existing_contacts_only BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE webhook_logs ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'lead'`);
 
   // Calendly (utils/calendly.js, routes/calendly.js; CALENDLY_CHANGES Part 1): ONE connection per workspace,
@@ -476,6 +500,9 @@ async function initDb() {
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS calendly_uri       TEXT`);
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS calendly_event_uri TEXT`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_calendly_uri ON activities (workspace_id, calendly_uri) WHERE calendly_uri IS NOT NULL`);
+  // As on the Cal.com card (FONIO_CHANGES Part 34): with existing_contacts_only on, a booking from an email that
+  // matches no contact is only logged — no contact, no deal, no Engine. OFF until the workspace switches it on.
+  await pool.query(`ALTER TABLE workspace_calendly ADD COLUMN IF NOT EXISTS existing_contacts_only BOOLEAN NOT NULL DEFAULT false`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_workspaces (
@@ -815,7 +842,8 @@ async function initDb() {
     )
   `);
   // fonio's calls (FONIO_CHANGES Parts 3–5; utils/fonio-calls.js): the queue AND the history, one row per call.
-  // trigger: deal_manual | deal_webhook. status: scheduled (waiting for due_at) → sending → sent | failed; or
+  // trigger: deal_manual | deal_webhook | follow_up (the retry after a call that reached nobody, Part 33). status:
+  // scheduled (waiting for due_at) → sending → sent | failed; or
   // skipped (never callable: reason no_contact, no_phone, bad_number, number_not_allowed, already_scheduled) or
   // cancelled (reason inactive, disconnected, by_user). raw_number is the contact's number as saved, to_number as
   // called; message is fonio's own answer. A row stuck in 'sending' (the process died mid-request) becomes failed
@@ -826,7 +854,7 @@ async function initDb() {
       workspace_id  INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
       deal_id       INTEGER REFERENCES deals(id)    ON DELETE SET NULL,
       contact_id    INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
-      trigger       TEXT NOT NULL CHECK (trigger IN ('deal_manual','deal_webhook')),
+      trigger       TEXT NOT NULL CHECK (trigger IN ('deal_manual','deal_webhook','follow_up')),
       status        TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','sending','sent','failed','skipped','cancelled')),
       reason        TEXT,
       raw_number    TEXT,
@@ -860,6 +888,15 @@ async function initDb() {
   // The workspace's own variables for the assistant's prompt in fonio (FONIO_CHANGES Part 13, 2026-11-10;
   // utils/fonio-calls.js checkVariables): [{ name, source }], each sent with every call as name → the source's value.
   await pool.query(`ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS variables JSONB NOT NULL DEFAULT '[]'::jsonb`);
+  // Retrying a call that reached nobody (FONIO_CHANGES Part 33, 2026-11-17; utils/fonio-calls.js followUpSettings):
+  // { enabled, no_answer, voicemail, busy, max_attempts } — the delay in minutes per outcome as fonio's assistant
+  // writes it (answered, no_answer, voicemail, busy), counted from the attempt's sent_at, and how many follow-up
+  // calls one call may start. {} (nothing retried) until the workspace saves the card.
+  await pool.query(`ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS follow_up JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  // Who books a meeting agreed in the call (FONIO_CHANGES Part 34, 2026-11-17; routes/fonio.js meetingFromCall): with
+  // book_meetings off, fonio books the time itself — Cal.com or Calendly is connected in fonio — and the CRM only says
+  // so in the call's note, so the meeting is not booked twice. ON until switched off: the CRM has booked it since Part 28.
+  await pool.query(`ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS book_meetings BOOLEAN NOT NULL DEFAULT true`);
   // Conversations the CRM did not start (FONIO_CHANGES Part 15, 2026-11-11; utils/fonio-calls.js saveOther): an
   // incoming call, or an outgoing one that fits no row of fonio_calls. number is the person's (+E.164, NULL when
   // hidden), caller_name what fonio's Body gave as caller_name. contact_id is the contact with that number, deal_id
@@ -892,6 +929,23 @@ async function initDb() {
   await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS result_body JSONB`);
   await pool.query(`ALTER TABLE fonio_other_calls ADD COLUMN IF NOT EXISTS result_body JSONB`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS fonio_other_calls_one_conversation ON fonio_other_calls (workspace_id, conversation_id) WHERE conversation_id IS NOT NULL`);
+  // A follow-up call (FONIO_CHANGES Part 33): call_outcome as fonio reported it (answered, no_answer, voicemail,
+  // busy; NULL when fonio said nothing this can be sure of), follow_up_of the call this one repeats, follow_up_no
+  // how many follow-ups deep it is (0 for a call a new deal started), follow_up_at when this call's retry was
+  // booked — one retry per call, and the sweep that books it for an unreported call sets the same column.
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS call_outcome  TEXT`);
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS follow_up_of  INTEGER REFERENCES fonio_calls(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS follow_up_no  INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS follow_up_at  TIMESTAMPTZ`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS fonio_calls_unreported_idx ON fonio_calls (sent_at) WHERE status = 'sent' AND result_at IS NULL`);
+  // An old table's trigger check names two values only; dropping and re-adding it every start keeps this idempotent
+  // (re-declared the same way as activities_source_check).
+  try {
+    await pool.query(`ALTER TABLE fonio_calls DROP CONSTRAINT IF EXISTS fonio_calls_trigger_check`);
+    await pool.query(`ALTER TABLE fonio_calls ADD CONSTRAINT fonio_calls_trigger_check CHECK (trigger IN ('deal_manual','deal_webhook','follow_up'))`);
+  } catch (e) {
+    if (e.code !== '42710') throw e;
+  }
   // The master CRM (MASTER_ACCESS_CHANGES Part 1, 2026-11-09; utils/master.js): one row per visit of a workspace
   // through the admin secret — the workspace, the owner row the visit acted as, when it began and ended, and from
   // where. The names are copied so a row outlives a deleted workspace or user (hence SET NULL, not CASCADE).

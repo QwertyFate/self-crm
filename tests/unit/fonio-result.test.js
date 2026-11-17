@@ -34,7 +34,7 @@ describe('readResult', () => {
     const r = fr.readResult({ crm_call_id: '17', conversation_id: 'conv_1', conversation_link: 'https://app.fonio.ai/c/1', direction: 'outbound',
       duration: '125', summary: ' Termin vereinbart. ', transcript: 'Agent: Hallo\r\nKunde: Hi', person_number: '+49 171 1234567', agent_number: OWN }, OWN);
     assert.deepEqual(r, { crmCallId: 17, conversationId: 'conv_1', link: 'https://app.fonio.ai/c/1', direction: 'outbound', inbound: false,
-      duration: '125', summary: 'Termin vereinbart.', transcript: 'Agent: Hallo\nKunde: Hi', numbers: ['+491711234567'], name: '', meeting: null });
+      duration: '125', summary: 'Termin vereinbart.', transcript: 'Agent: Hallo\nKunde: Hi', numbers: ['+491711234567'], name: '', meeting: null, outcome: null });
   });
   test("fonio's own names and its default Body (the person's number as \"from\")", () => {
     const r = fr.readResult({ conversationId: 'c9', from: '+491711234567', to: OWN, conversationLink: 'https://app.fonio.ai/x', plainTranscript: 'T', summary: 'S' }, OWN);
@@ -71,7 +71,7 @@ describe('readResult', () => {
     for (const d of ['outbound', 'OUTGOING', '', '{{direction}}']) assert.equal(fr.readResult({ direction: d }, OWN).inbound, false, d);
   });
   test('nothing usable: all empty, never a throw', () => {
-    assert.deepEqual(fr.readResult(null, OWN), { crmCallId: null, conversationId: null, link: null, direction: '', inbound: false, duration: '', summary: '', transcript: '', numbers: [], name: '', meeting: null });
+    assert.deepEqual(fr.readResult(null, OWN), { crmCallId: null, conversationId: null, link: null, direction: '', inbound: false, duration: '', summary: '', transcript: '', numbers: [], name: '', meeting: null, outcome: null });
   });
 });
 
@@ -88,6 +88,45 @@ describe('resultNote', () => {
     const note = fr.resultNote({ ...base, summary: 's'.repeat(fr.MAX_SUMMARY + 5), transcript: 't'.repeat(fr.MAX_TRANSCRIPT + 5) });
     assert.ok(note.includes(`${'s'.repeat(fr.MAX_SUMMARY)}\n… (gekürzt)`));
     assert.ok(note.endsWith(`${'t'.repeat(fr.MAX_TRANSCRIPT)}\n… (Transkript gekürzt)`));
+  });
+  test('how the call ended is in the first line, before its length (Part 33)', () => {
+    assert.equal(fr.resultNote({ ...base, outcome: 'no_answer', duration: '0:20' }), 'fonio-Anruf · nicht abgenommen · Dauer 0:20\n\n' + fr.NOT_RECORDED);
+    assert.equal(fr.resultNote({ ...base, inbound: true, outcome: 'voicemail' }), 'Eingehender fonio-Anruf · Mailbox\n\n' + fr.NOT_RECORDED);
+  });
+});
+
+// ── Part 33: how the call ended ──────────────────────────────────────────────
+describe('readOutcome: how the call ended', () => {
+  const o = b => fr.readOutcome(b);
+  test('the four words, as the prompt has the assistant write them', () => {
+    for (const [raw, want] of [['answered', 'answered'], ['no_answer', 'no_answer'], ['voicemail', 'voicemail'], ['busy', 'busy'],
+      ['ANSWERED', 'answered'], ['no answer', 'no_answer'], ['No-Answer', 'no_answer'], ['Voice Mail', 'voicemail'], ['voice_mail', 'voicemail']]) {
+      assert.equal(o({ call_outcome: raw }), want, raw);
+    }
+  });
+  test('German words and the ways an assistant words them', () => {
+    for (const [raw, want] of [['Nicht abgenommen', 'no_answer'], ['nicht erreicht', 'no_answer'], ['keine Antwort', 'no_answer'],
+      ['unanswered', 'no_answer'], ['not reached', 'no_answer'], ['niemand erreicht', 'no_answer'], ['Anrufbeantworter', 'voicemail'],
+      ['Mailbox', 'voicemail'], ['Sprachnachricht', 'voicemail'], ['besetzt', 'busy'], ['engaged', 'busy'], ['angenommen', 'answered'],
+      ['abgenommen', 'answered'], ['erreicht', 'answered'], ['ja', 'answered'], ['yes', 'answered']]) {
+      assert.equal(o({ call_outcome: raw }), want, raw);
+    }
+  });
+  test('other names for the same value, the first filled one winning', () => {
+    assert.equal(o({ callOutcome: 'busy' }), 'busy');
+    assert.equal(o({ call_status: 'voicemail' }), 'voicemail');
+    assert.equal(o({ outcome: 'no_answer', call_outcome: '' }), 'no_answer');
+    assert.equal(o({ ergebnis: 'answered' }), 'answered');
+  });
+  test('nothing to go on: no field, a placeholder, an empty value, or words this cannot be sure of', () => {
+    for (const body of [null, {}, { call_outcome: '' }, { call_outcome: '{{call_outcome}}' }, { call_outcome: '<Call Outcome>' },
+      { call_outcome: 'unknown' }, { call_outcome: 'maybe' }, { summary: 'Kunde war freundlich' }]) {
+      assert.equal(o(body), null, JSON.stringify(body));
+    }
+  });
+  test('in the result, so the note and the queue see it', () => {
+    assert.equal(fr.readResult({ call_outcome: 'no_answer', summary: 'S' }, OWN).outcome, 'no_answer');
+    assert.equal(fr.readResult({ summary: 'S' }, OWN).outcome, null);
   });
 });
 

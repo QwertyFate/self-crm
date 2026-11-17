@@ -1179,6 +1179,25 @@
             <div class="settings-card-body">
               <div class="intg-section">
                 <div class="intg-section-head">
+                  <h3 data-i18n="intg_webhooks_title">Your webhooks</h3>
+                  <p class="intg-section-hint" data-i18n="intg_webhooks_hint">Up to three, each with its own URL, field mapping and auto-deal settings. Pick one to edit it.</p>
+                </div>
+                <div id="intg-webhook-list" class="intg-webhook-tabs"></div>
+                <p id="intg-webhook-default-hint" class="intg-section-hint hidden" data-i18n="intg_webhook_default_hint">Bookings from Cal.com or Calendly that create a new contact use this first webhook's pipeline, stage and assignee.</p>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="intg_webhook_name_label">Webhook name</h3>
+                  <p class="intg-section-hint" data-i18n="intg_webhook_name_hint">A label for the team — it shows on every lead this webhook receives, in Recent leads.</p>
+                </div>
+                <div class="intg-field">
+                  <input type="text" id="intg-webhook-name" class="form-control" maxlength="60"
+                    data-i18n-ph="intg_webhook_name_ph" placeholder="e.g. Facebook leads"
+                    onchange="renameIntgWebhook()" onblur="renameIntgWebhook()" />
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
                   <h3 data-i18n="intg_url_label">Your webhook URL</h3>
                   <p class="intg-section-hint" data-i18n="intg_url_hint">Paste this URL into the tool that sends the leads.</p>
                 </div>
@@ -1188,12 +1207,33 @@
                   <button class="btn btn-sm" onclick="regenerateWebhookKey()" data-i18n="btn_regenerate">Regenerate</button>
                 </div>
               </div>
+              <!-- A test delivery, kept as the sample the mapping is set from (LEAD_WEBHOOK_CHANGES Part 2): renderIntgTest() -->
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="intg_test_title">Test delivery</h3>
+                  <p class="intg-section-hint" data-i18n="intg_test_hint">Send one delivery from the tool that will send the leads. The CRM keeps it as a sample for setting up the mapping and creates no contact from it.</p>
+                </div>
+                <div class="settings-card-actions">
+                  <button class="btn btn-sm" type="button" id="intg-test-btn" onclick="toggleIntgTest(this)" data-i18n="intg_test_start">Listen for a test delivery</button>
+                  <button class="btn btn-sm" type="button" id="intg-last-btn" onclick="useIntgLastDelivery(this)" data-i18n="intg_sample_last">Use the last delivery</button>
+                  <span id="intg-test-status" class="intg-test-status"></span>
+                </div>
+                <div id="intg-sample-wrap" class="intg-sample-wrap hidden">
+                  <div class="intg-sample-head">
+                    <span id="intg-sample-when" class="intg-sample-when"></span>
+                    <button class="btn btn-sm btn-ghost" type="button" onclick="discardIntgSample()" data-i18n="intg_sample_discard">Discard sample</button>
+                  </div>
+                  <pre id="intg-sample" class="intg-log-raw intg-sample"></pre>
+                </div>
+              </div>
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="intg_mapping_title">Field mapping</h3>
-                  <p class="intg-section-hint" data-i18n="intg_mapping_hint">Which key in the incoming JSON fills which contact field. Use dots for nested keys, for example data.email.</p>
+                  <p class="intg-section-hint" data-i18n="intg_mapping_hint">Which value of an incoming delivery fills which contact field. After a test delivery, choose each one from the list. Without one, type the key; use dots for nested keys, for example data.email.</p>
                 </div>
                 <div id="intg-field-map" class="intg-field-map"></div>
+                <!-- What the sample would become with the mapping as it stands (LEAD_WEBHOOK_CHANGES Part 4): loadIntgPreview() -->
+                <div id="intg-preview" class="intg-preview hidden" aria-live="polite"></div>
               </div>
               <div class="intg-section">
                 <div class="intg-section-head">
@@ -1219,6 +1259,7 @@
               </div>
               <div class="settings-card-actions">
                 <button class="btn btn-primary btn-sm" onclick="saveIntegration()" data-i18n="btn_save_changes">Save changes</button>
+                <button class="btn btn-danger-ghost btn-sm" id="intg-delete-btn" onclick="deleteIntgWebhook()" data-i18n="intg_btn_delete_webhook">Delete webhook</button>
                 <span id="intg-msg" class="workspace-name-msg hidden"></span>
               </div>
             </div>
@@ -1262,9 +1303,13 @@
           <div class="settings-card">
             <div class="settings-card-header">
               <h2 data-i18n="intg_activity_title">Received leads</h2>
-              <button class="btn btn-sm" onclick="loadIntgLogs()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg><span data-i18n="btn_refresh">Refresh</span></button>
+              <div class="intg-log-toolbar">
+                <label for="intg-log-filter" class="intg-log-filter-label" data-i18n="intg_log_filter_label">Webhook</label>
+                <select id="intg-log-filter" class="form-control intg-log-filter" onchange="loadIntgLogs()"></select>
+                <button class="btn btn-sm" onclick="loadIntgLogs()"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg><span data-i18n="btn_refresh">Refresh</span></button>
+              </div>
             </div>
-            <p class="settings-hint" data-i18n="intg_activity_hint">The last 50 leads this webhook received and what was captured from each.</p>
+            <p class="settings-hint" data-i18n="intg_activity_hint">The last 50 leads these webhooks received and what was captured from each.</p>
             <div class="settings-card-body">
               <div id="intg-logs" class="intg-logs"><p class="empty-inline" data-i18n="intg_no_activity">No leads received yet. Send a test from your platform and it will show up here.</p></div>
             </div>
@@ -1430,6 +1475,8 @@
                   <select id="cly-event-type" class="form-control" onchange="saveCalendlyEventType()"></select>
                   <input type="text" id="cly-type-readonly" class="form-control hidden" readonly />
                 </div>
+                <label class="switch-row"><input type="checkbox" id="cly-existing-only" class="switch" onchange="saveCalendlyExistingOnly()"> <span data-i18n="cal_existing_only">Only note bookings on contacts the CRM already has</span></label>
+                <p class="help" data-i18n="cal_existing_only_hint">On: a booking from an email that matches no contact is only logged, and no contact or deal is made. Off: a booking with a new email makes a contact and a deal, as before.</p>
               </div>
               <div class="intg-section hidden" id="cly-log-section">
                 <div class="intg-section-head">
@@ -1495,6 +1542,8 @@
                   <select id="cal-event-type" class="form-control" onchange="saveCalcomEventType()"></select>
                   <input type="text" id="cal-type-readonly" class="form-control hidden" readonly />
                 </div>
+                <label class="switch-row"><input type="checkbox" id="cal-existing-only" class="switch" onchange="saveCalcomExistingOnly()"> <span data-i18n="cal_existing_only">Only note bookings on contacts the CRM already has</span></label>
+                <p class="help" data-i18n="cal_existing_only_hint">On: a booking from an email that matches no contact is only logged, and no contact or deal is made. Off: a booking with a new email makes a contact and a deal, as before.</p>
               </div>
               <div class="intg-section hidden" id="cal-log-section">
                 <div class="intg-section-head">
@@ -1662,6 +1711,42 @@
                   </div>
                 </div>
               </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_meet_label">Meetings agreed in the call</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_meet_hint">The assistant can agree a meeting in the call; where it is booked is decided here.</p>
+                </div>
+                <div class="intg-fields">
+                  <label class="switch-row"><input type="checkbox" id="fonio-book-meetings" class="switch"> <span data-i18n="fonio_book_meetings">Book the agreed meeting in the CRM</span></label>
+                  <p class="help" data-i18n="fonio_book_meetings_hint">On: the CRM books the agreed time at the connected Cal.com or Calendly. Off: fonio books it itself, because Cal.com or Calendly is connected there — the call's note only says what was agreed.</p>
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_follow_label">If nobody answers</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_follow_hint">A call can be tried again when it reaches nobody. The delay counts from the call itself, and the retry waits for the calling hours like any call. It is a normal call in the list below, where it can be cancelled.</p>
+                </div>
+                <div class="intg-fields">
+                  <label class="switch-row"><input type="checkbox" id="fonio-follow-on" class="switch" onchange="updateFonioFollow()"> <span data-i18n="fonio_follow_on">Call again when nobody answers</span></label>
+                  <div class="intg-field">
+                    <label for="fonio-follow-no-answer" data-i18n="fonio_follow_no_answer">Not answered: call again after (minutes)</label>
+                    <input type="number" id="fonio-follow-no-answer" class="form-control" min="0" max="10080" step="1" />
+                  </div>
+                  <div class="intg-field">
+                    <label for="fonio-follow-voicemail" data-i18n="fonio_follow_voicemail">Mailbox: call again after (minutes)</label>
+                    <input type="number" id="fonio-follow-voicemail" class="form-control" min="0" max="10080" step="1" />
+                  </div>
+                  <div class="intg-field">
+                    <label for="fonio-follow-busy" data-i18n="fonio_follow_busy">Busy: call again after (minutes)</label>
+                    <input type="number" id="fonio-follow-busy" class="form-control" min="0" max="10080" step="1" />
+                  </div>
+                  <div class="intg-field">
+                    <label for="fonio-follow-attempts" data-i18n="fonio_follow_attempts">Follow-up calls per contact</label>
+                    <input type="number" id="fonio-follow-attempts" class="form-control" min="0" max="3" step="1" />
+                    <p class="help" data-i18n="fonio_follow_attempts_hint">0 books none. The delays are read from the call's outcome, which the assistant writes as call_outcome (see "Call results" below).</p>
+                  </div>
+                </div>
+              </div>
               <div class="settings-card-actions hidden" id="fonio-actions">
                 <button class="btn btn-primary btn-sm" id="fonio-save-btn" onclick="saveFonio(this)" data-i18n="fonio_btn_save">Save</button>
                 <button class="btn btn-sm btn-danger hidden" id="fonio-remove-btn" onclick="removeFonio()" data-i18n="fonio_btn_remove">Remove</button>
@@ -1699,6 +1784,16 @@
                     <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)" data-i18n="btn_copy">Copy</button>
                   </div>
                   <pre class="intg-code" id="fonio-result-body"></pre>
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_outcome_label">How the call ended</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_outcome_hint">For a call that is tried again, the CRM has to know how it ended. In fonio, add a variable of your own called call_outcome (Add Variable) with the description: How the call ended: answered, no_answer, voicemail or busy. Have the assistant say it at the end of the prompt, keep its value in the Body as call_outcome. Without it, only a call fonio reports nothing about for an hour is tried again.</p>
+                </div>
+                <div class="intg-url-box">
+                  <input type="text" id="fonio-outcome-words" readonly class="intg-url-input" value="answered | no_answer | voicemail | busy" />
+                  <button class="btn btn-sm" onclick="copyIntgText(this, document.getElementById('fonio-outcome-words').value)" data-i18n="btn_copy">Copy</button>
                 </div>
               </div>
               <p class="help" id="fonio-result-last"></p>

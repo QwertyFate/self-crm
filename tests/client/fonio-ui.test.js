@@ -36,7 +36,9 @@ describe('markup', () => {
     const ids = ['fonio-card', 'fonio-status', 'fonio-readonly-hint', 'fonio-facts', 'fonio-key', 'fonio-from', 'fonio-active', 'fonio-on-manual',
       'fonio-on-webhook', 'fonio-delay', 'fonio-cc', 'fonio-prefixes', 'fonio-hours-on', 'fonio-days', 'fonio-hours-from', 'fonio-hours-to',
       'fonio-hours-tz', 'fonio-actions', 'fonio-save-btn', 'fonio-remove-btn', 'fonio-msg', 'fonio-detail', 'fonio-calls-card', 'fonio-calls',
-      'fonio-result-card', 'fonio-result-url', 'fonio-result-body', 'fonio-result-last',
+      'fonio-book-meetings',
+      'fonio-follow-on', 'fonio-follow-no-answer', 'fonio-follow-voicemail', 'fonio-follow-busy', 'fonio-follow-attempts',
+      'fonio-result-card', 'fonio-result-url', 'fonio-result-body', 'fonio-result-last', 'fonio-outcome-words',
       'fonio-vars-card', 'fonio-vars-prompt', 'fonio-vars-found', 'fonio-vars-rows', 'fonio-vars-out-wrap', 'fonio-vars-out', 'fonio-vars-msg'];
     for (const id of ids) assert.ok(pane.includes(`id="${id}"`), `missing #${id}`);
     for (const m of block.matchAll(/getElementById\('([a-z-]+)'\)|\$\('([a-z-]+)'\)/g)) {
@@ -125,7 +127,10 @@ describe('every label the server can ask for, in both languages', () => {
     assert.equal(statuses.length, 6);
     for (const s of statuses) assert.ok(both(`fonio_call_status_${s}`), s);
   });
-  test('both triggers', () => { for (const tr of ['deal_manual', 'deal_webhook']) assert.ok(both(`fonio_trigger_${tr}`), tr); });
+  test('both triggers, and the follow-up a call that reached nobody starts (Part 33)', () => {
+    for (const tr of ['deal_manual', 'deal_webhook', 'follow_up']) assert.ok(both(`fonio_trigger_${tr}`), tr);
+    for (const k of ['fonio_trigger_follow_up_n', 'fonio_outcome_answered', 'fonio_outcome_no_answer', 'fonio_outcome_voicemail', 'fonio_outcome_busy']) assert.ok(both(k), k);
+  });
   test('every reason the queue or the route writes', () => {
     // the queue writes a call's reason; the route only through cancelWaiting (its other reasons are the form's)
     const queue = read('utils/fonio-calls.js');
@@ -153,16 +158,35 @@ const F = loadFns('public/js/integrations.js', ['readFonioForm', 'fonioErrorText
 });
 globalThis.__fonioDict = dict;
 
+// ── Part 34: a meeting agreed in the call, and who books it ──────────────────
+describe('who books a meeting agreed in the call (Part 34)', () => {
+  test('markup: one switch in the fonio card, every word from the dictionary', () => {
+    assert.match(pane, /<input type="checkbox" id="fonio-book-meetings" class="switch">/);
+    const start = pane.indexOf('id="fonio-book-meetings"') - 400, section = pane.slice(start, start + 1200);
+    for (const k of ['fonio_meet_label', 'fonio_meet_hint', 'fonio_book_meetings', 'fonio_book_meetings_hint']) {
+      assert.ok(section.includes(`data-i18n="${k}"`), `#fonio-book-meetings' section names ${k}`);
+      assert.ok(both(k), k);
+    }
+  });
+  test('renderFonio shows the saved choice; saveFonio reads the box', () => {
+    assert.match(sliceFn(js, 'renderFonio', 'integrations.js'), /chk\('fonio-book-meetings', s\.book_meetings\);/);
+    assert.match(sliceFn(js, 'saveFonio', 'integrations.js'), /bookMeetings: c\('fonio-book-meetings'\),/);
+  });
+});
+
 describe('readFonioForm: the form as the PUT body', () => {
   const form = {
     key: '', from: ' +49 30 123456 ', active: true, onManual: true, onWebhook: false, delay: '15', cc: ' +49 ',
     prefixes: '+49 15, 0171;0160\n', hoursOn: true, days: [5, 1, 3], hoursFrom: '09:00', hoursTo: '18:00',
+    bookMeetings: true,
+    followOn: true, followNoAnswer: '30', followVoicemail: '720', followBusy: ' 15 ', followAttempts: '2',
   };
   test('trims, splits the number starts on commas, sorts the days; no key typed, no key sent', () => {
     assert.deepEqual(F.readFonioForm(form), {
       from_number: '+49 30 123456', active: true, on_deal_manual: true, on_deal_webhook: false, delay_minutes: 15,
       country_code: '+49', number_prefixes: ['+49 15', '0171', '0160'], hours_on: true, hours_days: [1, 3, 5],
-      hours_from: '09:00', hours_to: '18:00',
+      hours_from: '09:00', hours_to: '18:00', book_meetings: true,
+      follow_up: { enabled: true, no_answer: 30, voicemail: 720, busy: 15, max_attempts: 2 },
     });
   });
   test('the variables card says which free-time variables every call carries while a booking service is connected (Part 29)', () => {
@@ -172,8 +196,58 @@ describe('readFonioForm: the form as the PUT body', () => {
     assert.deepEqual(names, { text: ['freie_termine', 'free_times'], json: ['freie_termine_json', 'free_times_json'], today: ['heute', 'today'] });
   });
   test('a typed key is sent, trimmed', () => assert.equal(F.readFonioForm({ ...form, key: '  fonio_live_abc  ' }).api_key, 'fonio_live_abc'));
+  test('book_meetings is sent as the switch stands (Part 34)', () => {
+    assert.equal(F.readFonioForm({ ...form, bookMeetings: true }).book_meetings, true);
+    assert.equal(F.readFonioForm({ ...form, bookMeetings: false }).book_meetings, false);
+    assert.equal(F.readFonioForm({ ...form, bookMeetings: undefined }).book_meetings, false, 'an unticked box is false, never missing');
+  });
   test('an empty delay is sent as not-a-number, so the server refuses it instead of reading 0', () => {
     assert.ok(Number.isNaN(F.readFonioForm({ ...form, delay: '' }).delay_minutes));
+  });
+});
+
+// ── Part 33: trying again after a call that reached nobody ──────────────────
+describe('trying again after a call that reached nobody (Part 33)', () => {
+  test('markup: the switch gates the four fields; the four outcome words are shown to copy', () => {
+    assert.match(pane, /<input type="checkbox" id="fonio-follow-on" class="switch" onchange="updateFonioFollow\(\)">/);
+    for (const [id, max] of [['fonio-follow-no-answer', 10080], ['fonio-follow-voicemail', 10080], ['fonio-follow-busy', 10080], ['fonio-follow-attempts', 3]]) {
+      assert.match(pane, new RegExp(`<input type="number" id="${id}" class="form-control" min="0" max="${max}" step="1" />`), id);
+    }
+    assert.match(pane, /<input type="text" id="fonio-outcome-words" readonly class="intg-url-input" value="answered \| no_answer \| voicemail \| busy" \/>/);
+    assert.match(pane, /onclick="copyIntgText\(this, document\.getElementById\('fonio-outcome-words'\)\.value\)"/);
+    for (const lang of ['en', 'de']) for (const word of ['call_outcome', 'no_answer', 'voicemail', 'busy']) assert.ok(dict[lang].fonio_outcome_hint.includes(word), `${lang}: ${word}`);
+  });
+
+  const G = loadFns('public/js/integrations.js', ['updateFonioFollow'], { state: { document: null, fonioData: null } });
+  const IDS = ['fonio-follow-no-answer', 'fonio-follow-voicemail', 'fonio-follow-busy', 'fonio-follow-attempts'];
+  function page(on) {
+    const els = { 'fonio-follow-on': { checked: on } };
+    for (const id of IDS) els[id] = { disabled: false };
+    G.__set('document', { getElementById: id => els[id] || null });
+    return els;
+  }
+  test('owner with the switch off: the delays are greyed out; on: they can be changed', () => {
+    G.__set('fonioData', { can_manage: true });
+    let els = page(false);
+    G.updateFonioFollow();
+    assert.deepEqual(IDS.map(id => els[id].disabled), [true, true, true, true]);
+    els = page(true);
+    G.updateFonioFollow();
+    assert.deepEqual(IDS.map(id => els[id].disabled), [false, false, false, false]);
+  });
+  test('a member: the delays stay read-only even with the switch on', () => {
+    G.__set('fonioData', { can_manage: false });
+    const els = page(true);
+    G.updateFonioFollow();
+    assert.deepEqual(IDS.map(id => els[id].disabled), [true, true, true, true]);
+  });
+  test('render calls it after the member lock, so it has the last word on the delays', () => {
+    assert.match(sliceFn(js, 'renderFonio', 'integrations.js'), /el\.disabled = !manage; \}\);\s*updateFonioActive\(\);\s*updateFonioFollow\(\);/);
+  });
+  test('an empty delay is sent as not-a-number, so the server refuses it instead of reading 0', () => {
+    const body = F.readFonioForm({ key: '', from: '+4930', active: false, onManual: true, onWebhook: true, delay: '5', cc: '+49', prefixes: '',
+      hoursOn: true, days: [1], hoursFrom: '09:00', hoursTo: '18:00', followOn: true, followNoAnswer: '', followVoicemail: '1440', followBusy: '120', followAttempts: '1' });
+    assert.ok(Number.isNaN(body.follow_up.no_answer));
   });
 });
 
@@ -287,8 +361,11 @@ describe('the result card (Part 8): the link, the Body for fonio, the last deliv
     const filled = Object.fromEntries(Object.keys(body).map(k => [k, 'x']));
     Object.assign(filled, { crm_call_id: '7', conversation_link: 'https://app.fonio.ai/c/1', person_number: '+491711234567', agent_number: '+4930123456' });
     assert.deepEqual(fr.readResult(filled, '+4930123456'), { crmCallId: 7, conversationId: 'x', link: 'https://app.fonio.ai/c/1', direction: 'x', inbound: false,
-      duration: 'x', summary: 'x', transcript: 'x', numbers: ['+491711234567'], name: 'x', meeting: null });
-    assert.deepEqual(Object.keys(body), ['crm_call_id', 'conversation_id', 'conversation_link', 'direction', 'person_number', 'agent_number', 'caller_name', 'meeting_booked', 'meeting_date', 'meeting_time', 'meeting_email', 'duration', 'summary', 'transcript']);
+      duration: 'x', summary: 'x', transcript: 'x', numbers: ['+491711234567'], name: 'x', meeting: null, outcome: null });
+    assert.deepEqual(Object.keys(body), ['crm_call_id', 'conversation_id', 'conversation_link', 'direction', 'person_number', 'agent_number', 'caller_name', 'call_outcome', 'meeting_booked', 'meeting_date', 'meeting_time', 'meeting_email', 'duration', 'summary', 'transcript']);
+    // Part 33: the outcome is read from the same Body; a filled one says how the call ended
+    assert.equal(fr.readResult({ ...filled, call_outcome: 'no_answer' }, '+4930123456').outcome, 'no_answer');
+    assert.equal(body.call_outcome, '{{call_outcome}}');
     // Part 28: the three meeting names are read too; left as fonio's unfilled placeholders they are no meeting
     assert.deepEqual(fr.readResult({ ...filled, meeting_booked: 'yes', meeting_date: '2026-11-20', meeting_time: '14:00' }, '+4930123456').meeting, { date: '2026-11-20', time: '14:00', email: null, said: '2026-11-20 14:00' });
     assert.equal(fr.readResult(body, '+4930123456').meeting, null);

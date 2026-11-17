@@ -317,9 +317,10 @@ async function runImport() {
 
   let assigneeId = parseInt(document.getElementById('import-assignee').value) || null;
   if (!assigneeId) {
+    // The workspace's first (oldest) lead webhook, the same one a CSV import fell back to when a workspace had one.
     const intgSettings = await api.get('/api/integrations/settings');
-    if (intgSettings?.webhook?.default_assignee_id) {
-      assigneeId = intgSettings.webhook.default_assignee_id;
+    if (intgSettings?.webhooks?.[0]?.default_assignee_id) {
+      assigneeId = intgSettings.webhooks[0].default_assignee_id;
     }
   }
 
