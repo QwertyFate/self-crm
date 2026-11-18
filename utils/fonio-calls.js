@@ -8,7 +8,10 @@
    (routes/deals.js, trigger 'deal_manual') or through the lead link
    (routes/integrations.js /receive, 'deal_webhook'). CSV imports and Cal.com
    bookings create deals too and call nobody. Nothing is written when there is
-   no connection, it is not active, or that trigger is off. Otherwise the row
+   no connection, it is not active, that trigger is off, or the workspace
+   limited who gets the call (Part 37: only_webhooks, only_pipelines — null
+   for all, or a list of ids) and this lead webhook or the deal's pipeline is
+   not in the list. Otherwise the row
    says what will happen: 'scheduled' at now + delay, moved into the calling
    hours, or 'skipped' with why (no contact, no number, a number that cannot
    be made international, one outside the number starts, a call for this
@@ -142,17 +145,35 @@ function checkNumber(raw, conn) {
   return { number };
 }
 
-async function scheduleForDeal(pool, { workspaceId, dealId, trigger, now = new Date() }) {
+// Who gets the call (Part 37). The connection's only_webhooks and only_pipelines are null for "all" or the ids fonio
+// is limited to. An id that is missing — a deal without a pipeline, a caller that names no webhook — is in no list.
+const WHO_KEYS = ['only_webhooks', 'only_pipelines'];
+const WHO_MAX  = 100;
+const allowedBy = (list, id) => !Array.isArray(list) || (id != null && list.some(x => Number(x) === Number(id)));
+// A list as it is saved: { value: null } for all, { value: [ids] } each once and in order, or { error }. An empty
+// list is refused: "only these" with nothing in it is a connection that never calls, which the switches already say.
+function checkWho(list) {
+  if (list === null || list === undefined) return { value: null };
+  if (!Array.isArray(list) || !list.length || list.length > WHO_MAX) return { error: `A list of 1 to ${WHO_MAX} ids, or null for all` };
+  if (list.some(id => !Number.isInteger(id) || id <= 0)) return { error: 'The ids are whole numbers' };
+  return { value: [...new Set(list)].sort((a, b) => a - b) };
+}
+
+// webhookId: the lead webhook a 'deal_webhook' deal came through (routes/integrations.js /receive).
+async function scheduleForDeal(pool, { workspaceId, dealId, trigger, webhookId = null, now = new Date() }) {
   if (!TRIGGERS.includes(trigger)) return null;
   const conn = await loadConnection(pool, workspaceId);
   if (!conn || !conn.active) return null;
   if (trigger === 'deal_manual' ? !conn.on_deal_manual : !conn.on_deal_webhook) return null;
+  // not this lead webhook, or (below) not this pipeline: like a trigger that is off — no call, and no row either
+  if (trigger === 'deal_webhook' && !allowedBy(conn.only_webhooks, webhookId)) return null;
   const { rows: [deal] } = await pool.query(
-    `SELECT d.id, d.contact_id, c.phone
+    `SELECT d.id, d.contact_id, d.pipeline_id, c.phone
        FROM deals d LEFT JOIN contacts c ON c.id = d.contact_id AND c.workspace_id = d.workspace_id
       WHERE d.id = $1 AND d.workspace_id = $2`, [dealId, workspaceId]
   );
   if (!deal) return null;
+  if (!allowedBy(conn.only_pipelines, deal.pipeline_id)) return null;
   const base = { workspaceId, dealId: deal.id, contactId: deal.contact_id || null, trigger, rawNumber: deal.phone || null };
   const skip = (reason, toNumber = null) => insertCall(pool, { ...base, status: 'skipped', reason, toNumber });
   if (!deal.contact_id) return skip('no_contact');
@@ -582,14 +603,19 @@ async function sendCall(pool, id, now = new Date()) {
   await keepJson(pool, 'UPDATE fonio_calls SET request = $2::jsonb, response = $3::jsonb WHERE id = $1',
     call.id, { url: `${fonio.BASE}/public/v1/outbound_call`, body: { apiKey: '(hidden)', fromNumber: conn.from_number, toNumber: number, context } },
     result.answer || { http: result.http ?? 0, body: null, error: result.error || null });
-  if (result.ok) return done('sent', { message: result.message, toNumber: number, sent: true });
+  if (result.ok) {
+    // the deal's stage as the call goes out (Part 39): a rule moves the deal after the call only while it is still
+    // there. 0 stands for "no stage"; a call sent before this part keeps NULL and moves nothing.
+    await pool.query('UPDATE fonio_calls f SET stage_at_send = COALESCE((SELECT d.stage_id FROM deals d WHERE d.id = f.deal_id), 0) WHERE f.id = $1', [call.id]).catch(() => {});
+    return done('sent', { message: result.message, toNumber: number, sent: true });
+  }
   if (result.retry && call.attempts < MAX_ATTEMPTS) {
     return done('scheduled', { message: result.error, toNumber: number, dueAt: new Date(new Date(now).getTime() + RETRY_MINUTES * 60000).toISOString() });
   }
   return done('failed', { reason: 'fonio', message: result.error, toNumber: number });
 }
 
-async function runDue(pool, { now = new Date(), limit = 20 } = {}) {
+async function runDue(pool, { now = new Date(), limit = 20, tell = {} } = {}) {
   await pool.query(
     `UPDATE fonio_calls SET status = 'failed', reason = 'interrupted', updated_at = NOW()
       WHERE status = 'sending' AND updated_at < $1`, [new Date(new Date(now).getTime() - STUCK_MINUTES * 60000)]
@@ -597,6 +623,10 @@ async function runDue(pool, { now = new Date(), limit = 20 } = {}) {
   // the calls fonio never reported get their retry here too (Part 33); a failure here never holds the due calls back
   try { await sweepUnreported(pool, now, limit); }
   catch (err) { console.error('fonio: the unreported sweep failed:', err?.message || err); }
+  // and the calls that will not be tried again move their deal to "not reached", where the workspace set that up
+  // (Part 39, utils/fonio-stage.js); required here, not at the top: that file reads this one's follow-up settings
+  try { await require('./fonio-stage').sweepNotReached(pool, now, limit, tell); }
+  catch (err) { console.error('fonio: the not-reached sweep failed:', err?.message || err); }
   const { rows } = await pool.query(
     `SELECT id FROM fonio_calls WHERE status = 'scheduled' AND due_at <= $1 ORDER BY due_at, id LIMIT $2`, [now, limit]
   );
@@ -609,13 +639,14 @@ async function runDue(pool, { now = new Date(), limit = 20 } = {}) {
 }
 
 let worker = null;
-function startWorker(pool, { intervalMs = 30000, limit = 20, log = console } = {}) {
+// tell: { notifyUser, engine } for the deals the worker moves itself (Part 39); server.js hands them in.
+function startWorker(pool, { intervalMs = 30000, limit = 20, log = console, tell = {} } = {}) {
   if (worker) return worker;
   let busy = false;
   const tick = async () => {
     if (busy) return;
     busy = true;
-    try { await runDue(pool, { limit }); }
+    try { await runDue(pool, { limit, tell }); }
     catch (err) { log.error('fonio worker:', err?.message || err); }
     finally { busy = false; }
   };
@@ -712,8 +743,9 @@ async function saveResult(pool, wid, r, content, now = new Date()) {
   const callback = r.callback && !r.meeting ? await callbackAfterResult(pool, wid, call, r.callback, now) : null;
   // how it ended decides whether the contact is called again (Part 33); a result without call_outcome is no guess,
   // and never throws, never undoes the note
-  if (!callback || callback.status !== 'planned') await followUpAfterResult(pool, wid, call, r.outcome || null, now);
-  return { outcome: 'noted', call_id: call.id, activity_id: created.id, ...(callback ? { callback } : {}) };
+  const retry = !callback || callback.status !== 'planned' ? await followUpAfterResult(pool, wid, call, r.outcome || null, now) : null;
+  // retry: a further try was booked, so an unanswered call was not the last one (Part 39 reads it)
+  return { outcome: 'noted', call_id: call.id, activity_id: created.id, ...(callback ? { callback } : {}), ...(retry ? { retry: true } : {}) };
 }
 
 // A conversation the CRM did not start (Part 15) — an incoming call, or an outgoing one no call above fits — kept in
@@ -892,6 +924,7 @@ module.exports = {
   followUpSettings, checkFollowUp, followUpAfterResult, sweepUnreported,
   CALLBACK_MAX, CALLBACK_DAYS, CALLBACK_DAY_TIME, CALLBACK_NIGHT, callbackInstant, callbackAfterResult, callbackLine,
   VALUE_SOURCES, MAX_VARIABLES, checkVariables,
+  WHO_KEYS, WHO_MAX, checkWho,
   freeTimeValues, SLOT_NAMES,
   scheduleForDeal, callContext, plainKey, requestDate, sendCall, runDue, startWorker, cancelWaiting, cancelOne, listCalls, checkNumber, saveResult,
 };

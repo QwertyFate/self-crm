@@ -1671,6 +1671,14 @@ input[type="checkbox"].switch:focus-visible,
 .intg-field { display: flex; flex-direction: column; gap: var(--sp-1); max-width: 360px; }
 .intg-field label { font-size: var(--fs-xs); font-weight: 580; color: var(--ink-secondary); }
 .intg-field select, .intg-field input { width: 100%; font-size: var(--fs-sm); }
+/* fonio tab, "Who gets the call" (FONIO_CHANGES Part 38): All / Only these, then one switch per pipeline or lead webhook */
+.fonio-who-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 2px; }
+.fonio-who-note { margin-left: 6px; font-size: var(--fs-sm); color: var(--text-3); }
+.fonio-who-note.warn { color: var(--warning-ink, var(--danger)); }
+/* fonio tab, "The deal after the call" (FONIO_CHANGES Part 40): one line per result, a stage and an urgency to choose */
+.fonio-rules-table td { vertical-align: middle; }
+.fonio-rules-table td:first-child code, .fonio-rules-table td:first-child .help { display: block; margin-top: 2px; }
+.fonio-rules-table select { min-width: 150px; }
 .intg-autosaved { align-self: flex-end; font-size: var(--fs-2xs); font-weight: 600; color: var(--brand-ink); }
 input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
 .switch-row:has(> input.switch:disabled) { color: var(--text-3); cursor: default; }   /* its label greys out with it (fonio's triggers while paused) */
@@ -2784,6 +2792,12 @@ body:has(#app.rail:not(.hidden)) #loading-overlay { left: var(--sb-width-rail); 
 .tl-item:hover .dd-tl-actions, .tl-item:focus-within .dd-tl-actions { opacity: 1; }
 .dd-ibtn { width: 26px !important; height: 26px !important; } .dd-ibtn .ic { width: 14px; height: 14px; }
 .dd-editor { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
+/* the editor's auto-save line, left of Cancel and Save: quiet, red only when a save failed; in a narrow panel the
+   buttons drop under the help line instead of squeezing it */
+.note-state { font-size: var(--fs-sm); color: var(--text-3); }
+.note-state[data-state="failed"] { color: var(--danger); font-weight: 600; }
+.dd-editor .row-between { flex-wrap: wrap; }
+.dd-editor .row-between > .row { margin-left: auto; }
 .dd-tasks { border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
 .dd-task { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--divider); background: var(--surface); }
 .dd-task:last-child { border-bottom: 0; }

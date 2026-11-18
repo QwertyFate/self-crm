@@ -586,8 +586,9 @@ router.post('/receive/:key', async (req, res) => {
         [wid, contact.id, wh.pipeline_id, stageId, contact.name]
       );
       dealId = deal.id;
-      // fonio's call to the lead, when the workspace has it on for the lead link; it never fails the delivery
-      await fonioCalls.scheduleForDeal(pool, { workspaceId: wid, dealId, trigger: 'deal_webhook' })
+      // fonio's call to the lead, when the workspace has it on for the lead link — and, where it chose which lead
+      // webhooks get the call, for this one (wh.id); it never fails the delivery
+      await fonioCalls.scheduleForDeal(pool, { workspaceId: wid, dealId, trigger: 'deal_webhook', webhookId: wh.id })
         .catch(err => console.error('fonio scheduling:', err?.message || err));
     }
 

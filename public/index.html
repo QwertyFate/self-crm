@@ -469,7 +469,7 @@
         <div id="contact-side-panel" class="contact-side-panel hidden">
           <div class="side-panel-header">
             <span class="side-panel-name" id="side-panel-name"></span>
-            <button class="iconbtn" onclick="closeSidePanel()" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+            <button class="iconbtn" onclick="dvCloseSidePanel()" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
           </div>
           <div id="side-panel-body" class="side-panel-body"></div>
         </div>
@@ -1672,6 +1672,23 @@
                   </div>
                 </div>
               </div>
+              <!-- Who gets the call (FONIO_CHANGES Parts 37 and 38): every pipeline / lead webhook, or only the ones switched on. Both lists are filled by renderFonioWho. -->
+              <div class="intg-section" id="fonio-who">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_who_label">Who gets the call</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_who_hint">As long as nothing is limited here, every new deal is called. The calls can be limited to some pipelines and to some lead webhooks; a lead is called only when both its webhook and its pipeline are allowed.</p>
+                </div>
+                <div class="intg-fields">
+                  <div class="intg-field">
+                    <label id="fonio-who-pipelines-label" data-i18n="fonio_who_pipelines">Pipelines</label>
+                    <div id="fonio-who-pipelines" class="fonio-who" role="group" aria-labelledby="fonio-who-pipelines-label"></div>
+                  </div>
+                  <div class="intg-field">
+                    <label id="fonio-who-webhooks-label" data-i18n="fonio_who_webhooks">Lead webhooks</label>
+                    <div id="fonio-who-webhooks" class="fonio-who" role="group" aria-labelledby="fonio-who-webhooks-label"></div>
+                  </div>
+                </div>
+              </div>
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_numbers_label">Numbers</h3>
@@ -1758,6 +1775,21 @@
                   <p class="help" data-i18n="fonio_callback_rules">That time counts outside the calling hours too, but nobody is called between 22:00 and 07:00. Without an exact time: morning 10:00, midday 12:00, afternoon 15:00, evening 18:00. At most 3 callbacks in a row per contact. The assistant has to report the time: see "A callback asked for in the call" under "Call results".</p>
                 </div>
               </div>
+              <!-- The deal after the call (FONIO_CHANGES Parts 39 and 40): per pipeline, what came out of the call decides the deal's stage and urgency. The pipeline list and the table are filled by renderFonioRules. -->
+              <div class="intg-section" id="fonio-rules">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_rules_label">The deal after the call</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_rules_hint">What came out of a call can move the deal to another stage and set its urgency. The assistant reports it as lead_status (see "What came out of the conversation" under "Call results"); "Not reached" is decided by the CRM itself, after the last try. Each pipeline has its own table.</p>
+                </div>
+                <div class="intg-fields">
+                  <div class="intg-field">
+                    <label for="fonio-rules-pipeline" data-i18n="fonio_rules_pipeline">Pipeline</label>
+                    <select id="fonio-rules-pipeline" class="form-control" onchange="setFonioRulesPipeline(this.value)"></select>
+                  </div>
+                  <div id="fonio-rules-table"></div>
+                  <p class="help" data-i18n="fonio_rules_note">A deal is moved only while it is still in the stage it had when the call went out: one that somebody moved by hand since is left alone. The call's note says what was done.</p>
+                </div>
+              </div>
               <div class="settings-card-actions hidden" id="fonio-actions">
                 <button class="btn btn-primary btn-sm" id="fonio-save-btn" onclick="saveFonio(this)" data-i18n="fonio_btn_save">Save</button>
                 <button class="btn btn-sm btn-danger hidden" id="fonio-remove-btn" onclick="removeFonio()" data-i18n="fonio_btn_remove">Remove</button>
@@ -1833,6 +1865,27 @@
                     <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)" data-i18n="btn_copy">Copy</button>
                   </div>
                   <pre class="intg-code fonio-vars-out" id="fonio-cb-prompt" data-i18n="fonio_cb_prompt">If the person has no time right now, ask when a callback suits (day and time), confirm the time briefly and end the call politely. Do not agree a meeting in that case.</pre>
+                </div>
+              </div>
+              <!-- What to add in fonio so the assistant reports what came out of the conversation (FONIO_CHANGES Part 40): the variable's description and the prompt's sentence, each to copy. -->
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_ls_label">What came out of the conversation</h3>
+                  <p class="intg-section-hint" data-i18n="fonio_ls_hint">For the deal to move after a call ("The deal after the call" above), the assistant has to report what came out of it. In fonio, add a variable of your own (Add Variable) called lead_status with the description below. The Body above carries it already. Then put the sentence into the assistant's prompt.</p>
+                </div>
+                <div class="intg-json-block">
+                  <div class="intg-json-header">
+                    <code>lead_status</code>
+                    <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)" data-i18n="btn_copy">Copy</button>
+                  </div>
+                  <pre class="intg-code fonio-vars-out" id="fonio-ls-desc" data-i18n="fonio_ls_desc">The result of the conversation, as exactly one of these words: interested, meeting_booked, callback, not_interested, wrong_person. If nobody was reached or the result is unclear, leave empty.</pre>
+                </div>
+                <div class="intg-json-block">
+                  <div class="intg-json-header">
+                    <span data-i18n="fonio_ls_prompt_label">Sentence for the prompt</span>
+                    <button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson(this)" data-i18n="btn_copy">Copy</button>
+                  </div>
+                  <pre class="intg-code fonio-vars-out" id="fonio-ls-prompt" data-i18n="fonio_ls_prompt">At the end of the conversation, set lead_status to exactly one word: interested (wants to go on, no meeting agreed yet), meeting_booked (a meeting was agreed), callback (asked to be called again later), not_interested (declined) or wrong_person (wrong number or not the right contact).</pre>
                 </div>
               </div>
               <p class="help" id="fonio-result-last"></p>

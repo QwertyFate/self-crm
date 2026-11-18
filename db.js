@@ -899,6 +899,22 @@ async function initDb() {
   // book_meetings off, fonio books the time itself — Cal.com or Calendly is connected in fonio — and the CRM only says
   // so in the call's note, so the meeting is not booked twice. ON until switched off: the CRM has booked it since Part 28.
   await pool.query(`ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS book_meetings BOOLEAN NOT NULL DEFAULT true`);
+  // Who gets the call (FONIO_CHANGES Part 37, 2026-11-18; utils/fonio-calls.js scheduleForDeal): each list is NULL for
+  // "all" — what it was before, lead webhooks and pipelines added later included — or the ids fonio is limited to. A
+  // new deal is called only when its pipeline is allowed, a lead also only when the webhook it came through is. Plain
+  // lists, no foreign keys: an id that was deleted stays in its list and matches nothing.
+  await pool.query(`ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS only_webhooks JSONB`);
+  await pool.query(`ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS only_pipelines JSONB`);
+  // The deal after the call (FONIO_CHANGES Part 39, 2026-11-18; utils/fonio-stage.js). stage_rules on the connection:
+  // { "<pipeline id>": { "<event>": { stage_id, urgency } } } — the event is what fonio's assistant wrote as
+  // lead_status (interested, meeting_booked, callback, not_interested, wrong_person) or not_reached, which the CRM
+  // decides itself after the last try; stage_id and urgency are each null for "leave as it is". {} moves nothing.
+  await pool.query(`ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS stage_rules JSONB NOT NULL DEFAULT '{}'::jsonb`);
+  // On the call: the deal's stage when the call went out (0 for none; NULL on calls sent before this part) — a line
+  // of the table moves the deal only while it is still there — and the one look at the table: when, and which event.
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS stage_at_send INTEGER`);
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS stage_rule_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS stage_event TEXT`);
   // Conversations the CRM did not start (FONIO_CHANGES Part 15, 2026-11-11; utils/fonio-calls.js saveOther): an
   // incoming call, or an outgoing one that fits no row of fonio_calls. number is the person's (+E.164, NULL when
   // hidden), caller_name what fonio's Body gave as caller_name. contact_id is the contact with that number, deal_id

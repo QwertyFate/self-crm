@@ -36,7 +36,23 @@ const pool = {
       country_code: p[8], number_prefixes: JSON.parse(p[9]), hours_on: p[10], hours_days: JSON.parse(p[11]),
       hours_from: `${p[12]}:00`, hours_to: `${p[13]}:00`, hours_tz: p[14], saved_by: p[15],
       follow_up: JSON.parse(p[16]), book_meetings: p[17],
+      only_webhooks: p[18] == null ? null : JSON.parse(p[18]), only_pipelines: p[19] == null ? null : JSON.parse(p[19]),   // Part 37: NULL is "all"
     });
+    // Part 37: which of the ids in a list belong to this workspace (lead webhooks 5, 6, 7; pipelines 1, 2)
+    const own = text.match(/^SELECT id FROM (workspace_webhook|pipelines) WHERE workspace_id = \$1 AND id = ANY\(\$2::int\[\]\)$/);
+    if (own) {
+      const ids = params[0] === WS ? (own[1] === 'pipelines' ? [1, 2] : [5, 6, 7]) : [];
+      return { rows: params[1].filter(id => ids.includes(id)).map(id => ({ id })) };
+    }
+    // Part 39: the stage table is written on its own, like the variables; pipeline 1 has the stages 11 and 12, pipeline 2 has 21
+    if (text === 'UPDATE workspace_fonio SET stage_rules = $2::jsonb WHERE workspace_id = $1') {
+      if (state.row?.workspace_id === params[0]) state.row = { ...state.row, stage_rules: JSON.parse(params[1]) };
+      return { rowCount: 1, rows: [] };
+    }
+    if (text === 'SELECT id, pipeline_id FROM pipeline_stages WHERE workspace_id = $1 AND pipeline_id = ANY($2::int[])') {
+      const all = params[0] === WS ? [{ id: 11, pipeline_id: 1 }, { id: 12, pipeline_id: 1 }, { id: 21, pipeline_id: 2 }] : [];
+      return { rows: all.filter(x => params[1].includes(x.pipeline_id)) };
+    }
     if (text === 'UPDATE workspace_fonio SET variables = $2::jsonb WHERE workspace_id = $1') {
       if (state.row?.workspace_id === params[0]) state.row = { ...state.row, variables: JSON.parse(params[1]) };
       return { rowCount: 1, rows: [] };
@@ -100,6 +116,7 @@ describe('reading', () => {
       country_code: '+49', number_prefixes: [], hours_on: true, hours_days: [1, 2, 3, 4, 5],
       hours_from: '09:00', hours_to: '18:00', hours_tz: 'Europe/Berlin',
       book_meetings: true,
+      only_webhooks: null, only_pipelines: null,
       follow_up: { enabled: false, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1, callback: true },
     });
     assert.equal(r.body.can_manage, true);
@@ -431,5 +448,193 @@ describe('what a variable can be connected to (Part 14)', () => {
     assert.deepEqual(state.calls.at(-1).params, [WS], "asked for the caller's workspace");
     assert.equal((await admin.request('GET', '/api/integrations/fonio/sources')).status, 200);
     assert.equal((await member.request('GET', '/api/integrations/fonio/sources')).status, 403);
+  });
+});
+
+// Who gets the call (Part 37): two lists on the connection, each null for "all" or the ids fonio is limited to.
+// In the fake, this workspace has the lead webhooks 5, 6, 7 and the pipelines 1, 2. What the lists then do to a new
+// deal is in fonio-who.test.js.
+describe('who gets the call (Part 37)', () => {
+  const who = body => [body.settings.only_webhooks, body.settings.only_pipelines];
+  const asks = () => state.calls.filter(c => /^SELECT id FROM (workspace_webhook|pipelines) WHERE workspace_id = \$1 AND id = ANY/.test(c.sql));
+
+  test('a new connection calls all: both lists are null, and nothing is asked about them', async () => {
+    const r = await save(owner, FIRST);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(who(r.body), [null, null]);
+    assert.deepEqual([state.row.only_webhooks, state.row.only_pipelines], [null, null], 'NULL on the row, not an empty list');
+    assert.deepEqual(asks(), []);
+  });
+
+  test('a connection saved before the columns existed reads as all', async () => {
+    await save(owner, FIRST);
+    delete state.row.only_webhooks; delete state.row.only_pipelines;
+    assert.deepEqual(who((await owner.request('GET', '/api/integrations/fonio')).body), [null, null]);
+    assert.deepEqual(who((await save(owner, { delay_minutes: 9 })).body), [null, null], 'and a save of something else keeps it so');
+  });
+
+  test('a list is saved tidied (each id once, in order) and everyone reads it', async () => {
+    await save(owner, FIRST);
+    const r = await save(admin, { only_webhooks: [6, 5, 6], only_pipelines: [2] });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(who(r.body), [[5, 6], [2]]);
+    assert.deepEqual([state.row.only_webhooks, state.row.only_pipelines], [[5, 6], [2]]);
+    assert.deepEqual(who((await member.request('GET', '/api/integrations/fonio')).body), [[5, 6], [2]]);
+  });
+
+  test('the ids are looked up in the saver\'s own workspace', async () => {
+    await save(owner, FIRST);
+    await save(owner, { only_webhooks: [5], only_pipelines: [1, 2] });
+    assert.deepEqual(asks().map(c => [c.sql.match(/FROM (\w+)/)[1], c.params]), [['workspace_webhook', [WS, [5]]], ['pipelines', [WS, [1, 2]]]]);
+  });
+
+  test('a save that does not name a list keeps it, and asks nothing about it', async () => {
+    await save(owner, { ...FIRST, only_webhooks: [5], only_pipelines: [1] });
+    state.calls.length = 0;
+    const r = await save(owner, { active: true });
+    assert.deepEqual(who(r.body), [[5], [1]]);
+    assert.deepEqual(asks(), [], 'a saved list is not checked again: a webhook deleted since must not block the switch');
+  });
+
+  test('one list can change without the other', async () => {
+    await save(owner, { ...FIRST, only_webhooks: [5], only_pipelines: [1] });
+    assert.deepEqual(who((await save(owner, { only_pipelines: [1, 2] })).body), [[5], [1, 2]]);
+  });
+
+  test('null sets a list back to all', async () => {
+    await save(owner, { ...FIRST, only_webhooks: [5], only_pipelines: [1] });
+    const r = await save(owner, { only_webhooks: null });
+    assert.deepEqual(who(r.body), [null, [1]]);
+    assert.equal(state.row.only_webhooks, null);
+  });
+
+  test('refused with the list\'s name: an empty list, a wrong shape, ids that are not whole numbers', async () => {
+    await save(owner, FIRST);
+    for (const k of ['only_webhooks', 'only_pipelines']) {
+      for (const bad of [[], 'all', 5, {}, [1.5], ['1'], [0], [-3]]) {
+        state.calls.length = 0;
+        const r = await save(owner, { [k]: bad });
+        assert.equal(r.status, 400, `${k}: ${JSON.stringify(bad)}`);
+        assert.equal(r.body.reason, k);
+        assert.deepEqual(writes(), [], 'nothing is written');
+      }
+    }
+  });
+
+  test('refused: an id that is not this workspace\'s own lead webhook or pipeline', async () => {
+    await save(owner, FIRST);
+    state.calls.length = 0;
+    const w = await save(owner, { only_webhooks: [5, 99] });
+    assert.equal(w.status, 400); assert.equal(w.body.reason, 'only_webhooks');
+    const p = await save(owner, { only_pipelines: [3] });
+    assert.equal(p.status, 400); assert.equal(p.body.reason, 'only_pipelines');
+    const mixed = await save(owner, { only_webhooks: [1], only_pipelines: [1] });   // 1 is a pipeline, not a lead webhook
+    assert.equal(mixed.status, 400); assert.equal(mixed.body.reason, 'only_webhooks');
+    assert.deepEqual(writes(), []);
+    assert.deepEqual([state.row.only_webhooks, state.row.only_pipelines], [null, null]);
+  });
+
+  test('the lists can come with the first save; fonio is still asked about the key only after they hold', async () => {
+    const bad = await save(owner, { ...FIRST, only_pipelines: [3] });
+    assert.equal(bad.status, 400);
+    assert.equal(fon.calls.length, 0, 'fonio is not asked when the save is refused anyway');
+    const ok = await save(owner, { ...FIRST, only_pipelines: [1] });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.deepEqual(who(ok.body), [null, [1]]);
+  });
+
+  test('a member reads the lists and cannot change them', async () => {
+    await save(owner, { ...FIRST, only_pipelines: [1] });
+    assert.equal((await save(member, { only_pipelines: null })).status, 403);
+    assert.deepEqual(state.row.only_pipelines, [1]);
+  });
+
+  test('the statements carry both lists as JSONB, and the table name is never taken from the request', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'routes', 'fonio.js'), 'utf8');
+    assert.match(src, /only_webhooks = \$19::jsonb, only_pipelines = \$20::jsonb, saved_at = NOW\(\)/);
+    assert.match(src, /only_webhooks = EXCLUDED\.only_webhooks, only_pipelines = EXCLUDED\.only_pipelines, saved_at = NOW\(\)/);
+    assert.match(src, /only_webhooks:  \{ table: 'workspace_webhook', what: 'Lead webhooks' \},\s*only_pipelines: \{ table: 'pipelines',         what: 'Pipelines' \},/);
+    assert.match(src, /`SELECT id FROM \$\{WHO\[key\]\.table\} WHERE workspace_id = \$1 AND id = ANY\(\$2::int\[\]\)`, \[wid, ids\]/);
+    assert.match(src, /for \(const k of fonioCalls\.WHO_KEYS\) \{\s*if \(body\[k\] === undefined \|\| s\[k\] === null\) continue;/);
+  });
+});
+
+// The deal after the call (Part 39): the table of stage and urgency per pipeline and event. In the fake, pipeline 1 has
+// the stages 11 and 12, pipeline 2 has 21. What the table then does to a deal is in fonio-stage.test.js and
+// fonio-receive.test.js.
+describe('the deal after the call: the table (Part 39)', () => {
+  const TABLE = { 1: { interested: { stage_id: 12, urgency: 3 }, not_reached: { stage_id: 11, urgency: null } }, 2: { not_interested: { stage_id: null, urgency: 0 } } };
+  const tableWrites = () => state.calls.filter(c => c.sql === 'UPDATE workspace_fonio SET stage_rules = $2::jsonb WHERE workspace_id = $1');
+
+  test('a new connection has an empty table, and nothing is written for it', async () => {
+    const r = await save(owner, FIRST);
+    assert.deepEqual(r.body.settings.stage_rules, {});
+    assert.deepEqual(tableWrites(), []);
+  });
+
+  test('the table is saved as sent, tidied, and everyone reads it', async () => {
+    await save(owner, FIRST);
+    const r = await save(admin, { stage_rules: { ...TABLE, 1: { ...TABLE[1], callback: { stage_id: null, urgency: null }, wrong_person: null } } });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body.settings.stage_rules, TABLE, 'lines that leave both as they are are not kept');
+    assert.deepEqual(state.row.stage_rules, TABLE);
+    assert.deepEqual((await member.request('GET', '/api/integrations/fonio')).body.settings.stage_rules, TABLE);
+  });
+
+  test('a save that does not send the table keeps it; the table alone can be sent', async () => {
+    await save(owner, { ...FIRST, stage_rules: TABLE });
+    state.calls.length = 0;
+    assert.deepEqual((await save(owner, { delay_minutes: 9 })).body.settings.stage_rules, TABLE);
+    assert.deepEqual(tableWrites(), [], 'not written again');
+    const one = { 1: { interested: { stage_id: 11, urgency: null } } };
+    assert.deepEqual((await save(owner, { stage_rules: one })).body.settings.stage_rules, one, 'replaced as a whole');
+  });
+
+  test('an empty table clears it', async () => {
+    await save(owner, { ...FIRST, stage_rules: TABLE });
+    assert.deepEqual((await save(owner, { stage_rules: {} })).body.settings.stage_rules, {});
+    assert.deepEqual(state.row.stage_rules, {});
+  });
+
+  test('refused with its reason, nothing written: a wrong shape, an unknown event, a value out of range', async () => {
+    await save(owner, FIRST);
+    for (const bad of ['x', [], { 1: { reached: { stage_id: 11 } } }, { 1: { interested: { stage_id: '11' } } }, { 1: { interested: { urgency: 9 } } }, { abc: {} }]) {
+      state.calls.length = 0;
+      const r = await save(owner, { stage_rules: bad });
+      assert.equal(r.status, 400, JSON.stringify(bad)); assert.equal(r.body.reason, 'stage_rules');
+      assert.deepEqual(writes(), []);
+    }
+  });
+
+  test('refused: a pipeline of another workspace, a stage that does not exist, a stage of another pipeline', async () => {
+    await save(owner, FIRST);
+    for (const bad of [{ 3: { interested: { stage_id: 11 } } }, { 1: { interested: { stage_id: 99 } } }, { 1: { interested: { stage_id: 21 } } }, { 2: { interested: { stage_id: 12 } } }]) {
+      state.calls.length = 0;
+      const r = await save(owner, { stage_rules: bad });
+      assert.equal(r.status, 400, JSON.stringify(bad)); assert.equal(r.body.reason, 'stage_rules');
+      assert.deepEqual(writes(), []);
+    }
+    assert.deepEqual(state.row.stage_rules ?? {}, {});
+  });
+
+  test('a line that only sets the urgency needs no stage lookup to pass', async () => {
+    await save(owner, FIRST);
+    const r = await save(owner, { stage_rules: { 2: { callback: { urgency: 2 } } } });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body.settings.stage_rules, { 2: { callback: { stage_id: null, urgency: 2 } } });
+  });
+
+  test('a member reads the table and cannot change it', async () => {
+    await save(owner, { ...FIRST, stage_rules: TABLE });
+    assert.equal((await save(member, { stage_rules: {} })).status, 403);
+    assert.deepEqual(state.row.stage_rules, TABLE);
+  });
+
+  test('a refused table stops the whole save: the rest of the form is not written either', async () => {
+    await save(owner, FIRST);
+    state.calls.length = 0;
+    const r = await save(owner, { delay_minutes: 42, stage_rules: { 1: { interested: { stage_id: 99 } } } });
+    assert.equal(r.status, 400);
+    assert.equal(state.row.delay_minutes, 5);
   });
 });

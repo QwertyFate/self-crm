@@ -48,6 +48,9 @@ function reset() {
       { id: 50, workspace_id: OTHER_WS, phone: '+491511000009', updated_at: ago(1) },
     ],
     deals: [{ id: 60, workspace_id: WS, contact_id: 40 }, { id: 61, workspace_id: WS, contact_id: 41 }, { id: 62, workspace_id: WS, contact_id: 41 }],
+    // Part 39: the deals of the calls above as the stage rules read them (deal 13 is call 12's), and the stages of pipeline 1
+    dealRows: [{ id: 13, workspace_id: WS, title: 'Erika Muster', contact_id: 5, pipeline_id: 1, stage_id: 71, urgency: 0 }],
+    stages: [{ id: 71, pipeline_id: 1, name: 'Neu' }, { id: 72, pipeline_id: 1, name: 'Qualifiziert' }, { id: 73, pipeline_id: 1, name: 'Termin geplant' }, { id: 74, pipeline_id: 1, name: 'Nicht erreicht' }],
     others: [], nextOther: 900,
   });
 }
@@ -65,10 +68,36 @@ const pool = {
     if (q === 'UPDATE activities SET content = content || $3 WHERE id = $1 AND workspace_id = $2') { const a = state.activities.find(x => x.id === params[0] && x.workspace_id === params[1]); if (a) a.content += params[2]; return { rowCount: a ? 1 : 0, rows: [] }; }
     if (q === 'SELECT assigned_to FROM deals WHERE id=$1 AND workspace_id=$2') return { rows: [{ assigned_to: params[0] === 13 ? 9 : null }] };
     if (q === 'SELECT assigned_to FROM contacts WHERE id=$1 AND workspace_id=$2') return { rows: [{ assigned_to: null }] };
-    if (q === 'SELECT workspace_id, from_number, country_code, book_meetings FROM workspace_fonio WHERE receive_token = $1') {
+    if (q === 'SELECT workspace_id, from_number, country_code, book_meetings, hours_tz FROM workspace_fonio WHERE receive_token = $1') {
       const c = state.conns.find(x => x.receive_token === params[0]);
-      return { rows: c ? [{ workspace_id: c.workspace_id, from_number: c.from_number, country_code: '+49', book_meetings: c.book_meetings !== false }] : [] };
+      return { rows: c ? [{ workspace_id: c.workspace_id, from_number: c.from_number, country_code: '+49', book_meetings: c.book_meetings !== false, hours_tz: 'Europe/Berlin' }] : [] };
     }
+    // Part 39: the deal after the call — the workspace's table, the one look per call, the deal, its stages, the move
+    if (q === 'SELECT stage_rules FROM workspace_fonio WHERE workspace_id = $1') {
+      const c = state.conns.find(x => x.workspace_id === params[0]);
+      return { rows: c ? [{ stage_rules: c.stage_rules || {} }] : [] };
+    }
+    if (q.startsWith('UPDATE fonio_calls SET stage_rule_at = NOW(), stage_event = $3 WHERE id = $1 AND workspace_id = $2 AND stage_rule_at IS NULL RETURNING')) {
+      const c = state.fonioCalls.find(x => x.id === params[0] && x.workspace_id === params[1]);
+      if (!c || c.stage_rule_at) return { rows: [] };
+      c.stage_rule_at = new Date().toISOString(); c.stage_event = params[2];
+      return { rows: [{ id: c.id, deal_id: c.deal_id, contact_id: c.contact_id, stage_at_send: c.stage_at_send ?? null }] };
+    }
+    if (q === 'SELECT id, title, contact_id, pipeline_id, stage_id, urgency FROM deals WHERE id = $1 AND workspace_id = $2') {
+      const d = state.dealRows.find(x => x.id === params[0] && x.workspace_id === params[1]);
+      return { rows: d ? [{ id: d.id, title: d.title, contact_id: d.contact_id, pipeline_id: d.pipeline_id, stage_id: d.stage_id, urgency: d.urgency }] : [] };
+    }
+    if (q === 'SELECT id, name FROM pipeline_stages WHERE id = $1 AND pipeline_id = $2 AND workspace_id = $3') {
+      const st = state.stages.find(x => x.id === params[0] && x.pipeline_id === params[1] && params[2] === WS);
+      return { rows: st ? [{ id: st.id, name: st.name }] : [] };
+    }
+    if (q.startsWith('UPDATE deals SET stage_id = COALESCE($3, stage_id), urgency = COALESCE($4, urgency), updated_at = NOW() WHERE id = $1 AND workspace_id = $2 AND stage_id IS NOT DISTINCT FROM $5')) {
+      const d = state.dealRows.find(x => x.id === params[0] && x.workspace_id === params[1]);
+      if (!d || (d.stage_id ?? null) !== (params[4] ?? null)) return { rowCount: 0, rows: [] };
+      if (params[2] != null) d.stage_id = params[2]; if (params[3] != null) d.urgency = params[3];
+      return { rowCount: 1, rows: [] };
+    }
+    if (q === 'SELECT id FROM users WHERE workspace_id = $1') return { rows: params[0] === WS ? [{ id: 1 }, { id: 3 }] : [] };
     if (q === 'UPDATE workspace_fonio SET last_delivery = $2::jsonb WHERE workspace_id = $1') {
       state.conns.find(x => x.workspace_id === params[0]).last_delivery = JSON.parse(params[1]);
       return { rows: [], rowCount: 1 };
@@ -527,7 +556,7 @@ describe('refused', () => {
     }
     assert.equal(state.calls.length, 0);
     assert.equal((await post('ef'.repeat(32), RESULT)).status, 404);
-    assert.deepEqual(state.calls.map(c => c.sql), ['SELECT workspace_id, from_number, country_code, book_meetings FROM workspace_fonio WHERE receive_token = $1']);
+    assert.deepEqual(state.calls.map(c => c.sql), ['SELECT workspace_id, from_number, country_code, book_meetings, hours_tz FROM workspace_fonio WHERE receive_token = $1']);
     assert.equal(notes().length, 0);
   });
   test('a body that is not JSON: 400, remembered as such', async () => {
@@ -794,5 +823,161 @@ describe('the wiring', () => {
     assert.ok(db.indexOf('ADD COLUMN IF NOT EXISTS receive_token') > db.indexOf('CREATE TABLE IF NOT EXISTS workspace_fonio'));
     assert.ok(db.indexOf('ADD COLUMN IF NOT EXISTS result_at') > db.indexOf('CREATE TABLE IF NOT EXISTS fonio_calls'));
     assert.match(db, /ADD CONSTRAINT activities_source_check CHECK\(source IN \('user','engine','calcom','notetaker','fonio','calendly'\)\)/);
+  });
+});
+
+// ── Part 39: the deal after the call ─────────────────────────────────────────
+// Call 12 is deal 13 ("Erika Muster", pipeline 1, stage 71 "Neu"). The table for pipeline 1 says where the deal goes
+// by what came out of the call. utils/fonio-stage.js is tested on its own in fonio-stage.test.js; here the whole way
+// through the receiver: fonio's Body in, the deal moved, the note's last line, who is told, and the answer.
+describe('the deal after the call (Part 39)', () => {
+  const RULES = { 1: { interested: { stage_id: 72, urgency: 3 }, meeting_booked: { stage_id: 73, urgency: null }, not_reached: { stage_id: 74, urgency: 1 }, wrong_person: { stage_id: null, urgency: 0 } } };
+  const deal = () => state.dealRows.find(d => d.id === 13);
+  const setUp = (rules = RULES) => { state.conns[0].stage_rules = rules; callOf(12).stage_at_send = 71; told.length = 0; };
+  const result = (over = {}) => ({ ...RESULT, conversation_id: 'conv-s1', ...over });
+  const lastLine = () => notes()[0].content.split('\n\n').at(-1);
+
+  test('lead_status interested: the deal moves to the stage and urgency of its line, the note says so, everyone is told', async () => {
+    setUp();
+    const r = await post(TOKEN, result({ lead_status: 'interested', call_outcome: 'answered' }));
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body.deal, { event: 'interested', status: 'applied', stage_id: 72, urgency: 3 });
+    assert.deepEqual([deal().stage_id, deal().urgency], [72, 3]);
+    assert.equal(lastLine(), 'Deal nach „Qualifiziert“ verschoben, Dringlichkeit: Hoch (Ergebnis: interessiert).');
+    assert.deepEqual(told.map(n => [n.userId, n.type, n.title, n.body, n.entityType, n.entityId, n.actor]),
+      [1, 3].map(uid => [uid, 'deal_stage_changed', 'Deal stage changed: Erika Muster', 'fonio: Qualifiziert', 'deal', 13, null]));
+    assert.equal(callOf(12).stage_event, 'interested');
+  });
+
+  test('written the German way, or loosely: still understood', async () => {
+    setUp();
+    const r = await post(TOKEN, result({ lead_status: ' Interessiert. ' }));
+    assert.equal(r.body.deal.status, 'applied');
+    assert.equal(deal().stage_id, 72);
+  });
+
+  test('no table: nothing moves, nothing is added to the note, and the answer names no deal', async () => {
+    setUp({});
+    const r = await post(TOKEN, result({ lead_status: 'interested' }));
+    assert.equal(r.status, 200);
+    assert.equal('deal' in r.body, false);
+    assert.equal(deal().stage_id, 71);
+    assert.doesNotMatch(notes()[0].content, /Deal /);
+    assert.equal(told.length, 0);
+  });
+
+  test('a word that is not one of the five, or no lead_status on an answered call: the deal stays', async () => {
+    setUp();
+    const r = await post(TOKEN, result({ lead_status: 'vielleicht', call_outcome: 'answered' }));
+    assert.equal('deal' in r.body, false);
+    assert.equal(deal().stage_id, 71);
+  });
+
+  test('no line for that event in the deal\'s pipeline: the deal stays', async () => {
+    setUp();
+    const r = await post(TOKEN, result({ lead_status: 'not_interested' }));
+    assert.equal('deal' in r.body, false);
+    assert.equal(deal().stage_id, 71);
+  });
+
+  test('somebody moved the deal since the call went out: left alone, and the note says why', async () => {
+    setUp(); deal().stage_id = 73;
+    const r = await post(TOKEN, result({ lead_status: 'interested' }));
+    assert.deepEqual(r.body.deal, { event: 'interested', status: 'moved_by_hand', stage_id: null, urgency: null });
+    assert.deepEqual([deal().stage_id, deal().urgency], [73, 0]);
+    assert.equal(lastLine(), 'Deal nicht verschoben: Er wurde seit dem Anruf bereits verschoben (Ergebnis: interessiert).');
+    assert.equal(told.length, 0);
+  });
+
+  test('only the urgency: set without a move, and nobody is told (as for a change by hand)', async () => {
+    setUp(); deal().urgency = 3;
+    const r = await post(TOKEN, result({ lead_status: 'wrong_person' }));
+    assert.deepEqual(r.body.deal, { event: 'wrong_person', status: 'applied', stage_id: null, urgency: 0 });
+    assert.deepEqual([deal().stage_id, deal().urgency], [71, 0]);
+    assert.equal(lastLine(), 'Dringlichkeit des Deals: Keine Dringlichkeit (Ergebnis: falsche Person).');
+    assert.equal(told.length, 0);
+  });
+
+  test('not answered and no further try planned: "not reached"', async () => {
+    setUp();
+    const r = await post(TOKEN, result({ call_outcome: 'no_answer' }));
+    assert.deepEqual(r.body.deal, { event: 'not_reached', status: 'applied', stage_id: 74, urgency: 1 });
+    assert.equal(deal().stage_id, 74);
+    assert.equal(lastLine(), 'Deal nach „Nicht erreicht“ verschoben, Dringlichkeit: Niedrig (Ergebnis: nicht erreicht).');
+  });
+
+  test('not answered, but a retry is booked: this was not the last try, the deal stays where it is', async () => {
+    setUp(); state.conns[0].hours_on = false;
+    state.conns[0].follow_up = { enabled: true, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1 };
+    const r = await post(TOKEN, result({ call_outcome: 'no_answer' }));
+    assert.equal(state.fonioCalls.filter(c => c.trigger === 'follow_up').length, 1, 'the retry waits');
+    assert.equal('deal' in r.body, false);
+    assert.equal(deal().stage_id, 71);
+    assert.equal(callOf(12).stage_rule_at, undefined, 'not looked at: the retry\'s own result will be');
+  });
+
+  test('the retry also goes unanswered and the tries are used up ("called twice and no answer"): now it is "not reached"', async () => {
+    setUp(); state.conns[0].hours_on = false;
+    state.conns[0].follow_up = { enabled: true, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1 };
+    Object.assign(callOf(12), { follow_up_no: 1, trigger: 'follow_up' });   // call 12 is itself the one retry
+    const r = await post(TOKEN, result({ call_outcome: 'no_answer' }));
+    assert.equal(state.fonioCalls.filter(c => c.follow_up_of === 12).length, 0, 'no third call');
+    assert.deepEqual(r.body.deal, { event: 'not_reached', status: 'applied', stage_id: 74, urgency: 1 });
+  });
+
+  test('a meeting agreed in the call moves the deal without lead_status, from the variables there already are', async () => {
+    setUp();
+    const integrations = require('../../routes/integrations');
+    const fonioMeeting = require('../../utils/fonio-meeting');
+    const kept = { book: fonioMeeting.bookMeeting, tell: integrations.booking.tellAssignee };
+    fonioMeeting.bookMeeting = async (p, a) => ({ status: 'booked', service: 'calcom', inserted: false, activity_id: 778, title: 'x', start: '2026-11-20T13:00:00.000Z', url: null, location: null, date: a.meeting.date, time: a.meeting.time, said: a.meeting.said });
+    integrations.booking.tellAssignee = async () => 9;
+    try {
+      const r = await post(TOKEN, result({ meeting_booked: 'yes', meeting_date: '2026-11-20', meeting_time: '14:00' }));
+      assert.deepEqual(r.body.deal, { event: 'meeting_booked', status: 'applied', stage_id: 73, urgency: null });
+      assert.equal(deal().stage_id, 73);
+      assert.equal(lastLine(), 'Deal nach „Termin geplant“ verschoben (Ergebnis: Termin vereinbart).', 'after the meeting\'s own line');
+    } finally { fonioMeeting.bookMeeting = kept.book; integrations.booking.tellAssignee = kept.tell; }
+  });
+
+  test('what the assistant wrote wins over what the other variables suggest', async () => {
+    setUp({ 1: { ...RULES[1], not_interested: { stage_id: 74, urgency: null } } });
+    const r = await post(TOKEN, result({ lead_status: 'not interested', call_outcome: 'no_answer' }));
+    assert.equal(r.body.deal.event, 'not_interested');
+  });
+
+  test('the same result delivered again moves nothing a second time', async () => {
+    setUp();
+    await post(TOKEN, result({ lead_status: 'interested' }));
+    deal().stage_id = 71; callOf(12).stage_at_send = 71; told.length = 0;   // as if somebody had put it back
+    const again = await post(TOKEN, result({ lead_status: 'interested' }));
+    assert.equal(again.body.already, true);
+    assert.equal('deal' in again.body, false);
+    assert.equal(deal().stage_id, 71);
+    assert.equal(told.length, 0);
+  });
+
+  test('a call that came in (not one the CRM started) moves no deal', async () => {
+    setUp();
+    const r = await post(TOKEN, { ...RESULT, crm_call_id: '', conversation_id: 'conv-in', direction: 'inbound', person_number: '+491511000001', lead_status: 'interested' });
+    assert.equal(r.status, 200);
+    assert.equal('deal' in r.body, false);
+    assert.equal(deal().stage_id, 71);
+  });
+
+  test('a failure in this step never fails fonio\'s delivery: the note is written, the answer is a success', async () => {
+    setUp(); state.dealRows = null;   // the deal lookup blows up
+    const r = await post(TOKEN, result({ lead_status: 'interested' }));
+    assert.equal(r.status, 200); assert.equal(r.body.success, true);
+    assert.equal(notes().length, 1);
+    assert.equal('deal' in r.body, false);
+  });
+
+  test('the wiring: the receiver reads the workspace\'s clock, hands in who is told, and does this step last', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'routes', 'fonio.js'), 'utf8');
+    assert.match(src, /const deal = out\.outcome === 'noted' \? await dealAfterCall\(req, conn, r, out\) : null;/);
+    assert.ok(src.indexOf("await dealAfterCall(req, conn, r, out)") > src.indexOf("await meetingFromCall(conn.workspace_id, r, out.activity_id, bookMeetings) : null;\n    const deal"), 'after the meeting');
+    assert.match(src, /fonioStage\.eventOf\(\{ leadStatus: r\.leadStatus, meeting: !!r\.meeting, callback: out\.callback\?\.status === 'planned', outcome: r\.outcome, retry: !!out\.retry \}\)/);
+    assert.match(src, /fonioStage\.tellMoved\(pool, conn\.workspace_id, done, \{ notifyUser, engine, timezone: conn\.hours_tz, baseUrl: baseUrl\(req\) \}\)/);
   });
 });

@@ -558,7 +558,7 @@ badge bound notes. `tests/routes/activity-deal.test.js`, `tests/routes/activitie
 | GET | `/activities` | Newest 200 for the workspace, with contact and author names |
 | POST | `/activities` | `{contact_id, type, content, event_date?, event_time?}`. `type ∈ note, call, email, whatsapp`. Scans `content` for `@mentions` and inserts notification rows |
 | GET | `/activities/:id` | |
-| PATCH | `/activities/:id` | Partial via `COALESCE`. Sending `event_date: null` **clears** the date (same for `event_time`) — that is the `CASE WHEN $7 THEN NULL` trick in the SQL |
+| PATCH | `/activities/:id` | Partial via `COALESCE`. Sending `event_date: null` **clears** the date (same for `event_time`) — that is the `CASE WHEN $7 THEN NULL` trick in the SQL. Scans `content` for `@mentions` like POST, unless the body carries `autosave: true`: the note editors save while somebody types and send that flag, so nobody is notified at every pause; the save that ends the edit comes without it |
 | DELETE | `/activities/:id` | |
 | GET | `/activity-comments?activity_id=` | Returns a **tree**: roots with nested `children[]`, assembled in JS |
 | POST | `/activity-comments` | `{activity_id, parent_id?, content}`; mention-scans too, returns the created row joined with its author |

@@ -10,7 +10,8 @@
 //      `disabled`, so the form guard and handlers that disable their own buttons are untouched.
 //   2. The note editors (deal and contact): Enter is a new line; Ctrl/Cmd+Enter saves by clicking
 //      the Save button, so the keyboard goes through the same lock.
-//   3. The contact editor reads the note's id once, before any wait, and never sends a missing id.
+//   3. The contact editor never sends a missing id. Since the notes save themselves (NOTE_EDITOR_CHANGES Part 1)
+//      the id lives in dvNoteSaver from the moment the editor opens; the save takes that saver once, before any wait.
 //   4. The help line under the contact editor says Ctrl+Enter, in both languages.
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
@@ -97,11 +98,15 @@ describe('the note editors', () => {
     assert.doesNotMatch(h, /e\.key === 'Enter' && !e\.shiftKey/, 'a bare Enter no longer saves');
     assert.match(h, /if \(e\.key === 'Enter' && \(e\.ctrlKey \|\| e\.metaKey\)\) \{ e\.preventDefault\(\); host\.querySelector\('\[data-act="act-save"\]'\)\?\.click\(\); \}/);
   });
-  test('contact page: the save reads the id once, before any wait, and never sends a missing one', () => {
+  test('contact page: the save takes the saver once, before any wait, and never sends a missing id', () => {
     const s = fnBody(dv, 'saveNoteEdit');
-    assert.match(s, /^\{\s*(\/\/[^\n]*\n\s*)*const aid = S\.editAct; if \(!aid\) return;/, 'the id is captured first');
-    assert.match(s, /api\.patch\(`\/api\/activities\/\$\{aid\}`/);
-    assert.doesNotMatch(s, /\$\{S\.editAct\}/, 'the URL never reads the shared state');
+    assert.match(s, /^\{\s*(\/\/[^\n]*\n\s*)*const saver = S\.saver; if \(!saver \|\| S\.editBusy\) return false;/, 'the saver is captured first');
+    assert.match(s, /await saver\.done\(\)/);
+    assert.doesNotMatch(s, /S\.saver\.|S\.editAct\b(?! = )/, 'after a wait, the shared state is never read for what to save');
+    const saver = fnBody(dv, 'dvNoteSaver');
+    assert.match(saver, /apiFetchSilent\(`\/api\/activities\/\$\{id\}`/, 'the URL is built from the id the saver was given when the editor opened');
+    assert.doesNotMatch(saver, /\bS\./, 'the saver cannot read a view\'s state');
+    assert.doesNotMatch(dv, /\/api\/activities\/\$\{S\.editAct\}/, 'no URL reads the shared state');
   });
   test('the help line under the contact editor says Ctrl+Enter, in both languages; the old key is gone', () => {
     const app = new Function(sliceConst('public/js/core.js', 'TRANSLATIONS').replace(/^[^{]*/, 'return '))();

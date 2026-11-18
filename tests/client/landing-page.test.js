@@ -189,7 +189,8 @@ describe('the replica layer: the app\'s own markup in every part', () => {
     assert.match(ui, /\/\* ════ contacts ════ \*\//);
     for (const f of ['krCtPage', 'krCtParts', 'krCtRecord', 'krCtRecordBody', 'krCtRecordModal', 'krCtInlineEditor', 'krCtInlineCommit', 'krCtRecordLog']) assert.match(ui, new RegExp(`function ${f}\\(`), f);
     const dv = read('public/js/detail-views.js');
-    assert.match(dv, /'open-contact': el => \{ m\.close\(\); openContactDetail\(\+el\.dataset\.id\); \}/);
+    // the app asks about unsaved note text before it closes the deal (NOTE_EDITOR_CHANGES Part 2); the demo has no such text
+    assert.match(dv, /'open-contact': async el => \{ if \(!\(await leave\(\)\)\) return; m\.close\(\); openContactDetail\(\+el\.dataset\.id\); \}/);
     assert.ok(js.includes("if (act === 'open-contact') { knRecClose(F); return knCtOpen(F, Number(b.dataset.id)); }"));
     assert.match(js, /const panel = knShows\(F, 'contacts'\);\s*W\.ctRec = \{ id, host: panel \? 'panel' : 'modal'/);
     assert.match(dv, /if \(usePanel\) \{/, 'the app picks the side panel or the pop window too');

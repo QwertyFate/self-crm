@@ -36,6 +36,11 @@
    any word of the name), and inserts a 'mention' notification pointing at the
    contact's most recently updated deal when there is one, otherwise the
    contact. Its errors are swallowed: a mention must never fail the write.
+   AN AUTO-SAVE TELLS NOBODY: the note editors save while somebody types and
+   send `autosave: true` with those PATCHes. The content is written as always,
+   the scan is skipped — a half-typed "@An" would match every name starting
+   with it, and each pause would notify again. The save that ends the edit
+   comes without the flag and tells the people mentioned once.
    NOTE routes/activity-comments.js has a SECOND, STRICTER mention scanner
    (exact name match only). Changing mention behaviour means changing both.
 
@@ -200,7 +205,7 @@ router.get('/:id', async (req, res, next) => {
 
 router.patch('/:id', async (req, res, next) => {
   try {
-    const { type, content, event_date, event_time, completed } = req.body;
+    const { type, content, event_date, event_time, completed, autosave } = req.body;
 
     if (!content && completed === undefined && type === undefined && event_date === undefined && event_time === undefined) {
       return res.status(400).json({ error: 'Nothing to update' });
@@ -224,8 +229,11 @@ router.patch('/:id', async (req, res, next) => {
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Activity not found' });
 
-    const { rows: [actor] } = await pool.query('SELECT name FROM users WHERE id=$1', [req.userId]);
-    await notifyMentions(req.workspaceId, req.userId, actor?.name || 'Someone', content, result.rows[0].id);
+    // an auto-save from a note editor tells nobody (see @MENTIONS above); only a literal true counts
+    if (autosave !== true) {
+      const { rows: [actor] } = await pool.query('SELECT name FROM users WHERE id=$1', [req.userId]);
+      await notifyMentions(req.workspaceId, req.userId, actor?.name || 'Someone', content, result.rows[0].id);
+    }
 
     res.json({ success: true, id: result.rows[0].id });
   } catch (e) { next(e); }

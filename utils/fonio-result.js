@@ -42,6 +42,12 @@
    utils/fonio-calls.js callbackInstant() makes the instant of it on the
    workspace's clock and callbackAfterResult() plans the call.
 
+   WHAT CAME OUT OF THE CONVERSATION (Part 39)  The Body may carry lead_status,
+   a variable of the workspace's own: interested, meeting_booked, callback,
+   not_interested or wrong_person. readLeadStatus() reads it forgivingly and
+   returns null for anything it cannot be sure of; utils/fonio-stage.js moves
+   the deal by the workspace's table.
+
    resultNote() is the note's text, in German (the product's language; the
    Notetaker's notes are German by default too). Duration is shown as fonio
    sends it: its unit is not documented. The first line also says how the call
@@ -70,6 +76,8 @@ const FIELDS = {
   // when the person asked to be called back (Part 35): the workspace's own variables in fonio
   callbackDate:   ['callback_date', 'callbackDate', 'rueckruf_datum'],
   callbackTime:   ['callback_time', 'callbackTime', 'rueckruf_uhrzeit'],
+  // what came out of the conversation (Part 39): a variable of the workspace's own, one of LEAD_STATUSES
+  leadStatus:     ['lead_status', 'leadStatus', 'lead_result', 'leadResult', 'gespraechsergebnis'],
 };
 const MAX_SUMMARY = 4000, MAX_TRANSCRIPT = 200000;
 // What an AI writes into caller_name when the person never said their name (Part 15).
@@ -264,6 +272,29 @@ function numbersIn(body, ownNumber) {
   return [...out].slice(0, 5);
 }
 
+// What came out of the conversation, as the assistant wrote it into lead_status (Part 39): one of LEAD_STATUSES, or
+// null for anything this cannot be sure of — the deal is then left where it is (utils/fonio-stage.js). Read
+// forgivingly: capitals, spaces and dashes, German words, near misses. The refusals come first ("not interested"
+// holds "interested"), and a word that starts with a "no" is never read as one of the three good news.
+const LEAD_STATUSES = ['interested', 'meeting_booked', 'callback', 'not_interested', 'wrong_person'];
+const LEAD_STATUS_PATTERNS = [
+  ['not_interested', /not_interested|no_interest|uninterested|kein_interesse|nicht_interessiert|kein_bedarf|abgelehnt|absage/],
+  ['wrong_person', /wrong_(person|number|contact)|falsche_(person|nummer)|falscher_(ansprechpartner|kontakt)/],
+  ['meeting_booked', /meeting|appointment|termin/],
+  ['callback', /callback|call_back|call_again|r(ü|ue|u)ckruf|zur(ü|ue|u)ckrufen/],
+  ['interested', /^(is_|ist_|hat_)?(interested|interest|interessiert|interesse)$/],
+];
+const NEGATED = /^(no|not|none|kein|keine|keinen|nicht|ohne)_/;
+function readLeadStatus(body) {
+  const raw = pick(asObject(body) || {}, FIELDS.leadStatus).toLowerCase();
+  if (!raw) return null;
+  const s = raw.replace(/[\s\-–/]+/g, '_').replace(/^[_.,;:!]+|[_.,;:!]+$/g, '');
+  for (const [status, re] of LEAD_STATUS_PATTERNS.slice(0, 2)) if (re.test(s)) return status;
+  if (NEGATED.test(s)) return null;
+  for (const [status, re] of LEAD_STATUS_PATTERNS.slice(2)) if (re.test(s)) return status;
+  return null;
+}
+
 function readResult(body, ownNumber) {
   const b = asObject(body) || {};
   const id = pick(b, FIELDS.crmCallId);
@@ -284,6 +315,7 @@ function readResult(body, ownNumber) {
     meeting:        readMeeting(b),                    // a meeting agreed in the call, or null (Part 28)
     outcome:        readOutcome(b),                    // answered, no_answer, voicemail, busy, or null (Part 33)
     callback:       readCallback(b),                   // when the person asked to be called back, or null (Part 35)
+    leadStatus:     readLeadStatus(b),                 // what came out of the conversation, or null (Part 39)
   };
 }
 
@@ -305,4 +337,4 @@ function resultNote(r) {
   return parts.join('\n\n');
 }
 
-module.exports = { FIELDS, MAX_SUMMARY, MAX_TRANSCRIPT, NOT_RECORDED, OUTCOME_WORDS, DAY_PARTS, parseBody, readResult, readOutcome, readMeeting, readCallback, readDate, readTime, fieldNames, resultNote };
+module.exports = { FIELDS, MAX_SUMMARY, MAX_TRANSCRIPT, NOT_RECORDED, OUTCOME_WORDS, DAY_PARTS, LEAD_STATUSES, parseBody, readResult, readOutcome, readMeeting, readCallback, readLeadStatus, readDate, readTime, fieldNames, resultNote };

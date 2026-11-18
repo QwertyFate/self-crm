@@ -34,12 +34,14 @@
    PUT the record" helper.
 
    FUNCTION MAP
-     helpers      dvDigits, dvActText, dvActHtml, dvDue, dvAutoGrow, dvEmpty,
+     helpers      dvDigits, dvActText, dvActHtml, dvDue, dvAutoGrow, dvNoteSaver, dvEmpty,
                   dvInlineEdit, dvTypeOf, dvPlural, dvLower, dvNotSet, dvSupplierWord,
                   dvObjectWord, dvTaskStatuses, dvDoneKey, dvFirstKey,
                   dvAgoHours, dvWhen, dvIso, dvOpt, dvListOpts
      data         dvAllTasks, dvContacts, dvTaskLists, dvRefreshDeals,
                   dvRefreshTasks, dvRefreshContacts
+     leaving      dvGuards, dvConfirmUnsaved, dvUsesPanel, dvPanelGuard, dvLeavePanel,
+                  dvCloseSidePanel, dvPanelClosed, dvBeforeUnload   (unsaved note text)
      deals        openDealForm, openDealDetail, openDealModal,
                   openDealModalForContact
      contacts     openContactDetail, openDetail
@@ -144,6 +146,118 @@ function dvAutoGrow(el) {
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
 }
+// A note saves itself while it is edited (NOTE_EDITOR_CHANGES Part 1). DV_AUTOSAVE_MS after the last key the text goes
+// to the server, one request at a time; what is typed while a request is out goes with the next one. These saves carry
+// `autosave`, so nobody mentioned in the note is told at every pause (routes/activities.js). done() ends the edit: it
+// sends what is still open and, when the note changed, one save without the flag, which does tell them. back() puts
+// the note back to the text it had when the editor opened (Esc, Cancel). stop() ends everything without a request.
+// dirty: the field holds something the server does not (still waiting, a failed save, an empty note).
+// The id is fixed when the editor opens and never read from shared state again (the "null" id of 2026-10-20).
+// onState hears '' (nothing to say), 'saving', 'saved', 'failed' or 'empty'; an empty note is never sent.
+const DV_AUTOSAVE_MS = 1500;
+function dvNoteSaver(id, text, onState) {
+  const orig = String(text || '').trim();
+  let cur = orig, saved = orig, sent = false, timer = null, over = false, said = '', queue = Promise.resolve();
+  const say = s => { if (over || s === said) return; said = s; onState(s); };
+  const dirty = () => cur.trim() !== saved;
+  const halt = () => { clearTimeout(timer); timer = null; };
+  const next = step => (queue = queue.then(step, step));   // one request at a time: each step waits for the one before
+  // silent: no loading bar over the field while somebody types, and a lost connection comes back as { error }
+  // last: the browser tab is going — keepalive lets the request finish after the page is gone
+  const put = async (v, quiet, last) => {
+    const res = await apiFetchSilent(`/api/activities/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, ...(last ? { keepalive: true } : {}),
+      body: JSON.stringify({ content: esc(v).replace(/\n/g, '<br>'), ...(quiet ? { autosave: true } : {}) }) }) || {};
+    if (!res.error) { saved = v; sent = true; }
+    return res;
+  };
+  function auto(last) {
+    timer = null;
+    return next(async () => {
+      if (over) return;
+      const v = cur.trim();
+      if (v === saved) return say(sent ? 'saved' : '');
+      if (!v) return say('empty');
+      say('saving');
+      const res = await put(v, true, last);
+      say(res.error ? 'failed' : !dirty() ? 'saved' : cur.trim() ? 'saving' : 'empty');
+    });
+  }
+  return {
+    get dirty() { return !over && dirty(); },
+    input(value) {
+      if (over) return;
+      cur = String(value ?? ''); halt();
+      if (!dirty()) return say(sent ? 'saved' : '');
+      say(cur.trim() ? 'saving' : 'empty');
+      timer = setTimeout(() => auto(), DV_AUTOSAVE_MS);
+    },
+    // The browser tab is closing or reloading (Part 2): what is still waiting goes out now instead of after the wait.
+    flush() { if (over || !dirty() || !cur.trim()) return; halt(); auto(true); },
+    // Save, Ctrl+Enter: { empty: true } | { error } | { ok: true, sent, changed } — sent: the server heard from this
+    // editor, so the list is out of date; changed: the note ends with another text than it began with.
+    done() {
+      halt();
+      return next(async () => {
+        if (over) return { ok: true, sent };   // already ended: a second call sends nothing
+        const v = cur.trim();
+        if (!v) { say('empty'); return { empty: true }; }
+        if (v !== saved || v !== orig) {
+          say('saving');
+          const res = await put(v, v === orig);   // back at the text it began with: nobody to tell
+          if (res.error) { say('failed'); return { error: res.error }; }
+        }
+        over = true;
+        return { ok: true, sent, changed: v !== orig };
+      });
+    },
+    // Esc, Cancel: { error } | { ok: true, sent }
+    back() {
+      halt();
+      return next(async () => {
+        if (over) return { ok: true, sent };
+        if (saved !== orig) { const res = await put(orig, true); if (res.error) return { error: res.error }; }
+        over = true;
+        return { ok: true, sent };
+      });
+    },
+    stop() { over = true; halt(); },
+  };
+}
+// What the editor says about its auto-save, next to its buttons: nothing until something was typed.
+const DV_SAVE_STATES = { saving: 'note_saving', saved: 'note_saved', failed: 'note_not_saved', empty: 'note_empty' };
+const dvSaveStateText = state => (DV_SAVE_STATES[state] ? t(DV_SAVE_STATES[state]) : '');
+function dvSaveStateHtml(id, state) { return `<span class="note-state" id="${id}" role="status" aria-live="polite" data-state="${esc(DV_SAVE_STATES[state] ? state : '')}">${esc(dvSaveStateText(state))}</span>`; }
+function dvSaveStateShow(el, state) { if (!el) return; el.dataset.state = DV_SAVE_STATES[state] ? state : ''; el.textContent = dvSaveStateText(state); }
+// Leaving with unsaved note text (NOTE_EDITOR_CHANGES Part 2). The deal window and the contact view each keep a guard
+// here while they are open:
+//   leave()  saves the open note, then asks only about what cannot be saved — a save that fails, an empty note, a new
+//            note typed but not logged. true: go ahead. false: the person stays.
+//   dirty()  something is unsaved right now
+//   flush()  what is waiting goes out at once
+// Asked before a window or the side panel is closed by hand, before another deal or contact takes its place, and before
+// a jump from one record to another. close() and closeSidePanel() themselves never ask: they are also called after a
+// delete, where there is nothing left to ask about.
+const dvGuards = new Set();
+function dvConfirmUnsaved() { return ui.confirm({ title: t('note_unsaved_title'), message: t('note_unsaved_msg'), confirmLabel: t('note_unsaved_leave'), cancelLabel: t('note_unsaved_stay'), danger: true }); }
+// The contact view opens in the side panel on Contacts / Suppliers, in a pop window everywhere else (or when asked to).
+function dvUsesPanel(opts = {}) {
+  const page = document.querySelector('.sb-link[aria-current="page"]')?.dataset.page;
+  return !opts.modal && (page === 'contacts' || page === 'suppliers') && !!document.getElementById('contact-side-panel');
+}
+// The view in the side panel, if one is open there. The panel is one element reused per contact, so the view in it is
+// asked before the panel is closed or given to another contact.
+function dvPanelGuard() { return document.getElementById('side-panel-body')?._ctGuard || null; }
+async function dvLeavePanel() { const g = dvPanelGuard(); return !g || g.leave(); }
+async function dvCloseSidePanel() { if (await dvLeavePanel()) closeSidePanel(); }   // the panel's X (index.html)
+function dvPanelClosed() { const end = document.getElementById('side-panel-body')?._ctEnd; if (end) end(); }   // called by closeSidePanel() (modals.js)
+// Closing or reloading the browser tab. Nothing can be awaited here: what is waiting is sent at once, and while
+// something is unsaved the browser asks in its own words — a page cannot set or translate that sentence.
+function dvBeforeUnload(e) {
+  if (![...dvGuards].some(g => g.dirty())) return;
+  dvGuards.forEach(g => g.flush());
+  e.preventDefault(); e.returnValue = '';
+}
+window.addEventListener('beforeunload', dvBeforeUnload);
 // Documents on a contact (contracts, call recordings, other) — the types the server accepts.
 const DV_DOC_TYPES = ['vertrag', 'aufnahme', 'sonstiges'];
 function dvFileSize(n) {
@@ -579,12 +693,14 @@ let dvDeal = null;   // the open deal detail instance (one at a time)
 // opts.onClose: fired when the pop window closes by any path (button, scrim, Escape, close()) — the
 // Activities page uses it to reload its feed, since entries can be logged or deleted in here.
 async function openDealDetail(id, opts = {}) {
+  // one deal window at a time: the open one saves its note first and may ask to stay (NOTE_EDITOR_CHANGES Part 2)
+  if (dvDeal && !(await dvDeal.leave())) return;
   if (dvDeal) dvDeal.close();
   await Promise.all([ensureMembers(), pipelines.length ? null : api.get('/api/pipelines').then(r => { pipelines = r; }), dealFields.length ? null : api.get('/api/deal-fields').then(r => { dealFields = r; })]);
   const [d, allContacts, allSuppliers, allTasks, objs, calStatus] = await Promise.all([api.get(`/api/deals/${id}`), dvContacts('contact'), dvContacts('supplier'), dvAllTasks(), api.get('/api/objects'), dvCalcomStatus()]);
   if (!d || d.error) { ui.toast(t('dv_deal_gone')); return; }
   objects = Array.isArray(objs) ? objs : objects;
-  const S = { calcom: calStatus, d, contacts: allContacts, suppliers: allSuppliers, tasks: allTasks.filter(x => x.deal_id === d.id && !x.parent_id), acts: [], tab: 'activity', actsOnly: false, type: 'note', text: '', textErr: '', filter: null, editAct: null, editText: '', addTask: false, task: { title: '', due_on: false, due_date: '', due_time: '', priority: 'medium', assigned_to: currentUser?.id || '' }, taskErr: '', gone: false };
+  const S = { calcom: calStatus, d, contacts: allContacts, suppliers: allSuppliers, tasks: allTasks.filter(x => x.deal_id === d.id && !x.parent_id), acts: [], tab: 'activity', actsOnly: false, type: 'note', text: '', textErr: '', filter: null, editAct: null, editText: '', editSave: '', saver: null, editBusy: false, addTask: false, task: { title: '', due_on: false, due_date: '', due_time: '', priority: 'medium', assigned_to: currentUser?.id || '' }, taskErr: '', gone: false };
   const contactOf = () => S.contacts.find(c => c.id === S.d.contact_id) || null;
   const supplierOf = () => S.suppliers.find(c => c.id === S.d.supplier_id) || null;
   const pipe = () => pipelines.find(p => p.id === S.d.pipeline_id) || { name: '', stages: [] };
@@ -694,8 +810,8 @@ async function openDealDetail(id, opts = {}) {
     return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main">
       <div class="tl-head"><b>${esc(t(ty.label))}</b>${a.cancelled_at ? `<span class="badge badge-danger" style="margin-right:6px">${esc(t('act_cancelled'))}</span>` : ''}${a.bound_deal_id && a.bound_deal_id !== S.d.id ? `<span class="badge badge-outline" title="${esc(t('dv_logged_other_deal'))}" style="margin-right:6px">${esc(a.deal_title || t('dv_other_deal'))}</span>` : ''}${a.logged_by_name ? `<span class="muted">${esc(tf('dv_by_name', { name: a.logged_by_name }))}</span>` : ''}<span class="dd-tl-time muted" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
         <span class="dd-tl-actions">${dvMeetingButtons(a)}<button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
-      ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="dd-act-edit" rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
-          <div class="row" style="justify-content:flex-end"><button class="btn btn-secondary btn-sm" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" data-act="act-save" data-id="${a.id}">${esc(t('btn_save'))}</button></div></div>`
+      ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="dd-act-edit" data-esc rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
+          <div class="row" style="justify-content:flex-end">${dvSaveStateHtml('dd-act-state', S.editSave)}<button class="btn btn-secondary btn-sm" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" data-act="act-save" data-id="${a.id}">${esc(t('btn_save'))}</button></div></div>`
         : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActPreviewHtml(a.content)}</div>${dvNoteMoreHtml(a)}${dvJoinRow(a)}`}</div></div>`;
   }
   function activityHtml() {
@@ -783,7 +899,9 @@ async function openDealDetail(id, opts = {}) {
   /* ----- rendering ----- */
   const m = ui.modal({ title: 'Deal', size: 'xl', body: `<div class="dd" id="dd-root"><div id="dd-top"></div><section class="card dd-head" id="dd-head" aria-label="${esc(t('dv_deal_summary'))}"></section>
       <div class="split split-2-1"><section class="card dd-main" id="dd-main"></section><div class="dd-side" id="dd-side"></div></div></div>`,
-    onClose: () => { if (dvDeal === inst) dvDeal = null; opts.onClose && opts.onClose(); } });
+    beforeClose: () => leave(),
+    // a close that did not ask (the deal was deleted, say) still sends a note that is open, as far as it can
+    onClose: () => { dvGuards.delete(guard); if (S.saver) S.saver.done(); if (dvDeal === inst) dvDeal = null; opts.onClose && opts.onClose(); } });
   m.el.querySelector('.modal').classList.add('dd-modal');
   const root = m.el.querySelector('#dd-root'), R = sel => root.querySelector(sel);
   function keep(fn) {
@@ -840,9 +958,48 @@ async function openDealDetail(id, opts = {}) {
     S.text = ''; S.textErr = ''; await loadActs(); render('head main');
     ui.toast(tf('act_logged', { type: t(ty.label) })); const ta = R('#dd-compose-text'); ta && ta.focus();
   }
+  // A note edited in place saves itself (dvNoteSaver). Opening another note saves the open one first and leaves it
+  // open if that fails; Esc and Cancel put the note back to the text it had when the editor opened.
+  const noteState = s => { S.editSave = s; dvSaveStateShow(R('#dd-act-state'), s); };
+  function noteEnd() { if (S.saver) S.saver.stop(); S.saver = null; S.editAct = null; S.editText = ''; S.editSave = ''; }
+  async function noteOpen(aid) {
+    if (S.editAct === aid) return R('#dd-act-edit')?.focus();
+    if (S.editAct && !(await noteSave())) return;
+    const a = S.acts.find(x => x.id === aid); if (!a) return;
+    S.editAct = a.id; S.editText = dvActText(a.content); S.editSave = ''; S.saver = dvNoteSaver(a.id, S.editText, noteState);
+    render('main'); const ta = R('#dd-act-edit'); if (ta) { dvAutoGrow(ta); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+  }
+  async function noteSave() {
+    const saver = S.saver; if (!saver || S.editBusy) return false;
+    S.editBusy = true; const res = await saver.done(); S.editBusy = false;
+    if (res.empty) { const ta = R('#dd-act-edit'); if (ta) { ta.setAttribute('aria-invalid', 'true'); ta.focus(); } return false; }
+    if (res.error) { ui.toast(res.error); return false; }
+    noteEnd(); if (res.sent) await loadActs(); render('main'); if (res.changed) ui.toast(t('entry_updated'));
+    return true;
+  }
+  async function noteBack() {
+    const saver = S.saver; if (!saver || S.editBusy) return;
+    S.editBusy = true; const res = await saver.back(); S.editBusy = false;
+    if (res.error) return ui.toast(res.error);
+    noteEnd(); if (res.sent) await loadActs(); render('main');
+  }
+  // Leaving this window (NOTE_EDITOR_CHANGES Part 2): the open note is saved like a press on Save. The question comes
+  // only for what cannot be saved — that save failed, the note is empty, or a new note is typed but not logged.
+  // "Close without saving" drops exactly that; staying shows the field in question.
+  async function leave() {
+    while (S.editBusy) await new Promise(r => setTimeout(r, 30));   // a Save or Cancel that is under way finishes first
+    const noteOk = !S.saver || await noteSave(), draft = !!S.text.trim();
+    if (noteOk && !draft) return true;
+    if (await dvConfirmUnsaved()) { noteEnd(); S.text = ''; return true; }
+    if (!noteOk) S.filter = null;   // a type filter must not hide the note that is open
+    S.tab = 'activity'; render('main');
+    (R(noteOk ? '#dd-compose-text' : '#dd-act-edit') || R('#dd-compose-text'))?.focus();
+    return false;
+  }
+  const guard = { leave, dirty: () => !!(S.saver && S.saver.dirty) || !!S.text.trim(), flush: () => { if (S.saver) S.saver.flush(); } };
   async function delAct(aid) {
     const a = S.acts.find(x => x.id === aid), refresh = async () => { await loadActs(); render('head main'); };
-    const remove = async () => { const res = await api.del(`/api/activities/${aid}`); if (res?.error) return ui.toast(res.error); await refresh(); ui.toast(t('dv_entry_deleted')); };
+    const remove = async () => { const res = await api.del(`/api/activities/${aid}`); if (res?.error) return ui.toast(res.error); if (S.editAct === aid) noteEnd(); await refresh(); ui.toast(t('dv_entry_deleted')); };
     await dvDeleteActivityGuarded(a, contactOf()?.name, {
       plain: async () => { const ok = await ui.confirm({ title: t('dv_delete_entry_q'), message: t('dv_delete_entry_deal_msg'), confirmLabel: t('btn_delete'), danger: true }); if (ok) await remove(); },
       deleteOnly: remove, afterCancel: refresh,
@@ -893,16 +1050,16 @@ async function openDealDetail(id, opts = {}) {
     ctype: el => { S.type = el.dataset.type; S.textErr = ''; render('main'); R(`[data-act="ctype"][data-type="${S.type}"]`)?.focus(); },
     tlfilter: el => ui.select(el, [{ value: null, label: t('dv_all_types') }, ...DV_ACT_TYPES.map(x => ({ value: x.id, label: t(x.label), icon: x.icon }))], S.filter, v => { S.filter = v; render('main'); }),
     tlclear: () => { S.filter = null; render('main'); },
-    'act-edit': el => { const a = S.acts.find(x => x.id === +el.dataset.id); if (!a) return; S.editAct = a.id; S.editText = dvActText(a.content); render('main'); const ta = R('#dd-act-edit'); if (ta) { dvAutoGrow(ta); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } },
-    'act-cancel': () => { S.editAct = null; render('main'); },
-    'act-save': async el => { const ta = R('#dd-act-edit'), v = ta.value.trim(); if (!v) { ta.setAttribute('aria-invalid', 'true'); ta.focus(); return; } const res = await api.patch(`/api/activities/${+el.dataset.id}`, { content: esc(v).replace(/\n/g, '<br>') }); if (res?.error) return ui.toast(res.error); S.editAct = null; await loadActs(); render('main'); ui.toast(t('entry_updated')); },
+    'act-edit': el => noteOpen(+el.dataset.id),
+    'act-cancel': () => noteBack(),
+    'act-save': () => noteSave(),
     'act-del': el => delAct(+el.dataset.id), 'act-resched': el => reschedAct(+el.dataset.id), 'act-meeting-cancel': el => cancelAct(+el.dataset.id),
     'task-add': () => { S.addTask = true; S.taskErr = ''; render('main'); R('#dd-task-title')?.focus(); },
     'task-cancel': () => { S.addTask = false; S.taskErr = ''; render('main'); },
     'open-task': el => openTaskDrawer(+el.dataset.id, { onChange: async () => { S.tasks = (await dvAllTasks()).filter(t2 => t2.deal_id === S.d.id && !t2.parent_id); render('main'); } }),
     'contact-menu': el => linkMenu(el, 'contact'), 'supplier-menu': el => linkMenu(el, 'supplier'),
-    'open-contact': el => { m.close(); openContactDetail(+el.dataset.id); },
-    'open-object': el => { m.close(); if (typeof openObjectDetail === 'function') openObjectDetail(+el.dataset.id); },
+    'open-contact': async el => { if (!(await leave())) return; m.close(); openContactDetail(+el.dataset.id); },
+    'open-object': async el => { if (!(await leave())) return; m.close(); if (typeof openObjectDetail === 'function') openObjectDetail(+el.dataset.id); },
     'object-add': el => { const available = objects.filter(o => !(S.d.objects || []).some(l => l.id === o.id)); ui.select(el, available.map(o => ({ value: o.id, label: o.name })), null, async v => { const res = await api.post(`/api/deals/${S.d.id}/objects`, { object_id: v }); if (res?.error) return ui.toast(res.error); S.d.objects = await api.get(`/api/deals/${S.d.id}/objects`); render('side'); ui.toast(tf('dv_x_linked', { x: dvObjectWord(1) })); }); },
     'object-rm': async el => { const res = await api.del(`/api/deals/${S.d.id}/objects/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); S.d.objects = await api.get(`/api/deals/${S.d.id}/objects`); render('side'); ui.toast(tf('dv_x_unlinked', { x: dvObjectWord(1) })); },
     'edit-full': () => openDealForm({ deal: S.d, onSave: () => reload() }),
@@ -917,7 +1074,7 @@ async function openDealDetail(id, opts = {}) {
     ui.toast(to === dvDoneKey() ? t('tk_completed') : t('tk_reopened'));
   });
   on(root, 'input', '#dd-compose-text', (e, el) => { S.text = el.value; if (S.textErr) { S.textErr = ''; el.removeAttribute('aria-invalid'); const er = R('#dd-compose-err'); er && (er.textContent = ''); } });
-  on(root, 'input', '#dd-act-edit', (e, el) => { S.editText = el.value; el.removeAttribute('aria-invalid'); dvAutoGrow(el); });
+  on(root, 'input', '#dd-act-edit', (e, el) => { S.editText = el.value; el.removeAttribute('aria-invalid'); dvAutoGrow(el); S.saver && S.saver.input(el.value); });
   // Same gestures as the contact panel: a click opens the editor, a double-click too; a click
   // that merely ends a text selection is ignored so the selection is not thrown away.
   const noteEdit = el => A['act-edit']({ dataset: { id: el.dataset.note } });
@@ -925,7 +1082,7 @@ async function openDealDetail(id, opts = {}) {
   on(root, 'dblclick', '[data-note]', (e, el) => { if (!e.target.closest('a')) noteEdit(el); });
   on(root, 'click', '[data-note-full]', (e, el) => dvOpenNote(S.acts.find(x => x.id === +el.dataset.noteFull)));   // a long note, whole (Part 9)
   on(root, 'keydown', '#dd-act-edit', e => {
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.editAct = null; render('main'); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); noteBack(); }
     // Enter is a new line. Ctrl/Cmd+Enter saves by clicking Save, so the one-press lock (core.js) applies.
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); R('[data-act="act-save"]')?.click(); }
   });
@@ -939,8 +1096,8 @@ async function openDealDetail(id, opts = {}) {
   on(root, 'submit', '#dd-taskform', e => { e.preventDefault(); submitTask(); });
   on(root, 'keydown', '#dd-compose-text', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submitCompose(); } });
   on(root, 'keydown', '[role="tab"]', (e, el) => { const ids = ['overview', 'activity', 'tasks'], i = ids.indexOf(el.dataset.tab); let n = -1; if (e.key === 'ArrowRight') n = (i + 1) % ids.length; else if (e.key === 'ArrowLeft') n = (i + ids.length - 1) % ids.length; if (n >= 0) { e.preventDefault(); setTab(ids[n]); } });
-  const inst = { close: () => m.close(), reload };
-  dvDeal = inst; render();
+  const inst = { close: () => m.close(), reload, leave };
+  dvDeal = inst; dvGuards.add(guard); render();
   return inst;
 }
 
@@ -948,12 +1105,14 @@ async function openDealDetail(id, opts = {}) {
    CONTACT DETAIL — reference contacts.js detail, in the side panel or a pop window
    ══════════════════════════════════════════════════════════════════════════ */
 async function openContactDetail(id, opts = {}) {
+  // the side panel is reused per contact: the view in it saves its note first and may ask to stay (NOTE_EDITOR_CHANGES Part 2)
+  if (dvUsesPanel(opts) && !(await dvLeavePanel())) return;
   await Promise.all([ensureFields(), ensureMembers()]);
   const [c, contactDeals, allTasks, calStatus, contactDocs] = await Promise.all([api.get(`/api/contacts/${id}`), api.get(`/api/deals?contact_id=${id}`), dvAllTasks(), dvCalcomStatus(), api.get(`/api/contacts/${id}/documents`)]);
   if (!c || c.error) { ui.toast(t('dv_contact_gone')); return; }
   if (!pipelines.length) pipelines = await api.get('/api/pipelines');
   const sup = c.contact_type === 'supplier', noun = sup ? dvSupplierWord() : t('lbl_contact'), one = dvLower(noun);   // `one` sits inside sentences: lower case in English, capital in German
-  const S = { calcom: calStatus, c, deals: Array.isArray(contactDeals) ? contactDeals : [], tasks: allTasks.filter(x => x.contact_id === id && !x.parent_id), docs: Array.isArray(contactDocs) ? contactDocs : [], tab: 'overview', draft: { type: 'note', text: '', err: false, filter: 'all' }, editAct: null, editText: '' };
+  const S = { calcom: calStatus, c, deals: Array.isArray(contactDeals) ? contactDeals : [], tasks: allTasks.filter(x => x.contact_id === id && !x.parent_id), docs: Array.isArray(contactDocs) ? contactDocs : [], tab: 'overview', draft: { type: 'note', text: '', err: false, filter: 'all' }, editAct: null, editText: '', editSave: '', saver: null, editBusy: false };
   const acts = () => S.c.activities || [];
   const stageOfDeal = d => (pipelines.find(p => p.id === d.pipeline_id)?.stages || []).find(s => s.id === d.stage_id);
   const sumVal = a => a.reduce((s, d) => s + (Number(d.value) || 0), 0);
@@ -978,8 +1137,8 @@ async function openContactDetail(id, opts = {}) {
     const ty = dvTypeOf(a.type), editing = S.editAct === a.id;
     return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main"><div class="tl-head"><b>${esc(t(ty.label))}</b>${a.cancelled_at ? `<span class="badge badge-danger" style="margin-left:6px">${esc(t('act_cancelled'))}</span>` : ''}${a.deal_title ? `<span class="badge badge-outline" title="${esc(t('dv_logged_on_deal'))}" style="margin-left:6px">${esc(a.deal_title)}</span>` : ''}<span class="muted" style="font-size:var(--fs-sm)">${a.logged_by_name ? esc(tf('dv_by_name', { name: a.logged_by_name })) : ''}</span><span class="muted" style="margin-left:auto;font-size:var(--fs-sm)" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
       <span class="dd-tl-actions">${dvMeetingButtons(a)}<button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
-      ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="ct-aedit" rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
-          <div class="row-between"><span class="help">${esc(t('ctrl_enter_saves_esc_cancels'))}</span><span class="row"><button class="btn btn-secondary btn-sm" type="button" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" type="button" data-act="act-save">${esc(t('btn_save'))}</button></span></div></div>`
+      ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="ct-aedit" data-esc rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
+          <div class="row-between"><span class="help">${esc(t('ctrl_enter_saves_esc_cancels'))}</span><span class="row">${dvSaveStateHtml('ct-astate', S.editSave)}<button class="btn btn-secondary btn-sm" type="button" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" type="button" data-act="act-save">${esc(t('btn_save'))}</button></span></div></div>`
         : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActPreviewHtml(a.content)}</div>${dvNoteMoreHtml(a)}${dvJoinRow(a)}`}</div></div>`;
   };
   const taskRow = x => { const done = x.status === dvDoneKey(), pr = DV_PRIO[x.priority] || DV_PRIO.medium, late = taskIsOverdue(x, done);
@@ -1075,8 +1234,7 @@ async function openContactDetail(id, opts = {}) {
   }
 
   /* ----- host: side panel on the Contacts/Suppliers page, pop window elsewhere ----- */
-  const activePage = document.querySelector('.sb-link[aria-current="page"]')?.dataset.page;
-  const usePanel = !opts.modal && (activePage === 'contacts' || activePage === 'suppliers') && document.getElementById('contact-side-panel');
+  const usePanel = dvUsesPanel(opts);
   let host, modal = null;
   if (usePanel) {
     document.querySelectorAll('#contacts-body tr.side-panel-active').forEach(r => r.classList.remove('side-panel-active'));
@@ -1086,17 +1244,44 @@ async function openContactDetail(id, opts = {}) {
     document.getElementById('contact-side-panel').classList.remove('hidden');
   } else {
     // opts.onClose fires for the pop-window host only; the side panel (Contacts/Suppliers page) has no caller that needs it
-    modal = ui.modal({ title: noun, size: 'xl', body: '<div></div>', onClose: opts.onClose });
+    modal = ui.modal({ title: noun, size: 'xl', body: '<div></div>', beforeClose: () => leave(), onClose: () => { end(); opts.onClose && opts.onClose(); } });
     modal.el.querySelector('.modal').classList.add('ct-modal'); host = modal.body;
   }
+  if (host._ctEnd) host._ctEnd();   // the view that had the side panel before this one is over
   if (host._ctOff) host._ctOff.forEach(f => f()); const offs = []; host._ctOff = offs;
   function render() {
+    if (host._ctOff !== offs) return;   // a view that no longer owns the side panel must not paint over the next one
     const a = document.activeElement, fid = a && host.contains(a) ? a.id : null;
     host.innerHTML = detailHtml();
     if (fid) document.getElementById(fid)?.focus();
     dvAutoGrow(host.querySelector('#ct-aedit'));   // a re-render rebuilds the editor, so re-fit it
   }
   const close = () => { if (modal) modal.close(); else closeSidePanel(); };
+
+  /* ----- leaving (NOTE_EDITOR_CHANGES Part 2) ----- */
+  // The open note is saved like a press on Save. The question comes only for what cannot be saved — that save failed,
+  // the note is empty, or a new note is typed but not logged. "Close without saving" drops exactly that; staying shows
+  // the field in question.
+  async function leave() {
+    while (S.editBusy) await new Promise(r => setTimeout(r, 30));   // a Save or Cancel that is under way finishes first
+    const noteOk = !S.saver || await saveNoteEdit(), draft = !!S.draft.text.trim();
+    if (noteOk && !draft) return true;
+    if (await dvConfirmUnsaved()) { endNoteEdit(); S.draft.text = ''; return true; }
+    if (!noteOk) S.draft.filter = 'all';   // a type filter must not hide the note that is open
+    S.tab = 'activity'; render();
+    (host.querySelector(noteOk ? '#ct-atext' : '#ct-aedit') || host.querySelector('#ct-atext'))?.focus();
+    return false;
+  }
+  const guard = { leave, dirty: () => !!(S.saver && S.saver.dirty) || !!S.draft.text.trim(), flush: () => { if (S.saver) S.saver.flush(); } };
+  // This view is over: its window closed, the side panel closed, or the panel went to another contact. The paths that
+  // may ask have asked before; a note still open here is sent as far as it can be.
+  function end() {
+    dvGuards.delete(guard);
+    if (host._ctGuard === guard) { host._ctGuard = null; host._ctEnd = null; }
+    if (S.saver) { S.saver.done(); S.saver = null; }
+  }
+  dvGuards.add(guard);
+  if (!modal) { host._ctGuard = guard; host._ctEnd = end; }
 
   /* ----- editing ----- */
   function startEdit(btn, key) {
@@ -1136,15 +1321,15 @@ async function openContactDetail(id, opts = {}) {
     'add-deal': () => openDealForm({ contactId: id, onSave: async () => { S.deals = await api.get(`/api/deals?contact_id=${id}`) || []; render(); } }),
     book: () => openCalcomBooking({ contact: S.c, onBooked: async () => { const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); } }),
     'add-task': () => openTaskForm({ contactId: id, contactName: S.c.name, onSave: async () => { S.tasks = (await dvAllTasks()).filter(x => x.contact_id === id && !x.parent_id); render(); } }),
-    'open-deal': el => { close(); openDealDetail(+el.dataset.id); },
+    'open-deal': async el => { if (!(await leave())) return; close(); openDealDetail(+el.dataset.id); },
     'open-task': el => openTaskDrawer(+el.dataset.id, { onChange: async () => { S.tasks = (await dvAllTasks()).filter(x => x.contact_id === id && !x.parent_id); render(); } }),
     'act-del': async el => { const aid = +el.dataset.id, a = acts().find(x => x.id === aid); const refresh = async () => { const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); };
-      const remove = async () => { const res = await api.del(`/api/activities/${aid}`); if (res?.error) return ui.toast(res.error); const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); ui.toast(t('dv_entry_deleted'));  };
+      const remove = async () => { const res = await api.del(`/api/activities/${aid}`); if (res?.error) return ui.toast(res.error); if (S.editAct === aid) endNoteEdit(); const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); ui.toast(t('dv_entry_deleted'));  };
       await dvDeleteActivityGuarded(a, S.c.name, { plain: async () => { const ok = await ui.confirm({ title: t('dv_delete_entry_q'), message: t('dv_delete_entry_msg'), confirmLabel: t('btn_delete'), danger: true }); if (ok) await remove(); }, deleteOnly: remove, afterCancel: refresh }); },
     'act-resched': el => { const a = acts().find(x => x.id === +el.dataset.id); if (!a) return; openCalcomBooking({ reschedule: a, contact: S.c, dealId: a.deal_id || null, onBooked: async () => { const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); } }); },
     'act-meeting-cancel': el => { const a = acts().find(x => x.id === +el.dataset.id); if (!a) return; cancelCalcomMeeting(a, S.c.name, async () => { const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; render(); }); },
     'act-edit': el => startNoteEdit(+el.dataset.id),
-    'act-cancel': () => { S.editAct = null; S.editText = ''; render(); },
+    'act-cancel': () => cancelNoteEdit(),
     'act-save': () => saveNoteEdit(),
     'doc-upload': () => host.querySelector('#ct-docfile')?.click(),
     'doc-del': async el => { const ok = await ui.confirm({ title: t('dv_doc_delete_q'), message: t('dv_doc_delete_msg'), confirmLabel: t('btn_delete'), danger: true }); if (!ok) return; const res = await api.del(`/api/contacts/${id}/documents/${+el.dataset.id}`); if (res?.error) return ui.toast(res.error); S.docs = S.docs.filter(d => d.id !== +el.dataset.id); render(); ui.toast(t('dv_doc_deleted')); },
@@ -1158,33 +1343,47 @@ async function openContactDetail(id, opts = {}) {
   offs.push(on(host, 'change', '#ct-afilter', (e, el) => { S.draft.filter = el.value; render(); host.querySelector('#ct-afilter')?.focus(); }));
   offs.push(on(host, 'submit', '#ct-compose', e => { e.preventDefault(); logActivity(); }));
   offs.push(on(host, 'keydown', '#ct-atext', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); logActivity(); } }));
-  // A note is edited where it sits: one click (or a double-click) on its text opens the editor.
-  function startNoteEdit(aid) {
+  // A note is edited where it sits: one click (or a double-click) on its text opens the editor. It saves itself while
+  // it is edited (dvNoteSaver). Opening another note saves the open one first and leaves it open if that fails; Esc
+  // and Cancel put the note back to the text it had when the editor opened.
+  // The side panel is one element reused per contact: a view that no longer owns it must not write into it.
+  const noteState = s => { if (host._ctOff !== offs) return; S.editSave = s; dvSaveStateShow(host.querySelector('#ct-astate'), s); };
+  function endNoteEdit() { if (S.saver) S.saver.stop(); S.saver = null; S.editAct = null; S.editText = ''; S.editSave = ''; }
+  async function startNoteEdit(aid) {
+    if (S.editAct === aid) return host.querySelector('#ct-aedit')?.focus();
+    if (S.editAct && !(await saveNoteEdit())) return;
     const a = acts().find(x => x.id === aid); if (!a) return;
-    S.editAct = aid; S.editText = dvActText(a.content); render();
+    S.editAct = aid; S.editText = dvActText(a.content); S.editSave = ''; S.saver = dvNoteSaver(aid, S.editText, noteState); render();
     const ta = host.querySelector('#ct-aedit');
     if (ta) { dvAutoGrow(ta); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
   }
   async function saveNoteEdit() {
-    // The id is read once, before any wait. The first save clears S.editAct while the contact
-    // reloads; a second save in that gap used to send "null" as the id (2026-10-20).
-    const aid = S.editAct; if (!aid) return;
-    const ta = host.querySelector('#ct-aedit'); if (!ta) return;
-    const v = ta.value.trim();
-    if (!v) { ta.setAttribute('aria-invalid', 'true'); ta.focus(); return; }
-    const res = await api.patch(`/api/activities/${aid}`, { content: esc(v).replace(/\n/g, '<br>') });
-    if (res?.error) return ui.toast(res.error);
-    S.editAct = null; S.editText = '';
-    const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh;
-    render(); ui.toast(t('entry_updated'));
+    // The saver is taken once, before any wait, and it holds the note's id from the moment the editor opened. A
+    // second save in the gap while the contact reloads used to send "null" as the id (2026-10-20).
+    const saver = S.saver; if (!saver || S.editBusy) return false;
+    S.editBusy = true; const res = await saver.done(); S.editBusy = false;
+    if (res.empty) { const ta = host.querySelector('#ct-aedit'); if (ta) { ta.setAttribute('aria-invalid', 'true'); ta.focus(); } return false; }
+    if (res.error) { ui.toast(res.error); return false; }
+    endNoteEdit();
+    if (res.sent) { const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; }
+    render(); if (res.changed) ui.toast(t('entry_updated'));
+    return true;
+  }
+  async function cancelNoteEdit() {
+    const saver = S.saver; if (!saver || S.editBusy) return;
+    S.editBusy = true; const res = await saver.back(); S.editBusy = false;
+    if (res.error) return ui.toast(res.error);
+    endNoteEdit();
+    if (res.sent) { const fresh = await api.get(`/api/contacts/${id}`); if (fresh && !fresh.error) S.c = fresh; }
+    render();
   }
   // A click that ends a text selection should not swallow the selection by re-rendering.
   offs.push(on(host, 'click', '[data-note]', (e, el) => { if (e.target.closest('a')) return; if (!String(window.getSelection() || '')) startNoteEdit(+el.dataset.note); }));   // a link in a note is followed, not edited
   offs.push(on(host, 'dblclick', '[data-note]', (e, el) => { if (!e.target.closest('a')) startNoteEdit(+el.dataset.note); }));
   offs.push(on(host, 'click', '[data-note-full]', (e, el) => dvOpenNote(acts().find(x => x.id === +el.dataset.noteFull))));   // a long note, whole (Part 9)
-  offs.push(on(host, 'input', '#ct-aedit', (e, el) => { S.editText = el.value; el.removeAttribute('aria-invalid'); dvAutoGrow(el); }));
+  offs.push(on(host, 'input', '#ct-aedit', (e, el) => { S.editText = el.value; el.removeAttribute('aria-invalid'); dvAutoGrow(el); S.saver && S.saver.input(el.value); }));
   offs.push(on(host, 'keydown', '#ct-aedit', e => {
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); S.editAct = null; S.editText = ''; render(); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelNoteEdit(); }
     // Enter is a new line. Ctrl/Cmd+Enter saves by clicking Save, so the one-press lock (core.js) applies.
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); host.querySelector('[data-act="act-save"]')?.click(); }
   }));

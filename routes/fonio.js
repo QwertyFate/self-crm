@@ -4,8 +4,10 @@
    ONE CONNECTION PER WORKSPACE (workspace_fonio): the company's fonio API key
    and fonio number, an active switch, the delay in minutes, which new deals
    trigger a call (created by hand, through the lead link), the number rules,
-   the calling hours and whether a call that reached nobody is tried again
-   (follow_up, Part 33) — db.js has the meaning of each column. Everyone may
+   the calling hours, whether a call that reached nobody is tried again
+   (follow_up, Part 33) and who gets the call at all (only_webhooks,
+   only_pipelines, Part 37: null for all lead webhooks / pipelines, or the ids
+   fonio is limited to) — db.js has the meaning of each column. Everyone may
    read the settings; saving and removing them are owner/admin only, as for
    Cal.com. The key is sealed like the Cal.com key (utils/calcom.js) and never
    leaves the server again: owners and admins see its last four characters.
@@ -44,7 +46,12 @@
    the person asked to be called back at (callback_date, callback_time;
    Part 35) comes before that: callbackAfterResult plans one call for it, the
    note's last line says what came of it, and the answer carries
-   callback { status, call_id, due_at }. Every
+   callback { status, call_id, due_at }. What came out of the call then moves
+   the deal (Part 39): the workspace's own variable lead_status — or a meeting
+   agreed, a callback planned, or an unanswered call with no further try —
+   picks a line of stage_rules, the table of stage and urgency the workspace
+   keeps per pipeline (utils/fonio-stage.js); the note's last line says what
+   was done, and the answer carries deal { event, status }. Every
    delivery is remembered in last_delivery (when, the outcome,
    the body's field names), so the page can show what fonio sends.
    server.js gives this path its raw bytes (1 MB, a whole transcript) and the
@@ -58,7 +65,8 @@
 
    ENDPOINTS
      GET    /                    { configured, settings, can_manage } (everyone; key_hint for owner/admin)
-     PUT    /                    save, merged over what is saved (owner/admin)
+     PUT    /                    save, merged over what is saved (owner/admin); variables and stage_rules are
+                                 each replaced as a whole when sent
      DELETE /                    remove the connection (owner/admin)
      GET    /calls               the last 50 calls, newest first (everyone)
      POST   /calls/:id/cancel    cancel a waiting call (owner/admin); 409 when it is no longer waiting
@@ -80,6 +88,8 @@ const fonioCalls  = require('../utils/fonio-calls');
 const fonioResult = require('../utils/fonio-result');
 const baseUrl     = require('../utils/base-url');
 const fonioMeeting = require('../utils/fonio-meeting');   // a meeting agreed in a call, booked at Cal.com or Calendly (Part 28)
+const fonioStage  = require('../utils/fonio-stage');      // the deal after the call: stage and urgency by what came out (Part 39)
+const engine      = require('../utils/engine');           // hears of a deal a call moved into one of its trigger stages
 const { notifyUser } = require('../notifications');
 
 const MAX_DELAY  = 7 * 24 * 60;                 // minutes: a week
@@ -89,6 +99,7 @@ const DEFAULTS = {
   country_code: '+49', number_prefixes: [], hours_on: true, hours_days: [1, 2, 3, 4, 5],
   hours_from: '09:00', hours_to: '18:00', hours_tz: 'Europe/Berlin',
   book_meetings: true,                        // who books a meeting agreed in the call (Part 34): the CRM until switched off
+  only_webhooks: null, only_pipelines: null,  // who gets the call (Part 37): null is all, a list is only those ids
   follow_up: { ...fonioCalls.FOLLOW_UP },   // retrying a call that reached nobody (Part 33): off until saved
 };
 const SETTING_KEYS = Object.keys(DEFAULTS).filter(k => k !== 'hours_tz' && k !== 'follow_up');
@@ -109,7 +120,8 @@ async function loadRow(wid) {
   const { rows: [row] } = await pool.query(
     `SELECT f.from_number, f.active, f.delay_minutes, f.on_deal_manual, f.on_deal_webhook, f.country_code,
             f.number_prefixes, f.hours_on, f.hours_days, f.hours_from, f.hours_to, f.hours_tz, f.key_hint,
-            f.receive_token, f.last_delivery, f.variables, f.follow_up, f.book_meetings, f.saved_by, f.saved_at,
+            f.receive_token, f.last_delivery, f.variables, f.follow_up, f.book_meetings, f.only_webhooks, f.only_pipelines,
+            f.stage_rules, f.saved_by, f.saved_at,
             u.name AS saved_by_name
        FROM workspace_fonio f LEFT JOIN users u ON u.id = f.saved_by
       WHERE f.workspace_id = $1`, [wid]
@@ -139,6 +151,8 @@ function answer(req, row) {
   const manage = canManage(req.userRole);
   if (!row) return { configured: false, settings: { ...DEFAULTS }, can_manage: manage };
   const settings = { ...settingsOf(row), variables: Array.isArray(row.variables) ? row.variables : [],
+    // the deal after the call (Part 39): pipeline id → event → { stage_id, urgency }; {} on a row from before
+    stage_rules: row.stage_rules && typeof row.stage_rules === 'object' && !Array.isArray(row.stage_rules) ? row.stage_rules : {},
     saved_by: row.saved_by, saved_by_name: row.saved_by_name || null, saved_at: row.saved_at };
   if (manage) {
     settings.key_hint = row.key_hint || null;
@@ -172,7 +186,25 @@ function checkSettings(s) {
   }
   const follow = fonioCalls.checkFollowUp(s.follow_up);
   if (!follow.value) return { reason: 'follow_up', error: follow.error };
-  return { value: { ...s, from_number: from, country_code: cc, number_prefixes: prefixes, hours_days: days, follow_up: follow.value } };
+  const who = {};
+  for (const k of fonioCalls.WHO_KEYS) {
+    const list = fonioCalls.checkWho(s[k]);
+    if (list.error) return { reason: k, error: `${WHO[k].what}: ${list.error}` };
+    who[k] = list.value;
+  }
+  return { value: { ...s, ...who, from_number: from, country_code: cc, number_prefixes: prefixes, hours_days: days, follow_up: follow.value } };
+}
+
+// Who gets the call (Part 37): the table each list's ids live in. A list that is SENT may name only this workspace's
+// own rows; a saved list is not asked about again — an id deleted since simply matches nothing.
+const WHO = {
+  only_webhooks:  { table: 'workspace_webhook', what: 'Lead webhooks' },
+  only_pipelines: { table: 'pipelines',         what: 'Pipelines' },
+};
+async function foreignIds(wid, key, ids) {
+  const { rows } = await pool.query(`SELECT id FROM ${WHO[key].table} WHERE workspace_id = $1 AND id = ANY($2::int[])`, [wid, ids]);
+  const own = new Set(rows.map(r => Number(r.id)));
+  return ids.filter(id => !own.has(id));
 }
 
 router.get('/', requireAuth, async (req, res, next) => {
@@ -203,12 +235,28 @@ router.put('/', requireAuth, requireManage, async (req, res, next) => {
     const checked = checkSettings(merged);
     if (!checked.value) return res.status(400).json({ error: checked.error, reason: checked.reason });
     const s = checked.value;
+    for (const k of fonioCalls.WHO_KEYS) {
+      if (body[k] === undefined || s[k] === null) continue;
+      if ((await foreignIds(req.workspaceId, k, s[k])).length) {
+        return res.status(400).json({ error: `${WHO[k].what}: an id in the list is not in this workspace`, reason: k });
+      }
+    }
     // the workspace's own variables for the prompt: replaced as a whole when sent, kept when not
     let variables = null;
     if (body.variables !== undefined) {
       const v = fonioCalls.checkVariables(body.variables);
       if (!v.value) return res.status(400).json({ error: v.error, reason: 'variables' });
       variables = v.value;
+    }
+    // the deal after the call (Part 39): the table is replaced as a whole when sent, kept when not. A table that is
+    // sent may name only this workspace's pipelines, and under each only that pipeline's own stages.
+    let stageRules = null;
+    if (body.stage_rules !== undefined) {
+      const t = fonioStage.checkRules(body.stage_rules);
+      if (!t.value) return res.status(400).json({ error: t.error, reason: 'stage_rules' });
+      const foreign = await fonioStage.foreignRefs(pool, req.workspaceId, t.value);
+      if (foreign) return res.status(400).json({ error: `The table names a ${foreign} that is not in this workspace`, reason: 'stage_rules' });
+      stageRules = t.value;
     }
 
     // a new key is asked about once: one fonio refuses, or a fonio that does not answer, writes nothing
@@ -222,6 +270,7 @@ router.put('/', requireAuth, requireManage, async (req, res, next) => {
       s.delay_minutes, s.on_deal_manual, s.on_deal_webhook, s.country_code, JSON.stringify(s.number_prefixes),
       s.hours_on, JSON.stringify(s.hours_days), s.hours_from, s.hours_to, s.hours_tz, req.userId,
       JSON.stringify(s.follow_up), s.book_meetings,
+      s.only_webhooks && JSON.stringify(s.only_webhooks), s.only_pipelines && JSON.stringify(s.only_pipelines),   // null stays NULL: all
     ];
     if (saved) {
       await pool.query(
@@ -229,25 +278,28 @@ router.put('/', requireAuth, requireManage, async (req, res, next) => {
            api_key_sealed = COALESCE($2, api_key_sealed), key_hint = COALESCE($3, key_hint), from_number = $4,
            active = $5, delay_minutes = $6, on_deal_manual = $7, on_deal_webhook = $8, country_code = $9,
            number_prefixes = $10::jsonb, hours_on = $11, hours_days = $12::jsonb, hours_from = $13, hours_to = $14,
-           hours_tz = $15, saved_by = $16, follow_up = $17::jsonb, book_meetings = $18, saved_at = NOW()
+           hours_tz = $15, saved_by = $16, follow_up = $17::jsonb, book_meetings = $18,
+           only_webhooks = $19::jsonb, only_pipelines = $20::jsonb, saved_at = NOW()
          WHERE workspace_id = $1`, params
       );
     } else {
       await pool.query(
         `INSERT INTO workspace_fonio (workspace_id, api_key_sealed, key_hint, from_number, active, delay_minutes,
            on_deal_manual, on_deal_webhook, country_code, number_prefixes, hours_on, hours_days, hours_from, hours_to,
-           hours_tz, saved_by, follow_up, book_meetings)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12::jsonb,$13,$14,$15,$16,$17::jsonb,$18)
+           hours_tz, saved_by, follow_up, book_meetings, only_webhooks, only_pipelines)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12::jsonb,$13,$14,$15,$16,$17::jsonb,$18,$19::jsonb,$20::jsonb)
          ON CONFLICT (workspace_id) DO UPDATE SET
            api_key_sealed = EXCLUDED.api_key_sealed, key_hint = EXCLUDED.key_hint, from_number = EXCLUDED.from_number,
            active = EXCLUDED.active, delay_minutes = EXCLUDED.delay_minutes, on_deal_manual = EXCLUDED.on_deal_manual,
            on_deal_webhook = EXCLUDED.on_deal_webhook, country_code = EXCLUDED.country_code,
            number_prefixes = EXCLUDED.number_prefixes, hours_on = EXCLUDED.hours_on, hours_days = EXCLUDED.hours_days,
            hours_from = EXCLUDED.hours_from, hours_to = EXCLUDED.hours_to, hours_tz = EXCLUDED.hours_tz,
-           saved_by = EXCLUDED.saved_by, follow_up = EXCLUDED.follow_up, book_meetings = EXCLUDED.book_meetings, saved_at = NOW()`, params
+           saved_by = EXCLUDED.saved_by, follow_up = EXCLUDED.follow_up, book_meetings = EXCLUDED.book_meetings,
+           only_webhooks = EXCLUDED.only_webhooks, only_pipelines = EXCLUDED.only_pipelines, saved_at = NOW()`, params
       );
     }
     if (variables) await pool.query('UPDATE workspace_fonio SET variables = $2::jsonb WHERE workspace_id = $1', [req.workspaceId, JSON.stringify(variables)]);
+    if (stageRules) await pool.query('UPDATE workspace_fonio SET stage_rules = $2::jsonb WHERE workspace_id = $1', [req.workspaceId, JSON.stringify(stageRules)]);
     if (saved?.active && !s.active) await fonioCalls.cancelWaiting(pool, req.workspaceId, 'inactive', req.userId);
     res.json(answer(req, await loadRow(req.workspaceId)));
   } catch (err) { next(err); }
@@ -353,11 +405,31 @@ async function meetingFromCall(wid, r, noteId, bookMeetings = true) {
   }
 }
 
+// What the call means for the deal (Part 39): the event picks a line of the workspace's table, the deal is moved when
+// it is still where it was as the call went out, the note's last line says what was done, and a move is told like
+// one by hand. Never throws and never fails fonio's delivery; null when there was nothing to do.
+async function dealAfterCall(req, conn, r, out) {
+  try {
+    const event = fonioStage.eventOf({ leadStatus: r.leadStatus, meeting: !!r.meeting, callback: out.callback?.status === 'planned', outcome: r.outcome, retry: !!out.retry });
+    const done = await fonioStage.applyAfterCall(pool, conn.workspace_id, out.call_id, event);
+    if (!done) return null;
+    const line = fonioStage.noteLine(done);
+    if (line && out.activity_id) {
+      await pool.query('UPDATE activities SET content = content || $3 WHERE id = $1 AND workspace_id = $2', [out.activity_id, conn.workspace_id, '\n\n' + line]).catch(() => {});
+    }
+    await fonioStage.tellMoved(pool, conn.workspace_id, done, { notifyUser, engine, timezone: conn.hours_tz, baseUrl: baseUrl(req) });
+    return { event: done.event, status: done.status, stage_id: done.stage ? done.stage.id : null, urgency: done.urgency ?? null };
+  } catch (err) {
+    console.error('fonio: the deal after the call failed:', err?.message || err);
+    return null;
+  }
+}
+
 router.post('/receive/:token', async (req, res, next) => {
   const token = String(req.params.token || '');
   if (!LINK.test(token)) return res.status(404).json({ error: 'Unknown link' });
   try {
-    const { rows: [conn] } = await pool.query('SELECT workspace_id, from_number, country_code, book_meetings FROM workspace_fonio WHERE receive_token = $1', [token]);
+    const { rows: [conn] } = await pool.query('SELECT workspace_id, from_number, country_code, book_meetings, hours_tz FROM workspace_fonio WHERE receive_token = $1', [token]);
     if (!conn) return res.status(404).json({ error: 'Unknown link' });
     // the workspace may book in fonio itself (Part 34): an old row (undefined) still books here
     const bookMeetings = conn.book_meetings !== false;
@@ -389,8 +461,10 @@ router.post('/receive/:token', async (req, res, next) => {
         [out.activity_id, conn.workspace_id, '\n\n' + fonioCalls.callbackLine(out.callback)]).catch(() => {});
     }
     const meeting = out.outcome === 'noted' ? await meetingFromCall(conn.workspace_id, r, out.activity_id, bookMeetings) : null;
+    const deal = out.outcome === 'noted' ? await dealAfterCall(req, conn, r, out) : null;
     res.json({ success: true, already: out.outcome === 'already', call_id: out.call_id, activity_id: out.activity_id ?? null, ...(meeting ? { meeting } : {}),
-      ...(out.callback ? { callback: { status: out.callback.status, call_id: out.callback.call_id ?? null, due_at: out.callback.due_at ?? null } } : {}) });
+      ...(out.callback ? { callback: { status: out.callback.status, call_id: out.callback.call_id ?? null, due_at: out.callback.due_at ?? null } } : {}),
+      ...(deal ? { deal } : {}) });
   } catch (err) { next(err); }
 });
 

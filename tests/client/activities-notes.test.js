@@ -97,7 +97,10 @@ describe('the activity modal saves the same shape as the other three writers', (
   test('every writer in the app now stores esc(…).replace(/\\n/g, "<br>")', () => {
     const writers = (dv.match(/content: esc\([^)]*\)\.replace\(\/\\n\/g, '<br>'\)/g) || []).length
                   + (modals.match(/content:\s+esc\([^)]*\)\.replace\(\/\\n\/g, '<br>'\)/g) || []).length;
-    assert.ok(writers >= 4, `expected the four writers, found ${writers}`);
+    // three in detail-views.js: the two "log" boxes (deal, contact) and dvNoteSaver, the one writer both note editors
+    // share since the notes save themselves (NOTE_EDITOR_CHANGES Part 1; before it each editor had its own, four in all)
+    assert.equal(writers, 3, `expected the three writers, found ${writers}`);
+    assert.match(sliceFn(dv, 'dvNoteSaver', 'detail-views.js'), /content: esc\(v\)\.replace\(\/\\n\/g, '<br>'\)/);
     assert.doesNotMatch(modals, /content:\s+document\.getElementById\('act-content'\)\.value,/);
   });
 });

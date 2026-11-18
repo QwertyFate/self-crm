@@ -400,6 +400,7 @@ initDb()
     integrations.startNotetakerLinkWatch();
     // fonio's calls to new deals' contacts: every 30 seconds the due ones are sent, inside each workspace's calling
     // hours (utils/fonio-calls.js, FONIO_CHANGES Part 4). FONIO_WORKER=0 disables it, e.g. on a second instance.
-    if (process.env.FONIO_WORKER !== '0') require('./utils/fonio-calls').startWorker(pool);
+    // tell: who the worker tells when it moves a deal itself — "not reached" after the last try (FONIO_CHANGES Part 39)
+    if (process.env.FONIO_WORKER !== '0') require('./utils/fonio-calls').startWorker(pool, { tell: { notifyUser: require('./notifications').notifyUser, engine: require('./utils/engine') } });
   })
   .catch(err => { console.error('Database init failed:', err); process.exit(1); });

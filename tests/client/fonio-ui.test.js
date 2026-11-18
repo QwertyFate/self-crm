@@ -284,7 +284,7 @@ describe('a callback at the time asked for in the call (Part 36)', () => {
     assert.ok(dict.en.fonio_callback_rules.includes(dict.en.fonio_result_title) && dict.de.fonio_callback_rules.includes(dict.de.fonio_result_title));
   });
   test('the result card: both variables\' descriptions and the prompt\'s sentence, each in a block of its own with a Copy button', () => {
-    const section = pane.slice(pane.indexOf('data-i18n="fonio_cb_label"') - 200, pane.indexOf('id="fonio-result-last"'));
+    const section = pane.slice(pane.indexOf('data-i18n="fonio_cb_label"') - 200, pane.indexOf('data-i18n="fonio_ls_label"') - 200);   // up to the next section (Part 40)
     assert.ok(pane.indexOf('data-i18n="fonio_cb_label"') > pane.indexOf('id="fonio-outcome-words"'), 'after "How the call ended", in the result card');
     for (const [id, key, head] of [['fonio-cb-date-desc', 'fonio_cb_date_desc', '<code>callback_date</code>'], ['fonio-cb-time-desc', 'fonio_cb_time_desc', '<code>callback_time</code>'], ['fonio-cb-prompt', 'fonio_cb_prompt', '<span data-i18n="fonio_cb_prompt_label">']]) {
       assert.match(section, new RegExp(`<div class="intg-json-block">\\s*<div class="intg-json-header">\\s*${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]{0,120}?<button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson\\(this\\)" data-i18n="btn_copy">Copy</button>\\s*</div>\\s*<pre class="intg-code fonio-vars-out" id="${id}" data-i18n="${key}">`), id);
@@ -437,8 +437,8 @@ describe('the result card (Part 8): the link, the Body for fonio, the last deliv
     const filled = Object.fromEntries(Object.keys(body).map(k => [k, 'x']));
     Object.assign(filled, { crm_call_id: '7', conversation_link: 'https://app.fonio.ai/c/1', person_number: '+491711234567', agent_number: '+4930123456' });
     assert.deepEqual(fr.readResult(filled, '+4930123456'), { crmCallId: 7, conversationId: 'x', link: 'https://app.fonio.ai/c/1', direction: 'x', inbound: false,
-      duration: 'x', summary: 'x', transcript: 'x', numbers: ['+491711234567'], name: 'x', meeting: null, outcome: null, callback: { unreadable: true, said: 'x x' } });   // 'x' in callback_date/_time (Part 36) is a wish nobody can read
-    assert.deepEqual(Object.keys(body), ['crm_call_id', 'conversation_id', 'conversation_link', 'direction', 'person_number', 'agent_number', 'caller_name', 'call_outcome', 'meeting_booked', 'meeting_date', 'meeting_time', 'meeting_email', 'callback_date', 'callback_time', 'duration', 'summary', 'transcript']);
+      duration: 'x', summary: 'x', transcript: 'x', numbers: ['+491711234567'], name: 'x', meeting: null, outcome: null, callback: { unreadable: true, said: 'x x' }, leadStatus: null });   // 'x' in callback_date/_time (Part 36) is a wish nobody can read
+    assert.deepEqual(Object.keys(body), ['crm_call_id', 'conversation_id', 'conversation_link', 'direction', 'person_number', 'agent_number', 'caller_name', 'call_outcome', 'meeting_booked', 'meeting_date', 'meeting_time', 'meeting_email', 'callback_date', 'callback_time', 'lead_status', 'duration', 'summary', 'transcript']);
     // Part 33: the outcome is read from the same Body; a filled one says how the call ended
     assert.equal(fr.readResult({ ...filled, call_outcome: 'no_answer' }, '+4930123456').outcome, 'no_answer');
     assert.equal(body.call_outcome, '{{call_outcome}}');
@@ -633,5 +633,371 @@ describe('the variables card (Part 14): a prompt\'s placeholders connected to CR
     assert.match(sliceFn(js, 'saveFonioVars', 'integrations.js'), /api\.put\('\/api\/integrations\/fonio', \{ variables: fonioVarsBody\(fonioVars\) \}\)/);
     assert.match(sliceFn(js, 'setFonioVar', 'integrations.js'), /renderFonioVarsOut\(\);/);
     assert.doesNotMatch(sliceFn(js, 'setFonioVar', 'integrations.js'), /renderFonioVars\(\)/, 'typing does not redraw the row');
+  });
+});
+
+// ── Part 38: who gets the call — the two lists in the fonio tab ──────────────
+// The server part (the columns, the settings route, the scheduling) is in tests/routes/fonio-who.test.js and
+// fonio-settings.test.js. Here: each list is "All" (null) or "Only these" (the ids that are switched on); a lead
+// webhook says where its leads land and why it is not called although it is on; the form sends the lists only once
+// their choices have arrived, and never an id that was deleted since.
+describe('who gets the call (Part 38)', () => {
+  const W = loadFns('public/js/integrations.js', ['fonioWhoOf', 'fonioWhoChoices', 'fonioWhoHtml', 'fonioWhoBody', 'readFonioForm', 'fonioErrorText'], {
+    extra: `${js.match(/^const FONIO_WHO = \{[\s\S]*?^\};$/m)[0]}
+      const t = k => { const v = globalThis.__fonioDict.en[k]; if (v === undefined) throw new Error('no key ' + k); return v; };
+      const tf = (k, o) => t(k).replace(/\\{(\\w+)\\}/g, (_, n) => o[n]);
+      ${sliceFn(read('public/js/core.js'), 'esc', 'core.js')}`,
+  });
+  const pipelines = [{ id: 1, name: 'Sales' }, { id: 2, name: 'Partners' }];
+  const webhooks = [
+    { id: 5, name: 'Website form', create_deal: true, pipeline_id: 1 },
+    { id: 6, name: 'Newsletter', create_deal: true, pipeline_id: 2 },
+    { id: 7, name: 'Contacts only', create_deal: false, pipeline_id: null },
+  ];
+  const ALL = { only_pipelines: null, only_webhooks: null };
+
+  test('markup: its own section with both lists, after "When fonio calls"; every word from the dictionary', () => {
+    const sec = pane.slice(pane.indexOf('<div class="intg-section" id="fonio-who">'), pane.indexOf('data-i18n="fonio_numbers_label"'));
+    assert.ok(sec.length > 0 && pane.indexOf('id="fonio-who"') > pane.indexOf('id="fonio-delay"'), 'after the triggers and the delay');
+    assert.match(sec, /<h3 data-i18n="fonio_who_label">/);
+    assert.match(sec, /<p class="intg-section-hint" data-i18n="fonio_who_hint">/);
+    assert.match(sec, /<label id="fonio-who-pipelines-label" data-i18n="fonio_who_pipelines">[^<]*<\/label>\s*<div id="fonio-who-pipelines" class="fonio-who" role="group" aria-labelledby="fonio-who-pipelines-label"><\/div>/);
+    assert.match(sec, /<label id="fonio-who-webhooks-label" data-i18n="fonio_who_webhooks">[^<]*<\/label>\s*<div id="fonio-who-webhooks" class="fonio-who" role="group" aria-labelledby="fonio-who-webhooks-label"><\/div>/);
+    assert.ok(sec.indexOf('fonio-who-pipelines') < sec.indexOf('fonio-who-webhooks'), 'pipelines first: a webhook\'s note points "above"');
+  });
+
+  test('every sentence exists in both languages; the German ones address nobody', () => {
+    const keys = ['fonio_who_label', 'fonio_who_hint', 'fonio_who_pipelines', 'fonio_who_webhooks', 'fonio_who_all', 'fonio_who_only', 'fonio_who_all_pipelines',
+      'fonio_who_all_webhooks', 'fonio_who_only_hint', 'fonio_who_into', 'fonio_who_pipeline_off', 'fonio_who_no_deal', 'fonio_who_none_pipelines',
+      'fonio_who_none_webhooks', 'fonio_err_only_pipelines', 'fonio_err_only_webhooks'];
+    for (const k of keys) {
+      assert.ok(both(k), k);
+      assert.doesNotMatch(dict.de[k], /\b(du|dein|deine|deinen|Sie|Ihre?n?)\b/, `${k} is impersonal`);
+      assert.ok(js.includes(`'${k}'`) || pane.includes(`"${k}"`), `${k} is used`);
+    }
+  });
+
+  test('the saved lists as the form holds them: null stays "all", ids become numbers', () => {
+    assert.deepEqual(W.fonioWhoOf({ only_pipelines: null, only_webhooks: ['5', 6] }), { only_pipelines: null, only_webhooks: [5, 6] });
+    assert.deepEqual(W.fonioWhoOf({}), ALL, 'a server from before the lists');
+    assert.deepEqual(W.fonioWhoOf(undefined), ALL);
+  });
+
+  test('"All": the two buttons and one sentence, no boxes', () => {
+    const h = W.fonioWhoHtml('only_pipelines', ALL, W.fonioWhoChoices('only_pipelines', ALL, pipelines, webhooks), true);
+    assert.match(h, /^<div class="seg"><button type="button" data-who-mode="all" aria-pressed="true">All<\/button><button type="button" data-who-mode="only" aria-pressed="false">Only these<\/button><\/div><p class="help">New deals in every pipeline are called, also in pipelines added later\.<\/p>$/);
+    assert.match(W.fonioWhoHtml('only_webhooks', ALL, [], true), /Leads from every lead webhook are called, also from webhooks added later\./);
+  });
+
+  test('"Only these": one switch per pipeline, on for the ids in the list', () => {
+    const who = { only_pipelines: [1], only_webhooks: null };
+    const h = W.fonioWhoHtml('only_pipelines', who, W.fonioWhoChoices('only_pipelines', who, pipelines, webhooks), true);
+    assert.match(h, /data-who-mode="only" aria-pressed="true"/);
+    assert.match(h, /<label class="switch-row"><input type="checkbox" class="switch" data-who-id="1" checked> <span>Sales<\/span><\/label>/);
+    assert.match(h, /<label class="switch-row"><input type="checkbox" class="switch" data-who-id="2"> <span>Partners<\/span><\/label>/);
+    assert.match(h, /<p class="help">What is added later is not called until it is switched on here\.<\/p>$/);
+  });
+
+  test('a lead webhook says where its leads land; one that makes no deal says nobody is called', () => {
+    const c = W.fonioWhoChoices('only_webhooks', ALL, pipelines, webhooks);
+    assert.deepEqual(c, [
+      { id: 5, name: 'Website form', note: 'Pipeline: Sales', warn: false },
+      { id: 6, name: 'Newsletter', note: 'Pipeline: Partners', warn: false },
+      { id: 7, name: 'Contacts only', note: 'Creates no deal, so nobody is called.', warn: true },
+    ]);
+  });
+
+  test('a lead webhook whose pipeline is switched off says so, also while it is switched on itself', () => {
+    const who = { only_pipelines: [1], only_webhooks: [5, 6] };
+    const c = W.fonioWhoChoices('only_webhooks', who, pipelines, webhooks);
+    assert.deepEqual(c[0], { id: 5, name: 'Website form', note: 'Pipeline: Sales', warn: false });
+    assert.deepEqual(c[1], { id: 6, name: 'Newsletter', note: 'Not called: the pipeline "Partners" is switched off above.', warn: true });
+    const h = W.fonioWhoHtml('only_webhooks', who, c, true);
+    assert.match(h, /data-who-id="6" checked> <span>Newsletter <span class="fonio-who-note warn">Not called: the pipeline &quot;Partners&quot; is switched off above\.<\/span><\/span>/);
+    assert.match(h, /data-who-id="5" checked> <span>Website form <span class="fonio-who-note">Pipeline: Sales<\/span><\/span>/);
+  });
+
+  test('a webhook whose pipeline was deleted counts as making no deal', () => {
+    const c = W.fonioWhoChoices('only_webhooks', ALL, [{ id: 1, name: 'Sales' }], webhooks);
+    assert.equal(c[1].note, 'Creates no deal, so nobody is called.');
+  });
+
+  test('nothing to switch on yet: a sentence instead of an empty list', () => {
+    const who = { only_pipelines: [], only_webhooks: [] };
+    assert.match(W.fonioWhoHtml('only_webhooks', who, [], true), /<div class="fonio-who-list"><p class="help">No lead webhooks yet\.<\/p><\/div>/);
+    assert.match(W.fonioWhoHtml('only_pipelines', who, [], true), /No pipelines yet\./);
+  });
+
+  test('a member sees the lists and can change nothing', () => {
+    const who = { only_pipelines: [1], only_webhooks: null };
+    const h = W.fonioWhoHtml('only_pipelines', who, W.fonioWhoChoices('only_pipelines', who, pipelines, webhooks), false);
+    assert.equal((h.match(/ disabled/g) || []).length, 4, 'both buttons and both switches');
+    const wire = sliceFn(js, 'renderFonioWho', 'integrations.js');
+    assert.match(wire, /if \(b && manage\) setFonioWhoMode\(key, b\.dataset\.whoMode\)/);
+    assert.match(wire, /if \(c && manage\) toggleFonioWho\(key, Number\(c\.dataset\.whoId\), c\.checked\)/);
+  });
+
+  test('names typed by people cannot inject markup', () => {
+    const evil = [{ id: 9, name: '<img src=x onerror=alert(1)>' }];
+    const who = { only_pipelines: [9], only_webhooks: [3] };
+    assert.doesNotMatch(W.fonioWhoHtml('only_pipelines', who, W.fonioWhoChoices('only_pipelines', who, evil, []), true), /<img/);
+    const hooks = [{ id: 3, name: '<b>x</b>', create_deal: true, pipeline_id: 9 }];
+    const h = W.fonioWhoHtml('only_webhooks', who, W.fonioWhoChoices('only_webhooks', who, evil, hooks), true);
+    assert.doesNotMatch(h, /<img|<b>/);
+    assert.match(h, /&lt;b&gt;x&lt;\/b&gt;/);
+  });
+
+  test('switching to "Only these" starts with everything on, so the switch of mode alone changes no call', () => {
+    const s = sliceFn(js, 'setFonioWhoMode', 'integrations.js');
+    assert.match(s, /if \(mode === 'all'\) fonioWho\[key\] = null;/);
+    assert.match(s, /else if \(!Array\.isArray\(fonioWho\[key\]\)\) fonioWho\[key\] = fonioWhoChoices\(key, fonioWho, intgData\?\.pipelines, intgWebhooks\)\.map\(c => c\.id\);/);
+  });
+
+  test('the lists for the save: null for all, the ids that are on and still exist', () => {
+    assert.deepEqual(W.fonioWhoBody(ALL, pipelines, webhooks), ALL);
+    assert.deepEqual(W.fonioWhoBody({ only_pipelines: [1, 99], only_webhooks: [6, 5, 42] }, pipelines, webhooks), { only_pipelines: [1], only_webhooks: [6, 5] }, 'ids deleted since are dropped');
+    assert.deepEqual(W.fonioWhoBody({ only_pipelines: [], only_webhooks: null }, pipelines, webhooks), { only_pipelines: [], only_webhooks: null }, 'nothing on is sent as it is: the server refuses it with its sentence');
+  });
+
+  test('while the choices have not arrived nothing is sent, so the server keeps what is saved', () => {
+    assert.equal(W.fonioWhoBody({ only_pipelines: [1], only_webhooks: [5] }, undefined, null), undefined);
+    assert.equal(W.fonioWhoBody(ALL, pipelines, null), undefined);
+    assert.match(sliceFn(js, 'saveFonio', 'integrations.js'), /who: document\.getElementById\('fonio-who'\) \? fonioWhoBody\(fonioWho, intgData\?\.pipelines, intgData \? intgWebhooks : null\) : undefined,/);
+  });
+
+  test('readFonioForm: the lists go into the body only when the form has them', () => {
+    const form = { key: '', from: '+4930123456', active: true, onManual: true, onWebhook: true, delay: '5', cc: '+49', prefixes: '', hoursOn: false, days: [], hoursFrom: '09:00', hoursTo: '18:00',
+      bookMeetings: true, followOn: false, followNoAnswer: '120', followVoicemail: '1440', followBusy: '120', followAttempts: '1' };
+    const without = W.readFonioForm(form);
+    assert.ok(!('only_pipelines' in without) && !('only_webhooks' in without));
+    const body = W.readFonioForm({ ...form, who: { only_pipelines: [1], only_webhooks: null } });
+    assert.deepEqual([body.only_pipelines, body.only_webhooks], [[1], null]);
+  });
+
+  test('a refused list has its own sentence', () => {
+    assert.equal(W.fonioErrorText({ reason: 'only_pipelines' }), 'Switch on at least one pipeline, or choose "All".');
+    assert.equal(W.fonioErrorText({ reason: 'only_webhooks' }), 'Switch on at least one lead webhook, or choose "All".');
+  });
+
+  test('the lists follow the server: after loading, after a save, after removing; and the lead webhooks\' own reload renders them again', () => {
+    assert.match(sliceFn(js, 'loadFonio', 'integrations.js'), /fonioWho = fonioWhoOf\(data\.settings\);/);
+    assert.match(sliceFn(js, 'saveFonio', 'integrations.js'), /fonioWho = fonioWhoOf\(res\.settings\);\s*fonioRules = fonioRulesOf\(res\.settings\);\s*renderFonio\(\);/);
+    assert.match(sliceFn(js, 'removeFonio', 'integrations.js'), /fonioWho = fonioWhoOf\(res\.settings\);/);
+    assert.match(sliceFn(js, 'renderFonio', 'integrations.js'), /renderFonioWho\(\);\s*renderFonioRules\(\);\s*card\.querySelectorAll\('input'\)\.forEach\(el => \{ el\.disabled = !manage; \}\);/);
+    assert.match(sliceFn(js, 'reloadIntgSettings', 'integrations.js'), /renderIntgPlatforms\(\);\s*renderFonioWho\(\);/);
+  });
+
+  test('the look: the notes are quiet, a warning has its colour', () => {
+    assert.match(css, /^\.fonio-who-list \{ display: flex; flex-direction: column; gap: 8px; margin: 10px 0 2px; \}$/m);
+    assert.match(css, /^\.fonio-who-note \{ margin-left: 6px; font-size: var\(--fs-sm\); color: var\(--text-3\); \}$/m);
+    assert.match(css, /^\.fonio-who-note\.warn \{ color: var\(--warning-ink, var\(--danger\)\); \}$/m);
+  });
+});
+
+// ── Part 40: the deal after the call — the table and the texts for fonio ─────
+// The server part (the reader, the table's rules, the receiver, the worker) is in tests/routes/fonio-stage.test.js,
+// fonio-receive.test.js and fonio-settings.test.js. Here: one table per pipeline with a stage and an urgency per
+// result; what is sent is only what still exists; and the texts to copy into fonio name exactly the words the
+// server reads.
+describe('the deal after the call (Part 40)', () => {
+  const fonioStage = require('../../utils/fonio-stage');
+  const fr = require('../../utils/fonio-result');
+  const EVENTS_SRC = js.match(/^const FONIO_EVENTS = \[[^\]]*\];$/m)[0];
+  const load = (names, more = '') => loadFns('public/js/integrations.js', names, {
+    extra: `${EVENTS_SRC}
+      const t = k => { const v = globalThis.__fonioDict.en[k]; if (v === undefined) throw new Error('no key ' + k); return v; };
+      const tf = (k, o) => t(k).replace(/\\{(\\w+)\\}/g, (_, n) => o[n]);
+      ${sliceFn(read('public/js/core.js'), 'esc', 'core.js')}
+      ${more}`,
+  });
+  const T = load(['fonioRulesOf', 'fonioRulesStages', 'fonioRulesHtml', 'fonioRulesBody', 'readFonioForm', 'fonioErrorText']);
+  const pipelines = [{ id: 1, name: 'Sales' }, { id: 2, name: 'Partners' }];
+  const stages = [{ id: 11, name: 'New', pipeline_name: 'Sales' }, { id: 12, name: 'Qualified', pipeline_name: 'Sales' }, { id: 14, name: 'Not reached', pipeline_name: 'Sales' }, { id: 21, name: 'Partner new', pipeline_name: 'Partners' }];
+  const RULES = { 1: { interested: { stage_id: 12, urgency: 3 }, not_reached: { stage_id: 14, urgency: null }, wrong_person: { stage_id: null, urgency: 0 } } };
+
+  test('markup: the section in the fonio card, before the buttons; a pipeline to choose and the table\'s place', () => {
+    const sec = pane.slice(pane.indexOf('<div class="intg-section" id="fonio-rules">'), pane.indexOf('id="fonio-actions"'));
+    assert.ok(sec.length > 0 && pane.indexOf('id="fonio-rules"') > pane.indexOf('id="fonio-callback-on"'), 'after the callback section');
+    assert.match(sec, /<h3 data-i18n="fonio_rules_label">/);
+    assert.match(sec, /<p class="intg-section-hint" data-i18n="fonio_rules_hint">/);
+    assert.match(sec, /<label for="fonio-rules-pipeline" data-i18n="fonio_rules_pipeline">[^<]*<\/label>\s*<select id="fonio-rules-pipeline" class="form-control" onchange="setFonioRulesPipeline\(this\.value\)"><\/select>/);
+    assert.match(sec, /<div id="fonio-rules-table"><\/div>\s*<p class="help" data-i18n="fonio_rules_note">/);
+  });
+
+  test('markup: in the result card, the variable\'s description and the prompt\'s sentence, each to copy', () => {
+    const sec = pane.slice(pane.indexOf('data-i18n="fonio_ls_label"') - 200, pane.indexOf('id="fonio-result-last"'));
+    assert.ok(pane.indexOf('data-i18n="fonio_ls_label"') > pane.indexOf('id="fonio-cb-prompt"'), 'after the callback texts');
+    for (const [id, key, head] of [['fonio-ls-desc', 'fonio_ls_desc', '<code>lead_status</code>'], ['fonio-ls-prompt', 'fonio_ls_prompt', '<span data-i18n="fonio_ls_prompt_label">']]) {
+      assert.match(sec, new RegExp(`<div class="intg-json-block">\\s*<div class="intg-json-header">\\s*${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]{0,120}?<button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson\\(this\\)" data-i18n="btn_copy">Copy</button>\\s*</div>\\s*<pre class="intg-code fonio-vars-out" id="${id}" data-i18n="${key}">`), id);
+    }
+    assert.equal(sec.split('class="intg-json-block"').length - 1, 2);
+    assert.match(sec, /<h3 data-i18n="fonio_ls_label">[^<]*<\/h3>\s*<p class="intg-section-hint" data-i18n="fonio_ls_hint">/);
+  });
+
+  test('the events are the server\'s, in its order, and each has its name in both languages', () => {
+    const events = new Function(`${EVENTS_SRC} return FONIO_EVENTS;`)();
+    assert.deepEqual(events, fonioStage.EVENTS);
+    for (const e of events) assert.ok(both('fonio_ev_' + e), e);
+  });
+
+  test('every sentence exists in both languages and is used; the German ones address nobody', () => {
+    const keys = ['fonio_rules_label', 'fonio_rules_hint', 'fonio_rules_pipeline', 'fonio_rules_col_event', 'fonio_rules_col_stage', 'fonio_rules_col_urgency', 'fonio_rules_keep',
+      'fonio_rules_note', 'fonio_rules_none', 'fonio_rules_no_stages', 'fonio_ev_not_reached_hint', 'fonio_err_stage_rules', 'fonio_ls_label', 'fonio_ls_hint', 'fonio_ls_desc',
+      'fonio_ls_prompt_label', 'fonio_ls_prompt'];
+    for (const k of keys) {
+      assert.ok(both(k), k);
+      assert.doesNotMatch(dict.de[k], /\b(du|dein|deine|deinen|Sie|Ihre?n?)\b/, `${k} is impersonal`);
+      assert.ok(js.includes(`'${k}'`) || pane.includes(`"${k}"`), `${k} is used`);
+    }
+    for (const lang of ['en', 'de']) {
+      assert.ok(dict[lang].fonio_rules_hint.includes(dict[lang].fonio_ls_label) && dict[lang].fonio_rules_hint.includes(dict[lang].fonio_result_title), `${lang}: the table says where the texts for fonio are`);
+      assert.ok(dict[lang].fonio_ls_hint.includes(dict[lang].fonio_rules_label), `${lang}: the texts say which table they feed`);
+      assert.ok(dict[lang].fonio_err_stage_rules.includes(dict[lang].fonio_rules_label));
+    }
+  });
+
+  test('the texts to copy name exactly the five words the server reads, in both languages — and the server reads each of them', () => {
+    for (const lang of ['en', 'de']) for (const k of ['fonio_ls_desc', 'fonio_ls_prompt']) {
+      const named = dict[lang][k].match(/\b[a-z]+_[a-z]+\b|\binterested\b|\bcallback\b/g).filter(w => w !== 'lead_status');
+      assert.deepEqual([...new Set(named)], fonioStage.STATUSES, `${lang} ${k}`);
+      assert.ok(dict[lang][k].includes('lead_status') || k === 'fonio_ls_desc', `${lang} ${k} names the variable`);
+    }
+    for (const w of fonioStage.STATUSES) assert.equal(fr.readLeadStatus({ lead_status: w }), w);
+    assert.doesNotMatch(dict.en.fonio_ls_desc + dict.de.fonio_ls_desc, /not_reached/, 'not reached is the CRM\'s own: fonio is told to leave the field empty');
+    assert.match(dict.en.fonio_ls_desc, /leave empty\.$/); assert.match(dict.de.fonio_ls_desc, /leer lassen\.$/);
+  });
+
+  test('the Body carries lead_status, its hint says what it is, and an unfilled one is no result', () => {
+    const body = JSON.parse(new Function(`${/const FONIO_RESULT_BODY = JSON\.stringify\(\{[\s\S]*?\}, null, 2\);/.exec(js)[0]} return FONIO_RESULT_BODY;`)());
+    assert.equal(body.lead_status, '{{lead_status}}');
+    assert.equal(fr.readResult(body, '+4930123456').leadStatus, null);
+    assert.equal(fr.readResult({ ...body, lead_status: 'interested' }, '+4930123456').leadStatus, 'interested');
+    for (const lang of ['en', 'de']) {
+      assert.ok(dict[lang].fonio_result_body_hint.includes('lead_status'), `${lang}: the Body's hint names it`);
+      assert.ok(dict[lang].fonio_result_body_hint.includes(dict[lang].fonio_ls_label), `${lang}: and where its description is`);
+      assert.ok(dict[lang].fonio_ls_hint.includes('lead_status'));
+    }
+  });
+
+  test('the saved table as the form holds it: known events, whole numbers, no empty lines', () => {
+    assert.deepEqual(T.fonioRulesOf({ stage_rules: RULES }), RULES);
+    assert.deepEqual(T.fonioRulesOf({ stage_rules: { 1: { interested: { stage_id: null, urgency: null }, reached: { stage_id: 1 }, callback: { stage_id: '12' } } } }), {});
+    assert.deepEqual(T.fonioRulesOf({}), {}); assert.deepEqual(T.fonioRulesOf(undefined), {}); assert.deepEqual(T.fonioRulesOf({ stage_rules: [] }), {});
+    const copy = T.fonioRulesOf({ stage_rules: RULES }); copy[1].interested.stage_id = 99;
+    assert.equal(RULES[1].interested.stage_id, 12, 'a copy: the form never changes what the server sent');
+  });
+
+  test('a pipeline\'s stages are the ones that name it', () => {
+    assert.deepEqual(T.fonioRulesStages(1, pipelines, stages).map(s => s.id), [11, 12, 14]);
+    assert.deepEqual(T.fonioRulesStages('2', pipelines, stages).map(s => s.id), [21]);
+    assert.deepEqual(T.fonioRulesStages(9, pipelines, stages), []);
+    assert.deepEqual(T.fonioRulesStages(1, undefined, undefined), []);
+  });
+
+  test('the table: six lines, each with a stage and an urgency to choose, "Leave as it is" first', () => {
+    const h = T.fonioRulesHtml(1, RULES, T.fonioRulesStages(1, pipelines, stages), true);
+    assert.equal((h.match(/<tr><td>/g) || []).length, 6);
+    assert.match(h, /^<table class="table compact fonio-rules-table"><thead><tr><th>What came out of the call<\/th><th>Move the deal to<\/th><th>Urgency<\/th><\/tr><\/thead>/);
+    assert.match(h, /<tr><td><strong>Interested<\/strong> <code>interested<\/code><\/td><td><select class="form-control" data-rule-event="interested" data-rule-field="stage_id" aria-label="Interested: Move the deal to"><option value="">Leave as it is<\/option><option value="11">New<\/option><option value="12" selected>Qualified<\/option><option value="14">Not reached<\/option><\/select><\/td>/);
+    assert.match(h, /data-rule-event="interested" data-rule-field="urgency" aria-label="Interested: Urgency"><option value="">Leave as it is<\/option><option value="0">No urgency<\/option><option value="1">Low<\/option><option value="2">Medium<\/option><option value="3" selected>High<\/option><option value="4">Very urgent<\/option><\/select>/);
+  });
+
+  test('a line that is not set shows "Leave as it is" twice; urgency 0 is a choice of its own', () => {
+    const h = T.fonioRulesHtml(1, RULES, T.fonioRulesStages(1, pipelines, stages), true);
+    assert.match(h, /data-rule-event="callback" data-rule-field="stage_id"[^>]*><option value="" selected>Leave as it is<\/option>/);
+    assert.match(h, /data-rule-event="callback" data-rule-field="urgency"[^>]*><option value="" selected>Leave as it is<\/option>/);
+    assert.match(h, /data-rule-event="wrong_person" data-rule-field="urgency"[^>]*><option value="">Leave as it is<\/option><option value="0" selected>No urgency<\/option>/);
+    assert.match(h, /data-rule-event="wrong_person" data-rule-field="stage_id"[^>]*><option value="" selected>/);
+  });
+
+  test('"Not reached" says that the CRM decides it; the five others show the word fonio sends', () => {
+    const h = T.fonioRulesHtml(1, RULES, T.fonioRulesStages(1, pipelines, stages), true);
+    assert.match(h, /<strong>Not reached after the last try<\/strong> <span class="help">Decided by the CRM: the call was not answered and no further try is planned\.<\/span>/);
+    assert.doesNotMatch(h, /<code>not_reached<\/code>/);
+    for (const w of fonioStage.STATUSES) assert.ok(h.includes(`<code>${w}</code>`), w);
+  });
+
+  test('another pipeline has its own table; one without stages says so', () => {
+    const h = T.fonioRulesHtml(2, RULES, T.fonioRulesStages(2, pipelines, stages), true);
+    assert.match(h, /data-rule-event="interested" data-rule-field="stage_id"[^>]*><option value="" selected>Leave as it is<\/option><option value="21">Partner new<\/option><\/select>/);
+    assert.match(T.fonioRulesHtml(1, RULES, [], true), /<p class="help">This pipeline has no stages yet\.<\/p>$/);
+  });
+
+  test('a saved stage that was deleted since shows as "Leave as it is", and is not sent again', () => {
+    const left = stages.filter(s => s.id !== 12);
+    assert.match(T.fonioRulesHtml(1, RULES, T.fonioRulesStages(1, pipelines, left), true), /data-rule-event="interested" data-rule-field="stage_id"[^>]*><option value="" selected>/);
+    assert.deepEqual(T.fonioRulesBody(RULES, pipelines, left)[1].interested, { stage_id: null, urgency: 3 }, 'its urgency is kept');
+    assert.deepEqual(T.fonioRulesBody({ 1: { callback: { stage_id: 12, urgency: null } } }, pipelines, left), {}, 'a line with nothing left is dropped');
+  });
+
+  test('a member sees the table and can change nothing', () => {
+    const h = T.fonioRulesHtml(1, RULES, T.fonioRulesStages(1, pipelines, stages), false);
+    assert.equal((h.match(/<select [^>]* disabled>/g) || []).length, 12);
+    assert.match(sliceFn(js, 'renderFonioRules', 'integrations.js'), /if \(el && manage\) setFonioRule\(el\.dataset\.ruleEvent, el\.dataset\.ruleField, el\.value\)/);
+  });
+
+  test('stage names typed by people cannot inject markup', () => {
+    const h = T.fonioRulesHtml(1, {}, [{ id: 11, name: '<img src=x onerror=alert(1)>', pipeline_name: 'Sales' }], true);
+    assert.doesNotMatch(h, /<img/); assert.match(h, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  });
+
+  test('the table for the save: what still exists; undefined while the pipelines and stages have not arrived', () => {
+    assert.deepEqual(T.fonioRulesBody(RULES, pipelines, stages), RULES);
+    assert.deepEqual(T.fonioRulesBody({ ...RULES, 9: { interested: { stage_id: 1, urgency: 1 } } }, pipelines, stages), RULES, 'a pipeline deleted since is dropped');
+    assert.deepEqual(T.fonioRulesBody({ 1: { interested: { stage_id: 21, urgency: null } } }, pipelines, stages), {}, 'a stage of another pipeline is not this pipeline\'s');
+    assert.deepEqual(T.fonioRulesBody({}, pipelines, stages), {}, 'an empty table is sent as empty: that clears it');
+    assert.equal(T.fonioRulesBody(RULES, undefined, undefined), undefined);
+    assert.equal(T.fonioRulesBody(RULES, pipelines, undefined), undefined);
+    assert.match(sliceFn(js, 'saveFonio', 'integrations.js'), /rules: document\.getElementById\('fonio-rules'\) \? fonioRulesBody\(fonioRules, intgData\?\.pipelines, intgData\?\.stages\) : undefined,/);
+    assert.deepEqual(fonioStage.checkRules(T.fonioRulesBody(RULES, pipelines, stages)).value, RULES, 'and the server takes it as it is');
+  });
+
+  test('changing a select: the value is kept for the pipeline on show; "Leave as it is" twice removes the line', () => {
+    const S = loadFns('public/js/integrations.js', ['setFonioRule'], {
+      state: { fonioRules: {}, fonioRulesPipeline: 1, intgData: { pipelines } },
+      extra: `${EVENTS_SRC} const __opt = { textContent: '' }; const document = { querySelector: () => __opt };
+        function __rules() { return JSON.parse(JSON.stringify(fonioRules)); } function __label() { return __opt.textContent; }`,
+      expose: ['__rules', '__label'],
+    });
+    S.setFonioRule('interested', 'stage_id', '12');
+    assert.deepEqual(S.__rules(), { 1: { interested: { stage_id: 12, urgency: null } } });
+    assert.equal(S.__label(), 'Sales (1)', 'the pipeline list counts its lines');
+    S.setFonioRule('interested', 'urgency', '0');
+    assert.deepEqual(S.__rules(), { 1: { interested: { stage_id: 12, urgency: 0 } } }, '0 is a value');
+    S.setFonioRule('not_reached', 'urgency', '1');
+    assert.equal(S.__label(), 'Sales (2)');
+    S.setFonioRule('interested', 'stage_id', ''); S.setFonioRule('interested', 'urgency', '');
+    assert.deepEqual(S.__rules(), { 1: { not_reached: { stage_id: null, urgency: 1 } } });
+    S.setFonioRule('not_reached', 'urgency', '');
+    assert.deepEqual(S.__rules(), {}, 'a pipeline without lines is dropped');
+    assert.equal(S.__label(), 'Sales');
+    S.setFonioRule('whatever', 'stage_id', '12'); S.setFonioRule('interested', 'title', 'x');
+    assert.deepEqual(S.__rules(), {}, 'only known events and the two fields');
+    S.__set('fonioRulesPipeline', 2); S.setFonioRule('callback', 'stage_id', '21');
+    assert.deepEqual(S.__rules(), { 2: { callback: { stage_id: 21, urgency: null } } }, 'the other pipeline has its own');
+  });
+
+  test('readFonioForm: the table goes into the body only when the form has it; a refused one has its sentence', () => {
+    const form = { key: '', from: '+4930123456', active: true, onManual: true, onWebhook: true, delay: '5', cc: '+49', prefixes: '', hoursOn: false, days: [], hoursFrom: '09:00', hoursTo: '18:00',
+      bookMeetings: true, followOn: false, followNoAnswer: '120', followVoicemail: '1440', followBusy: '120', followAttempts: '1' };
+    assert.ok(!('stage_rules' in T.readFonioForm(form)));
+    assert.deepEqual(T.readFonioForm({ ...form, rules: RULES }).stage_rules, RULES);
+    assert.deepEqual(T.readFonioForm({ ...form, rules: {} }).stage_rules, {}, 'an empty table is sent: it clears the saved one');
+    assert.match(T.fonioErrorText({ reason: 'stage_rules' }), /^The table under "The deal after the call" could not be saved/);
+  });
+
+  test('the table follows the server and the pipelines: after loading, saving, removing, and when the lead webhooks\' data arrives', () => {
+    assert.match(sliceFn(js, 'loadFonio', 'integrations.js'), /fonioRules = fonioRulesOf\(data\.settings\);/);
+    assert.match(sliceFn(js, 'saveFonio', 'integrations.js'), /fonioRules = fonioRulesOf\(res\.settings\);/);
+    assert.match(sliceFn(js, 'removeFonio', 'integrations.js'), /fonioRules = fonioRulesOf\(res\.settings\);/);
+    assert.match(sliceFn(js, 'reloadIntgSettings', 'integrations.js'), /renderFonioWho\(\);[^\n]*\n\s*renderFonioRules\(\);/);
+    const r = sliceFn(js, 'renderFonioRules', 'integrations.js');
+    assert.match(r, /fonioRulesPipeline = \(list\.find\(p => fonioRules\[p\.id\]\) \|\| list\[0\] \|\| \{\}\)\.id \?\? null;/, 'it opens on a pipeline that has lines');
+    assert.match(r, /sel\.disabled = !list\.length;/);
+  });
+
+  test('the look', () => {
+    assert.match(css, /^\.fonio-rules-table td \{ vertical-align: middle; \}$/m);
+    assert.match(css, /^\.fonio-rules-table select \{ min-width: 150px; \}$/m);
   });
 });

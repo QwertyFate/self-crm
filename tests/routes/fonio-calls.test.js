@@ -59,7 +59,7 @@ const pool = {
     db.log.push({ sql: t, params: p });
     const call = id => db.calls.find(c => c.id === id);
     if (t === 'SELECT * FROM workspace_fonio WHERE workspace_id = $1') return { rows: db.conn && db.conn.workspace_id === p[0] ? [db.conn] : [] };
-    if (t.startsWith('SELECT d.id, d.contact_id, c.phone FROM deals d')) {
+    if (t.startsWith('SELECT d.id, d.contact_id, d.pipeline_id, c.phone FROM deals d')) {
       const d = db.deals.get(p[0]); if (!d || d.workspace_id !== p[1]) return { rows: [] };
       const c = db.contacts.get(d.contact_id);
       return { rows: [{ id: d.id, contact_id: d.contact_id, phone: c && c.workspace_id === d.workspace_id ? c.phone : null }] };
@@ -165,6 +165,13 @@ const pool = {
     if (/FROM workspace_fonio f LEFT JOIN users u/.test(t)) return { rows: db.conn && db.conn.workspace_id === p[0] ? [{ ...db.conn, saved_by_name: 'Olaf Owner' }] : [] };
     if (t.startsWith('UPDATE workspace_fonio')) { db.conn = { ...db.conn, from_number: p[3], active: p[4], delay_minutes: p[5] }; return { rowCount: 1, rows: [] }; }
     if (t.startsWith('DELETE FROM workspace_fonio')) { db.conn = null; return { rowCount: 1, rows: [] }; }
+    // Part 39: the deal's stage is kept as the call goes out (0 for none), and the worker looks for calls that will not
+    // be tried again — none here; what it does with them is in fonio-stage.test.js
+    if (t === 'UPDATE fonio_calls f SET stage_at_send = COALESCE((SELECT d.stage_id FROM deals d WHERE d.id = f.deal_id), 0) WHERE f.id = $1') {
+      const c = call(p[0]); if (c) c.stage_at_send = (db.deals.get(c.deal_id) || {}).stage_id || 0;
+      return { rowCount: c ? 1 : 0, rows: [] };
+    }
+    if (t.startsWith('SELECT f.id, f.workspace_id, f.contact_id, f.deal_id, f.follow_up_no, w.follow_up, w.active, w.hours_tz FROM fonio_calls f JOIN workspace_fonio w')) return { rows: [] };
     throw new Error('unexpected SQL: ' + t);
   },
 };

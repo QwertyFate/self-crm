@@ -489,8 +489,9 @@ describe('Part 39: refresh after a pop-up, supplier label, company search', () =
   test('detail-views: the deal detail takes options and fires onClose; the contact pop window does too', () => {
     const dv = read('public/js/detail-views.js');
     assert.match(dv, /^async function openDealDetail\(id, opts = \{\}\) \{/m);
-    assert.match(sliceFn(dv, 'openDealDetail', 'detail-views.js'), /onClose: \(\) => \{ if \(dvDeal === inst\) dvDeal = null; opts\.onClose && opts\.onClose\(\); \}/);
-    assert.match(sliceFn(dv, 'openContactDetail', 'detail-views.js'), /modal = ui\.modal\(\{ title: noun, size: 'xl', body: '<div><\/div>', onClose: opts\.onClose \}\)/);
+    // since the unsaved warning (NOTE_EDITOR_CHANGES Part 2) both windows first end their own note guard, then fire it
+    assert.match(sliceFn(dv, 'openDealDetail', 'detail-views.js'), /onClose: \(\) => \{ dvGuards\.delete\(guard\); if \(S\.saver\) S\.saver\.done\(\); if \(dvDeal === inst\) dvDeal = null; opts\.onClose && opts\.onClose\(\); \}/);
+    assert.match(sliceFn(dv, 'openContactDetail', 'detail-views.js'), /modal = ui\.modal\(\{ title: noun, size: 'xl', body: '<div><\/div>', beforeClose: \(\) => leave\(\), onClose: \(\) => \{ end\(\); opts\.onClose && opts\.onClose\(\); \} \}\)/);
   });
   test('loadActivities fetches the full contact list for this page (both types), and the compose picker reads it', () => {
     const la = sliceFn(objects, 'loadActivities', 'objects.js');

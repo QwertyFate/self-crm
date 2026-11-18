@@ -116,9 +116,12 @@ async function deleteContact(id) {
   if (page === 'deals') loadDeals(); else loadContacts();
 }
 
+// Closes at once and never asks. The panel's X goes through dvCloseSidePanel (detail-views.js), which lets the contact
+// view save its note first and ask about what it cannot save; here that view is only told that it is over.
 function closeSidePanel() {
   document.getElementById('contact-side-panel')?.classList.add('hidden');
   document.querySelectorAll('#contacts-body tr.side-panel-active').forEach(r => r.classList.remove('side-panel-active'));
+  if (typeof dvPanelClosed === 'function') dvPanelClosed();
 }
 
 // Shared by openObjectModal's custom-field loop (reused from the earlier deal-field work).

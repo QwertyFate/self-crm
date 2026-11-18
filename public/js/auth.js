@@ -575,6 +575,10 @@ document.querySelectorAll('.sb-link[data-page]').forEach(link => {
 });
 
 async function switchPage(page) {
+  // Deals closes the contact side panel (below). A contact view open in it saves its note first and asks about what
+  // it cannot save (detail-views.js); with no view there, nothing is awaited and the switch is as immediate as before.
+  const panelView = page === 'deals' && typeof dvPanelGuard === 'function' && dvPanelGuard();
+  if (panelView && !(await panelView.leave())) return;
   document.querySelectorAll('.sb-link[data-page]').forEach(a => a.removeAttribute('aria-current'));
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelector(`.sb-link[data-page="${page}"]`)?.setAttribute('aria-current', 'page');

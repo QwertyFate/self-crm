@@ -307,6 +307,8 @@ async function reloadIntgSettings(selectId) {
   renderIntgWebhookTabs();
   renderIntgWebhookForm();
   renderIntgPlatforms();
+  renderFonioWho();   // the fonio tab lists these webhooks and pipelines (Part 38)
+  renderFonioRules(); // and these pipelines' stages (Part 40)
   showIntgGuide(activeGuideId || 'make');   // re-render the open guide too (language switch re-runs this loader)
   watchIntgTest();
   await loadIntgLogs();
@@ -1513,6 +1515,20 @@ async function removeNotetakerAi() {
 let fonioData = null;
 let fonioDays = [];   // the calling days picked in the form, 1 = Monday … 7 = Sunday
 let fonioCallsCanManage = false;
+// Who gets the call (Parts 37 and 38): per list null for all, or the ids that are switched on. Kept here while the
+// form is open, like the calling days, so that switching a box re-renders this section only.
+let fonioWho = { only_pipelines: null, only_webhooks: null };
+const FONIO_WHO = {
+  only_pipelines: { el: 'fonio-who-pipelines', all: 'fonio_who_all_pipelines', none: 'fonio_who_none_pipelines' },
+  only_webhooks:  { el: 'fonio-who-webhooks',  all: 'fonio_who_all_webhooks',  none: 'fonio_who_none_webhooks' },
+};
+// The deal after the call (Parts 39 and 40): pipeline id → event → { stage_id, urgency }, each null for "leave as it
+// is". The whole table is kept here while the form is open; the page shows one pipeline's lines at a time.
+// FONIO_EVENTS are the server's (utils/fonio-stage.js EVENTS): five words fonio's assistant writes as lead_status,
+// and not_reached, which the CRM decides itself.
+let fonioRules = {};
+let fonioRulesPipeline = null;
+const FONIO_EVENTS = ['interested', 'meeting_booked', 'callback', 'not_interested', 'wrong_person', 'not_reached'];
 
 
 async function loadFonio() {
@@ -1520,6 +1536,8 @@ async function loadFonio() {
   if (!data || data.error) return;
   fonioData = data;
   fonioDays = Array.isArray(data.settings?.hours_days) ? [...data.settings.hours_days] : [];
+  fonioWho = fonioWhoOf(data.settings);
+  fonioRules = fonioRulesOf(data.settings);
   resetFonioVars();
   renderFonio();
   loadFonioCalls();
@@ -1573,6 +1591,8 @@ function renderFonio() {
       `<button type="button" data-day="${n}" aria-pressed="${fonioDays.includes(n)}"${manage ? '' : ' disabled'}>${esc(t('fonio_day_' + n))}</button>`).join('');
     seg.onclick = e => { const b = e.target.closest('[data-day]'); if (b && manage) toggleFonioDay(Number(b.dataset.day)); };
   }
+  renderFonioWho();
+  renderFonioRules();
   card.querySelectorAll('input').forEach(el => { el.disabled = !manage; });
   updateFonioActive();
   updateFonioFollow();
@@ -1590,6 +1610,137 @@ function renderFonio() {
     ];
     facts.innerHTML = `<table class="table compact"><tbody>${rows.map(([k, v]) => `<tr><td class="strong">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>`;
   }
+}
+
+// ── fonio: who gets the call (FONIO_CHANGES Parts 37 and 38) ──
+// Two lists, pipelines and lead webhooks, each "All" (null: also what is added later) or "Only these" (the ids that
+// are switched on). The choices come from the lead webhooks' own data (GET /integrations/settings: intgData,
+// intgWebhooks), which arrives after the fonio settings, so reloadIntgSettings renders this section again.
+function fonioWhoOf(settings) {
+  const list = v => (Array.isArray(v) ? v.map(Number) : null);
+  return { only_pipelines: list(settings?.only_pipelines), only_webhooks: list(settings?.only_webhooks) };
+}
+// What can be switched on in a list: { id, name, note, warn }. A lead webhook says where its leads land, and why it
+// is not called although it is on: it makes no deal, or its pipeline is switched off in the list above.
+function fonioWhoChoices(key, who, pipelineList, webhookList) {
+  if (key === 'only_pipelines') return (pipelineList || []).map(p => ({ id: p.id, name: p.name, note: '', warn: false }));
+  return (webhookList || []).map(w => {
+    const pipeline = (pipelineList || []).find(p => p.id === w.pipeline_id);
+    if (!w.create_deal || !pipeline) return { id: w.id, name: w.name, note: t('fonio_who_no_deal'), warn: true };
+    const off = Array.isArray(who.only_pipelines) && !who.only_pipelines.includes(pipeline.id);
+    return { id: w.id, name: w.name, note: tf(off ? 'fonio_who_pipeline_off' : 'fonio_who_into', { pipeline: pipeline.name }), warn: off };
+  });
+}
+function fonioWhoHtml(key, who, choices, manage) {
+  const only = Array.isArray(who[key]), dis = manage ? '' : ' disabled';
+  const seg = `<div class="seg"><button type="button" data-who-mode="all" aria-pressed="${!only}"${dis}>${esc(t('fonio_who_all'))}</button><button type="button" data-who-mode="only" aria-pressed="${only}"${dis}>${esc(t('fonio_who_only'))}</button></div>`;
+  if (!only) return `${seg}<p class="help">${esc(t(FONIO_WHO[key].all))}</p>`;
+  const rows = choices.map(c => `<label class="switch-row"><input type="checkbox" class="switch" data-who-id="${Number(c.id)}"${who[key].includes(c.id) ? ' checked' : ''}${dis}> <span>${esc(c.name)}${c.note ? ` <span class="fonio-who-note${c.warn ? ' warn' : ''}">${esc(c.note)}</span>` : ''}</span></label>`).join('');
+  return `${seg}<div class="fonio-who-list">${rows || `<p class="help">${esc(t(FONIO_WHO[key].none))}</p>`}</div><p class="help">${esc(t('fonio_who_only_hint'))}</p>`;
+}
+function renderFonioWho() {
+  const manage = !!fonioData?.can_manage;
+  for (const key of Object.keys(FONIO_WHO)) {
+    const el = document.getElementById(FONIO_WHO[key].el); if (!el) continue;
+    el.innerHTML = fonioWhoHtml(key, fonioWho, fonioWhoChoices(key, fonioWho, intgData?.pipelines, intgWebhooks), manage);
+    el.onclick  = e => { const b = e.target.closest('[data-who-mode]'); if (b && manage) setFonioWhoMode(key, b.dataset.whoMode); };
+    el.onchange = e => { const c = e.target.closest('[data-who-id]'); if (c && manage) toggleFonioWho(key, Number(c.dataset.whoId), c.checked); };
+  }
+}
+// "Only these" starts with everything there is switched on, so the change of mode alone changes no call.
+function setFonioWhoMode(key, mode) {
+  if (mode === 'all') fonioWho[key] = null;
+  else if (!Array.isArray(fonioWho[key])) fonioWho[key] = fonioWhoChoices(key, fonioWho, intgData?.pipelines, intgWebhooks).map(c => c.id);
+  renderFonioWho();
+}
+function toggleFonioWho(key, id, on) {
+  const ids = (fonioWho[key] || []).filter(x => x !== id);
+  fonioWho[key] = on ? [...ids, id] : ids;
+  renderFonioWho();   // a lead webhook's note depends on the pipelines that are on
+}
+// The two lists for the PUT body: null, or the ids that are on AND still exist (one deleted since is dropped here).
+// undefined while the choices have not arrived: the server then keeps what is saved.
+function fonioWhoBody(who, pipelineList, webhookList) {
+  if (!Array.isArray(pipelineList) || !Array.isArray(webhookList)) return undefined;
+  const live = (ids, rows) => (Array.isArray(ids) ? ids.filter(id => rows.some(r => r.id === id)) : null);
+  return { only_pipelines: live(who.only_pipelines, pipelineList), only_webhooks: live(who.only_webhooks, webhookList) };
+}
+
+// ── fonio: the deal after the call (FONIO_CHANGES Parts 39 and 40) ──
+// A table per pipeline: what came out of the call → the stage the deal goes to and its urgency. The pipelines and
+// their stages come with the lead webhooks' data (intgData), so reloadIntgSettings renders this section again.
+function fonioRulesOf(settings) {
+  const out = {}, saved = settings?.stage_rules;
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return out;
+  for (const [pid, lines] of Object.entries(saved)) {
+    if (!lines || typeof lines !== 'object') continue;
+    for (const ev of FONIO_EVENTS) {
+      const l = lines[ev]; if (!l || typeof l !== 'object') continue;
+      const stage = Number.isInteger(l.stage_id) ? l.stage_id : null, urgency = Number.isInteger(l.urgency) ? l.urgency : null;
+      if (stage === null && urgency === null) continue;
+      (out[pid] = out[pid] || {})[ev] = { stage_id: stage, urgency };
+    }
+  }
+  return out;
+}
+// A pipeline's stages: the stage list names its pipeline (GET /integrations/settings), names are unique per workspace.
+function fonioRulesStages(pipelineId, pipelineList, stageList) {
+  const p = (pipelineList || []).find(x => x.id === Number(pipelineId));
+  return p ? (stageList || []).filter(s => s.pipeline_name === p.name) : [];
+}
+function fonioRulesHtml(pipelineId, rules, stages, manage) {
+  const lines = rules[pipelineId] || {}, dis = manage ? '' : ' disabled';
+  const opt = (value, label, cur) => `<option value="${esc(value)}"${String(cur ?? '') === String(value) ? ' selected' : ''}>${esc(label)}</option>`;
+  const rows = FONIO_EVENTS.map(ev => {
+    const l = lines[ev] || {}, name = t('fonio_ev_' + ev);
+    const gone = l.stage_id != null && !stages.some(s => s.id === l.stage_id);   // the saved stage was deleted since
+    const stage = `<select class="form-control" data-rule-event="${ev}" data-rule-field="stage_id" aria-label="${esc(`${name}: ${t('fonio_rules_col_stage')}`)}"${dis}>${opt('', t('fonio_rules_keep'), gone ? '' : l.stage_id)}${stages.map(s => opt(s.id, s.name, gone ? '' : l.stage_id)).join('')}</select>`;
+    const urgency = `<select class="form-control" data-rule-event="${ev}" data-rule-field="urgency" aria-label="${esc(`${name}: ${t('fonio_rules_col_urgency')}`)}"${dis}>${opt('', t('fonio_rules_keep'), l.urgency)}${[0, 1, 2, 3, 4].map(n => opt(n, t('urg_' + n), l.urgency)).join('')}</select>`;
+    const what = ev === 'not_reached' ? `<span class="help">${esc(t('fonio_ev_not_reached_hint'))}</span>` : `<code>${ev}</code>`;
+    return `<tr><td><strong>${esc(name)}</strong> ${what}</td><td>${stage}</td><td>${urgency}</td></tr>`;
+  }).join('');
+  return `<table class="table compact fonio-rules-table"><thead><tr><th>${esc(t('fonio_rules_col_event'))}</th><th>${esc(t('fonio_rules_col_stage'))}</th><th>${esc(t('fonio_rules_col_urgency'))}</th></tr></thead><tbody>${rows}</tbody></table>${stages.length ? '' : `<p class="help">${esc(t('fonio_rules_no_stages'))}</p>`}`;
+}
+function renderFonioRules() {
+  const sel = document.getElementById('fonio-rules-pipeline'), box = document.getElementById('fonio-rules-table');
+  if (!sel || !box) return;
+  const manage = !!fonioData?.can_manage, list = intgData?.pipelines || [];
+  if (!list.some(p => p.id === fonioRulesPipeline)) fonioRulesPipeline = (list.find(p => fonioRules[p.id]) || list[0] || {}).id ?? null;   // start on a pipeline that has lines
+  // a pipeline that has lines shows how many, so a table set up earlier is found again
+  sel.innerHTML = list.map(p => { const n = Object.keys(fonioRules[p.id] || {}).length; return `<option value="${Number(p.id)}"${p.id === fonioRulesPipeline ? ' selected' : ''}>${esc(p.name)}${n ? ` (${n})` : ''}</option>`; }).join('');
+  sel.disabled = !list.length;
+  if (fonioRulesPipeline === null) { box.innerHTML = `<p class="help">${esc(t('fonio_rules_none'))}</p>`; return; }
+  box.innerHTML = fonioRulesHtml(fonioRulesPipeline, fonioRules, fonioRulesStages(fonioRulesPipeline, list, intgData?.stages), manage);
+  box.onchange = e => { const el = e.target.closest('[data-rule-event]'); if (el && manage) setFonioRule(el.dataset.ruleEvent, el.dataset.ruleField, el.value); };
+}
+function setFonioRulesPipeline(id) { fonioRulesPipeline = Number(id) || null; renderFonioRules(); }
+// One select changed: '' is "leave as it is". A line that leaves both is dropped; nothing is re-rendered but the
+// pipeline list's count, so the select keeps the focus.
+function setFonioRule(event, field, value) {
+  if (fonioRulesPipeline === null || !FONIO_EVENTS.includes(event) || !['stage_id', 'urgency'].includes(field)) return;
+  const lines = fonioRules[fonioRulesPipeline] = fonioRules[fonioRulesPipeline] || {};
+  const line = { stage_id: null, urgency: null, ...(lines[event] || {}), [field]: value === '' ? null : Number(value) };
+  if (line.stage_id === null && line.urgency === null) delete lines[event]; else lines[event] = line;
+  if (!Object.keys(lines).length) delete fonioRules[fonioRulesPipeline];
+  const o = document.querySelector(`#fonio-rules-pipeline option[value="${Number(fonioRulesPipeline)}"]`), p = (intgData?.pipelines || []).find(x => x.id === fonioRulesPipeline);
+  if (o && p) { const n = Object.keys(fonioRules[fonioRulesPipeline] || {}).length; o.textContent = p.name + (n ? ` (${n})` : ''); }
+}
+// The table for the PUT body: only pipelines that still exist, a stage only when its pipeline still has it (a deleted
+// one becomes "leave as it is"), no line that leaves both. undefined while the pipelines and stages have not
+// arrived: the server then keeps what is saved.
+function fonioRulesBody(rules, pipelineList, stageList) {
+  if (!Array.isArray(pipelineList) || !Array.isArray(stageList)) return undefined;
+  const out = {};
+  for (const p of pipelineList) {
+    const stages = fonioRulesStages(p.id, pipelineList, stageList);
+    for (const ev of FONIO_EVENTS) {
+      const l = (rules[p.id] || {})[ev]; if (!l) continue;
+      const stage = l.stage_id != null && stages.some(s => s.id === l.stage_id) ? l.stage_id : null, urgency = l.urgency ?? null;
+      if (stage === null && urgency === null) continue;
+      (out[p.id] = out[p.id] || {})[ev] = { stage_id: stage, urgency };
+    }
+  }
+  return out;
 }
 
 // ── fonio: the workspace's own variables for the assistant's prompt (FONIO_CHANGES Parts 13 and 14) ──
@@ -1767,6 +1918,8 @@ async function saveFonioVars(btn) {
 // in fonio (it asks for a description): the name the person gave in the call, for the call log (Part 15).
 // callback_date and callback_time are two more of the user's own: when the person asked to be called back (Part 35);
 // their descriptions and the prompt's sentence are on the card to copy (index.html, "A callback asked for in the call").
+// lead_status is one more of the user's own: what came out of the conversation, which moves the deal (Parts 39, 40);
+// its description and sentence are on the card too ("What came out of the conversation").
 const FONIO_RESULT_BODY = JSON.stringify({
   crm_call_id: '{{crm_call_id}}',
   conversation_id: '{{conversationId}}',
@@ -1782,6 +1935,7 @@ const FONIO_RESULT_BODY = JSON.stringify({
   meeting_email: '{{meeting_email}}',
   callback_date: '{{callback_date}}',
   callback_time: '{{callback_time}}',
+  lead_status: '{{lead_status}}',
   duration: '<Duration>',
   summary: '<Summary>',
   transcript: '<Plain transcript>',
@@ -1869,6 +2023,10 @@ function readFonioForm(form) {
       // the callback switch (Part 36) is sent only when the page has the box: without it the server keeps what is saved
       ...(form.callbackOn === undefined ? {} : { callback: !!form.callbackOn }),
     },
+    // who gets the call (Part 38): sent only when the page has the lists and their choices have arrived
+    ...(form.who ? { only_pipelines: form.who.only_pipelines, only_webhooks: form.who.only_webhooks } : {}),
+    // the deal after the call (Part 40): the whole table, sent only when the page has it and its choices have arrived
+    ...(form.rules ? { stage_rules: form.rules } : {}),
   };
   const key = form.key.trim();
   if (key) body.api_key = key;
@@ -1887,6 +2045,9 @@ function fonioErrorText(res) {
     hours_days:   t('fonio_err_hours_days'),
     hours:        t('fonio_err_hours'),
     follow_up:    t('fonio_err_follow_up'),
+    only_pipelines: t('fonio_err_only_pipelines'),
+    only_webhooks:  t('fonio_err_only_webhooks'),
+    stage_rules:  t('fonio_err_stage_rules'),
     variables:    t('fonio_err_variables'),
     key:          t('fonio_err_key'),
     refused:      t('fonio_err_refused'),
@@ -1920,6 +2081,8 @@ async function saveFonio(btn) {
     followOn: c('fonio-follow-on'), followNoAnswer: v('fonio-follow-no-answer'), followVoicemail: v('fonio-follow-voicemail'),
     followBusy: v('fonio-follow-busy'), followAttempts: v('fonio-follow-attempts'),
     callbackOn: document.getElementById('fonio-callback-on') ? c('fonio-callback-on') : undefined,
+    who: document.getElementById('fonio-who') ? fonioWhoBody(fonioWho, intgData?.pipelines, intgData ? intgWebhooks : null) : undefined,
+    rules: document.getElementById('fonio-rules') ? fonioRulesBody(fonioRules, intgData?.pipelines, intgData?.stages) : undefined,
   });
   showFonioDetail('');
   if (btn) { btn.disabled = true; btn.textContent = body.api_key ? t('fonio_checking') : t('fonio_btn_save'); }
@@ -1933,6 +2096,8 @@ async function saveFonio(btn) {
     }
     fonioData = res;
     fonioDays = [...(res.settings?.hours_days || [])];
+    fonioWho = fonioWhoOf(res.settings);
+    fonioRules = fonioRulesOf(res.settings);
     renderFonio();
     showFonioMsg(body.api_key ? t('fonio_saved_key_ok') : t('fonio_saved_ok'), true);
     loadFonioCalls();   // switching it off cancels the waiting calls
@@ -1948,6 +2113,8 @@ async function removeFonio() {
   if (!res || res.error) { showFonioMsg(t('fonio_err_generic'), false); return; }
   fonioData = res;
   fonioDays = [...(res.settings?.hours_days || [])];
+  fonioWho = fonioWhoOf(res.settings);
+  fonioRules = fonioRulesOf(res.settings);
   showFonioDetail('');
   resetFonioVars();
   renderFonio();
