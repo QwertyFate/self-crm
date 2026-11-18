@@ -252,6 +252,7 @@ app.use('/api/task-projects', require('./routes/task-projects'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/chat',          require('./routes/chat'));
 app.use('/api/analytics',     require('./routes/analytics'));
+app.use('/api/note-templates', require('./routes/note-templates'));   // texts put into a note with one click (public/js/note-templates.js)
 app.use('/api/break-scores', breakScoresLimiter);
 app.use('/api/break-scores', require('./routes/break-scores'));   // the break's team board (public/js/break-game.js)
 app.use('/api/tasks',         require('./routes/task-attachments'));

@@ -258,6 +258,15 @@ function dvBeforeUnload(e) {
   e.preventDefault(); e.returnValue = '';
 }
 window.addEventListener('beforeunload', dvBeforeUnload);
+// Two more places hold a new note before it is logged (NOTE_EDITOR_CHANGES Part 3): the "Log activity" window of the
+// Calendar (modals.js; it asks by itself before it is closed by hand) and the box on the Activities page, whose text
+// objects.js keeps in activityCompose across pages. Only closing the browser tab can lose them, so they count there.
+function dvDraftElsewhere() {
+  const modal = document.getElementById('activity-modal');
+  if (modal && !modal.classList.contains('hidden') && (document.getElementById('act-content')?.value || '').trim()) return true;
+  return typeof activityCompose !== 'undefined' && !!String(activityCompose?.text || '').trim();
+}
+dvGuards.add({ leave: async () => true, dirty: dvDraftElsewhere, flush() {} });
 // Documents on a contact (contracts, call recordings, other) — the types the server accepts.
 const DV_DOC_TYPES = ['vertrag', 'aufnahme', 'sonstiges'];
 function dvFileSize(n) {
@@ -811,7 +820,7 @@ async function openDealDetail(id, opts = {}) {
       <div class="tl-head"><b>${esc(t(ty.label))}</b>${a.cancelled_at ? `<span class="badge badge-danger" style="margin-right:6px">${esc(t('act_cancelled'))}</span>` : ''}${a.bound_deal_id && a.bound_deal_id !== S.d.id ? `<span class="badge badge-outline" title="${esc(t('dv_logged_other_deal'))}" style="margin-right:6px">${esc(a.deal_title || t('dv_other_deal'))}</span>` : ''}${a.logged_by_name ? `<span class="muted">${esc(tf('dv_by_name', { name: a.logged_by_name }))}</span>` : ''}<span class="dd-tl-time muted" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
         <span class="dd-tl-actions">${dvMeetingButtons(a)}<button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
       ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="dd-act-edit" data-esc rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
-          <div class="row" style="justify-content:flex-end">${dvSaveStateHtml('dd-act-state', S.editSave)}<button class="btn btn-secondary btn-sm" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" data-act="act-save" data-id="${a.id}">${esc(t('btn_save'))}</button></div></div>`
+          <div class="row-between">${ntplButtonHtml('dd-act-edit')}<span class="row">${dvSaveStateHtml('dd-act-state', S.editSave)}<button class="btn btn-secondary btn-sm" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" data-act="act-save" data-id="${a.id}">${esc(t('btn_save'))}</button></span></div></div>`
         : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActPreviewHtml(a.content)}</div>${dvNoteMoreHtml(a)}${dvJoinRow(a)}`}</div></div>`;
   }
   function activityHtml() {
@@ -822,7 +831,7 @@ async function openDealDetail(id, opts = {}) {
         <div class="field"><label class="sr-only" for="dd-compose-text">${esc(tf('dv_compose_text_lbl', { type: t(ty.label) }))}</label>
           <textarea class="textarea" id="dd-compose-text" rows="3" placeholder="${esc(t(ty.ph))}" ${c ? '' : 'disabled'} ${S.textErr ? 'aria-invalid="true"' : ''}>${esc(S.text)}</textarea>
           <div class="error-text" id="dd-compose-err" role="alert">${esc(S.textErr)}</div></div>
-        <div class="row-between"><span class="help">${esc(c ? tf('dv_logged_as_on', { user: currentUser?.name || '', contact: c.name }) : tf('dv_logged_as', { user: currentUser?.name || '' }))} ${esc(t('dv_ctrl_enter'))}</span><button class="btn btn-primary btn-sm" type="submit" ${c ? '' : 'disabled'}>${esc(t(ty.verb))}</button></div></form>
+        <div class="row-between"><span class="help">${esc(c ? tf('dv_logged_as_on', { user: currentUser?.name || '', contact: c.name }) : tf('dv_logged_as', { user: currentUser?.name || '' }))} ${esc(t('dv_ctrl_enter'))}</span><span class="row">${ntplButtonHtml('dd-compose-text', !c)}<button class="btn btn-primary btn-sm" type="submit" ${c ? '' : 'disabled'}>${esc(t(ty.verb))}</button></span></div></form>
       <div class="dd-bar"><button class="chip ${S.filter ? 'on' : ''}" data-act="tlfilter" aria-haspopup="menu">${esc(t('chip_type'))}${S.filter ? ': ' + esc(t(dvTypeOf(S.filter).label)) : ''}${icon('chevron-down', 'ic-sm')}</button><button class="chip ${S.actsOnly ? 'on' : ''}" data-act="tlonly" type="button" aria-pressed="${S.actsOnly}" title="${esc(S.actsOnly ? t('dv_tlonly_on_title') : t('dv_tlonly_off_title'))}">${esc(S.actsOnly ? t('dv_show_all_notes') : t('dv_this_deal_only'))}</button>
         <span class="muted" style="font-size:var(--fs-sm)">${esc(S.filter ? tf('tk_n_of_total', { n: list.length, total: all.length }) : dvPlural(all.length, 'dv_one_entry', 'dv_n_entries'))}</span></div>
       ${list.length ? `<div class="timeline">${list.map(tlItem).join('')}</div>`
@@ -1138,7 +1147,7 @@ async function openContactDetail(id, opts = {}) {
     return `<div class="tl-item" data-aid="${a.id}"><span class="tl-ic ${a.type}">${icon(ty.icon)}</span><div class="dd-tl-main"><div class="tl-head"><b>${esc(t(ty.label))}</b>${a.cancelled_at ? `<span class="badge badge-danger" style="margin-left:6px">${esc(t('act_cancelled'))}</span>` : ''}${a.deal_title ? `<span class="badge badge-outline" title="${esc(t('dv_logged_on_deal'))}" style="margin-left:6px">${esc(a.deal_title)}</span>` : ''}<span class="muted" style="font-size:var(--fs-sm)">${a.logged_by_name ? esc(tf('dv_by_name', { name: a.logged_by_name })) : ''}</span><span class="muted" style="margin-left:auto;font-size:var(--fs-sm)" title="${esc(dvWhen(a.created_at))}">${esc(dvAgoHours(a.created_at))}</span>
       <span class="dd-tl-actions">${dvMeetingButtons(a)}<button class="iconbtn dd-ibtn" data-act="act-edit" data-id="${a.id}" aria-label="${esc(t('edit_entry'))}">${icon('pencil')}</button><button class="iconbtn dd-ibtn" data-act="act-del" data-id="${a.id}" aria-label="${esc(t('delete_entry'))}">${icon('trash')}</button></span></div>
       ${editing ? `<div class="dd-editor"><textarea class="textarea dv-grow" id="ct-aedit" data-esc rows="3" aria-label="${esc(t('edit_entry'))}">${esc(S.editText)}</textarea>
-          <div class="row-between"><span class="help">${esc(t('ctrl_enter_saves_esc_cancels'))}</span><span class="row">${dvSaveStateHtml('ct-astate', S.editSave)}<button class="btn btn-secondary btn-sm" type="button" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" type="button" data-act="act-save">${esc(t('btn_save'))}</button></span></div></div>`
+          <div class="row-between"><span class="row">${ntplButtonHtml('ct-aedit')}<span class="help">${esc(t('ctrl_enter_saves_esc_cancels'))}</span></span><span class="row">${dvSaveStateHtml('ct-astate', S.editSave)}<button class="btn btn-secondary btn-sm" type="button" data-act="act-cancel">${esc(t('btn_cancel'))}</button><button class="btn btn-primary btn-sm" type="button" data-act="act-save">${esc(t('btn_save'))}</button></span></div></div>`
         : `<div class="tl-text dd-pre" data-note="${a.id}" title="${esc(t('click_to_edit'))}">${dvActPreviewHtml(a.content)}</div>${dvNoteMoreHtml(a)}${dvJoinRow(a)}`}</div></div>`;
   };
   const taskRow = x => { const done = x.status === dvDoneKey(), pr = DV_PRIO[x.priority] || DV_PRIO.medium, late = taskIsOverdue(x, done);
@@ -1161,7 +1170,7 @@ async function openContactDetail(id, opts = {}) {
     return `<form class="ct-compose" id="ct-compose" novalidate aria-label="${esc(t('dv_log_activity'))}">
         <div class="seg" role="group" aria-label="${esc(t('dv_activity_type'))}">${DV_ACT_TYPES.map(x => `<button type="button" data-atype="${x.id}" aria-pressed="${d.type === x.id}">${icon(x.icon, 'ic-sm')}${esc(t(x.label))}</button>`).join('')}</div>
         <div class="field"><textarea class="textarea" id="ct-atext" aria-label="${esc(t('dv_activity_details'))}" placeholder="${esc(d.type === 'note' ? tf('dv_ph_note_about', { name: S.c.name.split(' ')[0] }) : t('dv_ph_discussed'))}" ${d.err ? 'aria-invalid="true"' : ''}>${esc(d.text)}</textarea><div class="error-text" id="ct-aerr" ${d.err ? '' : 'hidden'}>${esc(t('act_err_text'))}</div></div>
-        <div class="ct-compose-foot"><span class="help">${esc(t('dv_ctrl_enter'))}</span><button class="btn btn-primary btn-sm" type="submit">${esc(t(dvTypeOf(d.type).verb))}</button></div></form>
+        <div class="ct-compose-foot"><span class="help">${esc(t('dv_ctrl_enter'))}</span><span class="row">${ntplButtonHtml('ct-atext')}<button class="btn btn-primary btn-sm" type="submit">${esc(t(dvTypeOf(d.type).verb))}</button></span></div></form>
       <div class="ct-tl-head"><div class="section-title" style="margin:0">${esc(t('dv_activity_timeline'))}</div><select class="select select-sm" id="ct-afilter" aria-label="${esc(t('dv_filter_activity'))}">${[['all', t('dv_all_types')], ...DV_ACT_TYPES.map(x => [x.id, t('dv_filter_' + x.id)])].map(o => `<option value="${o[0]}" ${d.filter === o[0] ? 'selected' : ''}>${esc(o[1])}</option>`).join('')}</select></div>
       ${list.length ? `<div class="timeline">${list.map(actItem).join('')}</div>` : dvEmpty('activity', all.length ? t('dv_no_activity_type') : t('dv_no_activity_yet'), all.length ? t('dv_choose_type_above') : t('dv_log_to_start_contact'))}`;
   }

@@ -763,6 +763,25 @@ async function initDb() {
     )
   `);
 
+  // Note templates (NOTE_EDITOR_CHANGES Part 4, 2026-11-18; routes/note-templates.js): a name and a text per
+  // workspace, put into a note box with one click. Only the templates live here; a note written from one is a note
+  // like any other, in activities.content. Plain text as typed. A name exists once per workspace, whatever its
+  // capitals: name_key is the name in lower case as the route made it — in JavaScript, because the database's own
+  // LOWER() leaves Ä, Ö and Ü alone under a C locale.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS note_templates (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      name_key     TEXT NOT NULL,
+      content      TEXT NOT NULL,
+      created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS note_templates_name ON note_templates (workspace_id, name_key)`);
+
   // The Notetaker (routes/integrations.js, utils/notetaker.js): a meeting booked on Google Meet with
   // "Mit Notetaker aufzeichnen" ticked. One row per meeting: the request, then what was last sent to the
   // service (the link, the start with its offset) and what it answered (status, job id, HTTP status, error).

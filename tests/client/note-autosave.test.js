@@ -396,7 +396,8 @@ describe('both editors use it', () => {
   });
 
   test('the line sits left of Cancel and Save in both editors', () => {
-    assert.match(dv, /<div class="row" style="justify-content:flex-end">\$\{dvSaveStateHtml\('dd-act-state', S\.editSave\)\}<button class="btn btn-secondary btn-sm" data-act="act-cancel">/);
+    // since the templates (Part 5) the deal editor's row has the "Insert template" button on its left
+    assert.match(dv, /<div class="row-between">\$\{ntplButtonHtml\('dd-act-edit'\)\}<span class="row">\$\{dvSaveStateHtml\('dd-act-state', S\.editSave\)\}<button class="btn btn-secondary btn-sm" data-act="act-cancel">/);
     assert.match(dv, /<span class="row">\$\{dvSaveStateHtml\('ct-astate', S\.editSave\)\}<button class="btn btn-secondary btn-sm" type="button" data-act="act-cancel">/);
     assert.match(dv, /const noteState = s => \{ S\.editSave = s; dvSaveStateShow\(R\('#dd-act-state'\), s\); \};/);
   });

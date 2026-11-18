@@ -2106,11 +2106,11 @@
   </div>
 
   <!-- Activity Modal -->
-  <div id="activity-modal" class="modal-overlay hidden">
+  <div id="activity-modal" class="modal-overlay hidden" data-ask-close="closeActivityModal">
     <div class="modal">
       <div class="modal-head">
         <h2 class="modal-title" data-i18n="log_activity_title">Log Activity</h2>
-        <button class="iconbtn" onclick="closeModal('activity-modal')" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
+        <button class="iconbtn" onclick="closeActivityModal()" aria-label="Close" data-i18n-aria="btn_close"><svg class="ic" aria-hidden="true"><use href="#i-x"/></svg></button>
       </div>
       <form id="activity-form" onsubmit="saveActivity(event)">
         <div class="modal-body">
@@ -2129,10 +2129,11 @@
             <div class="field grow"><label class="label" for="act-time" data-i18n="lbl_time">Time</label><input type="time" id="act-time" /></div>
           </div>
           <p class="hint" style="margin:-4px 0 12px" data-i18n="html_act_time_hint">Leave the time empty for an all-day entry. A date puts it on the calendar.</p>
-          <div class="field"><label class="label" for="act-content"><span data-i18n="lbl_content">Content</span> <span class="req">*</span></label><textarea id="act-content" rows="8" required></textarea></div>
+          <!-- "Insert template" (note-templates.js): its list opens for any button with data-tpl and puts the text into the field named there -->
+          <div class="field"><div class="row-between"><label class="label" for="act-content"><span data-i18n="lbl_content">Content</span> <span class="req">*</span></label><button type="button" class="btn btn-ghost btn-sm ntpl-btn" data-tpl="act-content" aria-haspopup="menu"><svg class="ic" aria-hidden="true"><use href="#i-file-text"/></svg><span data-i18n="ntpl_insert">Insert template</span></button></div><textarea id="act-content" rows="8" required></textarea></div>
         </div>
         <div class="modal-foot">
-          <button type="button" class="btn btn-secondary" onclick="closeModal('activity-modal')" data-i18n="btn_cancel">Cancel</button>
+          <button type="button" class="btn btn-secondary" onclick="closeActivityModal()" data-i18n="btn_cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" data-i18n="btn_save">Save</button>
         </div>
       </form>
@@ -2539,6 +2540,7 @@
   <script src="js/settings.js"></script>
   <script src="js/mailbox.js"></script>
   <script src="js/modals.js"></script>
+  <script src="js/note-templates.js"></script>
   <script src="js/tasks.js"></script>
   <script src="js/notifications.js"></script>
   <script src="js/calendar.js"></script>

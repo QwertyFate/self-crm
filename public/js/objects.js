@@ -681,6 +681,8 @@ function onActivitiesSearch(value) {
 function clearActivitiesFilters() { const refetch = activitiesUI.deal != null; activitiesUI = { q: '', type: null, by: null, deal: null, period: 'all' }; if (refetch) loadActivities(); else renderActivities(); }
 
 /* ----- compose card ----- */
+// "Insert template" (note-templates.js, loaded after this file) sits beside the type buttons and puts a template's
+// text into #ac-text; the field's own oninput then keeps it as the draft, exactly as if it had been typed.
 function renderActivityCompose() {
   const el = document.getElementById('activities-compose');
   if (!el) return;
@@ -691,7 +693,7 @@ function renderActivityCompose() {
   const ae = document.activeElement, focusId = ae && ae.id && el.contains(ae) ? ae.id : null;
   const sel = focusId && typeof ae.selectionStart === 'number' ? [ae.selectionStart, ae.selectionEnd] : null;
   el.innerHTML = `<form class="card ac-compose" id="ac-form" novalidate aria-label="${esc(t('act_compose_aria'))}" onsubmit="submitActivityCompose(event)"><div class="card-body">
-    <div class="seg" role="group" aria-label="${esc(t('lbl_type'))}" style="align-self:flex-start">${ACT_TYPES.map(x => `<button type="button" data-ctype="${x}" aria-pressed="${C.type === x}" onclick="setActivityComposeType('${x}')">${icon(x, 'ic-sm')}${esc(t('act_' + x))}</button>`).join('')}</div>
+    <div class="row-between"><div class="seg" role="group" aria-label="${esc(t('lbl_type'))}">${ACT_TYPES.map(x => `<button type="button" data-ctype="${x}" aria-pressed="${C.type === x}" onclick="setActivityComposeType('${x}')">${icon(x, 'ic-sm')}${esc(t('act_' + x))}</button>`).join('')}</div>${typeof ntplButtonHtml === 'function' ? ntplButtonHtml('ac-text') : ''}</div>
     <div class="field"><label class="sr-only" for="ac-text">${esc(t('lbl_content'))}</label><textarea class="textarea" id="ac-text" rows="2" placeholder="${esc(t('act_ph_' + C.type))}" ${C.err && !C.text.trim() ? 'aria-invalid="true"' : ''} oninput="onActivityComposeInput(this)" onkeydown="onActivityComposeKey(event)">${esc(C.text)}</textarea></div>
     <div class="ac-compose-row">
       <div class="field"><label class="label" for="ac-deal">${esc(t('lbl_deal'))}</label><select class="select" id="ac-deal" onchange="onActivityComposeDeal(this)"><option value="">${esc(t('opt_no_deal'))}</option>${deals.map(d => `<option value="${d.id}" ${String(d.id) === C.deal ? 'selected' : ''}>${esc(d.title)}</option>`).join('')}</select></div>

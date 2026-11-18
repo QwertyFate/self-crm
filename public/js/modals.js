@@ -21,7 +21,7 @@
 
    FUNCTION MAP  openContactModal, saveContact, deleteContact,
                  renderFieldInput, renderDealFieldInput, closeSidePanel,
-                 openActivityModal, saveActivity */
+                 openActivityModal, closeActivityModal, saveActivity */
 
 async function openContactModal(id) {
   if (typeof fonioLogForget === 'function') fonioLogForget();   // fonio-log.js: only its own opening is for a call
@@ -152,6 +152,15 @@ async function openActivityModal({ date = '', time = '' } = {}) {
   document.getElementById('act-time').value = time;
   document.getElementById('activity-modal').classList.remove('hidden');
   document.getElementById('act-content')?.focus();
+}
+
+// Closing the window by hand — the X, Cancel, a click beside it — asks first when a text is typed and not saved
+// (NOTE_EDITOR_CHANGES Part 3); saveActivity closes it itself, without a question. The form is emptied on every
+// opening, so what is typed here exists nowhere else.
+async function closeActivityModal() {
+  const field = document.getElementById('act-content');
+  if (field && field.value.trim() && typeof dvConfirmUnsaved === 'function' && !(await dvConfirmUnsaved())) { field.focus(); return; }
+  closeModal('activity-modal');
 }
 
 function onActivityDealChange() {

@@ -382,3 +382,82 @@ describe('dvNoteSaver: flush (the tab is going)', () => {
     e.saver.input('Hello world'); assert.equal(e.saver.dirty, true);
   });
 });
+
+// ── Part 3: the two other places where a new note is typed ───────────────────
+// Checking the request again showed two places Parts 1 and 2 had missed: the "Log activity" window of the Calendar,
+// which was closed without a word by its X, by Cancel and by a click beside it, and — for the browser tab only —
+// the box on the Activities page.
+describe('the "Log activity" window of the Calendar asks before it loses a typed text (Part 3)', () => {
+  // the real closeActivityModal with a page that has (or lacks) a typed text
+  function win({ text = '', answer = true, confirmThere = true } = {}) {
+    const seen = { asked: 0, closed: [], focused: 0 };
+    const F = loadFns('public/js/modals.js', ['closeActivityModal'], {
+      extra: `const __seen = { asked: 0, closed: [], focused: 0 }; let __text = '', __answer = true;
+        const document = { getElementById: id => (id === 'act-content' ? { get value() { return __text; }, focus() { __seen.focused++; } } : null) };
+        function closeModal(id) { __seen.closed.push(id); }
+        ${confirmThere ? 'async function dvConfirmUnsaved() { __seen.asked++; return __answer; }' : ''}
+        function __setup(text, answer) { __text = text; __answer = answer; }
+        function __state() { return __seen; }`,
+      expose: ['__setup', '__state'] });
+    F.__setup(text, answer);
+    return { close: F.closeActivityModal, state: F.__state, seen };
+  }
+
+  test('nothing typed: it closes at once, without a question', async () => {
+    const w = win({ text: '   ' });
+    await w.close();
+    assert.deepEqual(w.state(), { asked: 0, closed: ['activity-modal'], focused: 0 });
+  });
+  test('a text is typed: the question; "Close without saving" closes', async () => {
+    const w = win({ text: 'Call back on Friday', answer: true });
+    await w.close();
+    assert.deepEqual(w.state(), { asked: 1, closed: ['activity-modal'], focused: 0 });
+  });
+  test('a text is typed, "Keep editing": the window stays and the text has the focus again', async () => {
+    const w = win({ text: 'Call back on Friday', answer: false });
+    await w.close();
+    assert.deepEqual(w.state(), { asked: 1, closed: [], focused: 1 });
+  });
+  test('the X, Cancel and a click beside the window all go through it; saving closes without a question', () => {
+    const start = html.indexOf('<div id="activity-modal"'), win = html.slice(start, html.indexOf('</form>', start));
+    assert.match(html, /<div id="activity-modal" class="modal-overlay hidden" data-ask-close="closeActivityModal">/);
+    assert.match(win, /<button class="iconbtn" onclick="closeActivityModal\(\)" aria-label="Close" data-i18n-aria="btn_close">/);
+    assert.match(win, /<button type="button" class="btn btn-secondary" onclick="closeActivityModal\(\)" data-i18n="btn_cancel">/);
+    assert.doesNotMatch(win, /closeModal\('activity-modal'\)/, 'no way past the question in the markup');
+    assert.match(sliceFn(modals, 'saveActivity', 'modals.js'), /closeModal\('activity-modal'\);/, 'a saved entry closes the window itself');
+  });
+  test('a click beside a window calls the closer the window names; every other window closes as before', () => {
+    const src = core.slice(core.indexOf("document.querySelectorAll('.modal-overlay').forEach(overlay => {"));
+    const handler = new Function('overlay', 'window', `${cut(src, "overlay.addEventListener('click', e => {").replace("overlay.addEventListener('click', e =>", 'return (e =>')})`);
+    const mk = (askClose, fns = {}) => { const o = { dataset: askClose ? { askClose } : {}, hidden: false, classList: { add: c => { if (c === 'hidden') o.hidden = true; } } }; return { o, on: handler(o, fns) }; };
+    let asked = 0;
+    const guarded = mk('closeActivityModal', { closeActivityModal: () => { asked++; } });
+    guarded.on({ target: guarded.o }); assert.deepEqual([asked, guarded.o.hidden], [1, false], 'the closer decides');
+    guarded.on({ target: {} });        assert.equal(asked, 1, 'a click inside the window is not a click beside it');
+    const plain = mk(null); plain.on({ target: plain.o }); assert.equal(plain.o.hidden, true);
+    const stale = mk('goneFunction'); stale.on({ target: stale.o }); assert.equal(stale.o.hidden, true, 'a closer that does not exist never traps the window open');
+  });
+});
+
+describe('closing the browser tab also counts a new note typed elsewhere (Part 3)', () => {
+  function page({ modalOpen = false, modalText = '', compose } = {}) {
+    return loadFns('public/js/detail-views.js', ['dvDraftElsewhere'], {
+      extra: `const document = { getElementById: id => (id === 'activity-modal' ? { classList: { contains: c => c === 'hidden' && !${modalOpen} } } : id === 'act-content' ? { value: ${JSON.stringify(modalText)} } : null) };
+        ${compose === undefined ? '' : `let activityCompose = ${JSON.stringify(compose)};`}`,
+    }).dvDraftElsewhere();
+  }
+  test('the "Log activity" window: only while it is open and has a text', () => {
+    assert.equal(page({ modalOpen: true, modalText: 'x' }), true);
+    assert.equal(page({ modalOpen: true, modalText: '  ' }), false);
+    assert.equal(page({ modalOpen: false, modalText: 'left from before' }), false, 'a closed window holds nothing');
+  });
+  test('the box on the Activities page: while it has a text, whichever page is open', () => {
+    assert.equal(page({ compose: { text: 'Draft' } }), true);
+    assert.equal(page({ compose: { text: ' ' } }), false);
+    assert.equal(page({}), false, 'a page without that box is not an error');
+    assert.match(read('public/js/objects.js'), /^let activityCompose = \{ type: 'note', text: '', deal: '', contact: '', err: '' \};$/m);
+  });
+  test('it is one of the guards the tab asks', () => {
+    assert.match(dv, /^dvGuards\.add\(\{ leave: async \(\) => true, dirty: dvDraftElsewhere, flush\(\) \{\} \}\);$/m);
+  });
+});
