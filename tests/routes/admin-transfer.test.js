@@ -11,7 +11,8 @@ const assert = require('node:assert/strict');
 const zlib = require('zlib');
 const { loadRoute, serve } = require('../helpers/load-route');
 const { readTar, collect } = require('../../utils/tar');
-const { TABLES } = require('../../utils/workspace-export');
+const { TABLES, LEFT_OUT, VERSION } = require('../../utils/workspace-export');
+const { read } = require('../helpers/client-fn');
 
 const WS_ID = 7;
 
@@ -125,7 +126,8 @@ describe('the bundle', () => {
       assert.deepEqual(entries.map(e => e.name), ['workspace.json']);
       const b = JSON.parse(entries[0].data);
       assert.equal(b.format, 'upgrads-workspace');
-      assert.equal(b.version, 1);
+      assert.equal(b.version, 2);
+      assert.equal(VERSION, 2, 'version 2: version 1 plus the note templates, the workflows and fonio\'s calls');
       assert.equal(b.workspace_id, WS_ID);
       assert.equal(b.workspace_name, 'Müller & Söhne');
       assert.ok(!Number.isNaN(Date.parse(b.exported_at)));
@@ -182,6 +184,66 @@ describe('what it reads, and how', () => {
                      'invite_codes', 'password_resets', 'stages']) {
       assert.doesNotMatch(sql, new RegExp(`(FROM|JOIN)\\s+${t}\\b`), `${t} must not be exported`);
     }
+  });
+
+  // Part 2 (2026-11-20): what was added to the CRM after the export was written — the workflows above all.
+  test('the workflows travel whole: the workflows, their boxes, the deals in them and their record — with the note templates and fonio\'s calls', async () => {
+    const pool = await exportLog();
+    const read = pool.log.slice(1, -1).map(e => /FROM (\w+) t/.exec(e.sql)[1]);
+    for (const t of ['note_templates', 'journey_flows', 'journey_nodes', 'journey_runs', 'journey_log', 'fonio_calls', 'fonio_other_calls']) {
+      assert.equal(read.filter(x => x === t).length, 1, `${t} is read once`);
+      assert.match(pool.log.find(e => new RegExp(`FROM ${t} t`).test(e.sql)).sql, new RegExp(`^SELECT to_jsonb\\(t\\) AS r FROM ${t} t WHERE t\\.workspace_id = \\$1 ORDER BY t\\.id$`), `${t}: every row of this workspace, whole`);
+    }
+    // in an order an importer can insert them in: what a row points to stands above it
+    const at = t => read.indexOf(t);
+    for (const [above, below] of [['users', 'note_templates'], ['journey_flows', 'journey_nodes'], ['journey_nodes', 'journey_runs'], ['deals', 'journey_runs'], ['journey_runs', 'journey_log'], ['users', 'journey_log'],
+      ['activities', 'fonio_calls'], ['deals', 'fonio_calls'], ['contacts', 'fonio_other_calls'], ['activities', 'fonio_other_calls']]) {
+      assert.ok(at(above) >= 0 && at(above) < at(below), `${above} before ${below}`);
+    }
+    assert.deepEqual(read.slice(0, 22), ['workspaces', 'users', 'user_workspaces', 'custom_fields', 'deal_fields', 'task_fields', 'object_fields', 'pipelines', 'pipeline_stages', 'contacts', 'deals', 'objects', 'object_contacts',
+      'deal_objects', 'activities', 'activity_comments', 'task_projects', 'task_project_statuses', 'task_lists', 'tasks', 'task_attachments', 'contact_documents'], 'what version 1 held, in its order: a version 1 bundle is a version 2 bundle without the rest');
+  });
+
+  test('the connections of the newer integrations stay here too, and so does what a workflow rebuilds by itself', async () => {
+    const pool = await exportLog();
+    const sql = pool.log.map(e => e.sql).join('\n');
+    for (const t of ['workspace_fonio', 'workspace_calendly', 'workspace_mail', 'email_accounts', 'journey_watch', 'master_access_log', 'platform_invites', 'platform_settings']) {
+      assert.doesNotMatch(sql, new RegExp(`(FROM|JOIN)\\s+${t}\\b`), `${t} must not be exported`);
+    }
+  });
+
+  // The export fell behind once: the workflows were built and nobody thought of it. This test is what tells next time.
+  test('every table the schema creates is either in the bundle or named as left out, with why — none is in neither, none in both', () => {
+    const schema = [...new Set([...read('db.js').matchAll(/CREATE TABLE IF NOT EXISTS ([a-z_]+) \(/g)].map(m => m[1]))];
+    const inBundle = TABLES.map(([name]) => name), leftOut = Object.keys(LEFT_OUT);
+    assert.ok(schema.length >= 54, `the schema's tables (${schema.length})`);
+    assert.deepEqual(schema.filter(t => !inBundle.includes(t) && !leftOut.includes(t)), [], 'a table in neither list: decide whether a copy of a workspace needs it, and put it in TABLES or in LEFT_OUT');
+    assert.deepEqual(inBundle.filter(t => leftOut.includes(t)), [], 'a table cannot be both');
+    assert.deepEqual([...inBundle, ...leftOut].filter(t => !schema.includes(t)), [], 'a name that is no table of the schema');
+    assert.equal(new Set(inBundle).size, inBundle.length, 'no table is read twice');
+    assert.deepEqual([...new Set(Object.values(LEFT_OUT))].sort(), ['access', 'chatter', 'dead', 'history', 'platform', 'rebuilt', 'secret'], 'each with one of the reasons the header explains');
+    // whatever holds a key, a token or a sign-in of this install stays here: no table of the bundle has such a column,
+    // whether the table was created with it or got it later (users.password_hash is the one thing meant to travel)
+    const db = read('db.js');
+    const columns = t => {
+      const at = db.indexOf(`CREATE TABLE IF NOT EXISTS ${t} (`), made = db.slice(at, db.indexOf(')\n', at)).split('\n').slice(1).map(l => l.trim().split(/\s+/)[0]);
+      const added = [...db.matchAll(new RegExp(`ALTER TABLE ${t}\\s+ADD COLUMN IF NOT EXISTS ([a-z_0-9]+)`, 'g'))].map(m => m[1]);
+      return [...made, ...added];
+    };
+    const secretish = c => /sealed|token|secret|api_key|webhook_key|key_hash/.test(c);
+    assert.ok(columns('deals').includes('origin') && columns('contacts').includes('journey_opt_out'), 'columns added later are seen');
+    for (const t of inBundle) assert.deepEqual(columns(t).filter(secretish), [], `${t} is in the bundle and must hold no key, token or secret`);
+    const holders = schema.filter(t => columns(t).some(secretish));
+    assert.ok(holders.length >= 10 && ['workspace_fonio', 'workspace_mail', 'workspace_calendly', 'workspace_webhook'].every(t => holders.includes(t)), 'the check finds the tables that do hold them');
+    for (const t of holders) assert.ok(['secret', 'access', 'history'].includes(LEFT_OUT[t]), `${t} holds a key or token and is left out`);
+    for (const t of Object.keys(LEFT_OUT).filter(k => LEFT_OUT[k] === 'secret')) assert.ok(!inBundle.includes(t));
+  });
+  // CUSTOMER_JOURNEY_CHANGES Part 17: the emails counted against the sending address's limits are seven days of THIS
+  // install's own sending — history, not something a copy of a workspace needs, and nothing that builds itself again.
+  test('the counted emails of the sending address stay behind, as history; the reason an email waits travels with its row', () => {
+    assert.equal(LEFT_OUT.journey_sends, 'history');
+    assert.ok(!TABLES.some(([name]) => name === 'journey_sends'));
+    assert.ok(TABLES.some(([name]) => name === 'journey_runs') && /ALTER TABLE journey_runs ADD COLUMN IF NOT EXISTS held TEXT/.test(read('db.js')), 'journey_runs.held is a plain word (limit_day, paused …): no key, no address');
   });
 });
 

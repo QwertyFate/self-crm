@@ -1029,7 +1029,11 @@ async function openDealDetail(id, opts = {}) {
   function moreMenu(anchor) {
     ui.menu(anchor, [
       { label: t('dv_edit_deal'), icon: 'pencil', onSelect: () => openDealForm({ deal: S.d, onSave: () => reload() }) },
-      { label: t('dv_duplicate'), icon: 'copy', onSelect: duplicate }, { sep: true },
+      { label: t('dv_duplicate'), icon: 'copy', onSelect: duplicate },
+      // a deal a workflow did not take in by itself is put into one by hand (journey.js, CUSTOMER_JOURNEY_CHANGES Part 4)
+      ...(typeof journeyIncludeDeal === 'function' ? [{ label: t('jr_include'), icon: 'journey', onSelect: () => journeyIncludeDeal(S.d.id, S.d.title) }] : []),
+      // everything the workflows did with this deal (journey-history.js, CUSTOMER_JOURNEY_CHANGES Part 15)
+      ...(typeof openJourneyDealHistory === 'function' ? [{ label: t('jh_deal_menu'), icon: 'list', onSelect: () => openJourneyDealHistory(S.d.id, S.d.title) }] : []), { sep: true },
       { label: t('delete_deal'), icon: 'trash', danger: true, onSelect: del }], { align: 'right' });
   }
   function linkMenu(anchor, kind) {

@@ -89,7 +89,7 @@ describe('contacts.js: filter chips, bulk bar, pagination, select mode', () => {
     const rc = read('routes/contacts.js');
     for (const pat of ['stage_name', 'stage_color', 'LEFT JOIN stages', "patch('/:id/stage'"]) assert.equal(count(rc, pat), 0, 'routes/contacts.js still mentions ' + pat);
     assert.equal(count(rc, 'stage_id'), 1, 'the only stage_id left is the pipeline stage of a deal created during import');
-    assert.match(rc, /INSERT INTO deals \(workspace_id, contact_id, pipeline_id, stage_id, title\)/);
+    assert.match(rc, /INSERT INTO deals \(workspace_id, contact_id, pipeline_id, stage_id, title, origin\) VALUES \(\$1,\$2,\$3,\$4,\$5,'import'\)/);   // origin: how the deal was made (CUSTOMER_JOURNEY_CHANGES Part 9)
     assert.equal(count(read('routes/admin.js'), "key: 'stage_id'"), 0, 'the platform default contact columns drop Stage');
     assert.equal(count(html, 'id="stage-modal"'), 0, 'the stage modal markup is gone');
     assert.equal(count(html, 'id="contact-stages-list"'), 0, 'the Settings contact-stages card is gone');

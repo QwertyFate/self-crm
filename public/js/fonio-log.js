@@ -19,14 +19,22 @@
    contact. Opening the contact dialog anywhere else forgets the pending call
    (fonioLogForget), so an unrelated new contact never takes it.
 
-   TECHNICAL DETAILS (Part 18)  Owners and admins get three dots at the end
-   of a row, shown while the row is hovered or focused. They open what the CRM
-   keeps about that call: what it sent to fonio, what fonio answered, the Body
-   fonio sent afterwards, and the row itself (GET /log/:kind/:id).
+   THE THREE DOTS at the end of a row, shown while the row is hovered or
+   focused, open a small menu of what can be done with that call:
+     Call this contact   (Part 42) for everyone, on a call that has a contact
+                         and is not itself still to come. The server says who
+                         would be called and at which number (GET /calls/check),
+                         the person confirms, and fonio calls within a minute —
+                         also outside the calling hours, which the question
+                         says. A reason not to call is said instead of asking.
+     Technical details   (Part 18) for owners and admins: what the CRM sent to
+                         fonio, what fonio answered, the Body fonio sent
+                         afterwards, and the row itself (GET /log/:kind/:id).
+   A row that offers neither has no dots.
    ═══════════════════════════════════════════════════════════════════════════ */
 let fonioLogEntries = [];
 let fonioLogFilter  = 'all';
-let fonioLogManage  = false;  // owner or admin: may open a call's technical details
+let fonioLogManage  = false;  // owner or admin: may open a call's technical details and cancel a waiting call
 let fonioLogPending = null;   // the kept call the open contact dialog is for
 let fonioLogPicking = null;   // the kept call the picker is for
 let fonioLogContacts = [];    // the picker's own list: the Contacts page's list is left alone
@@ -98,8 +106,10 @@ function fonioLogRowHtml(e) {
     : dash;
 
   // what came of it: the summary of a kept call; for a call the CRM sent, whether fonio's result is in
-  // a call still to come (Part 24) has no result yet; one the contact asked for in a call says so (Part 36)
-  const state = e.planned ? t(e.trigger === 'callback' ? 'fcl_planned_callback' : 'fcl_planned_waiting') : e.by_crm ? t(!e.result ? 'fcl_no_result' : e.noted ? 'fcl_noted' : 'fcl_result_no_note')
+  // a call still to come (Part 24) has no result yet; one the contact asked for in a call says so (Part 36), and one
+  // a person started here says who (Part 42)
+  const coming = e.trigger === 'manual' ? (e.asked_by_name ? tf('fcl_planned_manual', { name: e.asked_by_name }) : t('fcl_planned_manual_none')) : t(e.trigger === 'callback' ? 'fcl_planned_callback' : 'fcl_planned_waiting');
+  const state = e.planned ? coming : e.by_crm ? t(!e.result ? 'fcl_no_result' : e.noted ? 'fcl_noted' : 'fcl_result_no_note')
     : e.summary ? '' : t(e.noted ? 'fcl_noted' : 'fcl_no_summary');
   const extras = [
     e.duration ? esc(tf('fcl_duration', { d: e.duration })) : '',
@@ -114,8 +124,8 @@ function fonioLogRowHtml(e) {
     ? `<button type="button" class="btn btn-primary btn-sm" onclick="fonioLogAddContact(${Number(e.id)})">${esc(t('fcl_btn_add'))}</button>
        <button type="button" class="btn btn-secondary btn-sm" onclick="fonioLogPickContact(${Number(e.id)})">${esc(t('fcl_btn_connect'))}</button>`
     : '';
-  const more = fonioLogManage
-    ? `<button type="button" class="iconbtn fcl-more-btn" title="${esc(t('fcl_tech_title'))}" aria-label="${esc(t('fcl_tech_title'))}" onclick="openFonioLogTech('${e.by_crm ? 'call' : 'other'}', ${Number(e.id)})">${icon('ellipsis')}</button>`
+  const more = fonioLogMenuItems(e).length
+    ? `<button type="button" class="iconbtn fcl-more-btn" title="${esc(t('fcl_more'))}" aria-label="${esc(t('fcl_more'))}" aria-haspopup="menu" onclick="openFonioLogMenu('${e.by_crm ? 'call' : 'other'}', ${Number(e.id)}, this)">${icon('ellipsis')}</button>`
     : '';
   return `<tr data-call="${esc(e.key)}">
     <td class="fcl-when">${esc(when)}</td>
@@ -130,6 +140,49 @@ function fonioLogRowHtml(e) {
 }
 
 function fonioLogUnknownById(id) { return fonioLogEntries.find(e => e.id === id && fonioLogIsUnknown(e)) || null; }
+// A row by its kind ('call': one the CRM sent or will send; 'other': one it did not start) and its id.
+function fonioLogEntry(kind, id) { return fonioLogEntries.find(e => !!e.by_crm === (kind === 'call') && e.id === Number(id)) || null; }
+
+// ── The three dots: what can be done with a call ──
+// A contact can be called from any call that has one, but for a call still to come: that one is the call.
+function fonioLogCanCall(e) { return !!e && !e.planned && e.contact_id != null; }
+function fonioLogMenuItems(e) {
+  const kind = e.by_crm ? 'call' : 'other';
+  return [
+    ...(fonioLogCanCall(e) ? [{ label: t('fcl_call'), icon: 'phone', onSelect: () => fonioLogCall(kind, e.id) }] : []),
+    ...(fonioLogManage ? [{ label: t('fcl_tech_title'), icon: 'file-text', onSelect: () => openFonioLogTech(kind, e.id) }] : []),
+  ];
+}
+function openFonioLogMenu(kind, id, anchor) {
+  const e = fonioLogEntry(kind, id);
+  const items = e ? fonioLogMenuItems(e) : [];
+  return items.length ? ui.menu(anchor, items) : null;
+}
+
+// ── Call this contact (Part 42) ──
+// The route's reasons not to call, as sentences.
+const FONIO_LOG_CALL_ERRORS = { not_connected: 'fcl_call_err_not_connected', inactive: 'fcl_call_err_inactive', no_contact: 'fcl_call_err_no_contact', no_phone: 'fcl_call_err_no_phone',
+  bad_number: 'fcl_call_err_bad_number', number_not_allowed: 'fcl_call_err_number_not_allowed', already_scheduled: 'fcl_call_err_already_scheduled', just_called: 'fcl_call_err_just_called' };
+function fonioLogCallError(res) { return t(FONIO_LOG_CALL_ERRORS[res && res.reason] || 'fonio_err_generic'); }
+// The server first says who would be called and at which number — the contact's number as it is saved now, which need
+// not be the row's — then the person confirms, and the call is booked. The list is read again either way: the call
+// stands at its top, under Planned, until it has gone out.
+async function fonioLogCall(kind, id) {
+  const e = fonioLogEntry(kind, id);
+  if (!fonioLogCanCall(e)) return false;
+  const ask = { contact_id: Number(e.contact_id), deal_id: e.deal_id != null ? Number(e.deal_id) : null };
+  const check = await api.get(`/api/integrations/fonio/calls/check?contact_id=${ask.contact_id}${ask.deal_id ? `&deal_id=${ask.deal_id}` : ''}`);
+  if (!check || check.error || !check.contact) { ui.toast(fonioLogCallError(check)); return false; }
+  const name = check.contact.name || e.contact_name || '';
+  const who = { name, number: check.number || '' };
+  const yes = await ui.confirm({ title: t('fcl_call_q'), message: check.outside_hours ? tf('fcl_call_msg_outside', who) : tf('fcl_call_msg', who), confirmLabel: t('fcl_call_btn') });
+  if (!yes) return false;
+  const res = await api.post('/api/integrations/fonio/calls', ask);
+  const ok = !!res && !res.error;
+  ui.toast(ok ? tf('fcl_call_ok', { name }) : fonioLogCallError(res));
+  await loadFonioLog();
+  return ok;
+}
 
 // The kept call is written onto the contact; the list is read again either way.
 async function fonioLogConnect(id, contactId) {

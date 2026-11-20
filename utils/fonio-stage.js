@@ -206,4 +206,4 @@ async function sweepNotReached(pool, now = new Date(), limit = 20, tell = {}) {
   return done;
 }
 
-module.exports = { STATUSES, EVENTS, URGENCY_MAX, EVENT_WORDS, URGENCY_WORDS, checkRules, foreignRefs, eventOf, applyAfterCall, noteLine, tellMoved, sweepNotReached };
+module.exports = { STATUSES, EVENTS, URGENCY_MAX, EVENT_WORDS, URGENCY_WORDS, UNREPORTED_MINUTES, UNREPORTED_HOURS, checkRules, foreignRefs, eventOf, applyAfterCall, noteLine, tellMoved, sweepNotReached };

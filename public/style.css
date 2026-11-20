@@ -1679,6 +1679,28 @@ input[type="checkbox"].switch:focus-visible,
 .fonio-rules-table td { vertical-align: middle; }
 .fonio-rules-table td:first-child code, .fonio-rules-table td:first-child .help { display: block; margin-top: 2px; }
 .fonio-rules-table select { min-width: 150px; }
+/* fonio tab in parts (FONIO_CHANGES Part 41, the look only). The head: what is connected in one line, the status
+   badge, and the buttons that choose a part. A part is a column like a card's body and hides with the hidden
+   attribute; the settings card has no heading of its own, so its body starts further down. */
+.fonio-head .settings-card-header { align-items: flex-start; }
+.fonio-line { flex: 1 1 auto; min-width: 0; font-size: var(--fs-sm); font-weight: 550; color: var(--ink); line-height: var(--lh-normal); overflow-wrap: anywhere; }
+.seg.fonio-parts { display: flex; flex-wrap: wrap; width: fit-content; max-width: calc(100% - 2 * var(--sp-4)); margin: var(--sp-3) var(--sp-4) var(--sp-3); }
+.fonio-head > .settings-hint { padding-bottom: 0; }
+.fonio-part { display: flex; flex-direction: column; gap: var(--sp-3); }
+.fonio-part > .intg-section:first-child, .fonio-part > #fonio-facts:empty + .intg-section { padding-top: 0; border-top: none; }
+.intg-stack > .fonio-part { gap: var(--sp-4); }
+#fonio-card > .settings-card-body { padding-top: var(--sp-4); }
+/* an explanation folded away: a small "More" under the label it belongs to, the text only when it is opened */
+.fonio-more > summary { display: inline-flex; align-items: center; gap: 5px; width: fit-content; font-size: var(--fs-xs); font-weight: 580; color: var(--brand-ink); cursor: pointer; list-style: none; border-radius: var(--r-sm); }
+.fonio-more > summary::-webkit-details-marker { display: none; }
+.fonio-more > summary::before { content: '+'; display: inline-block; width: 9px; text-align: center; font-weight: 700; }
+.fonio-more[open] > summary::before { content: '\2212'; }
+.fonio-more > summary:hover { text-decoration: underline; }
+.fonio-more > summary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.fonio-more[open] > summary { margin-bottom: var(--sp-1); }
+.fonio-more > p + p { margin-top: var(--sp-15); }
+.fonio-more > .settings-hint { padding: 0; }
+.settings-card > .fonio-more { margin: 0 var(--sp-4) var(--sp-3); }
 .intg-autosaved { align-self: flex-end; font-size: var(--fs-2xs); font-weight: 600; color: var(--brand-ink); }
 input[type="checkbox"].switch:disabled { opacity: .5; cursor: default; }
 .switch-row:has(> input.switch:disabled) { color: var(--text-3); cursor: default; }   /* its label greys out with it (fonio's triggers while paused) */
@@ -2958,3 +2980,278 @@ body:has(#app.rail:not(.hidden)) #loading-overlay { left: var(--sb-width-rail); 
 .fcl-pick-row:hover, .fcl-pick-row:focus-visible { background: var(--neutral-bg); }
 .fcl-pick-row span { font-size: var(--fs-xs); }
 .fcl-pick-note { padding: 8px 10px; font-size: var(--fs-sm); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CUSTOMER JOURNEY (#page-journey, public/js/journey.js) — a workflow as a
+   chain of boxes: the start on top, then one action per box, a line between
+   each two. A kind has one colour for its icon and its name (--jr-c text,
+   --jr-bg fill, --jr-bd line).
+   ═══════════════════════════════════════════════════════════════════════════ */
+[data-kind="call"]     { --jr-c: var(--warning);  --jr-bg: var(--warning-bg); --jr-bd: var(--warning-bd); }
+[data-kind="email"]    { --jr-c: var(--info);     --jr-bg: var(--info-bg);    --jr-bd: var(--info-bd); }
+[data-kind="whatsapp"] { --jr-c: var(--success);  --jr-bg: var(--success-bg); --jr-bd: var(--success-bd); }
+[data-kind="sms"]      { --jr-c: var(--teal-600); --jr-bg: var(--teal-100);   --jr-bd: var(--teal-100); }
+[data-kind="task"]     { --jr-c: var(--neutral);  --jr-bg: var(--neutral-bg); --jr-bd: var(--neutral-bd); }
+[data-kind="move"]     { --jr-c: var(--violet);   --jr-bg: var(--violet-bg);  --jr-bd: var(--violet-bd); }
+[data-kind="wait"]     { --jr-c: var(--neutral);  --jr-bg: var(--neutral-bg); --jr-bd: var(--neutral-bd); }
+[data-kind="branch"]   { --jr-c: var(--brand-ink); --jr-bg: var(--brand-subtle); --jr-bd: var(--brand-line); }
+#journey-toolbar:empty { display: none; }
+.jr-pick { width: auto; min-width: 220px; max-width: 100%; }
+/* the ground the workflow stands on: a quiet dotted grid */
+.jr-board { flex: 1 1 auto; min-height: 0; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-xl);
+  background-color: var(--surface-sunken); background-image: radial-gradient(circle, var(--line) 1px, transparent 1.3px); background-size: 22px 22px; }
+/* the board (Part 5): every box stands at its own place on a canvas as large as the boxes need; the lines lie in a
+   layer under the boxes. An owner or admin drags a box (no page scroll and no text selection while doing so). */
+.jr-canvas { position: relative; min-width: 100%; min-height: 100%; }
+.jr-canvas.can-edit { user-select: none; -webkit-user-select: none; }
+.jr-lines { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.jr-line { fill: none; stroke: var(--line-strong); stroke-width: 1.6; }
+.jr-lines marker path { fill: var(--line-strong); }
+.jr-line-hit { fill: none; stroke: transparent; stroke-width: 16; pointer-events: stroke; cursor: pointer; }
+.jr-line-new { stroke: var(--brand-ink); stroke-dasharray: 5 4; }
+.jr-node { position: absolute; width: 300px; }
+.jr-canvas.can-edit .jr-node { touch-action: none; }
+/* while a box is dragged it is moved as a transform, on a layer of its own (Part 11): nothing else is laid out or
+   painted again, and nothing of it eases — it is under the pointer at once */
+.jr-node.is-dragging { z-index: 2; will-change: transform; }
+.jr-node.is-dragging .jr-box { box-shadow: var(--shadow-md); cursor: grabbing; transition: none; }
+/* the "+" under a box: a click adds a step behind it, a drag onto another box draws a line to it */
+.jr-out { position: absolute; left: 50%; bottom: -12px; margin-left: -12px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text-2); cursor: crosshair; }
+.jr-out:hover { background: var(--brand); border-color: var(--brand); color: var(--on-primary); }
+.jr-out .ic { width: 13px; height: 13px; }
+/* a branch box's two feet (Part 11): "Yes" a quarter in from the left, "No" a quarter in from the right — where its
+   two lines leave. Everyone reads them; for an owner or admin each is the handle of its line (.jr-out as well). */
+.jr-side { position: absolute; bottom: -11px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px; border-radius: 11px;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-2); font-size: var(--fs-xs); font-weight: 650; line-height: 1; white-space: nowrap; }
+.jr-side.is-yes { left: 25%; color: var(--success); }
+.jr-side.is-no  { left: 75%; }
+.jr-out.jr-side { width: auto; height: 22px; margin-left: 0; border-radius: 11px; }
+.jr-out.jr-side.is-yes { left: 25%; }
+.jr-out.jr-side.is-no  { left: 75%; }
+.jr-out.jr-side:hover { color: var(--on-primary); }
+.jr-out.jr-side .ic { width: 11px; height: 11px; }
+/* a box: one action. The start is navy in both themes, and dashed while nothing is chosen for it */
+.jr-box { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface);
+  color: var(--text); font: inherit; text-align: left; cursor: pointer; box-shadow: var(--shadow-sm); transition: border-color var(--dur-fast); }
+.jr-box:hover { border-color: var(--jr-c, var(--border-strong)); }
+.jr-box:focus-visible, .jr-out:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.jr-start { background: var(--navy-800); color: #fff; border-color: transparent; }
+.jr-start .jr-ic { background: rgba(255,255,255,.14); color: #fff; border-color: transparent; }
+.jr-start .jr-meta, .jr-start .jr-meta b, .jr-start .jr-text { color: rgba(255,255,255,.78); }
+.jr-start.is-empty { border: 1.5px dashed rgba(255,255,255,.55); }
+[data-theme="dark"] .jr-start { background: var(--brand-subtle-2); color: var(--ink); border-color: var(--brand-line); }
+.jr-ic { flex: none; width: 28px; height: 28px; border-radius: var(--r-md); display: grid; place-items: center; background: var(--jr-bg); color: var(--jr-c); border: 1px solid var(--jr-bd); }
+.jr-ic .ic { width: 15px; height: 15px; }
+.jr-what { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.jr-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; font-size: var(--fs-xs); color: var(--text-3); }
+.jr-meta b { color: var(--jr-c, var(--text-2)); font-weight: 650; }
+.jr-title { font-size: var(--fs-sm); font-weight: 600; line-height: var(--lh-snug); overflow-wrap: anywhere; }
+.jr-text { font-size: var(--fs-xs); color: var(--text-3); line-height: var(--lh-snug); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* a step whose integration is not connected says so on its box */
+.jr-warn { display: flex; align-items: center; gap: 5px; margin-top: 4px; font-size: var(--fs-xs); font-weight: 600; color: var(--warning); }
+.jr-warn .ic { width: 13px; height: 13px; }
+.jr-bad { color: var(--warning); font-weight: 600; }
+/* above the board (Part 4): the switch that makes the workflow run, and the hint how the board is worked */
+.jr-run { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
+.jr-hint { margin-left: auto; font-size: var(--fs-sm); color: var(--text-3); }
+/* "Activity": who waits for which step, and what the steps did */
+.jr-act { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
+.jr-act-counts { font-weight: 600; }
+.jr-act-head { margin-top: 6px; font-size: var(--fs-sm); font-weight: 650; color: var(--text-2); }
+.jr-act-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-lg); }
+.jr-act-row { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) minmax(0, 1.5fr); gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--divider); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.jr-act-row:last-child { border-bottom: 0; }
+.jr-act-tail { color: var(--text-3); }
+/* the record of what the workflows did (Part 15, journey-history.js): the buttons that narrow it and the search above
+   the list; an entry is its time, one line in plain words and — where the list spans workflows — its workflow. The
+   list, the note under it and "Load more" are shown and hidden with the `hidden` attribute alone. */
+.jh { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
+.jh-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.jh-groups { display: flex; flex-wrap: wrap; gap: 6px; }
+.jh-q { flex: 1 1 220px; min-width: 0; width: auto; }
+.jh-list { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: var(--r-lg); }
+.jh-row { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 2px 12px; padding: 8px 12px; border-bottom: 1px solid var(--divider); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.jh-list.wide .jh-row { grid-template-columns: 132px minmax(0, 1fr) minmax(0, 190px); }
+.jh-row:last-child { border-bottom: 0; }
+.jh-when { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.jh-flow { color: var(--text-3); text-align: right; }
+.jh-row.bad .jh-what { color: var(--danger); }
+.jh-note { font-size: var(--fs-sm); color: var(--text-3); } .jh-note.bad { color: var(--danger); font-weight: 600; }
+.jh-more { align-self: flex-start; }
+@media (max-width: 640px) { .jh-row, .jh-list.wide .jh-row { grid-template-columns: minmax(0, 1fr); } .jh-flow { text-align: left; } }
+/* an email step's window (Part 6): the placeholders to put in, the text as code, the preview in a frame of its own,
+   and the test */
+.jr-ph { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.jr-ph .chip { height: 26px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-xs); }
+/* variables (Part 14, journey-vars.js): the line that says which names between braces are none; the list behind
+   "Insert variable", wide enough for a variable's words and its name beside them; the subject above the preview */
+.jr-vars-note { font-size: var(--fs-sm); font-weight: 600; color: var(--warning); overflow-wrap: anywhere; }
+.menu.jr-vars-menu { max-width: min(460px, calc(100vw - 16px)); }
+.jr-vars-menu .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+.jr-subject { margin-bottom: 6px; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); overflow-wrap: anywhere; }
+.jr-subject:empty { display: none; }
+.jr-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-sm); line-height: 1.5; tab-size: 2; }
+.jr-preview { width: 100%; height: 300px; border: 1px solid var(--border-strong); border-radius: var(--r-md); background: #fff; }
+.jr-test { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.jr-test-note { font-size: var(--fs-sm); color: var(--text-2); overflow-wrap: anywhere; } .jr-test-note.bad { color: var(--danger); font-weight: 600; }
+/* "Include in the Customer Journey": the workflows that run, one to choose */
+.jr-inc { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
+.jr-inc-flow { justify-content: flex-start; }
+/* a window of the page: the wait as a number and its unit, Delete at the far left of the foot, the lead webhooks to tick, and a box as a member reads it */
+.jr-wait .input { flex: none; width: 110px; } .jr-wait .select { width: auto; min-width: 140px; }
+.jr-foot-left { margin-right: auto; }
+.jr-checks { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; max-height: 180px; overflow: auto; }
+.jr-check { display: flex; align-items: center; gap: 8px; font-size: var(--fs-md); }
+.jr-view .jr-meta { font-size: var(--fs-sm); }
+.jr-view-title { margin: 6px 0 8px; font-size: var(--fs-lg); font-weight: 650; overflow-wrap: anywhere; }
+.jr-view-text { margin-bottom: 14px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-2); line-height: var(--lh-loose); }
+/* the address the journey sends from (journey-mail.js): its button at the top of the page, and its window — a column
+   of its own, because a window's body spaces only its direct children */
+.jm-btn { max-width: 320px; }
+.jm { display: flex; flex-direction: column; gap: 12px; padding-top: 6px; }
+.jm-addr { display: flex; align-items: center; gap: 8px; font-size: var(--fs-lg); overflow-wrap: anywhere; }
+.jm-addr .ic { color: var(--text-3); }
+.jm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.jm-note { font-size: var(--fs-sm); color: var(--text-2); overflow-wrap: anywhere; }
+.jm-note.bad { color: var(--danger); font-weight: 600; }
+/* sending limits (Part 17): while sending is paused, the page's button and a notice at the top of the window have the
+   colour of a warning. The part "Sending limits" under the address: what went out as two slim meters, which turn to
+   that colour near their limit; then the three limits as a framed list — a limit's name and its number on one line,
+   what it means under them. */
+.jm-btn.is-paused { border-color: var(--warning-bd); background: var(--warning-bg); color: var(--warning); }
+.jm-pause { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--warning-bd); border-radius: var(--r-lg); background: var(--warning-bg); }
+.jm-pause-title { display: flex; align-items: center; gap: 8px; font-weight: 650; color: var(--warning); overflow-wrap: anywhere; }
+.jm-pause-title .ic { flex: none; }
+.jm-pause-detail { font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.jm-pause .help { color: var(--text-2); }
+.jm-part { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; padding-top: 16px; border-top: 1px solid var(--divider); }
+.jm-part-title { font-size: var(--fs-md); }
+.jm-sent { display: flex; flex-direction: column; gap: 6px; }
+.jm-sent-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: var(--fs-sm); color: var(--text-2); }
+.jm-sent-line b { color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.jm-meter { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.jm-meter span { display: block; height: 100%; border-radius: 3px; background: var(--primary); }
+.jm-meter.is-near span { background: var(--warning); }
+.jm-sent-full { font-size: var(--fs-sm); font-weight: 600; color: var(--warning); }
+.jm-limits { border: 1px solid var(--border); border-radius: var(--r-lg); }
+.jm-limit { display: grid; grid-template-columns: minmax(0, 1fr) 104px; align-items: center; gap: 4px 12px; padding: 10px 12px; border-bottom: 1px solid var(--divider); }
+.jm-limit:last-child { border-bottom: 0; }
+.jm-limit .input { text-align: right; }
+.jm-limit b { text-align: right; font-variant-numeric: tabular-nums; }
+.jm-limit .help { grid-column: 1 / -1; }
+/* the start's window (journey-start.js, Part 9): what the start is about as tabs, and the starts of the open tab as
+   cards, two side by side — each a title and one line that says what it means. The chosen one is framed. */
+.jt-chooser:focus { outline: none; }
+.jt-cats { display: flex; flex-wrap: wrap; gap: 6px; }
+.jt-cat { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-2);
+  font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; }
+.jt-cat .ic { width: 14px; height: 14px; }
+.jt-cat:hover { border-color: var(--border-strong); }
+.jt-cat[aria-selected="true"] { background: var(--brand); border-color: var(--brand); color: var(--on-primary); }
+.jt-trigs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.jt-trig { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); color: var(--text); font: inherit;
+  text-align: left; cursor: pointer; }
+.jt-trig b { font-size: var(--fs-sm); font-weight: 600; line-height: var(--lh-snug); }
+.jt-trig span { font-size: var(--fs-xs); color: var(--text-3); line-height: var(--lh-snug); }
+.jt-trig:hover { border-color: var(--border-strong); }
+.jt-trig[aria-checked="true"] { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+.jt-cat:focus-visible, .jt-trig:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.jt-num { width: 140px; }
+.jt-days { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.jt-days:focus { outline: none; }
+@media (max-width: 640px) { .jt-trigs { grid-template-columns: 1fr; } }
+/* where a workflow ends for a deal (Parts 10, 13, 16): a panel of its own in the start's window — a well, so that it
+   reads as one thing apart from the start above it. On top what is switched on, each rule a row; under it every rule
+   there is, behind the same tabs the start has, each rule a card with a switch. Whatever is hidden here is hidden by
+   the hidden attribute, which no rule below outranks. */
+.jt-endbox { gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: var(--r-xl); background: var(--surface-sunken); }
+/* what is on: a short list of rows — the icon of the rule's heading, its name with what it was set to, a cross */
+.jt-now { display: flex; flex-direction: column; gap: 6px; }
+.jt-now:focus { outline: none; }
+.jt-now-head { display: flex; align-items: center; gap: 8px; font-size: var(--fs-xs); font-weight: 650; color: var(--text-3); }
+.jt-now-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.jt-now-row { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 8px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-sm); }
+.jt-now-ic { flex: none; width: 26px; height: 26px; border-radius: var(--r-md); display: grid; place-items: center; background: var(--brand-subtle); color: var(--brand-ink); border: 1px solid var(--brand-line); }
+.jt-now-ic .ic { width: 14px; height: 14px; }
+.jt-now-what { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; padding: 5px 6px; border: 0; border-radius: var(--r-md); background: none; color: var(--text);
+  font: inherit; text-align: left; cursor: pointer; }
+.jt-now-what b { font-size: var(--fs-sm); font-weight: 600; }
+.jt-now-what span { font-size: var(--fs-sm); color: var(--text-2); overflow-wrap: anywhere; }
+.jt-now-what span.is-missing { color: var(--warning); font-weight: 600; }
+.jt-now-what:hover { background: var(--hover); }
+.jt-now-what:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.jt-now-x { flex: none; width: 28px; height: 28px; }
+.jt-now-x .ic { width: 14px; height: 14px; }
+.jt-now-none { margin: 0; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: var(--r-lg); background: var(--surface); font-size: var(--fs-sm); color: var(--text-3); }
+/* every rule: the tabs are the start's own (.jt-cat), with how many of a heading's rules are on */
+.jt-rules-head { margin-top: 4px; font-size: var(--fs-xs); font-weight: 650; color: var(--text-3); }
+.jt-cat-n { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; display: inline-grid; place-items: center; background: var(--brand); color: var(--on-primary); font-size: var(--fs-3xs); font-weight: 700; line-height: 1; }
+.jt-cat[aria-selected="true"] .jt-cat-n { background: var(--on-primary); color: var(--brand); }
+/* a rule: a card with its name, what it means, and a switch; on, it is framed as the chosen start is, and what it
+   needs stands inside it under a fine line */
+.jt-rules { display: flex; flex-direction: column; gap: 8px; }
+.jt-rule { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); }
+.jt-rule:has(> .jt-rule-head input:checked) { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+.jt-rule-head { display: flex; align-items: flex-start; gap: 14px; padding: 10px 12px; cursor: pointer; }
+.jt-rule-what { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.jt-rule-what b { font-size: var(--fs-sm); font-weight: 600; line-height: var(--lh-snug); }
+.jt-rule-what span { font-size: var(--fs-xs); color: var(--text-3); line-height: var(--lh-snug); }
+.jt-rule-head .switch { margin-top: 1px; }
+.jt-rule-set { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px 12px; border-top: 1px solid var(--divider); }
+.jt-set { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.jt-set .label, .jt-rule-set > .label { font-size: var(--fs-xs); }
+.jt-set .select, .jt-set .input:not(.jt-num) { max-width: 360px; }
+.jt-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+/* stages and call results are chosen as chips: a real tick box lies over each chip, unseen, so the keyboard and a
+   screen reader have what they know; a chosen chip is filled and carries a tick, so that colour is not all that says it */
+.jt-chipsets { display: flex; flex-direction: column; gap: 8px; }
+.jt-chipsets:focus, .jt-chips:focus { outline: none; }
+.jt-chipset { display: flex; flex-direction: column; gap: 5px; }
+.jt-chipset-name { font-size: var(--fs-xs); font-weight: 600; color: var(--text-3); }
+.jt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.jt-chip { position: relative; display: inline-flex; }
+.jt-chip input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.jt-chip span { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text-2);
+  font-size: var(--fs-sm); font-weight: 550; white-space: nowrap; transition: background var(--dur-fast), border-color var(--dur-fast), color var(--dur-fast); }
+.jt-chip:hover span { border-color: var(--brand); }
+.jt-chip input:checked + span { background: var(--brand); border-color: var(--brand); color: var(--on-primary); }
+.jt-chip input:checked + span::before { content: '✓'; font-size: 11px; line-height: 1; }
+.jt-chip input:focus-visible + span { box-shadow: var(--focus-ring); }
+@media (max-width: 640px) { .jt-pair { grid-template-columns: 1fr; } }
+.jt-stages { max-height: 200px; }
+.jt-stages:focus { outline: none; }
+.jt-stage-group { display: flex; flex-direction: column; gap: 6px; }
+.jt-stage-group + .jt-stage-group { margin-top: 8px; }
+/* a workflow of an integration (journey-fixed.js, Part 8): read here, changed in the integration's settings. Its steps
+   stand one under the other in the page's own flow — nothing is dragged, so nothing needs a place on the canvas —
+   with a short line and its arrowhead between each two. The box has its own class: none of the board's hover, focus
+   and drag rules reach it. */
+.jx-wrap { padding: 40px; }
+.jx-chain { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; width: 340px; max-width: 100%; }
+.jx-step { position: relative; }
+.jx-step + .jx-step { margin-top: 34px; }
+.jx-step + .jx-step::before { content: ''; position: absolute; left: 50%; top: -34px; height: 34px; border-left: 1.6px solid var(--line-strong); }
+.jx-step + .jx-step::after { content: ''; position: absolute; left: calc(50% + 0.8px); top: -9px; width: 7px; height: 7px; margin-left: -3.5px;
+  border-right: 1.6px solid var(--line-strong); border-bottom: 1.6px solid var(--line-strong); transform: rotate(45deg); }
+.jx-box { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); color: var(--text);
+  box-shadow: var(--shadow-sm); }
+.jx-box .jr-text { display: block; overflow: visible; }
+.jx-start { background: var(--navy-800); color: #fff; border-color: transparent; }
+.jx-start .jr-ic { background: rgba(255,255,255,.14); color: #fff; border-color: transparent; }
+.jx-start .jr-meta, .jx-start .jr-meta b, .jx-start .jr-text { color: rgba(255,255,255,.78); }
+[data-theme="dark"] .jx-start { background: var(--brand-subtle-2); color: var(--ink); border-color: var(--brand-line); }
+.jx-box[data-kind="note"], .jx-box[data-kind="notify"] { --jr-c: var(--neutral); --jr-bg: var(--neutral-bg); --jr-bd: var(--neutral-bd); }
+.jx-box[data-kind="meeting"] { --jr-c: var(--info); --jr-bg: var(--info-bg); --jr-bd: var(--info-bd); }
+.jx-box[data-kind="contact"] { --jr-c: var(--success); --jr-bg: var(--success-bg); --jr-bd: var(--success-bd); }
+.jx-box[data-kind="deal"], .jx-box[data-kind="flow"] { --jr-c: var(--violet); --jr-bg: var(--violet-bg); --jr-bd: var(--violet-bd); }
+.jx-box[data-kind="engine"] { --jr-c: var(--teal-600); --jr-bg: var(--teal-100); --jr-bd: var(--teal-100); }
+/* a step the settings have switched off: still shown, so the workflow says what does not happen too */
+.jx-step.is-off .jx-box { background: transparent; border-style: dashed; box-shadow: none; }
+.jx-step.is-off .jr-ic { opacity: .55; }
+.jx-step.is-off .jr-title { color: var(--text-3); font-weight: 500; }
+.jx-off { padding: 0 6px; border: 1px solid var(--border-strong); border-radius: 999px; font-weight: 600; color: var(--text-2); }
+/* above it: that it is fixed, and why its switch is not offered */
+.jx-lock .ic { width: 12px; height: 12px; }
+.jx-blocked { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-sm); font-weight: 600; color: var(--warning); }
+.jx-blocked .ic { width: 13px; height: 13px; }

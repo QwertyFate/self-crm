@@ -280,6 +280,6 @@ describe('server.js and db.js', () => {
   test('the entry\'s columns, one entry per booking, and the source', () => {
     assert.match(db, /ALTER TABLE activities ADD COLUMN IF NOT EXISTS calendly_uri\s+TEXT/); assert.match(db, /ALTER TABLE activities ADD COLUMN IF NOT EXISTS calendly_event_uri TEXT/);
     assert.match(db, /CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_calendly_uri ON activities \(workspace_id, calendly_uri\) WHERE calendly_uri IS NOT NULL/);
-    assert.match(db, /CHECK\(source IN \('user','engine','calcom','notetaker','fonio','calendly'\)\)/);
+    assert.match(db, /CHECK\(source IN \('user','engine','calcom','notetaker','fonio','calendly','journey'\)\)/);
   });
 });

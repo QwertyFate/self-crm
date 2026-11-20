@@ -27,7 +27,7 @@ const CONN = (over = {}) => ({
 // The tables, in memory. Each statement of utils/fonio-calls.js and routes/fonio.js has its answer; any other throws.
 const db = { conn: null, deals: new Map(), contacts: new Map(), fields: [], calls: [], nextCall: 1, log: [] };
 function seed() {
-  db.conn = CONN(); db.calls = []; db.nextCall = 1; db.log = [];
+  db.conn = CONN(); db.calls = []; db.nextCall = 1; db.log = []; db.raceOnInsert = false;
   db.contacts = new Map([
     [10, { id: 10, workspace_id: WS, name: 'Erika Muster', email: 'erika@muster.de', phone: '0171 1234567', company: 'Muster GmbH',
            ort: 'Berlin', owner: 'Olaf Owner', custom_data: { lead_source: 'Ads', email_alt: 'custom@x.de', notes: '' } }],
@@ -66,6 +66,26 @@ const pool = {
     }
     if (t.startsWith('SELECT id FROM fonio_calls WHERE workspace_id = $1 AND contact_id = $2')) {
       return { rows: db.calls.filter(c => c.workspace_id === p[0] && c.contact_id === p[1] && waitingStatus(c.status)).slice(0, 1).map(c => ({ id: c.id })) };
+    }
+    // Part 42: a call a person starts ("Call this contact"). The contact and the deal are asked for with their
+    // workspace, the deal also with its contact; the waiting call or the one that just went out with its window.
+    if (t === 'SELECT id, name, phone FROM contacts WHERE id = $1 AND workspace_id = $2') {
+      const c = db.contacts.get(p[0]); return { rows: c && c.workspace_id === p[1] ? [{ id: c.id, name: c.name, phone: c.phone }] : [] };
+    }
+    if (t === "SELECT status FROM fonio_calls WHERE workspace_id = $1 AND contact_id = $2 AND (status IN ('scheduled','sending') OR (status = 'sent' AND sent_at > $3)) ORDER BY (status = 'sent'), id LIMIT 1") {
+      const hit = db.calls.filter(c => c.workspace_id === p[0] && c.contact_id === p[1] && (waitingStatus(c.status) || (c.status === 'sent' && c.sent_at > new Date(p[2]))))
+        .sort((a, b) => (a.status === 'sent') - (b.status === 'sent') || a.id - b.id);
+      return { rows: hit.slice(0, 1).map(c => ({ status: c.status })) };
+    }
+    if (t === 'SELECT id FROM deals WHERE id = $1 AND workspace_id = $2 AND contact_id = $3') {
+      const d = db.deals.get(p[0]); return { rows: d && d.workspace_id === p[1] && d.contact_id === p[2] ? [{ id: d.id }] : [] };
+    }
+    if (t === "INSERT INTO fonio_calls (workspace_id, deal_id, contact_id, trigger, status, raw_number, to_number, due_at, asked_by) VALUES ($1,$2,$3,'manual','scheduled',$4,$5,$6,$7) RETURNING id, status, due_at") {
+      if (db.raceOnInsert || db.calls.some(c => c.contact_id === p[2] && waitingStatus(c.status))) throw Object.assign(new Error('duplicate key'), { code: '23505' });
+      const row = { id: db.nextCall++, workspace_id: p[0], deal_id: p[1], contact_id: p[2], trigger: 'manual', status: 'scheduled', reason: null, raw_number: p[3], to_number: p[4],
+        due_at: new Date(p[5]), asked_by: p[6], message: null, sent_at: null, attempts: 0, cancelled_by: null, created_at: new Date(), updated_at: new Date() };
+      db.calls.push(row);
+      return { rows: [{ id: row.id, status: row.status, due_at: row.due_at }] };
     }
     // Part 33: a retry booked after a call that reached nobody
     if (t.startsWith("INSERT INTO fonio_calls (workspace_id, deal_id, contact_id, trigger, status, raw_number, to_number, due_at, follow_up_of, follow_up_no)")) {
@@ -706,7 +726,7 @@ describe('the table', () => {
     }
     assert.ok(dbPool.find(/ALTER TABLE workspace_fonio ADD COLUMN IF NOT EXISTS follow_up JSONB NOT NULL DEFAULT '\{\}'::jsonb/));
     assert.ok(dbPool.find(/ALTER TABLE fonio_calls DROP CONSTRAINT IF EXISTS fonio_calls_trigger_check/));
-    assert.ok(dbPool.find(/ADD CONSTRAINT fonio_calls_trigger_check CHECK \(trigger IN \('deal_manual','deal_webhook','follow_up','callback'\)\)/), 'and the callback a person asked for in a call (Part 35)');
+    assert.ok(dbPool.find(/ADD CONSTRAINT fonio_calls_trigger_check CHECK \(trigger IN \('deal_manual','deal_webhook','follow_up','callback','journey','manual'\)\)/), 'and the callback a person asked for in a call (Part 35), and the call a workflow\'s step asks for (CUSTOMER_JOURNEY Part 4)');
     assert.ok(dbPool.find(/CREATE INDEX IF NOT EXISTS fonio_calls_unreported_idx ON fonio_calls \(sent_at\) WHERE status = 'sent' AND result_at IS NULL/));
   });
 });
@@ -883,5 +903,225 @@ describe("the workspace's own variables for the prompt (Part 13)", () => {
     const src = require('fs').readFileSync(require('path').join(__dirname, '../../utils/fonio-calls.js'), 'utf8');
     const fromCalendar = Object.values(fonioCalls.SLOT_NAMES).flat();   // the booking service's free times and today (Part 32)
     for (const k of fonioCalls.VALUE_SOURCES) assert.ok(fonioCalls.CONTACT_FIELDS.includes(k) || src.includes(`put('${k}'`) || fromCalendar.includes(k), k);
+  });
+});
+
+// Part 42: "Call this contact" on the fonio calls page — a call a person starts.
+describe('a call a person starts (Part 42)', () => {
+  const SAT = new Date('2026-11-07T10:00:00.000Z');          // Saturday 11:00 in Berlin: no calling day
+  const WED_LATE = new Date('2026-11-04T19:00:00.000Z');     // Wednesday 20:00 in Berlin: after the hours
+  const byHand = (contactId, more = {}) => fonioCalls.scheduleByHand(pool, { workspaceId: WS, contactId, userId: 3, now: WED10, ...more });
+  const check = (contactId, more = {}) => fonioCalls.checkByHand(pool, { workspaceId: WS, contactId, now: WED10, ...more });
+  const writes = () => db.log.filter(l => /^(INSERT|UPDATE|DELETE)/.test(l.sql));
+
+  test('the question before: who would be called, the number as it will be dialled, the deal when it is that contact\'s, and nothing written', async () => {
+    assert.deepEqual(await check(10, { dealId: 100 }), { contact: { id: 10, name: 'Erika Muster' }, number: '+491711234567', deal_id: 100, outside_hours: false });
+    assert.deepEqual(await check(10), { contact: { id: 10, name: 'Erika Muster' }, number: '+491711234567', deal_id: null, outside_hours: false });
+    assert.deepEqual(writes(), []);
+    assert.equal(db.calls.length, 0);
+  });
+  test('outside the calling hours is said — in the evening, on a day without calls, with no day at all — and never with the hours switched off', async () => {
+    assert.equal((await check(10, { now: WED_LATE })).outside_hours, true);
+    assert.equal((await check(10, { now: SAT })).outside_hours, true);
+    db.conn = CONN({ hours_days: [] });
+    assert.equal((await check(10)).outside_hours, true);
+    db.conn = CONN({ hours_on: false });
+    assert.equal((await check(10, { now: SAT })).outside_hours, false);
+  });
+  test('booked for now, signed by who asked, the number made international and the saved one kept', async () => {
+    const out = await byHand(10, { dealId: 100 });
+    const c = only();
+    assert.deepEqual(out, { call: { id: c.id, status: 'scheduled', due_at: c.due_at }, contact: { id: 10, name: 'Erika Muster' }, number: '+491711234567', deal_id: 100, outside_hours: false });
+    assert.deepEqual([c.workspace_id, c.deal_id, c.contact_id, c.trigger, c.status, c.raw_number, c.to_number, c.asked_by], [WS, 100, 10, 'manual', 'scheduled', '0171 1234567', '+491711234567', 3]);
+    assert.equal(c.due_at.toISOString(), WED10.toISOString(), 'no delay: now');
+  });
+  test('it goes out at once although it is outside the calling hours — a call a new deal started at that hour waits for the morning', async () => {
+    await byHand(10, { now: WED_LATE });
+    assert.equal(only().due_at.toISOString(), WED_LATE.toISOString(), 'not moved to 09:00');
+    await fonioCalls.runDue(pool, { now: minutes(WED_LATE, 0.5) });
+    assert.equal(only().status, 'sent'); assert.equal(fon.calls.length, 1);
+    assert.equal(fon.calls[0].body.toNumber, '+491711234567');
+    assert.equal(fon.calls[0].body.context.crm_call_id, String(only().id));
+    // the contrast: a call a new deal started, due at the same moment
+    seed(); fon.calls.length = 0;
+    await schedule(100);
+    only().due_at = WED_LATE;
+    await fonioCalls.runDue(pool, { now: minutes(WED_LATE, 0.5) });
+    assert.equal(only().status, 'scheduled'); assert.equal(only().due_at.toISOString(), '2026-11-05T08:00:00.000Z'); assert.equal(fon.calls.length, 0);
+    assert.deepEqual(fonioCalls.AT_ONCE, ['callback', 'manual'], 'only what a person set the time of');
+  });
+  test('on a day without calls, and with hours that name no day at all, it still goes out', async () => {
+    await byHand(10, { now: SAT });
+    await fonioCalls.runDue(pool, { now: minutes(SAT, 0.5) });
+    assert.equal(only().status, 'sent');
+    seed(); db.conn = CONN({ hours_days: [] });
+    await byHand(10);
+    await fonioCalls.runDue(pool, { now: minutes(WED10, 0.5) });
+    assert.equal(only().status, 'sent');
+  });
+  test('what starts calls by itself is not asked: both triggers off, another pipeline only, another lead webhook only', async () => {
+    db.conn = CONN({ on_deal_manual: false, on_deal_webhook: false, only_pipelines: [999], only_webhooks: [999], delay_minutes: 60 });
+    assert.equal((await byHand(10, { dealId: 100 })).call.status, 'scheduled');
+    assert.equal(only().due_at.toISOString(), WED10.toISOString(), 'nor the delay');
+  });
+  test('a contact without a deal can be called; the context then has the contact alone', async () => {
+    await byHand(10);
+    assert.equal(only().deal_id, null);
+    await fonioCalls.runDue(pool, { now: minutes(WED10, 0.5) });
+    const ctx = fon.calls[0].body.context;
+    assert.equal(ctx.crm_contact_id, '10'); assert.equal(ctx.name, 'Erika Muster');
+    assert.equal('crm_deal_id' in ctx, false); assert.equal('deal_title' in ctx, false);
+  });
+  test('a deal rides along only when it is this contact\'s own, in this workspace', async () => {
+    assert.equal((await check(10, { dealId: 101 })).deal_id, null, 'another contact\'s deal');
+    assert.equal((await check(10, { dealId: 200 })).deal_id, null, 'another workspace\'s deal');
+    assert.equal((await check(10, { dealId: 999 })).deal_id, null, 'no such deal');
+    assert.equal((await check(10, { dealId: 105 })).deal_id, 105, 'its second deal');
+    await byHand(10, { dealId: 200 });
+    assert.equal(only().deal_id, null, 'the call is made all the same, for the contact');
+  });
+  test('fonio not connected or switched off: refused, nothing written', async () => {
+    db.conn = null;
+    assert.deepEqual(await byHand(10), { code: 'not_connected' });
+    db.conn = CONN({ active: false });
+    assert.deepEqual(await byHand(10), { code: 'inactive' });
+    assert.deepEqual(await check(10), { code: 'inactive' });
+    assert.equal(db.calls.length, 0);
+  });
+  test('no such contact here, no number, a number that cannot be told, one outside the number starts: refused with the reason, and no row', async () => {
+    assert.deepEqual(await byHand(999), { code: 'no_contact' });
+    assert.deepEqual(await byHand(20), { code: 'no_contact' }, 'another workspace\'s contact');
+    assert.deepEqual(await byHand(11), { code: 'no_phone' });
+    assert.deepEqual(await byHand(12), { code: 'bad_number' });
+    db.conn = CONN({ number_prefixes: ['0171'] });
+    assert.deepEqual(await byHand(13), { code: 'number_not_allowed' });
+    assert.equal(db.calls.length, 0, 'unlike a call the CRM starts by itself, nothing is kept: the person is told');
+    assert.equal((await byHand(10)).call.status, 'scheduled', '0171 matches');
+  });
+  test('nobody gets a second call while one waits: pressed twice, or a call a new deal started is waiting', async () => {
+    await byHand(10);
+    assert.deepEqual(await byHand(10), { code: 'already_scheduled' });
+    assert.deepEqual(await check(10), { code: 'already_scheduled' });
+    assert.equal(db.calls.length, 1);
+    seed();
+    await schedule(100);
+    assert.deepEqual(await byHand(10), { code: 'already_scheduled' });
+    only().status = 'sending';
+    assert.deepEqual(await byHand(10), { code: 'already_scheduled' }, 'also while it is going out');
+  });
+  test('nobody is rung again within two minutes of a call that went out — a colleague pressing a moment later', async () => {
+    await byHand(10);
+    await fonioCalls.runDue(pool, { now: minutes(WED10, 0.5) });
+    assert.equal(only().status, 'sent');
+    only().sent_at = minutes(WED10, 0.5);
+    assert.deepEqual(await byHand(10, { now: minutes(WED10, 1) }), { code: 'just_called' });
+    assert.deepEqual(await check(10, { now: minutes(WED10, 2.4) }), { code: 'just_called' });
+    assert.equal(fonioCalls.HAND_GAP_MINUTES, 2);
+    assert.equal((await byHand(10, { now: minutes(WED10, 2.6) })).call.status, 'scheduled', 'after that it is a person\'s decision again');
+    assert.equal(db.calls.length, 2);
+  });
+  test('two presses at the same moment: the table\'s own rule decides, and the second is told a call is waiting', async () => {
+    db.raceOnInsert = true;
+    assert.deepEqual(await byHand(10), { code: 'already_scheduled' });
+  });
+  test('a call that reached nobody is tried again like every call — in the calling hours', async () => {
+    db.conn = CONN({ follow_up: { enabled: true, no_answer: 120, voicemail: 1440, busy: 120, max_attempts: 1 } });
+    await byHand(10, { now: WED_LATE });
+    await fonioCalls.runDue(pool, { now: minutes(WED_LATE, 0.5) });
+    const c = only();
+    c.sent_at = minutes(WED_LATE, 0.5);
+    const retry = await fonioCalls.followUpAfterResult(pool, WS, c, 'no_answer', minutes(WED_LATE, 5));
+    assert.equal(retry.status, 'scheduled');
+    const f = db.calls.find(x => x.follow_up_of === c.id);
+    assert.equal(f.trigger, 'follow_up');
+    assert.equal(f.due_at.toISOString(), '2026-11-05T08:00:00.000Z', 'the retry is the CRM\'s own call again: Thursday 09:00');
+  });
+
+  describe('the route', () => {
+    let owner, member, other;
+    before(async () => {
+      const as = (id, workspaceId, role) => serve({ '/f': loadRoute('fonio.js', { pool, user: { id, workspaceId, role } }) });
+      owner = await as(1, WS, 'owner'); member = await as(3, WS, 'member'); other = await as(9, OTHER_WS, 'owner');
+    });
+    after(async () => { for (const s of [owner, member, other]) await s.close(); });
+    beforeEach(() => { db.conn = CONN({ hours_on: false }); });   // the route asks "now": no calling hours, so the answer does not depend on the clock
+
+    test('everyone in the workspace may ask and may call: a member too', async () => {
+      const q = await member.request('GET', '/f/calls/check?contact_id=10&deal_id=100');
+      assert.equal(q.status, 200);
+      assert.deepEqual(q.body, { contact: { id: 10, name: 'Erika Muster' }, number: '+491711234567', deal_id: 100, outside_hours: false });
+      assert.equal(db.calls.length, 0, 'asking books nothing');
+      const r = await member.request('POST', '/f/calls', { contact_id: 10, deal_id: 100 });
+      assert.equal(r.status, 201);
+      const c = only();
+      assert.deepEqual(r.body, { success: true, call: { id: c.id, status: 'scheduled', due_at: c.due_at.toISOString() }, contact: { id: 10, name: 'Erika Muster' }, number: '+491711234567', deal_id: 100 });
+      assert.deepEqual([c.trigger, c.asked_by, c.workspace_id], ['manual', 3, WS], 'signed by the session\'s person, in the session\'s workspace');
+      assert.ok(Math.abs(c.due_at.getTime() - Date.now()) < 5000, 'due now');
+      assert.equal((await owner.request('POST', '/f/calls', { contact_id: 13 })).status, 201, 'without a deal');
+    });
+    test('outside the calling hours the question says so, and the call is booked for now all the same', async () => {
+      db.conn = CONN({ hours_days: [] });   // no day at all: outside at any moment
+      assert.equal((await member.request('GET', '/f/calls/check?contact_id=10')).body.outside_hours, true);
+      assert.equal((await member.request('POST', '/f/calls', { contact_id: 10 })).status, 201);
+      assert.ok(Math.abs(only().due_at.getTime() - Date.now()) < 5000);
+    });
+    test('every reason not to call answers with its own status and reason, and books nothing', async () => {
+      const refusal = async (path, body, setup) => { seed(); db.conn = CONN({ hours_on: false }); if (setup) await setup(); const before = db.calls.length;
+        const r = body ? await owner.request('POST', path, body) : await owner.request('GET', path); assert.equal(db.calls.length, before, path); return [r.status, r.body.reason]; };
+      assert.deepEqual(await refusal('/f/calls', { contact_id: 999 }), [404, 'no_contact']);
+      assert.deepEqual(await refusal('/f/calls', { contact_id: 11 }), [409, 'no_phone']);
+      assert.deepEqual(await refusal('/f/calls', { contact_id: 12 }), [409, 'bad_number']);
+      assert.deepEqual(await refusal('/f/calls', { contact_id: 13 }, () => { db.conn = CONN({ hours_on: false, number_prefixes: ['0171'] }); }), [409, 'number_not_allowed']);
+      assert.deepEqual(await refusal('/f/calls', { contact_id: 10 }, () => { db.conn = null; }), [409, 'not_connected']);
+      assert.deepEqual(await refusal('/f/calls', { contact_id: 10 }, () => { db.conn = CONN({ active: false }); }), [409, 'inactive']);
+      assert.deepEqual(await refusal('/f/calls', { contact_id: 10 }, () => schedule(100)), [409, 'already_scheduled']);
+      assert.deepEqual(await refusal('/f/calls', { contact_id: 10 }, () => { db.calls.push({ id: 50, workspace_id: WS, contact_id: 10, status: 'sent', sent_at: new Date() }); }), [409, 'just_called']);
+      assert.deepEqual(await refusal('/f/calls/check?contact_id=11'), [409, 'no_phone'], 'the question refuses the same way');
+      assert.deepEqual(await refusal('/f/calls/check?contact_id=10', null, () => schedule(100)), [409, 'already_scheduled']);
+    });
+    test('a contact or a deal that is no whole positive number is refused before the database is asked', async () => {
+      for (const body of [{}, { contact_id: null }, { contact_id: 'abc' }, { contact_id: 0 }, { contact_id: -3 }, { contact_id: 1.5 }, { contact_id: '10 OR 1=1' }, { contact_id: [10] }, { contact_id: 10, deal_id: 'x' }, { contact_id: 10, deal_id: 0 }]) {
+        db.log.length = 0;
+        const r = await owner.request('POST', '/f/calls', body);
+        assert.deepEqual([r.status, r.body.reason], [400, 'contact'], JSON.stringify(body));
+        assert.deepEqual(db.log, [], JSON.stringify(body));
+      }
+      for (const q of ['', '?contact_id=', '?contact_id=1&contact_id=2', '?contact_id=10&deal_id=x', '?deal_id=100']) {
+        db.log.length = 0;
+        assert.equal((await owner.request('GET', '/f/calls/check' + q)).status, 400, q);
+        assert.deepEqual(db.log, [], q);
+      }
+      assert.equal(db.calls.length, 0);
+    });
+    test('another workspace cannot call this one\'s contact: who and where come from the session', async () => {
+      const r = await other.request('POST', '/f/calls', { contact_id: 10, workspace_id: WS, workspaceId: WS, user_id: 1, asked_by: 1 });
+      assert.equal(r.status, 409, 'that workspace has no fonio connection here');
+      db.conn = { ...CONN({ hours_on: false }), workspace_id: OTHER_WS };
+      assert.deepEqual([(await other.request('POST', '/f/calls', { contact_id: 10 })).status, (await other.request('GET', '/f/calls/check?contact_id=10')).status], [404, 404]);
+      assert.equal(db.calls.length, 0);
+      const mine = await other.request('POST', '/f/calls', { contact_id: 20, user_id: 1, asked_by: 1 });
+      assert.equal(mine.status, 201);
+      assert.deepEqual([only().workspace_id, only().asked_by], [OTHER_WS, 9]);
+    });
+    test('the call stands in the list of calls with what started it; an owner can still cancel it while it waits', async () => {
+      await member.request('POST', '/f/calls', { contact_id: 10, deal_id: 100 });
+      const { calls } = (await member.request('GET', '/f/calls')).body;
+      assert.deepEqual([calls[0].trigger, calls[0].status, calls[0].contact_name], ['manual', 'scheduled', 'Erika Muster']);
+      assert.equal((await member.request('POST', `/f/calls/${calls[0].id}/cancel`)).status, 403);
+      assert.equal((await owner.request('POST', `/f/calls/${calls[0].id}/cancel`)).status, 200);
+      assert.equal(only().status, 'cancelled');
+    });
+    test('who started a call is kept with it: its own column, emptied when that person is deleted, and part of the technical record', () => {
+      const read = rel => require('fs').readFileSync(require('path').join(__dirname, '../..', rel), 'utf8');
+      assert.match(read('db.js'), /ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS asked_by INTEGER REFERENCES users\(id\) ON DELETE SET NULL/);
+      assert.match(read('utils/fonio-calls.js'), /created_at, updated_at, asked_by, request, response, result_body\s+FROM fonio_calls WHERE id = \$1 AND workspace_id = \$2/);
+    });
+    test('the route file: a login for both addresses, no role asked, the session\'s workspace and person handed on', () => {
+      const route = require('fs').readFileSync(require('path').join(__dirname, '../../routes/fonio.js'), 'utf8');
+      assert.match(route, /router\.get\('\/calls\/check', requireAuth, async/);
+      assert.match(route, /router\.post\('\/calls', requireAuth, async/);
+      assert.match(route, /fonioCalls\.checkByHand\(pool, \{ workspaceId: req\.workspaceId, \.\.\.ids \}\)/);
+      assert.match(route, /fonioCalls\.scheduleByHand\(pool, \{ workspaceId: req\.workspaceId, \.\.\.ids, userId: req\.userId \}\)/);
+    });
   });
 });

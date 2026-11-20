@@ -28,24 +28,73 @@
    four kinds, pipelines + stages, contacts, deals, listings and their links,
    activities + comments, task projects / statuses / lists / tasks, and the
    rows of task_attachments and contact_documents.
+   SINCE VERSION 2 (2026-11-20, WORKSPACE_TRANSFER_CHANGES Part 2) also what
+   the workspace has made with what was added after the first export:
+     note_templates      the templates a note is started from
+     journey_flows       the workflows — name, whether it is switched on
+     journey_nodes       … their boxes: the start with everything it was set
+                         to (what starts it, where it ends), every step, the
+                         two lines of a branch, each box's place on the board
+     journey_runs        … which deal is in which workflow, at which step,
+                         and when that step is due
+     journey_log         … the whole record: who was taken in, every step,
+                         every end with its reason, and who changed a
+                         workflow — also of workflows that were deleted
+     fonio_calls         fonio's calls for deals: sent, planned, their results
+     fonio_other_calls   … and the calls nobody planned (incoming, unmatched)
+   A version 1 bundle is a version 2 bundle without these seven tables.
 
    ⚠ password_hash is in the file. Treat a bundle like a password.
 
-   NOT IN IT, ON PURPOSE
+   NOT IN IT, ON PURPOSE  (LEFT_OUT below names every one; a test holds the
+   two lists against db.js, so a table added later has to be put in one of
+   them — the export cannot fall behind unnoticed again)
      secrets bound to this install   workspace_webhook (the key is in its URL),
-                                     workspace_calcom, workspace_engine,
-                                     api_keys (and workspace_notetaker_ai on
-                                     v2.3.3beta)
+                                     workspace_calcom, workspace_calendly,
+                                     workspace_engine, workspace_fonio (its key
+                                     and its result link), workspace_mail and
+                                     email_accounts (a Google sign-in, sealed
+                                     under this server's secret), api_keys,
+                                     workspace_notetaker_ai
      history about the workspace     webhook_logs, engine_deliveries,
                                      engine_api_requests, idempotency_keys,
-                                     notetaker_recordings, notifications
+                                     notetaker_recordings, notifications,
+                                     journey_sends (the emails counted against
+                                     the sending address's limits: seven days
+                                     of this install's own sending)
+     rebuilt by itself               journey_watch (what a workflow last saw of
+                                     each deal: written again the first time
+                                     the workflow looks)
      the team's chatter              chat_messages, chat_reads, break_scores
      access                          invite_codes, password_resets
+     the platform's, not the         master_access_log, platform_invites,
+     workspace's                     platform_settings
      dead                            stages (contact stages, removed in Part 19)
+
+   FOR WHOEVER IMPORTS A BUNDLE
+     · Ids also stand INSIDE JSON, where no foreign key shows them. In
+       journey_nodes.config: stage_id, stage_ids, stop_stage_ids,
+       stay_stage_ids (stages), pipeline_id, flow_id and
+       stop_set.other_flow.flow_id (workflows), webhook_ids (lead webhooks —
+       which are NOT in the bundle: a start limited to some of them has to
+       become "every lead webhook" or be set anew). A field is named by its
+       key, which travels as it is. fonio_calls.stage_at_send is a stage's id
+       without a foreign key.
+     · journey_runs.event_key and the ids in a call's request / result_body
+       were made from this install's ids. A key only has to stay unique per
+       workflow and deal; an importer that keeps ids from colliding with new
+       ones gives the old keys a prefix.
+     · WORK THAT IS STILL TO HAPPEN travels too: a workflow that is switched
+       on, a deal waiting for its next step (journey_runs.status 'waiting'), a
+       call that is planned (fonio_calls.status 'scheduled'). Imported as they
+       are into an install that runs, they would happen a second time — the
+       email sent, the person called — beside the install they came from. An
+       importer switches the workflows off and leaves planned calls behind
+       unless it is told that this copy takes over.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const FORMAT  = 'upgrads-workspace';
-const VERSION = 1;
+const VERSION = 2;
 
 const byWorkspace = table => `SELECT to_jsonb(t) AS r FROM ${table} t WHERE t.workspace_id = $1 ORDER BY t.id`;
 
@@ -82,7 +131,31 @@ const TABLES = [
   ['tasks',                 byWorkspace('tasks')],
   ['task_attachments',      byWorkspace('task_attachments')],
   ['contact_documents',     byWorkspace('contact_documents')],
+  // version 2: journey_nodes.next_id / else_id point into their own table, journey_runs to a workflow, a deal and a
+  // box, journey_log to those and a person (each of them may be gone: the entry keeps their names), fonio_calls to a
+  // deal, a contact, people, the note it left and the call it follows
+  ['note_templates',        byWorkspace('note_templates')],
+  ['journey_flows',         byWorkspace('journey_flows')],
+  ['journey_nodes',         byWorkspace('journey_nodes')],
+  ['journey_runs',          byWorkspace('journey_runs')],
+  ['journey_log',           byWorkspace('journey_log')],
+  ['fonio_calls',           byWorkspace('fonio_calls')],
+  ['fonio_other_calls',     byWorkspace('fonio_other_calls')],
 ];
+
+// Every other table of the schema, with why it stays out (the header says more). TABLES and LEFT_OUT together are
+// every table db.js creates: tests/routes/admin-transfer.test.js fails when a new table is in neither.
+const LEFT_OUT = {
+  workspace_webhook: 'secret', workspace_calcom: 'secret', workspace_calendly: 'secret', workspace_engine: 'secret', workspace_fonio: 'secret', workspace_mail: 'secret', email_accounts: 'secret',
+  api_keys: 'secret', workspace_notetaker_ai: 'secret',
+  webhook_logs: 'history', engine_deliveries: 'history', engine_api_requests: 'history', idempotency_keys: 'history', notetaker_recordings: 'history', notifications: 'history',
+  journey_sends: 'history',
+  journey_watch: 'rebuilt',
+  chat_messages: 'chatter', chat_reads: 'chatter', break_scores: 'chatter',
+  invite_codes: 'access', password_resets: 'access',
+  master_access_log: 'platform', platform_invites: 'platform', platform_settings: 'platform',
+  stages: 'dead',
+};
 
 // The bundle's content, or null when the workspace does not exist.
 async function readWorkspace(pool, workspaceId) {
@@ -130,4 +203,4 @@ function bundleFileName(bundle) {
   return `upgrads-${slug}-${bundle.workspace_id}-${bundle.exported_at.slice(0, 10)}.tar.gz`;
 }
 
-module.exports = { FORMAT, VERSION, TABLES, readWorkspace, bundleEntries, bundleFileName };
+module.exports = { FORMAT, VERSION, TABLES, LEFT_OUT, readWorkspace, bundleEntries, bundleFileName };

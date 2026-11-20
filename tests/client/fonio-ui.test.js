@@ -165,7 +165,10 @@ globalThis.__fonioDict = dict;
 describe('who books a meeting agreed in the call (Part 34)', () => {
   test('markup: one switch in the fonio card, every word from the dictionary', () => {
     assert.match(pane, /<input type="checkbox" id="fonio-book-meetings" class="switch">/);
-    const start = pane.indexOf('id="fonio-book-meetings"') - 400, section = pane.slice(start, start + 1200);
+    // Part 41: the two explanations are folded behind "More" in the section's head, so the section is taken by its
+    // bounds (its label to the next section) instead of a window of characters around the box.
+    const start = pane.indexOf('data-i18n="fonio_meet_label"'), section = pane.slice(start - 100, pane.indexOf('id="fonio-rules"'));
+    assert.ok(start > 0 && section.includes('id="fonio-book-meetings"'), 'the box is in the section its label opens');
     for (const k of ['fonio_meet_label', 'fonio_meet_hint', 'fonio_book_meetings', 'fonio_book_meetings_hint']) {
       assert.ok(section.includes(`data-i18n="${k}"`), `#fonio-book-meetings' section names ${k}`);
       assert.ok(both(k), k);
@@ -333,6 +336,7 @@ describe('fonioErrorText: every refusal the server names has its own sentence', 
     for (const r of ['key', 'refused', 'unreachable']) reasons.add(r);   // utils/fonio.js testKey
     for (const r of ['active', 'on_deal_manual', 'on_deal_webhook', 'hours_on', 'not_waiting']) reasons.delete(r);   // switches the form always sends right; the cancel route's own
     reasons.delete('inbound');   // the result link's answer to fonio (Part 7), never shown on the page
+    reasons.delete('contact');   // "Call this contact" without a contact named (Part 42): the calls page's own, said by fonio-log.js
     for (const r of reasons) assert.notEqual(F.fonioErrorText({ reason: r }), dict.en.fonio_err_generic, r);
     assert.equal(F.fonioErrorText({ reason: 'whatever' }), dict.en.fonio_err_generic);
     assert.equal(F.fonioErrorText(null), dict.en.fonio_err_generic);
@@ -821,7 +825,9 @@ describe('the deal after the call (Part 40)', () => {
     assert.match(sec, /<h3 data-i18n="fonio_rules_label">/);
     assert.match(sec, /<p class="intg-section-hint" data-i18n="fonio_rules_hint">/);
     assert.match(sec, /<label for="fonio-rules-pipeline" data-i18n="fonio_rules_pipeline">[^<]*<\/label>\s*<select id="fonio-rules-pipeline" class="form-control" onchange="setFonioRulesPipeline\(this\.value\)"><\/select>/);
-    assert.match(sec, /<div id="fonio-rules-table"><\/div>\s*<p class="help" data-i18n="fonio_rules_note">/);
+    // Part 41: the note about a deal moved by hand is folded behind "More" with the section's explanation; the table's place stays
+    assert.match(sec, /<div id="fonio-rules-table"><\/div>/);
+    assert.match(sec, /<details class="fonio-more">\s*<summary data-i18n="fonio_more">[^<]*<\/summary>\s*<p class="intg-section-hint" data-i18n="fonio_rules_hint">[^<]*<\/p>\s*<p class="help" data-i18n="fonio_rules_note">/);
   });
 
   test('markup: in the result card, the variable\'s description and the prompt\'s sentence, each to copy', () => {
@@ -831,7 +837,8 @@ describe('the deal after the call (Part 40)', () => {
       assert.match(sec, new RegExp(`<div class="intg-json-block">\\s*<div class="intg-json-header">\\s*${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s\\S]{0,120}?<button class="btn btn-sm intg-copy-btn" onclick="copyIntgJson\\(this\\)" data-i18n="btn_copy">Copy</button>\\s*</div>\\s*<pre class="intg-code fonio-vars-out" id="${id}" data-i18n="${key}">`), id);
     }
     assert.equal(sec.split('class="intg-json-block"').length - 1, 2);
-    assert.match(sec, /<h3 data-i18n="fonio_ls_label">[^<]*<\/h3>\s*<p class="intg-section-hint" data-i18n="fonio_ls_hint">/);
+    // Part 41: how to set it up is folded behind its own line under the label
+    assert.match(sec, /<h3 data-i18n="fonio_ls_label">[^<]*<\/h3>\s*<details class="fonio-more">\s*<summary data-i18n="fonio_more_how">[^<]*<\/summary>\s*<p class="intg-section-hint" data-i18n="fonio_ls_hint">/);
   });
 
   test('the events are the server\'s, in its order, and each has its name in both languages', () => {

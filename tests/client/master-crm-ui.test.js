@@ -120,6 +120,7 @@ describe('Part 3: the CRM for a master session', () => {
       function resetClientState() { calls.push(['resetClientState']); }
       function startAppVersionWatch() {}
       function mailboxKeepReturn() {}
+      function journeyMailKeepReturn() {}
       function switchPage(p) { calls.push(['page', p]); }
       function __probe() { return { els, el, window, calls }; }
       function __answers(a) { answers = a; }`,

@@ -47,6 +47,8 @@ const pool = {
     // Part 24: the calls still to come, the soonest first
     if (q.startsWith('SELECT f.id, f.due_at AS at, f.to_number AS number,') && q.includes("WHERE f.workspace_id = $1 AND f.status IN ('scheduled','sending') ORDER BY f.due_at, f.id LIMIT $2")) {
       assert.match(q, /d\.title AS deal_title, f\.trigger FROM fonio_calls f/, 'what started the planned call is read too (Part 36)');
+      assert.match(q, /c\.name AS contact_name, u\.name AS asked_by_name, f\.deal_id/, 'and who started it by hand (Part 42)');
+      assert.match(q, /LEFT JOIN users u ON u\.id = f\.asked_by WHERE f\.workspace_id = \$1/);
       return { rows: state.fonioCalls.filter(c => c.workspace_id === params[0] && (c.status === 'scheduled' || c.status === 'sending')).sort((a, b) => new Date(a.due_at) - new Date(b.due_at)).slice(0, params[1])
         .map(c => ({ id: c.id, at: c.due_at, number: c.to_number, contact_id: c.contact_id, contact_name: nameOf(c.contact_id), deal_id: c.deal_id, deal_title: titleOf(c.deal_id), trigger: c.trigger })) };
     }
@@ -117,7 +119,7 @@ describe('GET /log', () => {
     const { entries } = await (await fetch(`${base}/log`)).json();
     assert.deepEqual(entries.find(e => e.key === 'call:15'), { key: 'call:15', id: 15, by_crm: true, direction: 'outbound', at: '2026-11-12T05:00:00.000Z', number: '+491734444444',
       caller_name: null, contact_id: 40, contact_name: 'Erika Muster', deal_id: 60, deal_title: 'Wohnung 3', duration: null, summary: null, link: null, result: false, noted: false,
-      planned: true, trigger: 'callback' });
+      planned: true, trigger: 'callback', asked_by_name: null });   // asked_by_name: who started a call by hand (Part 42); nobody here
     assert.equal(entries.find(e => e.key === 'call:14').planned, true);
     assert.equal(entries.find(e => e.key === 'call:14').trigger, null, 'a row without one (the fake\'s) says null, never undefined');
     assert.equal(entries.find(e => e.key === 'call:12').trigger, undefined, 'only planned calls carry it');

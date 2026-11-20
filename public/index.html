@@ -97,6 +97,7 @@
 <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
 <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
 <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></symbol>
+<symbol id="i-journey" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></symbol>
 </svg>
 
   <!-- Global loading bar -->
@@ -357,6 +358,8 @@
         <a href="#" class="sb-link" data-page="calendar"><svg class="ic" aria-hidden="true"><use href="#i-calendar"/></svg><span class="sb-text" data-i18n="nav_calendar">Calendar</span></a>
         <a href="#" class="sb-link" data-page="objects" id="nav-objects-link"><svg class="ic" aria-hidden="true"><use href="#i-building"/></svg><span class="sb-text" id="nav-objects-label">Listings</span></a>
         <a href="#" class="sb-link" data-page="board" id="nav-board-link"><svg class="ic" aria-hidden="true"><use href="#i-presentation"/></svg><span class="sb-text" data-i18n="nav_board">Board</span></a>
+        <!-- Customer Journey: the workspace's workflows (public/js/journey.js) -->
+        <a href="#" class="sb-link" data-page="journey"><svg class="ic" aria-hidden="true"><use href="#i-journey"/></svg><span class="sb-text" data-i18n="nav_journey">Workflows</span></a>
         <a href="#" class="sb-link" data-page="analytics"><svg class="ic" aria-hidden="true"><use href="#i-bar-chart"/></svg><span class="sb-text" data-i18n="nav_analytics">Analytics</span></a>
         <!-- Onboarding monitor: shown by updateOnboardingNav() to owners/admins while the Upgrads Engine integration is active -->
         <a href="#" class="sb-link hidden" data-page="onboarding" id="nav-onboarding-link"><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><span class="sb-text" data-i18n="nav_onboarding">Onboarding</span></a>
@@ -1136,6 +1139,19 @@
         </div>
       </section>
 
+      <!-- ── Customer Journey: the workspace's workflows, one action per box — public/js/journey.js ── -->
+      <section id="page-journey" class="page">
+        <div class="page-header">
+          <div>
+            <h1 class="page-title"><svg class="ic" aria-hidden="true"><use href="#i-journey"/></svg><span data-i18n="nav_journey">Workflows</span></h1>
+            <p class="page-sub" data-i18n="jr_sub">Workflows say what happens to a lead, one step after the other. A workflow runs while it is switched on.</p>
+          </div>
+          <div class="page-actions" id="journey-actions"></div>
+        </div>
+        <div class="toolbar" id="journey-toolbar"></div>
+        <div class="jr-board" id="journey-board"></div>
+      </section>
+
       <section id="page-integrations" class="page page-rail">
         <div class="page-header">
           <div>
@@ -1630,19 +1646,38 @@
             </div>
             <div class="intg-stack">
 
-          <div class="settings-card" id="fonio-card">
+          <!-- The head of the tab (FONIO_CHANGES Part 41): what is connected, in one line, and the five parts of the tab to choose from. One part is shown at a time (renderFonioParts in integrations.js); the others stay in the page, hidden, so Save reads the whole form whatever part is open. Long explanations are folded behind "More" (details.fonio-more). -->
+          <div class="settings-card fonio-head" id="fonio-head">
             <div class="settings-card-header">
-              <h2 data-i18n="fonio_title">Connection</h2>
+              <p class="fonio-line" id="fonio-line"></p>
               <span id="fonio-status" class="badge" data-i18n="fonio_status_none">Not connected</span>
             </div>
-            <p class="settings-hint" data-i18n="fonio_hint">One fonio account for the whole workspace. Everyone sees the settings and the calls; only owners and admins can change them.</p>
             <p class="settings-hint hidden" id="fonio-readonly-hint" data-i18n="fonio_readonly_hint">Only owners and admins can change the fonio settings.</p>
+            <div class="seg fonio-parts" id="fonio-parts" role="tablist" aria-label="Parts of the fonio settings" data-i18n-aria="fonio_parts_aria">
+              <button type="button" role="tab" data-fonio-part="connection" aria-selected="true" onclick="setFonioPart('connection')" data-i18n="fonio_title">Connection</button>
+              <button type="button" role="tab" data-fonio-part="who" aria-selected="false" onclick="setFonioPart('who')" data-i18n="fonio_part_who">Who and when</button>
+              <button type="button" role="tab" data-fonio-part="after" aria-selected="false" onclick="setFonioPart('after')" data-i18n="fonio_part_after">After the call</button>
+              <button type="button" role="tab" data-fonio-part="setup" aria-selected="false" onclick="setFonioPart('setup')" data-i18n="fonio_part_setup" hidden>Setup in fonio</button>
+              <button type="button" role="tab" data-fonio-part="calls" aria-selected="false" onclick="setFonioPart('calls')" data-i18n="fonio_calls_title">Calls</button>
+            </div>
+            <details class="fonio-more">
+              <summary data-i18n="fonio_more">More</summary>
+              <p class="settings-hint" data-i18n="fonio_hint">One fonio account for the whole workspace. Everyone sees the settings and the calls; only owners and admins can change them.</p>
+            </details>
+          </div>
+
+          <!-- The settings, in three parts: Connection, Who and when, After the call. One Save for all three. -->
+          <div class="settings-card" id="fonio-card">
             <div class="settings-card-body">
+              <div class="fonio-part" data-fonio-part="connection">
               <div id="fonio-facts"></div>
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_conn_label">Account</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_conn_hint">The API key from fonio and the fonio number the calls come from. In fonio, the assistant assigned to this number for outbound calls makes the call.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more">More</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_conn_hint">The API key from fonio and the fonio number the calls come from. In fonio, the assistant assigned to this number for outbound calls makes the call.</p>
+                  </details>
                 </div>
                 <div class="intg-fields">
                   <div class="intg-field">
@@ -1657,12 +1692,19 @@
                 </div>
               </div>
               <div class="intg-section">
+                <div class="intg-fields">
+                  <label class="switch-row"><input type="checkbox" id="fonio-active" class="switch" onchange="updateFonioActive()"> <span data-i18n="fonio_active">Active: call the contact of new deals</span></label>
+                  <p class="help hidden" id="fonio-paused-hint" data-i18n="fonio_paused_hint">Paused: no calls go out until "Active" is on. The two switches under "Who and when" apply once it is.</p>
+                </div>
+              </div>
+              </div>
+
+              <div class="fonio-part" data-fonio-part="who" hidden>
+              <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_when_label">When fonio calls</h3>
                 </div>
                 <div class="intg-fields">
-                  <label class="switch-row"><input type="checkbox" id="fonio-active" class="switch" onchange="updateFonioActive()"> <span data-i18n="fonio_active">Active: call the contact of new deals</span></label>
-                  <p class="help hidden" id="fonio-paused-hint" data-i18n="fonio_paused_hint">Paused: no calls go out until "Active" is on. The two switches below apply once it is.</p>
                   <label class="switch-row"><input type="checkbox" id="fonio-on-manual" class="switch"> <span data-i18n="fonio_on_manual">New deals created by hand</span></label>
                   <label class="switch-row"><input type="checkbox" id="fonio-on-webhook" class="switch"> <span data-i18n="fonio_on_webhook">New deals from the lead webhook</span></label>
                   <div class="intg-field">
@@ -1676,7 +1718,10 @@
               <div class="intg-section" id="fonio-who">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_who_label">Who gets the call</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_who_hint">As long as nothing is limited here, every new deal is called. The calls can be limited to some pipelines and to some lead webhooks; a lead is called only when both its webhook and its pipeline are allowed.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more">More</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_who_hint">As long as nothing is limited here, every new deal is called. The calls can be limited to some pipelines and to some lead webhooks; a lead is called only when both its webhook and its pipeline are allowed.</p>
+                  </details>
                 </div>
                 <div class="intg-fields">
                   <div class="intg-field">
@@ -1692,7 +1737,10 @@
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_numbers_label">Numbers</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_numbers_hint">fonio dials numbers with + and the country code. A contact's number that starts with 0 gets the country code below.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more">More</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_numbers_hint">fonio dials numbers with + and the country code. A contact's number that starts with 0 gets the country code below.</p>
+                  </details>
                 </div>
                 <div class="intg-fields">
                   <div class="intg-field">
@@ -1709,7 +1757,10 @@
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_hours_label">Calling hours</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_hours_hint">A call that falls due outside these hours waits for the next opening.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more">More</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_hours_hint">A call that falls due outside these hours waits for the next opening.</p>
+                  </details>
                 </div>
                 <div class="intg-fields">
                   <label class="switch-row"><input type="checkbox" id="fonio-hours-on" class="switch"> <span data-i18n="fonio_hours_on">Only call within these hours</span></label>
@@ -1728,20 +1779,16 @@
                   </div>
                 </div>
               </div>
-              <div class="intg-section">
-                <div class="intg-section-head">
-                  <h3 data-i18n="fonio_meet_label">Meetings agreed in the call</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_meet_hint">The assistant can agree a meeting in the call; where it is booked is decided here.</p>
-                </div>
-                <div class="intg-fields">
-                  <label class="switch-row"><input type="checkbox" id="fonio-book-meetings" class="switch"> <span data-i18n="fonio_book_meetings">Book the agreed meeting in the CRM</span></label>
-                  <p class="help" data-i18n="fonio_book_meetings_hint">On: the CRM books the agreed time at the connected Cal.com or Calendly. Off: fonio books it itself, because Cal.com or Calendly is connected there — the call's note only says what was agreed.</p>
-                </div>
               </div>
+
+              <div class="fonio-part" data-fonio-part="after" hidden>
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_follow_label">If nobody answers</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_follow_hint">A call can be tried again when it reaches nobody. The delay counts from the call itself, and the retry waits for the calling hours like any call. It is a normal call in the list below, where it can be cancelled.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more">More</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_follow_hint">A call can be tried again when it reaches nobody. The delay counts from the call itself, and the retry waits for the calling hours like any call. It is a normal call under "Calls", where it can be cancelled.</p>
+                  </details>
                 </div>
                 <div class="intg-fields">
                   <label class="switch-row"><input type="checkbox" id="fonio-follow-on" class="switch" onchange="updateFonioFollow()"> <span data-i18n="fonio_follow_on">Call again when nobody answers</span></label>
@@ -1760,7 +1807,10 @@
                   <div class="intg-field">
                     <label for="fonio-follow-attempts" data-i18n="fonio_follow_attempts">Follow-up calls per contact</label>
                     <input type="number" id="fonio-follow-attempts" class="form-control" min="0" max="3" step="1" />
-                    <p class="help" data-i18n="fonio_follow_attempts_hint">0 books none. The delays are read from the call's outcome, which the assistant writes as call_outcome (see "Call results" below).</p>
+                    <details class="fonio-more">
+                      <summary data-i18n="fonio_more">More</summary>
+                      <p class="help" data-i18n="fonio_follow_attempts_hint">0 books none. The delays are read from the call's outcome, which the assistant writes as call_outcome (see "Call results", in the part "Setup in fonio").</p>
+                    </details>
                   </div>
                 </div>
               </div>
@@ -1768,18 +1818,38 @@
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_callback_label">When the contact asks for a callback</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_callback_hint">"No time now, call me this afternoon": the next call goes out at the time named in the call instead of after the delays above. It is a normal call in the list below, where it can be cancelled.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more">More</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_callback_hint">"No time now, call me this afternoon": the next call goes out at the time named in the call instead of after the delays above. It is a normal call under "Calls", where it can be cancelled.</p>
+                    <p class="help" data-i18n="fonio_callback_rules">That time counts outside the calling hours too, but nobody is called between 22:00 and 07:00. Without an exact time: morning 10:00, midday 12:00, afternoon 15:00, evening 18:00. At most 3 callbacks in a row per contact. The assistant has to report the time: see "A callback asked for in the call" under "Call results", in the part "Setup in fonio".</p>
+                  </details>
                 </div>
                 <div class="intg-fields">
                   <label class="switch-row"><input type="checkbox" id="fonio-callback-on" class="switch"> <span data-i18n="fonio_callback_on">Call back at the time asked for in the call</span></label>
-                  <p class="help" data-i18n="fonio_callback_rules">That time counts outside the calling hours too, but nobody is called between 22:00 and 07:00. Without an exact time: morning 10:00, midday 12:00, afternoon 15:00, evening 18:00. At most 3 callbacks in a row per contact. The assistant has to report the time: see "A callback asked for in the call" under "Call results".</p>
+                </div>
+              </div>
+              <div class="intg-section">
+                <div class="intg-section-head">
+                  <h3 data-i18n="fonio_meet_label">Meetings agreed in the call</h3>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more">More</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_meet_hint">The assistant can agree a meeting in the call; where it is booked is decided here.</p>
+                    <p class="help" data-i18n="fonio_book_meetings_hint">On: the CRM books the agreed time at the connected Cal.com or Calendly. Off: fonio books it itself, because Cal.com or Calendly is connected there — the call's note only says what was agreed.</p>
+                  </details>
+                </div>
+                <div class="intg-fields">
+                  <label class="switch-row"><input type="checkbox" id="fonio-book-meetings" class="switch"> <span data-i18n="fonio_book_meetings">Book the agreed meeting in the CRM</span></label>
                 </div>
               </div>
               <!-- The deal after the call (FONIO_CHANGES Parts 39 and 40): per pipeline, what came out of the call decides the deal's stage and urgency. The pipeline list and the table are filled by renderFonioRules. -->
               <div class="intg-section" id="fonio-rules">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_rules_label">The deal after the call</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_rules_hint">What came out of a call can move the deal to another stage and set its urgency. The assistant reports it as lead_status (see "What came out of the conversation" under "Call results"); "Not reached" is decided by the CRM itself, after the last try. Each pipeline has its own table.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more">More</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_rules_hint">What came out of a call can move the deal to another stage and set its urgency. The assistant reports it as lead_status (see "What came out of the conversation" under "Call results", in the part "Setup in fonio"); "Not reached" is decided by the CRM itself, after the last try. Each pipeline has its own table.</p>
+                    <p class="help" data-i18n="fonio_rules_note">A deal is moved only while it is still in the stage it had when the call went out: one that somebody moved by hand since is left alone. The call's note says what was done.</p>
+                  </details>
                 </div>
                 <div class="intg-fields">
                   <div class="intg-field">
@@ -1787,9 +1857,10 @@
                     <select id="fonio-rules-pipeline" class="form-control" onchange="setFonioRulesPipeline(this.value)"></select>
                   </div>
                   <div id="fonio-rules-table"></div>
-                  <p class="help" data-i18n="fonio_rules_note">A deal is moved only while it is still in the stage it had when the call went out: one that somebody moved by hand since is left alone. The call's note says what was done.</p>
                 </div>
               </div>
+              </div>
+
               <div class="settings-card-actions hidden" id="fonio-actions">
                 <button class="btn btn-primary btn-sm" id="fonio-save-btn" onclick="saveFonio(this)" data-i18n="fonio_btn_save">Save</button>
                 <button class="btn btn-sm btn-danger hidden" id="fonio-remove-btn" onclick="removeFonio()" data-i18n="fonio_btn_remove">Remove</button>
@@ -1799,6 +1870,8 @@
             </div>
           </div>
 
+          <!-- The part "Setup in fonio" (Part 41): what is set up once in fonio itself — the two cards below, each for owners and admins with a saved connection. -->
+          <div class="fonio-part" data-fonio-part="setup" hidden>
           <!-- fonio's result after a call (FONIO_CHANGES Parts 7 and 8): the workspace's result link and the Body to paste into fonio's HTTP Request. Owners/admins only, once a connection is saved (renderFonioResult). -->
           <div class="settings-card hidden" id="fonio-result-card">
             <div class="settings-card-header">
@@ -1809,7 +1882,10 @@
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_result_link_label">Result link</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_result_link_hint">In fonio, add an HTTP Request to the assistant that makes the calls: Run "After the conversation", method POST, this link as the URL. Keep the link secret: whoever has it can write notes into this workspace.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more_how">How to set this up</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_result_link_hint">In fonio, add an HTTP Request to the assistant that makes the calls: Run "After the conversation", method POST, this link as the URL. Keep the link secret: whoever has it can write notes into this workspace.</p>
+                  </details>
                 </div>
                 <div class="intg-url-box">
                   <input type="text" id="fonio-result-url" readonly class="intg-url-input" />
@@ -1819,7 +1895,10 @@
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_result_body_label">Body for the HTTP Request</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_result_body_hint">Paste this as the Body. Replace the three values in angle brackets with fonio's variables from "Add Variable"; keep the names on the left as they are.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more_how">How to set this up</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_result_body_hint">Paste this as the Body. Replace the three values in angle brackets with fonio's variables from "Add Variable"; keep the names on the left as they are.</p>
+                  </details>
                 </div>
                 <div class="intg-json-block">
                   <div class="intg-json-header">
@@ -1832,7 +1911,10 @@
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_outcome_label">How the call ended</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_outcome_hint">For a call that is tried again, the CRM has to know how it ended. In fonio, add a variable of your own called call_outcome (Add Variable) with the description: How the call ended: answered, no_answer, voicemail or busy. Have the assistant say it at the end of the prompt, keep its value in the Body as call_outcome. Without it, only a call fonio reports nothing about for an hour is tried again.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more_how">How to set this up</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_outcome_hint">For a call that is tried again, the CRM has to know how it ended. In fonio, add a variable of your own called call_outcome (Add Variable) with the description: How the call ended: answered, no_answer, voicemail or busy. Have the assistant say it at the end of the prompt, keep its value in the Body as call_outcome. Without it, only a call fonio reports nothing about for an hour is tried again.</p>
+                  </details>
                 </div>
                 <div class="intg-url-box">
                   <input type="text" id="fonio-outcome-words" readonly class="intg-url-input" value="answered | no_answer | voicemail | busy" />
@@ -1843,7 +1925,10 @@
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_cb_label">A callback asked for in the call</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_cb_hint">For a callback at the time the person names, the assistant has to report that time. In fonio, add two variables of your own (Add Variable) called callback_date and callback_time, each with its description below. The Body above carries both already. Then put the sentence into the assistant's prompt.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more_how">How to set this up</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_cb_hint">For a callback at the time the person names, the assistant has to report that time. In fonio, add two variables of your own (Add Variable) called callback_date and callback_time, each with its description below. The Body above carries both already. Then put the sentence into the assistant's prompt.</p>
+                  </details>
                 </div>
                 <div class="intg-json-block">
                   <div class="intg-json-header">
@@ -1871,7 +1956,10 @@
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_ls_label">What came out of the conversation</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_ls_hint">For the deal to move after a call ("The deal after the call" above), the assistant has to report what came out of it. In fonio, add a variable of your own (Add Variable) called lead_status with the description below. The Body above carries it already. Then put the sentence into the assistant's prompt.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more_how">How to set this up</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_ls_hint">For the deal to move after a call ("The deal after the call" under "After the call"), the assistant has to report what came out of it. In fonio, add a variable of your own (Add Variable) called lead_status with the description below. The Body above carries it already. Then put the sentence into the assistant's prompt.</p>
+                  </details>
                 </div>
                 <div class="intg-json-block">
                   <div class="intg-json-header">
@@ -1898,12 +1986,18 @@
               <h2 data-i18n="fonio_vars_title">Variables for the assistant</h2>
             </div>
             <p class="settings-hint" data-i18n="fonio_vars_hint">The assistant in fonio only knows a contact's details where its prompt names them as {{variable}}. Here you decide which CRM value is sent under which name with every call.</p>
-            <p class="settings-hint" data-i18n="fonio_vars_slots_hint">While Cal.com or Calendly is connected, every call the CRM starts also carries {{freie_termine}} (the next free times of the chosen event type, for example "Do 20.11.2026: 09:00, 09:30; Fr 21.11.2026: 14:00"), {{freie_termine_json}} (the same as a list) and {{heute}} (today's weekday and date). Name them in the prompt so the assistant only offers times that can be booked. A prompt that calls them something else works too: connect its name below to “Free times” or “Today's date”.</p>
+            <details class="fonio-more">
+              <summary data-i18n="fonio_more_slots">Free times and today's date in the prompt</summary>
+              <p class="settings-hint" data-i18n="fonio_vars_slots_hint">While Cal.com or Calendly is connected, every call the CRM starts also carries {{freie_termine}} (the next free times of the chosen event type, for example "Do 20.11.2026: 09:00, 09:30; Fr 21.11.2026: 14:00"), {{freie_termine_json}} (the same as a list) and {{heute}} (today's weekday and date). Name them in the prompt so the assistant only offers times that can be booked. A prompt that calls them something else works too: connect its name below to “Free times” or “Today's date”.</p>
+            </details>
             <div class="settings-card-body">
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_vars_prompt_label">Start from your prompt</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_vars_prompt_hint">Paste the assistant's prompt from fonio. Every placeholder in braces becomes a row below. The prompt is not saved in the CRM.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more">More</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_vars_prompt_hint">Paste the assistant's prompt from fonio. Every placeholder in braces becomes a row below. The prompt is not saved in the CRM.</p>
+                  </details>
                 </div>
                 <textarea id="fonio-vars-prompt" class="settings-textarea" rows="6" spellcheck="false" placeholder="Paste the prompt here" data-i18n-ph="fonio_vars_prompt_ph"></textarea>
                 <div class="settings-card-actions">
@@ -1914,7 +2008,10 @@
               <div class="intg-section">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_vars_list_label">Variables</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_vars_list_hint">The name is what the prompt uses in double braces. Rows set to "Not from the CRM" are not sent and stay in the prompt as they are.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more">More</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_vars_list_hint">The name is what the prompt uses in double braces. Rows set to "Not from the CRM" are not sent and stay in the prompt as they are.</p>
+                  </details>
                 </div>
                 <div id="fonio-vars-rows"></div>
                 <div class="settings-card-actions">
@@ -1924,7 +2021,10 @@
               <div class="intg-section hidden" id="fonio-vars-out-wrap">
                 <div class="intg-section-head">
                   <h3 data-i18n="fonio_vars_out_label">Your prompt for fonio</h3>
-                  <p class="intg-section-hint" data-i18n="fonio_vars_out_hint">The same prompt with the connected placeholders written as variables. Save below, then paste this into the assistant in fonio.</p>
+                  <details class="fonio-more">
+                    <summary data-i18n="fonio_more">More</summary>
+                    <p class="intg-section-hint" data-i18n="fonio_vars_out_hint">The same prompt with the connected placeholders written as variables. Save below, then paste this into the assistant in fonio.</p>
+                  </details>
                 </div>
                 <div class="intg-json-block">
                   <div class="intg-json-header">
@@ -1940,7 +2040,10 @@
               </div>
             </div>
           </div>
+          </div>
 
+          <!-- The part "Calls" (Part 41): the call history. -->
+          <div class="fonio-part" data-fonio-part="calls" hidden>
           <div class="settings-card" id="fonio-calls-card">
             <div class="settings-card-header">
               <h2 data-i18n="fonio_calls_title">Calls</h2>
@@ -1950,6 +2053,7 @@
             <div class="settings-card-body">
               <div id="fonio-calls"></div>
             </div>
+          </div>
           </div>
 
             </div>
@@ -2569,6 +2673,13 @@
   <script src="js/integrations.js"></script>
   <script src="js/onboarding.js"></script>
   <script src="js/fonio-log.js"></script>
+  <script src="js/journey.js"></script>
+  <script src="js/journey-start.js"></script>
+  <script src="js/journey-branch.js"></script>
+  <script src="js/journey-vars.js"></script>
+  <script src="js/journey-history.js"></script>
+  <script src="js/journey-mail.js"></script>
+  <script src="js/journey-fixed.js"></script>
   <script src="js/calendly.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="js/chat.js"></script>

@@ -79,7 +79,7 @@ async function ntplMenu(button) {
 function ntplForm(tpl, { onDone } = {}) {
   const id = 'ntpl-' + uid(), start = { name: tpl ? tpl.name : '', text: tpl ? tpl.content : '' };
   const m = ui.modal({ title: t(tpl ? 'ntpl_title_edit' : 'ntpl_title_add'), size: 'lg',
-    body: `<form id="${id}" novalidate>
+    body: `<form id="${id}" novalidate class="col" style="gap:14px;padding-top:4px">
         <div class="field"><label class="label" for="${id}-name">${esc(t('ntpl_name'))}</label>
           <input class="input" id="${id}-name" maxlength="${NTPL_MAX_NAME}" autocomplete="off" placeholder="${esc(t('ntpl_name_ph'))}" value="${esc(start.name)}"></div>
         <div class="field"><label class="label" for="${id}-text">${esc(t('ntpl_text'))}</label>

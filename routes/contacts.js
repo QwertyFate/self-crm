@@ -157,7 +157,7 @@ router.post('/import', async (req, res, next) => {
         const shouldCreateDeal = (isNew && createDealsForNew) || (!isNew && createDealsForUpdated);
         if (shouldCreateDeal && pipelineId && contactId) {
           await client.query(
-            'INSERT INTO deals (workspace_id, contact_id, pipeline_id, stage_id, title) VALUES ($1,$2,$3,$4,$5)',
+            `INSERT INTO deals (workspace_id, contact_id, pipeline_id, stage_id, title, origin) VALUES ($1,$2,$3,$4,$5,'import')`,   // origin: a workflow can start on an imported deal, or leave them out
             [req.workspaceId, contactId, pipelineId, defaultStageId || null, row.name.trim()]
           );
           dealsCreated++;

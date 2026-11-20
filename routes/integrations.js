@@ -581,8 +581,8 @@ router.post('/receive/:key', async (req, res) => {
         stageId = firstStage?.id || null;
       }
       const { rows: [deal] } = await pool.query(
-        `INSERT INTO deals (workspace_id, contact_id, pipeline_id, stage_id, title)
-         VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+        `INSERT INTO deals (workspace_id, contact_id, pipeline_id, stage_id, title, origin)
+         VALUES ($1,$2,$3,$4,$5,'webhook') RETURNING id`,
         [wid, contact.id, wh.pipeline_id, stageId, contact.name]
       );
       dealId = deal.id;
@@ -944,7 +944,7 @@ async function calContactFor(wid, b, conn) {
       stageId = st?.id || null;
     }
     const { rows: [d] } = await pool.query(
-      `INSERT INTO deals (workspace_id, contact_id, pipeline_id, stage_id, title) VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      `INSERT INTO deals (workspace_id, contact_id, pipeline_id, stage_id, title, origin) VALUES ($1,$2,$3,$4,$5,'booking') RETURNING id`,
       [wid, c.id, pipelineId, stageId, c.name]
     );
     dealId = d.id;

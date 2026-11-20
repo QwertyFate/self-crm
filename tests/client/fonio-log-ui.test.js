@@ -30,8 +30,9 @@ const extra = [
   sliceConst('public/js/fonio-log.js', 'FONIO_LOG_FILTERS'),
   'const FONIO_LOG_PICK_MAX = 30;',
   sliceConst('public/js/fonio-log.js', 'FONIO_LOG_TECH_PARTS'),
+  sliceConst('public/js/fonio-log.js', 'FONIO_LOG_CALL_ERRORS'),
   `const __log = [];
-   let __answers = {};
+   let __answers = {}, __confirm = true;
    const __els = {};
    const __el = id => (__els[id] ||= { id, value: '', innerHTML: '', textContent: '', hidden: null, focused: 0,
      classList: { toggle(_c, on) { __els[id].hidden = on; }, remove() { __els[id].hidden = false; }, add() { __els[id].hidden = true; } }, focus() { __els[id].focused++; } });
@@ -42,18 +43,21 @@ const extra = [
      post: async (url, body) => { __log.push(['post', url, body]); return __answers[url] ?? { success: true }; },
    };
    const apiFetchSilent = async url => { __log.push(['silent', url]); return __answers[url]; };
-   const ui = { toast: m => __log.push(['toast', m]) };
+   const ui = { toast: m => __log.push(['toast', m]), menu: (anchor, items) => { __log.push(['menu', anchor, items]); return 'menu'; },
+     confirm: async opts => { __log.push(['confirm', opts]); return __confirm; } };
+   function __say(v) { __confirm = v; }
    const closeModal = id => __log.push(['close', id]);
    async function openContactModal() { fonioLogForget(); __log.push(['openContactModal', currentContactType]); }
    function __state() { return { fonioLogEntries, fonioLogFilter, fonioLogPending, fonioLogPicking, currentContactType }; }
-   function __reset(answers = {}, missing = []) { __log.length = 0; __answers = answers; __missing = missing; for (const k of Object.keys(__els)) delete __els[k]; }
+   function __reset(answers = {}, missing = []) { __log.length = 0; __answers = answers; __missing = missing; __confirm = true; for (const k of Object.keys(__els)) delete __els[k]; }
    function __page() { return { log: __log, els: __els }; }`,
 ].join('\n');
 const NAMES = ['showFonioLogNav', 'updateFonioLogNav', 'fonioLogIsUnknown', 'fonioLogMatches', 'loadFonioLog', 'setFonioLogFilter', 'renderFonioLog', 'fonioLogRowHtml',
-  'fonioLogUnknownById', 'fonioLogConnect', 'fonioLogForget', 'fonioLogAddContact', 'fonioLogContactSaved', 'fonioLogPickContact', 'fonioLogPickMatches', 'renderFonioLogPick', 'fonioLogPicked', 'fonioLogTechText', 'openFonioLogTech'];
+  'fonioLogUnknownById', 'fonioLogConnect', 'fonioLogForget', 'fonioLogAddContact', 'fonioLogContactSaved', 'fonioLogPickContact', 'fonioLogPickMatches', 'renderFonioLogPick', 'fonioLogPicked', 'fonioLogTechText', 'openFonioLogTech',
+  'fonioLogEntry', 'fonioLogCanCall', 'fonioLogMenuItems', 'openFonioLogMenu', 'fonioLogCallError', 'fonioLogCall'];
 const F = loadFns('public/js/fonio-log.js', NAMES, {
   state: { currentLang: 'en', fonioLogManage: false, fonioLogEntries: [], fonioLogFilter: 'all', fonioLogPending: null, fonioLogPicking: null, fonioLogContacts: [], currentContactType: 'supplier' },
-  extra, expose: ['__state', '__reset', '__page'],
+  extra, expose: ['__state', '__reset', '__page', '__say'],
 });
 
 const LOG = '/api/integrations/fonio/log';
@@ -132,6 +136,7 @@ describe('wiring', () => {
     const used = new Set([...js.matchAll(/\bt[f]?\('(fcl_[a-z_]+)'/g)].map(m => m[1]));
     for (const m of js.matchAll(/t\(([^)]*'fcl_[^)]*)\)/g)) for (const k of m[1].matchAll(/'(fcl_[a-z_]+)'/g)) used.add(k[1]);
     for (const f of ['all', 'planned', 'inbound', 'outbound', 'unknown']) used.add('fcl_filter_' + f);
+    for (const k of Object.values(new Function(sliceConst('public/js/fonio-log.js', 'FONIO_LOG_CALL_ERRORS').replace(/^[^{]*/, 'return '))())) used.add(k);   // the reasons not to call (Part 42)
     for (const m of html.matchAll(/data-i18n(?:-ph|-aria)?="(fcl_[a-z_]+|nav_calls)"/g)) used.add(m[1]);
     for (const k of [...used]) if (k.endsWith('_')) used.delete(k);   // a prefix completed at run time ('fcl_filter_' + f), listed above
     assert.ok(used.size >= 30, String(used.size));
@@ -230,7 +235,8 @@ describe('a row', () => {
     assert.match(r, /onclick="event\.preventDefault\(\);openDealDetail\(60\)">Wohnung 3<\/a>/);
     assert.match(r, /<span class="muted">Written as a note<\/span>/);
     assert.match(r, /<a href="https:\/\/app\.fonio\.ai\/c\/12" target="_blank" rel="noopener">Open in fonio<\/a>/);
-    assert.doesNotMatch(r, /<button/);
+    assert.match(r, /<td class="fcl-actions"><\/td>/, 'no button in the Action column');
+    assert.equal(count(r, '<button'), 1, 'only the three dots (Part 42: its contact can be called)');
   });
   test('a call the CRM sent: no result yet, or a result without a note', () => {
     assert.match(F.fonioLogRowHtml({ ...sent, result: false, noted: false }), /No result from fonio yet/);
@@ -242,7 +248,8 @@ describe('a row', () => {
     assert.doesNotMatch(r, /Started by the CRM/);
     assert.match(r, /<div class="fcl-summary">Fragt nach dem Exposé\.<\/div><div class="muted fcl-sub">Duration 1:05<\/div>/);
     assert.match(r, /<td><span class="muted-dash">—<\/span><\/td>/);
-    assert.doesNotMatch(r, /<button/);
+    assert.match(r, /<td class="fcl-actions"><\/td>/, 'no button in the Action column');
+    assert.equal(count(r, '<button'), 1, 'only the three dots (Part 42: its contact can be called)');
   });
   test('an unknown caller: the number and the name fonio gave, marked, with both buttons', () => {
     const r = F.fonioLogRowHtml(unknown);
@@ -383,20 +390,27 @@ describe('technical details', () => {
   const start = html.indexOf('<div id="fcl-tech-modal" class="modal-overlay hidden">');
   const modal = html.slice(start, html.indexOf('<div id="object-field-modal"', start));
   const PARTS = ['request', 'response', 'result_body', 'record'];
-  test('the list says who may open them; a member gets no dots, an owner gets them on every row, last in the row', async () => {
+  test('the list says who may open them: only an owner or admin finds "Technical details" behind the dots, on every row, last in the row', async () => {
+    // Part 42: the dots open a menu. A member gets them only where there is something for a member: a contact to call.
     F.__reset({ [LOG]: { entries: ENTRIES, can_manage: false } });
     await F.loadFonioLog();
-    assert.doesNotMatch(F.__page().els['fonio-log-body'].innerHTML, /fcl-more-btn/);
-    assert.equal(count(F.__page().els['fonio-log-body'].innerHTML, '<td class="fcl-more"></td>'), 3, 'the column stays, empty');
+    const mine = F.__page().els['fonio-log-body'].innerHTML;
+    assert.equal(count(mine, 'class="iconbtn fcl-more-btn"'), 2, 'the two calls that have a contact');
+    assert.equal(count(mine, '<td class="fcl-more"></td>'), 1, 'the unknown caller: the column stays, empty');
+    for (const e of ENTRIES) assert.ok(!F.fonioLogMenuItems(e).some(i => i.label === 'Technical details'), `a member, ${e.key}`);
     F.__reset({ [LOG]: { entries: ENTRIES, can_manage: true } });
     await F.loadFonioLog();
     const body = F.__page().els['fonio-log-body'].innerHTML;
     assert.equal(count(body, 'class="iconbtn fcl-more-btn"'), 3);
-    assert.match(body, /<td class="fcl-actions">[\s\S]*?<\/td>\s*<td class="fcl-more"><button type="button" class="iconbtn fcl-more-btn" title="Technical details" aria-label="Technical details" onclick="openFonioLogTech\('other', 901\)"><svg class="ic " aria-hidden="true"><use href="#i-ellipsis"\/><\/svg><\/button><\/td>\s*<\/tr>/);
-    assert.match(body, /openFonioLogTech\('call', 12\)/);
+    assert.match(body, /<td class="fcl-actions">[\s\S]*?<\/td>\s*<td class="fcl-more"><button type="button" class="iconbtn fcl-more-btn" title="More actions" aria-label="More actions" aria-haspopup="menu" onclick="openFonioLogMenu\('other', 901, this\)"><svg class="ic " aria-hidden="true"><use href="#i-ellipsis"\/><\/svg><\/button><\/td>\s*<\/tr>/);
+    assert.match(body, /openFonioLogMenu\('call', 12, this\)/);
+    for (const e of ENTRIES) assert.equal(F.fonioLogMenuItems(e).at(-1).label, 'Technical details', `an owner, ${e.key}: last in the menu`);
+    F.fonioLogMenuItems(sent).at(-1).onSelect();
+    F.fonioLogMenuItems(unknown).at(-1).onSelect();
+    assert.deepEqual(F.__page().log.filter(c => c[0] === 'get').slice(-2), [['get', `${LOG}/call/12`], ['get', `${LOG}/other/900`]], 'it opens that call\'s details');
     F.__reset({ [LOG]: { error: 'x', can_manage: true } });
     await F.loadFonioLog();
-    assert.equal(F.fonioLogRowHtml(sent).includes('fcl-more-btn'), false, 'a failed load grants nothing');
+    assert.ok(!F.fonioLogMenuItems(sent).some(i => i.label === 'Technical details'), 'a failed load grants nothing');
   });
   test('the dots show on hover and on keyboard focus, and always where there is no hover', () => {
     assert.match(css, /\.fcl-more-btn \{[^}]*opacity: 0;/);
@@ -455,5 +469,151 @@ describe('technical details', () => {
   test('the values are written as text, never as markup', () => {
     assert.match(sliceFn(js, 'openFonioLogTech', 'fonio-log.js'), /pre\.textContent = /);
     assert.doesNotMatch(sliceFn(js, 'openFonioLogTech', 'fonio-log.js'), /innerHTML/);
+  });
+});
+
+// Part 42: "Call this contact" in a row's three dots.
+describe('call this contact', () => {
+  const CHECK = '/api/integrations/fonio/calls/check', CALLS = '/api/integrations/fonio/calls';
+  const planned = { ...sent, key: 'call:15', id: 15, planned: true, trigger: 'manual', asked_by_name: 'Olga', at: '2026-11-12T05:00:00.000Z', result: false, noted: false, link: null };
+  const gone = { ...sent, key: 'call:13', id: 13, contact_id: null, contact_name: null };
+  const ok = (more = {}) => ({ contact: { id: 40, name: 'Erika Muster' }, number: '+491711234567', deal_id: 60, outside_hours: false, ...more });
+  const posts = () => F.__page().log.filter(c => c[0] === 'post');
+  const toasts = () => F.__page().log.filter(c => c[0] === 'toast').map(c => c[1]);
+
+  test('offered on every call that has a contact, to everyone; not on a call still to come, nor where there is no contact', () => {
+    fill([known, unknown, sent, planned, gone]);
+    assert.deepEqual([known, unknown, sent, planned, gone].map(F.fonioLogCanCall), [true, false, true, false, false]);
+    assert.equal(F.fonioLogCanCall(null), false);
+    assert.deepEqual(F.fonioLogMenuItems(sent).map(i => [i.label, i.icon]), [['Call this contact', 'phone']], 'a member: this alone');
+    assert.deepEqual(F.fonioLogMenuItems(known).map(i => i.label), ['Call this contact'], 'also a call that came in');
+    assert.deepEqual(F.fonioLogMenuItems(unknown), []);
+    assert.deepEqual(F.fonioLogMenuItems(planned), [], 'a member has nothing to do with a call that waits');
+    F.__set('fonioLogManage', true);
+    assert.deepEqual(F.fonioLogMenuItems(sent).map(i => i.label), ['Call this contact', 'Technical details'], 'first in the menu');
+    assert.deepEqual(F.fonioLogMenuItems(planned).map(i => i.label), ['Technical details']);
+    assert.deepEqual(F.fonioLogMenuItems(unknown).map(i => i.label), ['Technical details']);
+    for (const ic of ['phone', 'file-text']) assert.ok(html.includes(`<symbol id="i-${ic}"`), ic);
+  });
+  test('a row with nothing behind the dots has none; the dots open the menu of their own row, at the dots', () => {
+    fill([known, unknown, sent, planned]);
+    assert.doesNotMatch(F.fonioLogRowHtml(unknown), /fcl-more-btn/);
+    assert.doesNotMatch(F.fonioLogRowHtml(planned), /fcl-more-btn/);
+    assert.match(F.fonioLogRowHtml(sent), /aria-haspopup="menu" onclick="openFonioLogMenu\('call', 12, this\)"/);
+    const anchor = { the: 'button' };
+    assert.equal(F.openFonioLogMenu('call', 12, anchor), 'menu');
+    const [, at, items] = F.__page().log.find(c => c[0] === 'menu');
+    assert.equal(at, anchor);
+    assert.deepEqual(items.map(i => i.label), ['Call this contact']);
+    F.__reset();
+    assert.equal(F.openFonioLogMenu('other', 900, anchor), null, 'nothing to offer: no menu');
+    assert.equal(F.openFonioLogMenu('call', 999, anchor), null, 'no such row');
+    assert.equal(F.openFonioLogMenu('other', 12, anchor), null, 'the kind is part of which row it is');
+    assert.deepEqual(F.__page().log, []);
+  });
+  test('the server is asked first who would be called; the question names the person and the number; "yes" books the call and reads the list again', async () => {
+    fill([sent], { [`${CHECK}?contact_id=40&deal_id=60`]: ok(), [CALLS]: { success: true, call: { id: 20 } }, [LOG]: { entries: [planned, sent], can_manage: false } });
+    assert.equal(await F.fonioLogCall('call', 12), true);
+    const log = F.__page().log;
+    assert.deepEqual(log.map(c => c[0]), ['get', 'confirm', 'post', 'toast', 'get']);
+    assert.deepEqual(log[0], ['get', `${CHECK}?contact_id=40&deal_id=60`]);
+    assert.deepEqual(log[1][1], { title: 'Call with fonio?', message: 'fonio calls Erika Muster at +491711234567 within a minute.', confirmLabel: 'Call now' });
+    assert.deepEqual(log[2], ['post', CALLS, { contact_id: 40, deal_id: 60 }]);
+    assert.equal(log[3][1], 'fonio calls Erika Muster now.');
+    assert.deepEqual(log[4], ['get', LOG]);
+    assert.equal(F.__state().fonioLogEntries.length, 2, 'the call now stands in the list');
+  });
+  test('a call that came in from a contact without a deal: the contact alone is named', async () => {
+    fill([known], { [`${CHECK}?contact_id=40`]: ok({ deal_id: null }) });
+    await F.fonioLogCall('other', 901);
+    assert.deepEqual(F.__page().log[0], ['get', `${CHECK}?contact_id=40`]);
+    assert.deepEqual(posts(), [['post', CALLS, { contact_id: 40, deal_id: null }]]);
+  });
+  test('outside the calling hours the question says so, and that the call goes out all the same', async () => {
+    fill([sent], { [`${CHECK}?contact_id=40&deal_id=60`]: ok({ outside_hours: true }) });
+    await F.fonioLogCall('call', 12);
+    assert.equal(F.__page().log[1][1].message, 'fonio calls Erika Muster at +491711234567 within a minute. This is outside the calling hours set for fonio; the call goes out all the same.');
+  });
+  test('the number in the question is the one the server will dial, not the row\'s', async () => {
+    fill([{ ...known, number: '+491511000001' }], { [`${CHECK}?contact_id=40`]: ok({ number: '+4930555666', contact: { id: 40, name: 'Erika Musterfrau' } }) });
+    await F.fonioLogCall('other', 901);
+    assert.equal(F.__page().log[1][1].message, 'fonio calls Erika Musterfrau at +4930555666 within a minute.');
+  });
+  test('"no" books nothing', async () => {
+    fill([sent], { [`${CHECK}?contact_id=40&deal_id=60`]: ok() });
+    F.__say(false);
+    assert.equal(await F.fonioLogCall('call', 12), false);
+    assert.deepEqual(F.__page().log.map(c => c[0]), ['get', 'confirm']);
+  });
+  test('a reason not to call is said instead of asking: every reason of the route has its sentence', async () => {
+    const route = read('routes/fonio.js');
+    const codes = [...route.slice(route.indexOf('const HAND_REFUSALS = {'), route.indexOf('const refuseHand')).matchAll(/^\s+([a-z_]+):\s+\[/gm)].map(m => m[1]);
+    assert.deepEqual(codes.sort(), Object.keys(new Function(sliceConst('public/js/fonio-log.js', 'FONIO_LOG_CALL_ERRORS').replace(/^[^{]*/, 'return '))()).sort());
+    assert.equal(codes.length, 8);
+    const said = new Set();
+    for (const reason of codes) {
+      fill([sent], { [`${CHECK}?contact_id=40&deal_id=60`]: { error: 'x', reason } });
+      assert.equal(await F.fonioLogCall('call', 12), false);
+      assert.deepEqual(F.__page().log.map(c => c[0]), ['get', 'toast'], `${reason}: no question, nothing booked`);
+      assert.notEqual(toasts()[0], dict.en.fonio_err_generic, reason);
+      said.add(toasts()[0]);
+    }
+    assert.equal(said.size, codes.length, 'each its own sentence');
+    assert.equal(F.fonioLogCallError({ reason: 'no_phone' }), 'The contact has no phone number.');
+    assert.equal(F.fonioLogCallError({ reason: 'already_scheduled' }), 'A call to this contact is already waiting.');
+    assert.equal(F.fonioLogCallError({ reason: 'whatever' }), dict.en.fonio_err_generic);
+    assert.equal(F.fonioLogCallError(undefined), dict.en.fonio_err_generic);
+  });
+  test('an answer that is none is a refusal; one that names nobody asks nothing', async () => {
+    for (const bad of [undefined, null, { error: 'Internal' }, { number: '+49' }]) {
+      fill([sent], { [`${CHECK}?contact_id=40&deal_id=60`]: bad });
+      await F.fonioLogCall('call', 12);
+      assert.deepEqual(F.__page().log.map(c => c[0]), ['get', 'toast']);
+    }
+  });
+  test('a refusal at the last moment — a colleague was quicker — is said, and the list is read again', async () => {
+    fill([sent], { [`${CHECK}?contact_id=40&deal_id=60`]: ok(), [CALLS]: { error: 'x', reason: 'already_scheduled' }, [LOG]: { entries: [planned, sent], can_manage: false } });
+    assert.equal(await F.fonioLogCall('call', 12), false);
+    assert.deepEqual(toasts(), ['A call to this contact is already waiting.']);
+    assert.deepEqual(F.__page().log.at(-1), ['get', LOG]);
+  });
+  test('nothing is asked for a row that cannot be called or is not there', async () => {
+    fill([unknown, planned, gone]);
+    for (const [kind, id] of [['other', 900], ['call', 15], ['call', 13], ['call', 77]]) assert.equal(await F.fonioLogCall(kind, id), false);
+    assert.deepEqual(F.__page().log, []);
+  });
+  test('only numbers reach the address', async () => {
+    fill([{ ...sent, contact_id: '40&x=1', deal_id: '60/../7' }], {});
+    await F.fonioLogCall('call', 12);
+    assert.deepEqual(F.__page().log[0], ['get', `${CHECK}?contact_id=NaN`]);
+  });
+  test('a call a person started says who started it while it waits', () => {
+    fill([planned]);
+    assert.match(F.fonioLogRowHtml(planned), /<span class="badge badge-warning">Planned<\/span>/);
+    assert.match(F.fonioLogRowHtml(planned), /<span class="muted">started by Olga<\/span>/);
+    assert.match(F.fonioLogRowHtml({ ...planned, asked_by_name: null }), /<span class="muted">started by hand<\/span>/);
+    assert.match(F.fonioLogRowHtml({ ...planned, asked_by_name: '<b>x</b>' }), /started by &lt;b&gt;x&lt;\/b&gt;/);
+    assert.match(F.fonioLogRowHtml({ ...planned, trigger: 'callback' }), /callback at the time asked for in the call/, 'the other kinds are as they were');
+    assert.match(F.fonioLogRowHtml({ ...planned, trigger: 'deal_webhook' }), /waiting for its time/);
+    F.__set('currentLang', 'de');
+    assert.match(F.fonioLogRowHtml(planned), /gestartet von Olga/);
+    F.__set('currentLang', 'en');
+  });
+  test('in German: the menu, the question and the answer', async () => {
+    fill([sent], { [`${CHECK}?contact_id=40&deal_id=60`]: ok({ outside_hours: true }), [CALLS]: { success: true } });
+    F.__set('currentLang', 'de');
+    assert.deepEqual(F.fonioLogMenuItems(sent).map(i => i.label), ['Diesen Kontakt anrufen']);
+    await F.fonioLogCall('call', 12);
+    const log = F.__page().log;
+    assert.deepEqual(log[1][1], { title: 'Mit fonio anrufen?', confirmLabel: 'Jetzt anrufen',
+      message: 'fonio ruft Erika Muster unter +491711234567 innerhalb einer Minute an. Das liegt außerhalb der für fonio eingestellten Anrufzeiten; der Anruf geht trotzdem raus.' });
+    assert.equal(log[3][1], 'fonio ruft Erika Muster jetzt an.');
+    F.__set('currentLang', 'en');
+  });
+  test('German speaks to nobody in particular, and the fonio tab has a word for a call started by hand and for a workflow\'s', () => {
+    for (const k of Object.keys(dict.de).filter(x => x.startsWith('fcl_call') || x.startsWith('fcl_planned_manual') || x === 'fcl_more')) assert.doesNotMatch(dict.de[k], /\b(du|dein|deine|deinen|dir|dich|Sie|Ihr|Ihre|Ihren|Ihnen)\b/, `${k}: ${dict.de[k]}`);
+    for (const k of ['fonio_trigger_manual', 'fonio_trigger_journey']) assert.ok(dict.en[k] && dict.de[k], k);
+    const list = /fonio_calls_trigger_check CHECK \(trigger IN \(([^)]+)\)\)/.exec(read('db.js'))[1];
+    for (const m of list.matchAll(/'([a-z_]+)'/g)) assert.ok(dict.en[`fonio_trigger_${m[1]}`] && dict.de[`fonio_trigger_${m[1]}`], `every trigger the table allows today has its label: ${m[1]}`);
   });
 });

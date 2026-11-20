@@ -65,6 +65,7 @@ async function init() {
   const params     = new URLSearchParams(window.location.search);
   const resetToken = params.get('reset');
   mailboxKeepReturn(params);   // mailbox.js: back from Google's consent screen, before showApp() clears the address
+  journeyMailKeepReturn(params);   // journey-mail.js: back from Google's sign-in page for the journey's sending address
 
   if (params.has('admin')) {
     document.getElementById('admin-screen').classList.remove('hidden');
@@ -598,6 +599,7 @@ async function switchPage(page) {
   if (page === 'analytics')    await loadAnalytics();
   if (page === 'onboarding')   await loadOnboarding();
   if (page === 'calls')        await loadFonioLog();
+  if (page === 'journey')      await loadJourney();
   if (page === 'integrations') await loadIntegrations();
   if (page === 'workspaces')   await loadWorkspacesPage();
   if (page === 'chat')         await loadChatPage();
@@ -624,6 +626,7 @@ function resetClientState() {
   analyticsData = null; trendRawData = null; calEvents = [];
   intgData = null; engineData = null; engineApiKeys = []; activeGuideId = null; activeCustomKeys = [];
   onboardingData = null; onboardingFilter = 'all';
+  resetJourneyUI();   // the Customer Journey page clears its own steps, pipeline and filter (journey.js)
   document.getElementById('nav-onboarding-link')?.classList.add('hidden');
   currentSettingsTab = 'workspace'; currentIntgTab = 'webhook';
   currentContactType = 'contact'; filteredContacts = []; selectedContactIds = new Set(); selectionModeOn = false;

@@ -721,7 +721,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'user'`);
   try {
     await pool.query(`ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_source_check`);
-    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine','calcom','notetaker','fonio','calendly'))`);
+    await pool.query(`ALTER TABLE activities ADD CONSTRAINT activities_source_check CHECK(source IN ('user','engine','calcom','notetaker','fonio','calendly','journey'))`);   // 'journey': written by a workflow's step (utils/journey-run.js)
   } catch (e) {
     if (e.code !== '42710') throw e;
   }
@@ -781,6 +781,183 @@ async function initDb() {
     )
   `);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS note_templates_name ON note_templates (workspace_id, name_key)`);
+
+  // Customer Journey (CUSTOMER_JOURNEY_CHANGES Part 3, 2026-11-19; routes/journey.js): the workspace's WORKFLOWS.
+  // A workflow (journey_flows) is a chain of boxes (journey_nodes), one action per box. kind: start (one per
+  // workflow, made with it: what starts the workflow and where it stops, in config) | call | email | whatsapp | sms |
+  // task | move (config.stage_id). wait_minutes: how long after the box before it a box happens (0 = right away).
+  // next_id is the line to the box that comes after. A box's id is what a sent email or a call is to name as where
+  // it came from. Part 3 keeps the workflows only: nothing runs from them yet.
+  // (Part 1's table journey_steps — one fixed journey along a pipeline's stages — was never shipped and is no longer
+  // made; a development database that has it keeps it, unused.)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS journey_flows (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS journey_nodes (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      flow_id      INTEGER NOT NULL REFERENCES journey_flows(id) ON DELETE CASCADE,
+      kind         TEXT NOT NULL,
+      title        TEXT NOT NULL DEFAULT '',
+      body         TEXT NOT NULL DEFAULT '',
+      wait_minutes INTEGER NOT NULL DEFAULT 0,
+      config       JSONB NOT NULL DEFAULT '{}',
+      next_id      INTEGER REFERENCES journey_nodes(id) ON DELETE SET NULL,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // The journey's sending address (CUSTOMER_JOURNEY_CHANGES Part 2, 2026-11-19; routes/journey-mail.js,
+  // utils/journey-mail.js): ONE Gmail address per workspace, connected by an owner or admin on Google's own sign-in
+  // page. email is that address in lower case; refresh_token_sealed is Google's refresh token, sealed like the
+  // Cal.com key (utils/calcom.js) — it never leaves the server. The CRM may send with it and cannot read the mailbox.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_mail (
+      workspace_id         INTEGER PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+      provider             TEXT NOT NULL DEFAULT 'google',
+      email                TEXT NOT NULL,
+      refresh_token_sealed TEXT NOT NULL,
+      connected_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      connected_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // Workflows that run (CUSTOMER_JOURNEY_CHANGES Part 4, 2026-11-19; utils/journey-run.js). A workflow runs while it
+  // is switched on (active); activated_at is when: a "new lead" workflow takes in only deals made from then on. A box
+  // has a place on the board once someone dragged it (x, y; NULL = where the chain puts it).
+  await pool.query(`ALTER TABLE journey_flows ADD COLUMN IF NOT EXISTS active       BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE journey_flows ADD COLUMN IF NOT EXISTS activated_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE journey_nodes ADD COLUMN IF NOT EXISTS x INTEGER`);
+  await pool.query(`ALTER TABLE journey_nodes ADD COLUMN IF NOT EXISTS y INTEGER`);
+  // One row per deal in a workflow, at most once (UNIQUE): node_id is the box that happens next, at due_at.
+  // status: waiting (for due_at) | working (the worker has taken it) | done (past the last box) | stopped (the deal
+  // reached a stop stage: reason) | old (the deal was already in the start's stage when the workflow was switched
+  // on: not taken in, until someone includes it by hand).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS journey_runs (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      flow_id      INTEGER NOT NULL REFERENCES journey_flows(id) ON DELETE CASCADE,
+      deal_id      INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+      node_id      INTEGER REFERENCES journey_nodes(id) ON DELETE SET NULL,
+      status       TEXT NOT NULL DEFAULT 'waiting',
+      reason       TEXT,
+      due_at       TIMESTAMPTZ,
+      attempts     INTEGER NOT NULL DEFAULT 0,
+      started_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (flow_id, deal_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS journey_runs_due_idx ON journey_runs (due_at) WHERE status = 'waiting'`);
+  // What each box did for each deal: the trace from a sent email, a call or a task back to its box.
+  // status: done | skipped (detail says why: no address, opted out, fonio off …) | failed.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS journey_log (
+      id           SERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      flow_id      INTEGER NOT NULL REFERENCES journey_flows(id) ON DELETE CASCADE,
+      node_id      INTEGER REFERENCES journey_nodes(id) ON DELETE SET NULL,
+      deal_id      INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+      kind         TEXT NOT NULL,
+      title        TEXT NOT NULL DEFAULT '',
+      status       TEXT NOT NULL,
+      detail       TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  // A person who pressed the "no more emails" link of a workflow's email gets no further one.
+  await pool.query(`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS journey_opt_out BOOLEAN NOT NULL DEFAULT false`);
+  // Everything that can start a workflow (CUSTOMER_JOURNEY_CHANGES Part 9, utils/journey-triggers.js).
+  // event_key: what happened ('' for a start a deal goes through once; a meeting's, a call's or a change's own key
+  // otherwise). A deal is in a workflow once PER KEY, so a second booking starts it again and nothing starts it
+  // twice — the rule that was "once per deal" is replaced by the index below.
+  await pool.query(`ALTER TABLE journey_runs ADD COLUMN IF NOT EXISTS event_key TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE journey_runs DROP CONSTRAINT IF EXISTS journey_runs_flow_id_deal_id_key`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS journey_runs_once_idx ON journey_runs (flow_id, deal_id, event_key)`);
+  // What a start that waits for a CHANGE last saw (who a deal is assigned to, a field's value, a task's status …):
+  // the CRM keeps no history of those, so the value is remembered per workflow and thing (subject: the id of the
+  // deal, contact, meeting or task). n counts its changes (the key of a change), since is when it last changed.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS journey_watch (
+      flow_id  INTEGER NOT NULL REFERENCES journey_flows(id) ON DELETE CASCADE,
+      subject  TEXT NOT NULL,
+      value    TEXT,
+      n        INTEGER NOT NULL DEFAULT 0,
+      since    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (flow_id, subject)
+    )
+  `);
+  // A box with two lines out (CUSTOMER_JOURNEY_CHANGES Part 11, utils/journey-branch.js): a branch box asks a question
+  // about the deal; next_id is its "yes" line, else_id its "no" line. NULL for every other box.
+  await pool.query(`ALTER TABLE journey_nodes ADD COLUMN IF NOT EXISTS else_id INTEGER REFERENCES journey_nodes(id) ON DELETE SET NULL`);
+  // The whole record of what the workflows do (CUSTOMER_JOURNEY_CHANGES Part 15, utils/journey-log.js). journey_log
+  // had one row per step; now every thing that happens is an entry — event: step | retry | entered | ended | moved |
+  // flow (a change to the workflow itself, with who did it: actor_id, and actor_name as it was). An entry carries the
+  // workflow's name and the deal's title as they were, because it OUTLIVES them: flow_id may be empty, and a deleted
+  // workflow empties it instead of taking its entries along (it was NOT NULL … ON DELETE CASCADE). The constraint is
+  // dropped and added again on every start, as the CHECK lists are; rows from before get their names once.
+  await pool.query(`ALTER TABLE journey_log ADD COLUMN IF NOT EXISTS event      TEXT NOT NULL DEFAULT 'step'`);
+  await pool.query(`ALTER TABLE journey_log ADD COLUMN IF NOT EXISTS flow_name  TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE journey_log ADD COLUMN IF NOT EXISTS deal_title TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE journey_log ADD COLUMN IF NOT EXISTS actor_id   INTEGER REFERENCES users(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE journey_log ADD COLUMN IF NOT EXISTS actor_name TEXT NOT NULL DEFAULT ''`);
+  await pool.query(`ALTER TABLE journey_log ALTER COLUMN flow_id DROP NOT NULL`);
+  try {
+    await pool.query(`ALTER TABLE journey_log DROP CONSTRAINT IF EXISTS journey_log_flow_id_fkey`);
+    await pool.query(`ALTER TABLE journey_log ADD CONSTRAINT journey_log_flow_id_fkey FOREIGN KEY (flow_id) REFERENCES journey_flows(id) ON DELETE SET NULL`);
+  } catch (e) {
+    if (e.code !== '42710') throw e;
+  }
+  await pool.query(`UPDATE journey_log l SET flow_name = f.name FROM journey_flows f WHERE f.id = l.flow_id AND l.flow_name = ''`);
+  await pool.query(`UPDATE journey_log l SET deal_title = d.title FROM deals d WHERE d.id = l.deal_id AND l.deal_title = ''`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS journey_log_workspace_idx ON journey_log (workspace_id, id DESC)`);
+  // How a deal was made: 'manual' (by hand, the default), 'webhook' (a lead webhook), 'booking' (a booking by a guest
+  // the CRM did not know), 'import' (a contact import). A workflow can start on one of them. Deals from before this
+  // column read 'manual'; a start only looks at deals made after it was switched on.
+  await pool.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT 'manual'`);
+  // Safeguards around the workflows' emails, so that the connected Gmail address is not blocked
+  // (CUSTOMER_JOURNEY_CHANGES Part 17, 2026-11-20; utils/journey-sends.js). The CRM's own limits stand below Google's:
+  // limit_day / limit_hour / limit_person are what an owner or admin set for this connection — NULL is the default
+  // for the address's kind (a gmail.com address, or one of a Google Workspace). paused_until: Google itself said
+  // "limit", and nothing is sent from the address until then (pause_reason, pause_detail: Google's own words);
+  // pause_count: how many pauses followed one another without an email going out in between — each doubles the next.
+  await pool.query(`ALTER TABLE workspace_mail ADD COLUMN IF NOT EXISTS limit_day    INTEGER`);
+  await pool.query(`ALTER TABLE workspace_mail ADD COLUMN IF NOT EXISTS limit_hour   INTEGER`);
+  await pool.query(`ALTER TABLE workspace_mail ADD COLUMN IF NOT EXISTS limit_person INTEGER`);
+  await pool.query(`ALTER TABLE workspace_mail ADD COLUMN IF NOT EXISTS paused_until TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE workspace_mail ADD COLUMN IF NOT EXISTS pause_reason TEXT`);
+  await pool.query(`ALTER TABLE workspace_mail ADD COLUMN IF NOT EXISTS pause_detail TEXT`);
+  await pool.query(`ALTER TABLE workspace_mail ADD COLUMN IF NOT EXISTS pause_count  INTEGER NOT NULL DEFAULT 0`);
+  // Every email that went out, counted: one row per send — a workflow's step ('step', with the contact it went to)
+  // or a test email ('test'). The limits are counted BY ADDRESS (from_email, lower case), because one address may be
+  // connected in more than one workspace and Google counts the address. Nothing in it points anywhere: a row must
+  // still count after its workspace or its contact is gone. The worker deletes rows older than seven days.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS journey_sends (
+      id           BIGSERIAL PRIMARY KEY,
+      workspace_id INTEGER NOT NULL,
+      from_email   TEXT NOT NULL,
+      contact_id   INTEGER,
+      kind         TEXT NOT NULL DEFAULT 'step' CHECK (kind IN ('step','test')),
+      sent_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS journey_sends_from_idx ON journey_sends (from_email, sent_at)`);
+  // An email that has to wait for a limit or a pause stays at its step: held says why (limit_day | limit_hour |
+  // limit_person | paused; 'error' when the limits could not be asked), due_at when there is room for it. NULL
+  // for every row that is not held back. The emails already held are the queue the next one is put behind.
+  await pool.query(`ALTER TABLE journey_runs ADD COLUMN IF NOT EXISTS held TEXT`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS journey_runs_held_idx ON journey_runs (workspace_id, held) WHERE held IS NOT NULL`);
 
   // The Notetaker (routes/integrations.js, utils/notetaker.js): a meeting booked on Google Meet with
   // "Mit Notetaker aufzeichnen" ticked. One row per meeting: the request, then what was last sent to the
@@ -980,10 +1157,13 @@ async function initDb() {
   // the person asked for in a call — follow_up_of the call it answers, follow_up_no unchanged (it is no retry).
   try {
     await pool.query(`ALTER TABLE fonio_calls DROP CONSTRAINT IF EXISTS fonio_calls_trigger_check`);
-    await pool.query(`ALTER TABLE fonio_calls ADD CONSTRAINT fonio_calls_trigger_check CHECK (trigger IN ('deal_manual','deal_webhook','follow_up','callback'))`);
+    await pool.query(`ALTER TABLE fonio_calls ADD CONSTRAINT fonio_calls_trigger_check CHECK (trigger IN ('deal_manual','deal_webhook','follow_up','callback','journey','manual'))`);   // 'journey': a workflow's call step (utils/journey-run.js); 'manual': a call a person started, "Call this contact" (FONIO_CHANGES Part 42)
   } catch (e) {
     if (e.code !== '42710') throw e;
   }
+  // Who started a call by hand (FONIO_CHANGES Part 42, "Call this contact"): NULL for every call the CRM starts by
+  // itself, and again when that person is deleted.
+  await pool.query(`ALTER TABLE fonio_calls ADD COLUMN IF NOT EXISTS asked_by INTEGER REFERENCES users(id) ON DELETE SET NULL`);
   // The master CRM (MASTER_ACCESS_CHANGES Part 1, 2026-11-09; utils/master.js): one row per visit of a workspace
   // through the admin secret — the workspace, the owner row the visit acted as, when it began and ended, and from
   // where. The names are copied so a row outlives a deleted workspace or user (hence SET NULL, not CASCADE).

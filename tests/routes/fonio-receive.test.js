@@ -822,7 +822,7 @@ describe('the wiring', () => {
     assert.match(db, /CREATE UNIQUE INDEX IF NOT EXISTS fonio_calls_one_conversation ON fonio_calls \(workspace_id, conversation_id\) WHERE conversation_id IS NOT NULL/);
     assert.ok(db.indexOf('ADD COLUMN IF NOT EXISTS receive_token') > db.indexOf('CREATE TABLE IF NOT EXISTS workspace_fonio'));
     assert.ok(db.indexOf('ADD COLUMN IF NOT EXISTS result_at') > db.indexOf('CREATE TABLE IF NOT EXISTS fonio_calls'));
-    assert.match(db, /ADD CONSTRAINT activities_source_check CHECK\(source IN \('user','engine','calcom','notetaker','fonio','calendly'\)\)/);
+    assert.match(db, /ADD CONSTRAINT activities_source_check CHECK\(source IN \('user','engine','calcom','notetaker','fonio','calendly','journey'\)\)/);   // 'journey': a workflow's step (CUSTOMER_JOURNEY Part 4)
   });
 });
 

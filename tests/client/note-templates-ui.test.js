@@ -194,6 +194,14 @@ describe('the form', () => {
     assert.match(form, /m\.close\(\);[^\n]*\n\s*ui\.toast\(t\('ntpl_saved'\)\);\s*if \(onDone\) onDone\(res\.template\);/);
     assert.match(dv, /^function dvConfirmUnsaved\(\)/m);
   });
+  // Part 7: the form sat in the window as a plain block, so the name field touched the label of the text field. A window's
+  // body spaces its own children only (.modal-body: gap), and the form is its one child — the fields are the form's.
+  test('the fields stand apart: the form is a column with a gap, as the other form windows are', () => {
+    assert.match(form, /<form id="\$\{id\}" novalidate class="col" style="gap:14px;padding-top:4px">/);
+    assert.match(dv, /<form id="\$\{fid\}" novalidate class="col" style="gap:14px;padding-top:4px">/, 'the same as the task form in detail-views.js');
+    assert.match(css, /^\.col \{ display: flex; flex-direction: column; gap: 8px; \}/m);
+    assert.doesNotMatch(css, /\.field \+ \.field|\.modal-body > form|\.modal-body form/, 'no rule spaces a plain form\'s fields by itself');
+  });
 });
 
 describe('words and codes', () => {

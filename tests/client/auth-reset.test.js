@@ -73,6 +73,7 @@ describe('auth flow', () => {
     assert.match(s, /stopClock\(\)/);
     assert.match(s, /updateChatBadge\(0\)/);
     assert.match(s, /resetTasksUI\(\)/, 'the Tasks page scope and filters (Part 40)');
+    assert.match(s, /resetJourneyUI\(\)/, 'the Customer Journey page: its steps, pipeline and filter (CUSTOMER_JOURNEY Part 1)');
     assert.match(s, /localStorage\.removeItem\('lastTaskListId'\)/);
     assert.match(s, /localStorage\.removeItem\('taskScope'\)/, "the Tasks page's remembered scope (Part 40)");
     assert.match(s, /proj-collapsed-/);
@@ -88,6 +89,7 @@ describe('resetClientState in a sandbox', () => {
     function updateChatBadge(n) { __calls.push('badge:' + n); }
     function resetTasksUI() { __calls.push('resetTasksUI'); }
     function resetActivitiesUI() { __calls.push('resetActivitiesUI'); }
+    function resetJourneyUI() { __calls.push('resetJourneyUI'); }
     let socket = { disconnected: false, disconnect() { this.disconnected = true; __calls.push('socket.disconnect'); } };
     const __sock = socket;
     let collapsedTasks = new Set([1, 2]);

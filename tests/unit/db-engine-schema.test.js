@@ -41,8 +41,28 @@ describe('the whole migration is additive', () => {
   test('the only DROPs are the CONSTRAINT IF EXISTS re-declarations', () => {
     // Case-sensitive on purpose: the base SCHEMA carries a prose comment ("drop them with a
     // migration") that is not a statement. Every real keyword in db.js is uppercase.
+    // One more kind since CUSTOMER_JOURNEY_CHANGES Part 15: a column that is made optional (DROP NOT NULL) — it takes
+    // nothing away, and it is named here so that no other slips in: journey_log.flow_id, so that the record of a
+    // workflow outlives the workflow.
     const drops = sqls.filter(s => /\bDROP\b/.test(s));
-    for (const s of drops) assert.match(s, /DROP CONSTRAINT IF EXISTS/, s);
+    const optional = drops.filter(s => /ALTER COLUMN \w+ DROP NOT NULL/.test(s));
+    assert.deepEqual(optional, ['ALTER TABLE journey_log ALTER COLUMN flow_id DROP NOT NULL']);
+    for (const s of drops.filter(x => !optional.includes(x))) assert.match(s, /DROP CONSTRAINT IF EXISTS/, s);
+  });
+  test('the record of the workflows outlives a workflow: its columns are added, the tie to the workflow is loosened, old rows get their names', () => {
+    for (const col of ["event TEXT NOT NULL DEFAULT 'step'", "flow_name TEXT NOT NULL DEFAULT ''", "deal_title TEXT NOT NULL DEFAULT ''", 'actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL', "actor_name TEXT NOT NULL DEFAULT ''"]) {
+      assert.ok(sqls.includes(`ALTER TABLE journey_log ADD COLUMN IF NOT EXISTS ${col}`), col);
+    }
+    const iNull = sqls.indexOf('ALTER TABLE journey_log ALTER COLUMN flow_id DROP NOT NULL');
+    const iDrop = sqls.indexOf('ALTER TABLE journey_log DROP CONSTRAINT IF EXISTS journey_log_flow_id_fkey');
+    const iAdd  = sqls.indexOf('ALTER TABLE journey_log ADD CONSTRAINT journey_log_flow_id_fkey FOREIGN KEY (flow_id) REFERENCES journey_flows(id) ON DELETE SET NULL');
+    const iFlow = sqls.indexOf("UPDATE journey_log l SET flow_name = f.name FROM journey_flows f WHERE f.id = l.flow_id AND l.flow_name = ''");
+    const iDeal = sqls.indexOf("UPDATE journey_log l SET deal_title = d.title FROM deals d WHERE d.id = l.deal_id AND l.deal_title = ''");
+    const iCreate = sqls.findIndex(s => /CREATE TABLE IF NOT EXISTS journey_log/.test(s));
+    assert.ok(iCreate >= 0 && iNull > iCreate && iDrop > iNull && iAdd === iDrop + 1, 'optional first, then the constraint dropped and added again — on every start');
+    assert.ok(iFlow > iAdd && iDeal > iAdd, 'only an entry without a name gets one: a second start changes nothing, and a name as it was is never overwritten');
+    assert.ok(sqls.includes('CREATE INDEX IF NOT EXISTS journey_log_workspace_idx ON journey_log (workspace_id, id DESC)'));
+    assert.match(sqls[iCreate], /flow_id INTEGER NOT NULL REFERENCES journey_flows\(id\) ON DELETE CASCADE/, 'the statement that was shipped stays as it was');
   });
   test('every CREATE TABLE / CREATE INDEX / ADD COLUMN is guarded with IF NOT EXISTS', () => {
     for (const s of findAll(/CREATE TABLE/i))  assert.match(s, /CREATE TABLE IF NOT EXISTS/i, s.slice(0, 60));
@@ -135,7 +155,7 @@ describe('activities.source (Part 16: who wrote a note — a user or the Engine)
   test('added additively with default user; the CHECK is re-declared DROP-then-ADD and lists user, engine, calcom (Cal.com bookings, 2026-10-13), notetaker (the Notetaker\'s notes, 2026-10-20), fonio (fonio\'s call results, 2026-11-09)', () => {
     assert.ok(find(/^ALTER TABLE activities ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'user'$/));
     const iDrop = sqls.findIndex(s => /DROP CONSTRAINT IF EXISTS activities_source_check/.test(s));
-    const iAdd  = sqls.findIndex(s => /ADD CONSTRAINT activities_source_check CHECK\(source IN \('user','engine','calcom','notetaker','fonio','calendly'\)\)/.test(s));
+    const iAdd  = sqls.findIndex(s => /ADD CONSTRAINT activities_source_check CHECK\(source IN \('user','engine','calcom','notetaker','fonio','calendly','journey'\)\)/.test(s));   // 'journey': a workflow's step (CUSTOMER_JOURNEY Part 4)
     assert.ok(iDrop >= 0 && iAdd === iDrop + 1);
     const iCol = sqls.findIndex(s => /ADD COLUMN IF NOT EXISTS source /.test(s));
     assert.ok(iCol < iDrop, 'column exists before the constraint');
@@ -184,5 +204,31 @@ describe('the two engine API tables', () => {
   });
   test('the cleanup index on idempotency_keys.expires_at exists', () => {
     assert.ok(find(/idx_idempotency_keys_expires ON idempotency_keys \(expires_at\)/));
+  });
+});
+
+// CUSTOMER_JOURNEY_CHANGES Part 17 (2026-11-20): the safeguards around the workflows' emails (utils/journey-sends.js).
+describe('the sending limits of the workflows\' address (Part 17)', () => {
+  test('the connection gets its three limits and its pause: every column added, none with a default but the count — NULL is "the default for the address\'s kind"', () => {
+    for (const col of ['limit_day INTEGER', 'limit_hour INTEGER', 'limit_person INTEGER', 'paused_until TIMESTAMPTZ', 'pause_reason TEXT', 'pause_detail TEXT', 'pause_count INTEGER NOT NULL DEFAULT 0']) {
+      assert.ok(sqls.includes(`ALTER TABLE workspace_mail ADD COLUMN IF NOT EXISTS ${col}`), col);
+    }
+    const iTable = sqls.findIndex(s => /CREATE TABLE IF NOT EXISTS workspace_mail/.test(s));
+    assert.ok(iTable >= 0 && iTable < sqls.indexOf('ALTER TABLE workspace_mail ADD COLUMN IF NOT EXISTS limit_day INTEGER'), 'after the table exists');
+    assert.doesNotMatch(find(/CREATE TABLE IF NOT EXISTS workspace_mail/), /limit_day|paused_until/, 'the shipped statement is as it was');
+  });
+  test('journey_sends: one row per email that went out — the address, the contact, a step or a test, when — and nothing in it points anywhere', () => {
+    const s = find(/CREATE TABLE IF NOT EXISTS journey_sends \(/);
+    assert.ok(s);
+    for (const col of ['id BIGSERIAL PRIMARY KEY', 'workspace_id INTEGER NOT NULL,', 'from_email TEXT NOT NULL', 'contact_id INTEGER,', "kind TEXT NOT NULL DEFAULT 'step' CHECK (kind IN ('step','test'))", 'sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW()']) assert.ok(s.includes(col), col);
+    assert.doesNotMatch(s, /REFERENCES/, 'a counted email still counts when its workspace or its contact is gone: Google counts the address');
+    assert.doesNotMatch(s, /subject|body|to_email|token/i, 'no word of an email, and no address but the sender\'s');
+    assert.ok(sqls.includes('CREATE INDEX IF NOT EXISTS journey_sends_from_idx ON journey_sends (from_email, sent_at)'), 'counted by the address over a time');
+  });
+  test('journey_runs.held says why an email waits; the rows that are held are found without reading every row', () => {
+    const iCol = sqls.indexOf('ALTER TABLE journey_runs ADD COLUMN IF NOT EXISTS held TEXT');
+    assert.ok(iCol > sqls.findIndex(s => /CREATE TABLE IF NOT EXISTS journey_runs/.test(s)));
+    assert.ok(sqls.indexOf('CREATE INDEX IF NOT EXISTS journey_runs_held_idx ON journey_runs (workspace_id, held) WHERE held IS NOT NULL') > iCol);
+    assert.doesNotMatch(find(/CREATE TABLE IF NOT EXISTS journey_runs/), /held/, 'the shipped statement is as it was');
   });
 });

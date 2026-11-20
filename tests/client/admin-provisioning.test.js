@@ -76,6 +76,8 @@ describe('markup: the tab bar and the provisioning panel', () => {
 
   test('the export hint warns that the file holds password hashes', () => {
     assert.match(panel, /<strong>Export<\/strong> downloads a copy of the whole workspace/);
+    assert.match(panel, /notes, tasks and note templates, the workflows with their steps, the\s+deals that are in them and everything they did, and fonio's calls/, 'what the bundle holds since version 2');
+    assert.match(panel, /The connections of the integrations \(their keys and sign-ins\), logs and\s+chat stay out\./);
     assert.match(panel, /password hash: keep it like a password/);
   });
 

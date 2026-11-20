@@ -253,6 +253,10 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/chat',          require('./routes/chat'));
 app.use('/api/analytics',     require('./routes/analytics'));
 app.use('/api/note-templates', require('./routes/note-templates'));   // texts put into a note with one click (public/js/note-templates.js)
+app.use('/api/journey/unsubscribe', webhookIpLimiter, require('./routes/journey-public'));   // PUBLIC: the "no more emails" link of a workflow's email (before the routes below, which need a login)
+app.use('/api/journey/mail',  require('./routes/journey-mail'));   // the journey's sending address: Gmail, connected on Google's sign-in page (before /api/journey, whose router would only pass it on)
+app.use('/api/journey/fixed', require('./routes/journey-fixed'));   // what the integrations do, as workflows nobody edits there (before /api/journey, like the mail routes)
+app.use('/api/journey',       require('./routes/journey'));   // the Customer Journey: the workspace's workflows (public/js/journey.js; utils/journey-run.js makes them happen)
 app.use('/api/break-scores', breakScoresLimiter);
 app.use('/api/break-scores', require('./routes/break-scores'));   // the break's team board (public/js/break-game.js)
 app.use('/api/tasks',         require('./routes/task-attachments'));
@@ -403,5 +407,9 @@ initDb()
     // hours (utils/fonio-calls.js, FONIO_CHANGES Part 4). FONIO_WORKER=0 disables it, e.g. on a second instance.
     // tell: who the worker tells when it moves a deal itself — "not reached" after the last try (FONIO_CHANGES Part 39)
     if (process.env.FONIO_WORKER !== '0') require('./utils/fonio-calls').startWorker(pool, { tell: { notifyUser: require('./notifications').notifyUser, engine: require('./utils/engine') } });
+    // The Customer Journey's workflows: every 30 seconds new deals are taken into the workflows that are switched on
+    // and the steps whose time has come happen (utils/journey-run.js, CUSTOMER_JOURNEY_CHANGES Part 4).
+    // JOURNEY_WORKER=0 disables it, e.g. on a second instance. tell: who hears of a task it makes or a deal it moves.
+    if (process.env.JOURNEY_WORKER !== '0') require('./utils/journey-run').startWorker(pool, { tell: { notifyUser: require('./notifications').notifyUser, engine: require('./utils/engine') } });
   })
   .catch(err => { console.error('Database init failed:', err); process.exit(1); });

@@ -1529,6 +1529,12 @@ const FONIO_WHO = {
 let fonioRules = {};
 let fonioRulesPipeline = null;
 const FONIO_EVENTS = ['interested', 'meeting_booked', 'callback', 'not_interested', 'wrong_person', 'not_reached'];
+// The tab in parts (Part 41, the look only): one part is shown at a time, chosen from the buttons at the top of the
+// tab. Every part stays in the page, hidden, so Save reads the whole form whatever part is open. The first three are
+// the settings (one Save for all of them); "setup" is what is set up once in fonio itself, "calls" the history.
+const FONIO_PARTS = ['connection', 'who', 'after', 'setup', 'calls'];
+const FONIO_FORM_PARTS = ['connection', 'who', 'after'];
+let fonioPart = 'connection';   // the part that is open; kept while the page is
 
 
 async function loadFonio() {
@@ -1598,6 +1604,9 @@ function renderFonio() {
   updateFonioFollow();
   renderFonioResult();
   renderFonioVars();
+  const line = $('fonio-line');
+  if (line) line.textContent = fonioLineText(d);   // what is connected, in one line (Part 41)
+  renderFonioParts();
   const facts = $('fonio-facts');
   if (facts) {
     if (!set) { facts.innerHTML = ''; return; }
@@ -1610,6 +1619,42 @@ function renderFonio() {
     ];
     facts.innerHTML = `<table class="table compact"><tbody>${rows.map(([k, v]) => `<tr><td class="strong">${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</tbody></table>`;
   }
+}
+
+// ── fonio: the tab in parts, and its one-line status (FONIO_CHANGES Part 41) ──
+// "Setup in fonio" holds two cards that only owners and admins with a saved connection get (the result link, the
+// variables). For everyone else it would be empty, so its button is not offered and a request for it falls back
+// to the first part.
+function fonioPartOf(part, data) {
+  const setup = !!(data && data.configured && data.can_manage);
+  return FONIO_PARTS.includes(part) && (part !== 'setup' || setup) ? part : 'connection';
+}
+function setFonioPart(part) {
+  fonioPart = fonioPartOf(part, fonioData);
+  renderFonioParts();
+}
+// Shows the open part and hides the others — the settings card as a whole when the open part is none of its three.
+// Hiding is the hidden attribute only: what a part's own code hides with the class .hidden (a card that is not the
+// viewer's, a paused line) is left to that code.
+function renderFonioParts() {
+  fonioPart = fonioPartOf(fonioPart, fonioData);
+  const setup = fonioPartOf('setup', fonioData) === 'setup';
+  document.querySelectorAll('#fonio-parts [data-fonio-part]').forEach(b => {
+    b.setAttribute('aria-selected', String(b.dataset.fonioPart === fonioPart));
+    if (b.dataset.fonioPart === 'setup') b.hidden = !setup;
+  });
+  document.querySelectorAll('#intg-pane-fonio .fonio-part').forEach(p => { p.hidden = p.dataset.fonioPart !== fonioPart; });
+  const card = document.getElementById('fonio-card');
+  if (card) card.hidden = !FONIO_FORM_PARTS.includes(fonioPart);
+}
+// The line at the top of the tab, from what is SAVED (not from what is typed in the form): not connected; connected
+// and calling, after how many minutes and within which hours; or connected and paused.
+function fonioLineText(data) {
+  const s = (data && data.settings) || {};
+  if (!data || !data.configured) return t('fonio_line_none');
+  if (!s.active) return tf('fonio_line_paused', { number: s.from_number || '' });
+  const hours = s.hours_on && s.hours_from && s.hours_to ? ' ' + tf('fonio_line_hours', { from: s.hours_from, to: s.hours_to }) : '';
+  return tf('fonio_line_active', { number: s.from_number || '', minutes: Number(s.delay_minutes) || 0 }) + hours;
 }
 
 // ── fonio: who gets the call (FONIO_CHANGES Parts 37 and 38) ──

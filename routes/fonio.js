@@ -70,6 +70,12 @@
      DELETE /                    remove the connection (owner/admin)
      GET    /calls               the last 50 calls, newest first (everyone)
      POST   /calls/:id/cancel    cancel a waiting call (owner/admin); 409 when it is no longer waiting
+     GET    /calls/check         ?contact_id=&deal_id=: who "Call this contact" would call, at which number, and
+                                 whether that is outside the calling hours (everyone; Part 42)
+     POST   /calls               { contact_id, deal_id? }: fonio calls that contact now, whatever the calling hours
+                                 (everyone); 201 { call, contact, number }; 409 with the reason when it cannot:
+                                 fonio off or not connected, no number, a number fonio may not call, a call waiting,
+                                 or one that went out a moment ago
      GET    /log                 the call log: calls the CRM sent and calls it did not start, newest first (everyone)
      GET    /log/:kind/:id       one call's technical record: request, fonio's answer, the result Body (owner/admin)
      POST   /log/:id/contact     { contact_id }: connect a kept call without a contact to one, and write its note
@@ -337,6 +343,53 @@ router.post('/calls/:id/cancel', requireAuth, requireManage, async (req, res, ne
     const row = await fonioCalls.cancelOne(pool, req.workspaceId, id, req.userId);
     if (!row) return res.status(409).json({ error: 'This call is no longer waiting', reason: 'not_waiting' });
     res.json({ calls: await fonioCalls.listCalls(pool, req.workspaceId), can_manage: true });
+  } catch (err) { next(err); }
+});
+
+// "Call this contact" (Part 42): a person asks fonio to call a contact, now. For everyone in the workspace, like
+// booking a meeting. GET /calls/check answers who would be called, at which number and whether that is outside the
+// calling hours, so the page can ask first; POST /calls books the call — utils/fonio-calls.js scheduleByHand asks
+// everything again and signs the call with who asked. Who and where come from the session; the body names the
+// contact and, when the row had one, the deal (used only when it is that contact's own). Every refusal names its
+// reason, so the page can say it in its language.
+const HAND_REFUSALS = {
+  not_connected:      [409, 'fonio is not connected'],
+  inactive:           [409, 'fonio is switched off'],
+  no_contact:         [404, 'Contact not found'],
+  no_phone:           [409, 'The contact has no phone number'],
+  bad_number:         [409, 'The contact\'s number cannot be made international'],
+  number_not_allowed: [409, 'The contact\'s number is outside the number starts fonio may call'],
+  already_scheduled:  [409, 'A call to this contact is already waiting'],
+  just_called:        [409, 'fonio called this contact a moment ago'],
+};
+const refuseHand = (res, code) => (HAND_REFUSALS[code]
+  ? res.status(HAND_REFUSALS[code][0]).json({ error: HAND_REFUSALS[code][1], reason: code })
+  : res.status(400).json({ error: 'Name the contact to call', reason: 'contact' }));
+// The contact and the deal as sent: whole positive numbers, the deal optional. null when they are anything else.
+function handIds(src) {
+  const id = v => ((typeof v === 'number' || typeof v === 'string') && /^[1-9]\d{0,9}$/.test(String(v)) ? Number(v) : null);   // a list of one is no id
+  const contactId = id(src?.contact_id), sent = src?.deal_id, none = sent === undefined || sent === null || sent === '';
+  const dealId = none ? null : id(sent);
+  return contactId && (none || dealId) ? { contactId, dealId } : null;
+}
+
+router.get('/calls/check', requireAuth, async (req, res, next) => {
+  try {
+    const ids = handIds(req.query);
+    if (!ids) return refuseHand(res, 'contact');
+    const out = await fonioCalls.checkByHand(pool, { workspaceId: req.workspaceId, ...ids });
+    if (out.code) return refuseHand(res, out.code);
+    res.json(out);
+  } catch (err) { next(err); }
+});
+
+router.post('/calls', requireAuth, async (req, res, next) => {
+  try {
+    const ids = handIds(req.body);
+    if (!ids) return refuseHand(res, 'contact');
+    const out = await fonioCalls.scheduleByHand(pool, { workspaceId: req.workspaceId, ...ids, userId: req.userId });
+    if (out.code) return refuseHand(res, out.code);
+    res.status(201).json({ success: true, call: out.call, contact: out.contact, number: out.number, deal_id: out.deal_id });
   } catch (err) { next(err); }
 });
 

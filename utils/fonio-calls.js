@@ -87,6 +87,12 @@
    a callback does not use up a follow-up. A call that agreed a meeting plans
    no callback. callbackLine() says the outcome in the call's note.
 
+   A CALL A PERSON STARTS (Part 42)  "Call this contact" on the fonio calls
+   page: scheduleByHand() books one call for a contact, due now, trigger
+   'manual', signed by who asked (asked_by). The calling hours do not hold it
+   (a person decided it); the checks that protect the person called all do.
+   Its retries and its result are those of every call.
+
    Every function takes the pool, so the routes' pool (and a test's fake)
    is the one used.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -190,6 +196,96 @@ async function scheduleForDeal(pool, { workspaceId, dealId, trigger, webhookId =
     return await insertCall(pool, { ...base, status: 'scheduled', toNumber: n.number, dueAt: due.toISOString() });
   } catch (err) {
     if (err && err.code === '23505') return skip('already_scheduled', n.number);   // a second deal won the race
+    throw err;
+  }
+}
+
+// A call a WORKFLOW's step asks for (CUSTOMER_JOURNEY_CHANGES Part 4, utils/journey-run.js; trigger 'journey'). The
+// workflow has decided who is called and when, so the tab's own choices for new deals — the two triggers, the lists
+// of lead webhooks and pipelines, the delay — are not asked. Everything that protects the person called is: the
+// connection must be active, the number is checked, nobody gets a second call while one waits, and the calling
+// hours hold. null: fonio is not connected or switched off. Otherwise the row: scheduled, or skipped with its reason.
+async function scheduleForJourney(pool, { workspaceId, dealId, now = new Date() }) {
+  const conn = await loadConnection(pool, workspaceId);
+  if (!conn || !conn.active) return null;
+  const { rows: [deal] } = await pool.query(
+    `SELECT d.id, d.contact_id, c.phone
+       FROM deals d LEFT JOIN contacts c ON c.id = d.contact_id AND c.workspace_id = d.workspace_id
+      WHERE d.id = $1 AND d.workspace_id = $2`, [dealId, workspaceId]
+  );
+  if (!deal) return null;
+  const base = { workspaceId, dealId: deal.id, contactId: deal.contact_id || null, trigger: 'journey', rawNumber: deal.phone || null };
+  const skip = (reason, toNumber = null) => insertCall(pool, { ...base, status: 'skipped', reason, toNumber });
+  if (!deal.contact_id) return skip('no_contact');
+  const n = checkNumber(deal.phone, conn);
+  if (!n.number || n.reason) return skip(n.reason, n.number || null);
+  const { rows: [waiting] } = await pool.query(
+    `SELECT id FROM fonio_calls WHERE workspace_id = $1 AND contact_id = $2 AND status IN ('scheduled','sending') LIMIT 1`,
+    [workspaceId, deal.contact_id]
+  );
+  if (waiting) return skip('already_scheduled', n.number);
+  const due = fonio.nextCallTime(new Date(now), conn);
+  if (!due) return skip('no_hours', n.number);
+  try {
+    return await insertCall(pool, { ...base, status: 'scheduled', toNumber: n.number, dueAt: due.toISOString() });
+  } catch (err) {
+    if (err && err.code === '23505') return skip('already_scheduled', n.number);
+    throw err;
+  }
+}
+
+// A call a PERSON asks for (Part 42): "Call this contact" on the fonio calls page (routes/fonio.js; trigger
+// 'manual'). It goes out at once — the calling hours do not hold it, as they do not hold a callback, because a person
+// decided it — and nothing of who gets a call by itself is asked: the two triggers, the lists of lead webhooks and
+// pipelines, the delay. Everything that protects the person called is: the connection must be there and on, the
+// number is checked, nobody gets a second call while one waits, and nobody is rung again within HAND_GAP_MINUTES of
+// a call that went out (two colleagues pressing a moment apart). A deal rides along only when it is this contact's
+// own: the result's note then lands on it too.
+//   checkByHand()     the question before the person confirms: who would be called, at which number, and whether
+//                     that is outside the calling hours — or why not.
+//   scheduleByHand()  asks all of it again and books the call, signed by who asked (asked_by).
+// { code } when the call cannot be made: not_connected, inactive, no_contact, no_phone, bad_number,
+// number_not_allowed, already_scheduled, just_called. Nothing is written then — the person who pressed is told why.
+const HAND_GAP_MINUTES = 2;
+const AT_ONCE = ['callback', 'manual'];   // the triggers whose time a person set: sent when due, whatever the calling hours
+async function byHand(pool, { workspaceId, contactId, dealId = null, now = new Date() }) {
+  const conn = await loadConnection(pool, workspaceId);
+  if (!conn) return { code: 'not_connected' };
+  if (!conn.active) return { code: 'inactive' };
+  const { rows: [contact] } = await pool.query('SELECT id, name, phone FROM contacts WHERE id = $1 AND workspace_id = $2', [contactId, workspaceId]);
+  if (!contact) return { code: 'no_contact' };
+  const n = checkNumber(contact.phone, conn);
+  if (!n.number || n.reason) return { code: n.reason };
+  const { rows: [busy] } = await pool.query(
+    `SELECT status FROM fonio_calls
+      WHERE workspace_id = $1 AND contact_id = $2 AND (status IN ('scheduled','sending') OR (status = 'sent' AND sent_at > $3))
+      ORDER BY (status = 'sent'), id LIMIT 1`, [workspaceId, contact.id, new Date(new Date(now).getTime() - HAND_GAP_MINUTES * 60000)]
+  );
+  if (busy) return { code: busy.status === 'sent' ? 'just_called' : 'already_scheduled' };
+  const { rows: [deal] } = dealId
+    ? await pool.query('SELECT id FROM deals WHERE id = $1 AND workspace_id = $2 AND contact_id = $3', [dealId, workspaceId, contact.id])
+    : { rows: [] };
+  const opens = fonio.nextCallTime(new Date(now), conn);
+  return { contact, number: n.number, dealId: deal ? deal.id : null, outside: !opens || opens.getTime() > new Date(now).getTime() };
+}
+async function checkByHand(pool, ask) {
+  const ok = await byHand(pool, ask);
+  if (ok.code) return ok;
+  return { contact: { id: ok.contact.id, name: ok.contact.name }, number: ok.number, deal_id: ok.dealId, outside_hours: ok.outside };
+}
+async function scheduleByHand(pool, { workspaceId, contactId, dealId = null, userId = null, now = new Date() }) {
+  const ok = await byHand(pool, { workspaceId, contactId, dealId, now });
+  if (ok.code) return ok;
+  try {
+    const { rows: [call] } = await pool.query(
+      `INSERT INTO fonio_calls (workspace_id, deal_id, contact_id, trigger, status, raw_number, to_number, due_at, asked_by)
+       VALUES ($1,$2,$3,'manual','scheduled',$4,$5,$6,$7)
+       RETURNING id, status, due_at`,
+      [workspaceId, ok.dealId, ok.contact.id, ok.contact.phone || null, ok.number, new Date(now).toISOString(), userId]
+    );
+    return { call, contact: { id: ok.contact.id, name: ok.contact.name }, number: ok.number, deal_id: ok.dealId, outside_hours: ok.outside };
+  } catch (err) {
+    if (err && err.code === '23505') return { code: 'already_scheduled' };   // another press won the race (fonio_calls_one_waiting)
     throw err;
   }
 }
@@ -578,8 +674,9 @@ async function sendCall(pool, id, now = new Date()) {
     conn = await loadConnection(pool, call.workspace_id);
     if (!conn) return done('cancelled', { reason: 'disconnected' });
     if (!conn.active) return done('cancelled', { reason: 'inactive' });
-    // a callback goes out at the time the person asked for (Part 35): the calling hours do not move it
-    const at = call.trigger === 'callback' ? new Date(now) : fonio.nextCallTime(now, conn);
+    // a callback goes out at the time the person asked for (Part 35), a call a person started at once (Part 42):
+    // the calling hours do not move either
+    const at = AT_ONCE.includes(call.trigger) ? new Date(now) : fonio.nextCallTime(now, conn);
     if (!at) return done('skipped', { reason: 'no_hours' });
     // the hours were changed since: wait for them (that claim was no attempt)
     if (at.getTime() > new Date(now).getTime()) return done('scheduled', { dueAt: at.toISOString(), giveBack: true });
@@ -836,7 +933,7 @@ async function callDetail(pool, wid, kind, id) {
     ? await pool.query(
       `SELECT id, deal_id, contact_id, trigger, status, reason, raw_number, to_number, message, attempts, due_at, sent_at, result_at,
               conversation_id, conversation_link, note_activity_id, call_outcome, follow_up_of, follow_up_no, follow_up_at,
-              created_at, updated_at, request, response, result_body
+              created_at, updated_at, asked_by, request, response, result_body
          FROM fonio_calls WHERE id = $1 AND workspace_id = $2`, [id, wid])
     : await pool.query(
       `SELECT id, direction, number, caller_name, contact_id, deal_id, conversation_id, conversation_link, duration, summary,
@@ -868,8 +965,8 @@ async function listLog(pool, wid, { limit = 100 } = {}) {
     ),
     // the calls still to come (Part 24): the soonest first
     pool.query(
-      `SELECT f.id, f.due_at AS at, f.to_number AS number, f.contact_id, c.name AS contact_name, f.deal_id, d.title AS deal_title, f.trigger
-         FROM fonio_calls f LEFT JOIN contacts c ON c.id = f.contact_id LEFT JOIN deals d ON d.id = f.deal_id
+      `SELECT f.id, f.due_at AS at, f.to_number AS number, f.contact_id, c.name AS contact_name, u.name AS asked_by_name, f.deal_id, d.title AS deal_title, f.trigger
+         FROM fonio_calls f LEFT JOIN contacts c ON c.id = f.contact_id LEFT JOIN deals d ON d.id = f.deal_id LEFT JOIN users u ON u.id = f.asked_by
         WHERE f.workspace_id = $1 AND f.status IN ('scheduled','sending')
         ORDER BY f.due_at, f.id LIMIT $2`, [wid, limit]
     ),
@@ -881,8 +978,9 @@ async function listLog(pool, wid, { limit = 100 } = {}) {
     duration: by_crm ? null : r.duration || null, summary: by_crm ? null : r.summary || null, link: r.link || null,
     result: by_crm ? !!r.result_at : true, noted: r.note_activity_id != null,
   });
-  // what started a planned call rides along (Part 36): the page names a callback the contact asked for
-  const planned = waiting.rows.map(r => ({ ...entry(r, true), planned: true, trigger: r.trigger || null }));
+  // what started a planned call rides along (Part 36): the page names a callback the contact asked for — and, for a
+  // call a person started (Part 42), who that was
+  const planned = waiting.rows.map(r => ({ ...entry(r, true), planned: true, trigger: r.trigger || null, asked_by_name: r.asked_by_name || null }));
   return [...planned, ...[...sent.rows.map(r => entry(r, true)), ...other.rows.map(r => entry(r, false))]
     .sort((a, b) => new Date(b.at) - new Date(a.at) || (a.key < b.key ? 1 : -1)).slice(0, limit)];
 }
@@ -924,7 +1022,8 @@ module.exports = {
   followUpSettings, checkFollowUp, followUpAfterResult, sweepUnreported,
   CALLBACK_MAX, CALLBACK_DAYS, CALLBACK_DAY_TIME, CALLBACK_NIGHT, callbackInstant, callbackAfterResult, callbackLine,
   VALUE_SOURCES, MAX_VARIABLES, checkVariables,
-  WHO_KEYS, WHO_MAX, checkWho,
+  WHO_KEYS, WHO_MAX, checkWho, allowedBy,
   freeTimeValues, SLOT_NAMES,
-  scheduleForDeal, callContext, plainKey, requestDate, sendCall, runDue, startWorker, cancelWaiting, cancelOne, listCalls, checkNumber, saveResult,
+  HAND_GAP_MINUTES, AT_ONCE, checkByHand, scheduleByHand,
+  scheduleForDeal, scheduleForJourney, callContext, plainKey, requestDate, sendCall, runDue, startWorker, cancelWaiting, cancelOne, listCalls, checkNumber, saveResult,
 };
