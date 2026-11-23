@@ -59,9 +59,26 @@
      branch    a question about the deal (Part 11, utils/journey-branch.js):
                the deal goes on along the box's "yes" line (next_id) or its
                "no" line (else_id). Nothing is done to the deal.
+     router    several routes out, each with its own question (Part 23,
+               utils/journey-router.js): the deal goes on down EVERY route
+               whose answer is yes, side by side — or, when none says yes,
+               along the "otherwise" line (else_id). Nothing is done to it.
      wait      nothing happens (Part 10): the box only takes time — its own
                wait, and then, when it says so, until a time of day on chosen
                weekdays (dueOf). What comes after it starts from there.
+
+   A DEAL ON SEVERAL ROUTES (Part 23)  A deal that goes down two routes of a
+   router is at two places of the workflow at once. The row the start made
+   stands for the deal (the ROOT: root_id NULL); every further route is a row
+   of its own that names it (root_id), with the root's started_at and an
+   event_key of its own (the root's, '~' and a random tail). Each row is run
+   like any row. A route that is through deletes its row (pathDone); when
+   the root's own route is through while others are on their way, the root
+   takes one of them over — so the root is 'done' exactly when the last
+   route is, and only then does the record say "ended". A rule that ends the
+   workflow ends it on every route at once (pathStopped). At most MAX_PATHS
+   places per deal and workflow: a route beyond that is not gone down, and
+   the record says so. "Include" (a restart) clears the routes of before.
 
    WHERE IT ENDS (Part 10)  stopReason() is asked each time a step is due,
    before the step: the deal is in a stop stage, or in none of the stages the
@@ -83,12 +100,14 @@ const ends       = require('./journey-ends');       // everything that can end a
 const vars       = require('./journey-vars');       // the variables a step's text can use: {{first_name}}, {{deal.<field>}} … (Part 14)
 const log        = require('./journey-log');        // the whole record of what the workflows do (Part 15)
 const sends      = require('./journey-sends');      // the sending limits, the count and the pause of the address (Part 17)
+const routes     = require('./journey-router');     // a box with several routes out, each with its own question (Part 23)
 
 const RETRY_MINUTES = 15;   // an email Google could not be reached for is tried again after this
 const MAX_ATTEMPTS  = 4;    // … this many times in all; then the step counts as failed and the workflow goes on
 const STUCK_MINUTES = 15;   // a row a crashed tick left as 'working' is taken up again after this
 const ENROLL_LIMIT  = 200;  // deals taken into one workflow in one tick
 const MAX_PLACE     = 20000;
+const MAX_PATHS     = 24;   // the places a deal can be at in one workflow at once (Part 23): a route beyond that is not gone down
 
 // ── the email's text ────────────────────────────────────────────────────────
 const htmlText = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -271,11 +290,64 @@ async function stopReason(pool, x, now = new Date()) {
   return ends.reasonOf(pool, x, c, now);
 }
 
-// A branch box: its question is asked about the deal as it is now, and the answer picks the line.
-async function doBranch(pool, x) {
-  const yes = await branch.holds(pool, x, x.config);
+// A branch box: its question is asked about the deal as it is now, and the answer picks the line. now: the moment
+// an age ("created more than 30 days ago") is counted back from.
+async function doBranch(pool, x, now) {
+  const yes = await branch.holds(pool, x, x.config, { now });
   return { status: 'done', detail: yes ? 'yes' : 'no', to: (yes ? x.next_id : x.else_id) || null };
 }
+
+// A router box: every route whose question says yes is gone down — or, when none does, the "otherwise" line. The
+// record says which: detail 'routes:1,3' — the routes by their place among the routes at that moment, the numbers
+// on their feet on the board (Part 26; a route's name can be long and can change, a short number fits the record) —
+// or 'else'.
+async function doRouter(pool, x, now) {
+  const went = await routes.taken(pool, x, x.config, { now });
+  return went.length ? { status: 'done', detail: `routes:${went.map(r => r.no).join(',')}`, targets: went.map(r => r.next_id) } : { status: 'done', detail: 'else', targets: [x.else_id] };
+}
+
+// ── a deal on several routes at once (Part 23) ──────────────────────────────
+// One route of a deal is through. row: { id, root_id }. A row that is a further route (root_id) is deleted. The
+// row that stands for the deal takes over a route that is still on its way, if there is one — and is 'done' only
+// when there is none: → { over }, whether the workflow is over for the deal now. db: the pool, or the client of a
+// transaction (routes/journey.js, when a box is deleted).
+async function pathDone(db, row) {
+  if (row.root_id) { await db.query('DELETE FROM journey_runs WHERE id = $1 AND root_id IS NOT NULL', [row.id]); return { over: false }; }
+  const { rows: others } = await db.query('SELECT id, status FROM journey_runs WHERE root_id = $1 ORDER BY id', [row.id]);
+  const next = others.find(o => o.status === 'waiting');
+  if (next) {
+    const { rows: [took] } = await db.query(`DELETE FROM journey_runs WHERE id = $1 AND root_id = $2 AND status = 'waiting' RETURNING node_id, due_at, attempts, held`, [next.id, row.id]);
+    if (took) {
+      await db.query(`UPDATE journey_runs SET node_id = $2, status = 'waiting', due_at = $3, attempts = $4, held = $5, updated_at = NOW() WHERE id = $1`, [row.id, took.node_id, took.due_at, took.attempts, took.held]);
+      return { over: false };
+    }
+  }
+  if (others.length) {   // a route whose step is being done this very moment: the deal's row asks again in a minute
+    await db.query(`UPDATE journey_runs SET node_id = NULL, status = 'waiting', due_at = NOW() + INTERVAL '1 minute', updated_at = NOW() WHERE id = $1`, [row.id]);
+    return { over: false };
+  }
+  await db.query(`UPDATE journey_runs SET status = $2, reason = $3, node_id = NULL, due_at = NULL, updated_at = NOW() WHERE id = $1`, [row.id, 'done', null]);
+  return { over: true };
+}
+// A rule ended the workflow for the deal: on every route at once. The further routes' rows go, the deal's row says
+// 'stopped' and why.
+async function pathStopped(db, row, reason) {
+  const root = row.root_id || row.id;
+  await db.query('DELETE FROM journey_runs WHERE root_id = $1', [root]);
+  await db.query(`UPDATE journey_runs SET status = $2, reason = $3, node_id = NULL, due_at = NULL, updated_at = NOW() WHERE id = $1`, [root, 'stopped', reason]);
+}
+// The row goes on to its next box and a further row is made for every other route — in ONE statement, so that a
+// crash leaves either all of it or none. $4–$6: the further routes' boxes, when each is due, and each row's key.
+const FORK = `
+  WITH on_it AS (
+    UPDATE journey_runs SET node_id = $2, status = 'waiting', due_at = $3, attempts = 0, updated_at = NOW() WHERE id = $1
+    RETURNING workspace_id, flow_id, deal_id, started_at, COALESCE(root_id, id) AS root
+  )
+  INSERT INTO journey_runs (workspace_id, flow_id, deal_id, node_id, status, due_at, event_key, started_at, root_id)
+  SELECT o.workspace_id, o.flow_id, o.deal_id, t.node_id, 'waiting', t.due_at, t.key, o.started_at, o.root
+    FROM on_it o, unnest($4::int[], $5::timestamptz[], $6::text[]) AS t(node_id, due_at, key)`;
+// A further route's own key: the deal's key in this workflow, '~' and a tail nobody else has.
+const pathKey = x => `${String(x.event_key || '').split('~')[0]}~${crypto.randomBytes(6).toString('hex')}`;
 
 // ── one row whose time has come ─────────────────────────────────────────────
 async function runOne(pool, id, { now = new Date(), tell = {} } = {}) {
@@ -285,11 +357,11 @@ async function runOne(pool, id, { now = new Date(), tell = {} } = {}) {
   if (!claimed) return null;   // another tick has it, or it was stopped meanwhile
   const { rows: [x] } = await pool.query(
     `SELECT r.id, r.workspace_id, r.flow_id, r.deal_id, r.node_id, r.started_at, r.held, f.name AS flow_name, s.config AS start_config,
-            n.kind, n.title, n.body, n.config, n.next_id, n.else_id,
-            d.title AS deal_title, d.stage_id, d.contact_id, d.assigned_to, d.urgency, d.custom_data AS deal_data,
+            n.kind, n.title, n.body, n.config, n.next_id, n.else_id, r.root_id, r.event_key,
+            d.title AS deal_title, d.stage_id, d.contact_id, d.assigned_to, d.urgency, d.custom_data AS deal_data, d.created_at AS deal_created_at,
             d.value AS deal_value, ps.name AS stage_name, p.name AS pipeline_name, u.name AS owner_name, u.email AS owner_email, w.name AS workspace_name,
             c.name AS contact_name, c.email AS contact_email, c.company AS contact_company, c.phone AS contact_phone, c.journey_opt_out,
-            c.custom_data AS contact_data, c.onboarding_status
+            c.custom_data AS contact_data, c.onboarding_status, c.assigned_to AS contact_assigned_to, c.created_at AS contact_created_at
        FROM journey_runs r
        JOIN journey_flows f ON f.id = r.flow_id
        JOIN deals d ON d.id = r.deal_id
@@ -306,10 +378,12 @@ async function runOne(pool, id, { now = new Date(), tell = {} } = {}) {
   // what every entry of this row says: whose, which workflow and which deal — by their names as they are now
   const entry = x ? { workspaceId: x.workspace_id, flowId: x.flow_id, dealId: x.deal_id, flowName: x.flow_name, dealTitle: x.deal_title } : null;
   const step = x ? { ...entry, nodeId: x.node_id, kind: x.kind, title: x.title } : null;
-  // the workflow is over for this deal: the row says so, and so does the record (done, or stopped with why)
+  // this row's way is over. Stopped by a rule: the workflow is over for the deal, on every route. Done: over for
+  // the deal only when no other route of it is still on its way (Part 23). The record says "ended" when it is over.
   const end = async (status, reason = null) => {
-    await pool.query(`UPDATE journey_runs SET status = $2, reason = $3, node_id = NULL, due_at = NULL, updated_at = NOW() WHERE id = $1`, [id, status, reason]);
-    if (entry) await log.record(pool, { ...entry, event: 'ended', status, detail: reason });
+    const row = { id, root_id: x ? x.root_id : null };
+    const over = status === 'stopped' ? (await pathStopped(pool, row, reason), true) : (await pathDone(pool, row)).over;
+    if (entry && over) await log.record(pool, { ...entry, event: 'ended', status, detail: reason });
   };
   // What held the row back last time (Part 17) is over once it is taken up; an email that is held again says so anew.
   if (x && x.held) await pool.query(`UPDATE journey_runs SET held = NULL WHERE id = $1`, [id]);
@@ -319,7 +393,7 @@ async function runOne(pool, id, { now = new Date(), tell = {} } = {}) {
 
   let res;
   try {
-    res = x.kind === 'wait' ? { status: 'done', detail: 'waited' } : x.kind === 'branch' ? await doBranch(pool, x) : x.kind === 'email' ? await doEmail(pool, x, now, tell) : x.kind === 'call' ? await doCall(pool, x, now)
+    res = x.kind === 'wait' ? { status: 'done', detail: 'waited' } : x.kind === 'branch' ? await doBranch(pool, x, now) : x.kind === 'router' ? await doRouter(pool, x, now) : x.kind === 'email' ? await doEmail(pool, x, now, tell) : x.kind === 'call' ? await doCall(pool, x, now)
       : x.kind === 'move' ? await doMove(pool, x, tell) : x.kind in TASK_PREFIX ? await doTask(pool, x, tell, now) : { status: 'skipped', detail: 'unknown_kind' };
   } catch (err) {
     console.error('journey: a step failed:', err?.message || err);
@@ -342,13 +416,27 @@ async function runOne(pool, id, { now = new Date(), tell = {} } = {}) {
   // what the box did: written down before the row moves on (write, not record — it may throw, and then nothing moves)
   await log.write(pool, { ...step, event: 'step', status, detail: res.detail });
   // on to the box after it, due after that box's wait; past the last box the workflow is done for this deal
-  // a branch box says which of its two lines the deal takes; every other box has one
-  const nextId = res.to !== undefined ? res.to : x.next_id;
-  const { rows: [next] } = nextId ? await pool.query('SELECT id, wait_minutes, kind, config FROM journey_nodes WHERE id = $1 AND flow_id = $2', [nextId, x.flow_id]) : { rows: [] };
+  // a branch box says which of its two lines the deal takes, a router box every route it goes down; every other box has one
+  const wanted = (res.targets !== undefined ? res.targets : [res.to !== undefined ? res.to : x.next_id]).filter(Boolean);
+  const nexts = [];
+  for (const nextId of wanted) {
+    const { rows: [n] } = await pool.query('SELECT id, wait_minutes, kind, config FROM journey_nodes WHERE id = $1 AND flow_id = $2', [nextId, x.flow_id]);
+    if (n) nexts.push(n);
+  }
+  const [next, ...more] = nexts;
   if (!next) { await end('done'); return { id, status, step: x.kind, finished: true }; }
-  await pool.query(`UPDATE journey_runs SET node_id = $2, status = 'waiting', due_at = $3, attempts = 0, updated_at = NOW() WHERE id = $1`,
-    [id, next.id, dueOf(next, at)]);
-  return { id, status, step: x.kind, finished: false };
+  if (!more.length) {
+    await pool.query(`UPDATE journey_runs SET node_id = $2, status = 'waiting', due_at = $3, attempts = 0, updated_at = NOW() WHERE id = $1`,
+      [id, next.id, dueOf(next, at)]);
+    return { id, status, step: x.kind, finished: false };
+  }
+  // several routes (Part 23): this row goes down the first, a row of its own is made for each of the others — as
+  // far as the deal may still be at more places of this workflow
+  const { rows: [live] } = await pool.query('SELECT COUNT(*)::int AS n FROM journey_runs WHERE root_id = $1', [x.root_id || x.id]);
+  const further = more.slice(0, Math.max(0, MAX_PATHS - 1 - Number((live && live.n) || 0)));
+  if (further.length < more.length) await log.record(pool, { ...step, event: 'step', status: 'skipped', detail: 'paths_limit' });
+  await pool.query(FORK, [id, next.id, dueOf(next, at), further.map(n => n.id), further.map(n => dueOf(n, at)), further.map(() => pathKey(x))]);
+  return { id, status, step: x.kind, finished: false, routes: 1 + further.length };
 }
 
 // ── taking deals in ─────────────────────────────────────────────────────────
@@ -368,6 +456,7 @@ async function enroll(pool, flow, dealId, { now = new Date(), restart = false, k
      RETURNING id, status, due_at`,
     [flow.workspace_id, flow.id, dealId, first ? first.id : null, first ? 'waiting' : 'done', due, String(key || '')]
   );
+  if (row && restart) await pool.query('DELETE FROM journey_runs WHERE root_id = $1', [row.id]);   // the routes it was on before are not gone on with (Part 23)
   if (row) {   // taken in (no row: it was in already) — and over at once where nothing stands behind the start
     const entry = { workspaceId: flow.workspace_id, flowId: flow.id, dealId };
     await log.record(pool, { ...entry, event: 'entered', detail: by || (flow.config && flow.config.trigger) || '', actorId });
@@ -423,21 +512,18 @@ async function runDue(pool, { now = new Date(), limit = 25, tell = {} } = {}) {
   // a row a crashed tick left as 'working': whether its step happened is not known, so it is not done again —
   // the row goes on to the box after it
   const { rows: stuck } = await pool.query(
-    `SELECT r.id, r.workspace_id, r.flow_id, r.node_id, r.deal_id, n.kind, n.title, n.next_id FROM journey_runs r LEFT JOIN journey_nodes n ON n.id = r.node_id
+    `SELECT r.id, r.root_id, r.workspace_id, r.flow_id, r.node_id, r.deal_id, n.kind, n.title, n.next_id FROM journey_runs r LEFT JOIN journey_nodes n ON n.id = r.node_id
       WHERE r.status = 'working' AND r.updated_at < $1`, [new Date(at - STUCK_MINUTES * 60000)]
   );
   for (const s of stuck) {
     try {   // one row that cannot be put right must not keep the tick from every other deal
-      // a box that does nothing to the deal (a question, a wait) is simply asked again
-      if (s.kind === 'branch' || s.kind === 'wait') { await pool.query(`UPDATE journey_runs SET status = 'waiting', updated_at = NOW() WHERE id = $1 AND status = 'working'`, [s.id]); continue; }
+      // a box that does nothing to the deal (a question, a router, a wait) is simply asked again
+      if (s.kind === 'branch' || s.kind === 'router' || s.kind === 'wait') { await pool.query(`UPDATE journey_runs SET status = 'waiting', updated_at = NOW() WHERE id = $1 AND status = 'working'`, [s.id]); continue; }
       const entry = { workspaceId: s.workspace_id, flowId: s.flow_id, dealId: s.deal_id };
       if (s.kind) await log.write(pool, { ...entry, nodeId: s.node_id, kind: s.kind, title: s.title, event: 'step', status: 'failed', detail: 'interrupted' });
       const { rows: [next] } = s.next_id ? await pool.query('SELECT id, wait_minutes, kind, config FROM journey_nodes WHERE id = $1 AND flow_id = $2', [s.next_id, s.flow_id]) : { rows: [] };
       if (next) await pool.query(`UPDATE journey_runs SET node_id = $2, status = 'waiting', due_at = $3, attempts = 0, updated_at = NOW() WHERE id = $1`, [s.id, next.id, dueOf(next, at)]);
-      else {
-        await pool.query(`UPDATE journey_runs SET status = 'done', node_id = NULL, due_at = NULL, updated_at = NOW() WHERE id = $1`, [s.id]);
-        await log.record(pool, { ...entry, event: 'ended', status: 'done' });
-      }
+      else if ((await pathDone(pool, s)).over) await log.record(pool, { ...entry, event: 'ended', status: 'done' });   // this route is through; over for the deal when it was the last
     } catch (err) { console.error('journey: a row a tick had left could not be put right:', err?.message || err); }
   }
   try { await enrollNew(pool, now); }
@@ -480,8 +566,8 @@ function startWorker(pool, { intervalMs = 30000, limit = 25, log = console, tell
 }
 
 module.exports = {
-  RETRY_MINUTES, MAX_ATTEMPTS, STUCK_MINUTES, ENROLL_LIMIT, MAX_PLACE,
+  RETRY_MINUTES, MAX_ATTEMPTS, STUCK_MINUTES, ENROLL_LIMIT, MAX_PLACE, MAX_PATHS,
   isHtml, htmlToText, emailParts, unsubscribeToken, contactOfToken, unsubscribeUrl,
-  dueOf, stopReason,
+  dueOf, stopReason, pathDone, pathStopped,
   enroll, enrollNew, newDeals, activeFlows, baseline, include, runOne, runDue, startWorker,
 };

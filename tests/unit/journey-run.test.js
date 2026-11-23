@@ -493,7 +493,7 @@ describe('the record: what the engine writes down beside what each step did', ()
   test('the lines that make it so', () => {
     const src = read('utils/journey-run.js');
     assert.match(src, /^const log\s+= require\('\.\/journey-log'\);/m);
-    assert.match(src, /if \(entry\) await log\.record\(pool, \{ \.\.\.entry, event: 'ended', status, detail: reason \}\);/);
+    assert.match(src, /if \(entry && over\) await log\.record\(pool, \{ \.\.\.entry, event: 'ended', status, detail: reason \}\);/, 'said when the workflow is over for the deal — on its last route (Part 23)');
     assert.match(src, /await log\.record\(pool, \{ \.\.\.step, event: 'retry', status: 'retry', detail: res\.detail \}\);\s+return \{ id, status: 'retry' \};/);
     assert.match(src, /await log\.record\(pool, \{ \.\.\.entry, event: 'entered', detail: by \|\| \(flow\.config && flow\.config\.trigger\) \|\| '', actorId \}\);/);
     assert.match(src, /restart: true, by: was \? 'restart' : 'manual', actorId \}\)/);
@@ -775,6 +775,218 @@ describe('an email and the limits of its address', () => {
   });
 });
 
+// Part 23 (2026-11-23): a router box — a deal goes down every route whose question says yes, and is then at several
+// places of the workflow at once: the row the start made (the root) and a row of its own for every further route.
+describe('a router box: a deal on several routes at once', () => {
+  const NOW = new Date('2026-11-23T10:00:00Z'), STARTED = new Date('2026-11-20T08:00:00Z');
+  const wait = (id, next_id = null, minutes = 0) => ({ id, flow_id: 2, kind: 'wait', title: '', wait_minutes: minutes, config: {}, next_id, else_id: null });
+  const router = (routes, else_id = null) => ({ id: 5, flow_id: 2, kind: 'router', title: 'Split', wait_minutes: 0, config: { routes }, next_id: null, else_id });
+  const ALWAYS = [{ id: 1, name: 'A', when: null, next_id: 10 }, { id: 2, name: 'B', when: null, next_id: 11 }, { id: 3, name: 'C', when: null, next_id: 12 }];
+  const row = (id, node_id, more = {}) => ({ id, workspace_id: 7, flow_id: 2, deal_id: 60, node_id, status: 'waiting', due_at: NOW, attempts: 0, held: null, reason: null, event_key: '', started_at: STARTED, root_id: null, ...more });
+  // The run table and the boxes in memory, answering the engine's own statements — and nothing else: a statement
+  // nobody expects is an error, so a changed statement is seen here.
+  function world(nodes, runs, { start = {}, deal = {} } = {}) {
+    const asked = [], entries = [];
+    let nextId = 100;
+    const of = id => runs.find(r => r.id === id);
+    const drop = keep => { for (let i = runs.length - 1; i >= 0; i--) if (!keep(runs[i])) runs.splice(i, 1); };
+    return { asked, entries, runs, query: async (sql, p) => {
+      const t = String(sql).replace(/\s+/g, ' ').trim();
+      asked.push({ sql: t, params: p });
+      if (t.startsWith("UPDATE journey_runs SET status = 'working'")) { const r = runs.find(x => x.id === p[0] && x.status === 'waiting'); if (!r) return { rows: [] }; r.status = 'working'; r.attempts++; return { rows: [{ id: r.id, attempts: r.attempts }] }; }
+      if (t.startsWith('SELECT r.id, r.workspace_id, r.flow_id, r.deal_id, r.node_id, r.started_at')) {
+        const r = of(p[0]); if (!r) return { rows: [] };
+        const n = nodes.find(x => x.id === r.node_id) || {};
+        return { rows: [{ ...r, flow_name: 'Nurture', start_config: start, kind: n.kind ?? null, title: n.title ?? null, body: '', config: n.config ?? null, next_id: n.next_id ?? null, else_id: n.else_id ?? null,
+          deal_title: 'Wohnung 3', stage_id: 31, contact_id: 40, assigned_to: 5, urgency: 0, deal_data: {}, contact_data: {}, contact_phone: '+49 1', contact_email: 'e@example.de', journey_opt_out: false, ...deal }] };
+      }
+      if (t.startsWith('INSERT INTO journey_log')) { entries.push({ node_id: p[2], kind: p[4], status: p[6], detail: p[7], event: p[8] }); return { rows: [{ id: entries.length }] }; }
+      if (t === 'SELECT id, wait_minutes, kind, config FROM journey_nodes WHERE id = $1 AND flow_id = $2') return { rows: nodes.filter(n => n.id === p[0] && n.flow_id === p[1]).map(({ id, wait_minutes, kind, config }) => ({ id, wait_minutes, kind, config })) };
+      if (t === "UPDATE journey_runs SET node_id = $2, status = 'waiting', due_at = $3, attempts = 0, updated_at = NOW() WHERE id = $1") { Object.assign(of(p[0]) || {}, { node_id: p[1], status: 'waiting', due_at: p[2], attempts: 0 }); return { rows: [], rowCount: 1 }; }
+      if (t === 'SELECT COUNT(*)::int AS n FROM journey_runs WHERE root_id = $1') return { rows: [{ n: runs.filter(r => r.root_id === p[0]).length }] };
+      if (t.startsWith('WITH on_it AS ( UPDATE journey_runs SET node_id = $2, status = \'waiting\', due_at = $3, attempts = 0, updated_at = NOW() WHERE id = $1 RETURNING')) {
+        const r = of(p[0]); if (!r) return { rows: [], rowCount: 0 };
+        Object.assign(r, { node_id: p[1], status: 'waiting', due_at: p[2], attempts: 0 });
+        p[3].forEach((node_id, i) => runs.push(row(nextId++, node_id, { due_at: p[4][i], event_key: p[5][i], started_at: r.started_at, root_id: r.root_id || r.id })));
+        return { rows: [], rowCount: p[3].length };
+      }
+      if (t === 'DELETE FROM journey_runs WHERE id = $1 AND root_id IS NOT NULL') { drop(r => !(r.id === p[0] && r.root_id)); return { rows: [] }; }
+      if (t === 'SELECT id, status FROM journey_runs WHERE root_id = $1 ORDER BY id') return { rows: runs.filter(r => r.root_id === p[0]).sort((a, b) => a.id - b.id).map(r => ({ id: r.id, status: r.status })) };
+      if (t === "DELETE FROM journey_runs WHERE id = $1 AND root_id = $2 AND status = 'waiting' RETURNING node_id, due_at, attempts, held") {
+        const r = runs.find(x => x.id === p[0] && x.root_id === p[1] && x.status === 'waiting'); if (!r) return { rows: [] };
+        drop(x => x !== r); return { rows: [{ node_id: r.node_id, due_at: r.due_at, attempts: r.attempts, held: r.held }] };
+      }
+      if (t === "UPDATE journey_runs SET node_id = $2, status = 'waiting', due_at = $3, attempts = $4, held = $5, updated_at = NOW() WHERE id = $1") { Object.assign(of(p[0]), { node_id: p[1], status: 'waiting', due_at: p[2], attempts: p[3], held: p[4] }); return { rows: [] }; }
+      if (t === "UPDATE journey_runs SET node_id = NULL, status = 'waiting', due_at = NOW() + INTERVAL '1 minute', updated_at = NOW() WHERE id = $1") { Object.assign(of(p[0]), { node_id: null, status: 'waiting', due_at: 'in a minute' }); return { rows: [] }; }
+      if (t === 'UPDATE journey_runs SET status = $2, reason = $3, node_id = NULL, due_at = NULL, updated_at = NOW() WHERE id = $1') { Object.assign(of(p[0]) || {}, { status: p[1], reason: p[2], node_id: null, due_at: null }); return { rows: [] }; }
+      if (t === 'DELETE FROM journey_runs WHERE root_id = $1') { drop(r => r.root_id !== p[0]); return { rows: [] }; }
+      if (t === 'UPDATE journey_runs SET held = NULL WHERE id = $1') { Object.assign(of(p[0]) || {}, { held: null }); return { rows: [] }; }   // what held a row back is over once it is taken up (Part 17)
+      throw new Error(`a statement nobody expected: ${t}`);
+    } };
+  }
+  const places = w => w.runs.map(r => [r.id, r.node_id, r.status, r.root_id]);
+  const said = w => w.entries.map(e => [e.event, e.kind, e.status, e.detail]);
+
+  test('every route whose question says yes: the deal\'s row takes the first, each other gets a row of its own — and the record says which routes', async () => {
+    const w = world([router(ALWAYS), wait(10, null, 60), wait(11), wait(12, null, 1440)], [row(1, 5)]);
+    assert.deepEqual(await run.runOne(w, 1, { now: NOW }), { id: 1, status: 'done', step: 'router', finished: false, routes: 3 });
+    assert.deepEqual(places(w), [[1, 10, 'waiting', null], [100, 11, 'waiting', 1], [101, 12, 'waiting', 1]]);
+    assert.deepEqual(w.runs.map(r => r.due_at.toISOString()), ['2026-11-23T11:00:00.000Z', '2026-11-23T10:00:00.000Z', '2026-11-24T10:00:00.000Z'], 'each due after its own box\'s wait');
+    assert.deepEqual(w.runs.slice(1).map(r => [r.workspace_id, r.flow_id, r.deal_id, r.started_at]), [[7, 2, 60, STARTED], [7, 2, 60, STARTED]], 'the same deal in the same workflow, entered when the deal entered');
+    assert.deepEqual(said(w), [['step', 'router', 'done', 'routes:1,2,3']]);
+    assert.ok(!w.entries.some(e => e.event === 'ended'), 'nothing is over');
+  });
+  test('a further row\'s key is the deal\'s own key, "~" and a tail nobody else has — whatever row it came from', async () => {
+    const w = world([router(ALWAYS), wait(10), wait(11), wait(12)], [row(1, 5, { event_key: 'b77' })]);
+    await run.runOne(w, 1, { now: NOW });
+    const keys = w.runs.slice(1).map(r => r.event_key);
+    for (const k of keys) assert.match(k, /^b77~[0-9a-f]{12}$/);
+    assert.equal(new Set(keys).size, 2);
+    const nested = world([router(ALWAYS), wait(10), wait(11), wait(12)], [row(1, 9), row(50, 5, { root_id: 1, event_key: '~aaaaaaaaaaaa' })]);
+    await run.runOne(nested, 50, { now: NOW });
+    assert.deepEqual(nested.runs.slice(2).map(r => [r.root_id, /^~[0-9a-f]{12}$/.test(r.event_key)]), [[1, true], [1, true]], 'a route\'s own routes belong to the deal\'s row, and their keys do not grow');
+  });
+  test('only the routes whose question says yes — and a route that says yes but leads nowhere is gone down all the same: no "otherwise"', async () => {
+    const asks = [{ id: 1, name: '', when: { test: 'has_phone' }, next_id: 10 }, { id: 2, name: '', when: { test: 'has_email' }, next_id: 11 }, { id: 4, name: '', when: { test: 'assigned' }, next_id: null }];
+    const w = world([router(asks, 12), wait(10), wait(11), wait(12)], [row(1, 5)], { deal: { contact_email: '' } });
+    await run.runOne(w, 1, { now: NOW });
+    assert.deepEqual(places(w), [[1, 10, 'waiting', null]], 'the phone route; the email route said no; the third leads nowhere');
+    assert.deepEqual(said(w), [['step', 'router', 'done', 'routes:1,3']], 'the record names a route by its place among the routes — the number on its foot — not by the number the server keeps it under (4)');
+    assert.ok(!w.asked.some(c => c.sql.startsWith('WITH on_it')), 'one way on: the plain statement, no further row');
+    const only = world([router([asks[2]], 12), wait(12)], [row(1, 5)]);
+    assert.deepEqual(await run.runOne(only, 1, { now: NOW }), { id: 1, status: 'done', step: 'router', finished: true });
+    assert.deepEqual([places(only), said(only)], [[[1, null, 'done', null]], [['step', 'router', 'done', 'routes:1'], ['ended', '', 'done', null]]], 'it led nowhere: the deal is through');
+  });
+  test('no route says yes: the "otherwise" line — and without one the deal is through', async () => {
+    const asks = [{ id: 1, name: '', when: { test: 'has_phone' }, next_id: 10 }, { id: 2, name: '', when: { test: 'has_email' }, next_id: 11 }];
+    const w = world([router(asks, 12), wait(10), wait(11), wait(12)], [row(1, 5)], { deal: { contact_email: '', contact_phone: '' } });
+    await run.runOne(w, 1, { now: NOW });
+    assert.deepEqual([places(w), said(w)], [[[1, 12, 'waiting', null]], [['step', 'router', 'done', 'else']]]);
+    const none = world([router(asks, null), wait(10), wait(11)], [row(1, 5)], { deal: { contact_email: '', contact_phone: '' } });
+    await run.runOne(none, 1, { now: NOW });
+    assert.deepEqual([places(none), said(none)], [[[1, null, 'done', null]], [['step', 'router', 'done', 'else'], ['ended', '', 'done', null]]]);
+    const gone = world([router(ALWAYS), wait(11)], [row(1, 5)]);   // two of the three boxes were deleted meanwhile
+    await run.runOne(gone, 1, { now: NOW });
+    assert.deepEqual(places(gone), [[1, 11, 'waiting', null]], 'a line to a box that is gone leads nowhere');
+  });
+  test('two routes that lead to the same box: the deal is there twice, once per route', async () => {
+    const w = world([router([{ id: 1, when: null, next_id: 10 }, { id: 2, when: null, next_id: 10 }]), wait(10)], [row(1, 5)]);
+    await run.runOne(w, 1, { now: NOW });
+    assert.deepEqual(places(w), [[1, 10, 'waiting', null], [100, 10, 'waiting', 1]]);
+  });
+  test('a route that is through deletes its row; the workflow is over — and the record says "ended" — only with the last one', async () => {
+    const w = world([router(ALWAYS), wait(10), wait(11), wait(12)], [row(1, 5)]);
+    await run.runOne(w, 1, { now: NOW });
+    assert.deepEqual(await run.runOne(w, 100, { now: NOW }), { id: 100, status: 'done', step: 'wait', finished: true });
+    assert.deepEqual(places(w), [[1, 10, 'waiting', null], [101, 12, 'waiting', 1]], 'the row of the route that is through is gone');
+    await run.runOne(w, 101, { now: NOW });
+    assert.deepEqual(places(w), [[1, 10, 'waiting', null]]);
+    assert.ok(!w.entries.some(e => e.event === 'ended'), 'two routes through, one on its way: not over');
+    await run.runOne(w, 1, { now: NOW });
+    assert.deepEqual(places(w), [[1, null, 'done', null]]);
+    assert.deepEqual(w.entries.filter(e => e.event === 'ended').map(e => [e.status, e.detail]), [['done', null]], 'said once, with the last route');
+  });
+  test('the deal\'s own row is through first: it takes over a route that is still on its way, and is done only when none is left', async () => {
+    const later = new Date('2026-11-30T09:00:00Z');
+    const w = world([router(ALWAYS), wait(10), wait(11), wait(12)], [row(1, 5)]);
+    await run.runOne(w, 1, { now: NOW });
+    Object.assign(w.runs[1], { due_at: later, attempts: 2, held: 'limit_day' });
+    await run.runOne(w, 1, { now: NOW });   // the route at box 10 is through
+    assert.deepEqual(places(w), [[1, 11, 'waiting', null], [101, 12, 'waiting', 1]], 'the oldest route that waits is now the deal\'s row');
+    assert.deepEqual([w.runs[0].due_at, w.runs[0].attempts, w.runs[0].held], [later, 2, 'limit_day'], 'as it was: when it is due, its tries, what holds it');
+    assert.ok(!w.entries.some(e => e.event === 'ended'));
+    await run.runOne(w, 1, { now: later }); await run.runOne(w, 1, { now: later });
+    assert.deepEqual(places(w), [[1, null, 'done', null]]);
+    assert.equal(w.entries.filter(e => e.event === 'ended').length, 1);
+  });
+  test('a route whose step is being done this very moment cannot be taken over: the deal\'s row asks again in a minute, and is not done', async () => {
+    const w = world([wait(10)], [row(1, 10), row(100, 10, { root_id: 1, status: 'working' })]);
+    assert.deepEqual(await run.pathDone(w, { id: 1, root_id: null }), { over: false });
+    assert.deepEqual(places(w), [[1, null, 'waiting', null], [100, 10, 'working', 1]]);
+    assert.equal(w.runs[0].due_at, 'in a minute');
+    w.runs.splice(1, 1);   // that route is through meanwhile
+    assert.deepEqual(await run.runOne(w, 1, { now: NOW }), { id: 1, status: 'done' }, 'the row without a box is asked again: now it is over');
+    assert.deepEqual([places(w), said(w)], [[[1, null, 'done', null]], [['ended', '', 'done', null]]]);
+  });
+  test('of several routes still on their way the first that WAITS is taken over — one whose step is being done is left to finish', async () => {
+    const w = world([wait(10), wait(11), wait(12)], [row(1, 10), row(100, 11, { root_id: 1, status: 'working' }), row(101, 12, { root_id: 1 })]);
+    assert.deepEqual(await run.pathDone(w, { id: 1, root_id: null }), { over: false });
+    assert.deepEqual(places(w), [[1, 12, 'waiting', null], [100, 11, 'working', 1]]);
+  });
+  test('a route\'s question is asked at the moment of the run, not at the moment of the clock on the wall', async () => {
+    const young = [{ id: 1, when: { test: 'deal_age', op: 'newer', minutes: 60 }, next_id: 10 }];   // "created within the last hour"
+    const THEN = new Date('2020-01-01T10:00:00Z');   // long past: on the wall's clock a deal made half an hour before it is years old
+    const w = world([router(young, 11), wait(10), wait(11)], [row(1, 5)], { deal: { deal_created_at: new Date(THEN.getTime() - 30 * 60000) } });
+    await run.runOne(w, 1, { now: THEN });
+    assert.deepEqual([places(w), said(w)], [[[1, 10, 'waiting', null]], [['step', 'router', 'done', 'routes:1']]]);
+    const old = world([router([{ id: 1, when: { test: 'deal_age', op: 'older', minutes: 60 }, next_id: 10 }], 11), wait(10), wait(11)], [row(1, 5)], { deal: { deal_created_at: new Date(THEN.getTime() - 30 * 60000) } });
+    await run.runOne(old, 1, { now: THEN });
+    assert.deepEqual(said(old), [['step', 'router', 'done', 'else']], 'and half an hour is not yet an hour');
+  });
+  test('pathDone by itself: a further route is deleted and never over; the deal\'s row alone is done and over', async () => {
+    const w = world([], [row(1, 10), row(100, 11, { root_id: 1 })]);
+    assert.deepEqual(await run.pathDone(w, { id: 100, root_id: 1 }), { over: false });
+    assert.deepEqual(places(w), [[1, 10, 'waiting', null]]);
+    assert.deepEqual(w.asked.map(c => c.sql), ['DELETE FROM journey_runs WHERE id = $1 AND root_id IS NOT NULL'], 'one statement, and it can never delete a deal\'s own row');
+    assert.deepEqual(await run.pathDone(w, { id: 1, root_id: null }), { over: true });
+    assert.deepEqual([w.runs[0].status, w.runs[0].reason, w.runs[0].node_id, w.runs[0].due_at], ['done', null, null, null]);
+  });
+  test('a rule that ends the workflow ends it on every route at once: the further rows go, the deal\'s row says stopped and why, the record says it once', async () => {
+    const w = world([router(ALWAYS), wait(10), wait(11), wait(12)], [row(1, 5)]);
+    await run.runOne(w, 1, { now: NOW });
+    const stopped = world([wait(10), wait(11), wait(12)], w.runs, { start: { stop_stage_ids: [31] } });   // the deal reached a stop stage meanwhile
+    assert.deepEqual(await run.runOne(stopped, 101, { now: NOW }), { id: 101, status: 'stopped', reason: 'stop_stage' }, 'seen on a further route');
+    assert.deepEqual(places(stopped), [[1, null, 'stopped', null]]);
+    assert.equal(stopped.runs[0].reason, 'stop_stage');
+    assert.deepEqual(said(stopped), [['ended', '', 'stopped', 'stop_stage']]);
+    assert.equal(await run.runOne(stopped, 1, { now: NOW }), null, 'nothing is left to run');
+    const direct = world([], [row(1, 10), row(100, 11, { root_id: 1 }), row(101, 12, { root_id: 1, status: 'working' }), row(2, 10), row(200, 11, { root_id: 2 })]);
+    await run.pathStopped(direct, { id: 1, root_id: null }, 'meeting');
+    assert.deepEqual(places(direct), [[1, null, 'stopped', null], [2, 10, 'waiting', null], [200, 11, 'waiting', 2]], 'this deal\'s routes only');
+  });
+  test('at most 24 places per deal and workflow: a route beyond that is not gone down, and the record says so', async () => {
+    assert.equal(run.MAX_PATHS, 24);
+    const six = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, when: null, next_id: 10 + i }));
+    const boxes = [router(six), ...six.map(r => wait(r.next_id))];
+    const full = world(boxes, [row(1, 5), ...Array.from({ length: 20 }, (_, i) => row(300 + i, 10, { root_id: 1 }))]);
+    assert.equal((await run.runOne(full, 1, { now: NOW })).routes, 4, 'the deal\'s row and three more: 24 places in all');
+    assert.equal(full.runs.length, 24);
+    assert.deepEqual(said(full), [['step', 'router', 'done', 'routes:1,2,3,4,5,6'], ['step', 'router', 'skipped', 'paths_limit']]);
+    const room = world(boxes, [row(1, 5), ...Array.from({ length: 18 }, (_, i) => row(300 + i, 10, { root_id: 1 }))]);
+    await run.runOne(room, 1, { now: NOW });
+    assert.deepEqual([room.runs.length, said(room).length], [24, 1], 'exactly room for all six: nothing is said');
+    const none = world(boxes, [row(1, 5), ...Array.from({ length: 23 }, (_, i) => row(300 + i, 10, { root_id: 1 }))]);
+    await run.runOne(none, 1, { now: NOW });
+    assert.deepEqual([none.runs.length, none.runs[0].node_id], [24, 10], 'no room: the deal\'s row still goes down the first route');
+    const child = world(boxes, [row(1, 9), row(50, 5, { root_id: 1 }), ...Array.from({ length: 21 }, (_, i) => row(300 + i, 10, { root_id: 1 }))]);
+    await run.runOne(child, 50, { now: NOW });
+    assert.equal(child.runs.length, 24, 'counted for the deal\'s row, whichever route reaches the router');
+  });
+  test('"Include" starts the deal again from the first box: the routes it was on before are not gone on with', async () => {
+    const calls = [];
+    const pool = { query: async (sql, p) => { const t = String(sql).replace(/\s+/g, ' ').trim(); calls.push([t, p]);
+      return t.startsWith('INSERT INTO journey_runs') ? { rows: [{ id: 5, status: 'waiting', due_at: NOW }] } : t.startsWith('SELECT id, wait_minutes') ? { rows: [{ id: 3, wait_minutes: 0, kind: 'task', config: {} }] } : { rows: [], rowCount: 1 }; } };
+    const flow = { id: 2, workspace_id: 7, first_id: 3, config: { trigger: 'manual' } };
+    await run.enroll(pool, flow, 60, { now: NOW, restart: true, by: 'restart' });
+    assert.deepEqual(calls.find(c => c[0].startsWith('DELETE FROM journey_runs')), ['DELETE FROM journey_runs WHERE root_id = $1', [5]]);
+    calls.length = 0;
+    await run.enroll(pool, flow, 60, { now: NOW });
+    assert.ok(!calls.some(c => c[0].startsWith('DELETE')), 'a deal a start takes in has no routes from before to clear');
+  });
+  test('the lines that make it so', () => {
+    const src = read('utils/journey-run.js');
+    assert.match(src, /^const routes\s+= require\('\.\/journey-router'\);/m);
+    assert.match(src, /WITH on_it AS \(\s+UPDATE journey_runs SET node_id = \$2, status = 'waiting', due_at = \$3, attempts = 0, updated_at = NOW\(\) WHERE id = \$1\s+RETURNING workspace_id, flow_id, deal_id, started_at, COALESCE\(root_id, id\) AS root\s+\)\s+INSERT INTO journey_runs \(workspace_id, flow_id, deal_id, node_id, status, due_at, event_key, started_at, root_id\)\s+SELECT o\.workspace_id, o\.flow_id, o\.deal_id, t\.node_id, 'waiting', t\.due_at, t\.key, o\.started_at, o\.root\s+FROM on_it o, unnest\(\$4::int\[\], \$5::timestamptz\[\], \$6::text\[\]\) AS t\(node_id, due_at, key\)/, 'the row moves on and the further rows are made in ONE statement: a crash leaves all of it or none');
+    assert.match(src, /const over = status === 'stopped' \? \(await pathStopped\(pool, row, reason\), true\) : \(await pathDone\(pool, row\)\)\.over;/);
+    assert.match(src, /else if \(\(await pathDone\(pool, s\)\)\.over\) await log\.record\(pool, \{ \.\.\.entry, event: 'ended', status: 'done' \}\);/, 'a row a crash left with nothing behind its step is through like any other');
+    assert.match(src, /`SELECT r\.id, r\.root_id, r\.workspace_id, r\.flow_id, r\.node_id, r\.deal_id, n\.kind, n\.title, n\.next_id FROM journey_runs r LEFT JOIN journey_nodes n ON n\.id = r\.node_id/);
+    assert.match(src, /n\.next_id, n\.else_id, r\.root_id, r\.event_key,/);
+    assert.match(read('db.js'), /ALTER TABLE journey_runs ADD COLUMN IF NOT EXISTS root_id INTEGER REFERENCES journey_runs\(id\) ON DELETE CASCADE/);
+    assert.match(read('db.js'), /CREATE INDEX IF NOT EXISTS journey_runs_root_idx ON journey_runs \(root_id\) WHERE root_id IS NOT NULL/, 'a deal\'s routes are looked up by it at every end of a route');
+    assert.deepEqual([typeof run.pathDone, typeof run.pathStopped], ['function', 'function'], 'the route ends a route the same way when a box is deleted');
+  });
+});
+
 describe('the lines that carry the engine\'s guarantees', () => {
   const code = read('utils/journey-run.js').replace(/\/\*[\s\S]*?\*\//, '');   // the code without its header
   test('it never opens the database module itself', () => {
@@ -810,19 +1022,27 @@ describe('the lines that carry the engine\'s guarantees', () => {
     assert.match(enrol, /try \{\s+for \(const found of await newDeals\(pool, flow, now\)\) if \(await enroll\(pool, flow, found\.dealId, \{ now, key: found\.key \}\)\) taken\+\+;\s+\} catch \(err\)/);
   });
   test('a Wait box does nothing but take its time, and every box\'s time is worked out in one place', () => {
-    assert.match(code, /res = x\.kind === 'wait' \? \{ status: 'done', detail: 'waited' \}\s+: x\.kind === 'branch' \? await doBranch\(pool, x\)\s+: x\.kind === 'email'/);
+    assert.match(code, /res = x\.kind === 'wait' \? \{ status: 'done', detail: 'waited' \}\s+: x\.kind === 'branch' \? await doBranch\(pool, x, now\)\s+: x\.kind === 'router' \? await doRouter\(pool, x, now\)\s+: x\.kind === 'email'/);
     assert.equal((code.match(/SELECT id, wait_minutes, kind, config FROM journey_nodes WHERE id = \$1 AND flow_id = \$2/g) || []).length, 3, 'the first box, the next box, and the box after a step a crash interrupted');
-    assert.equal((code.match(/dueOf\((first|next), /g) || []).length, 3);
+    assert.equal((code.match(/dueOf\((first|next|n), /g) || []).length, 5, 'and, with a router (Part 23), the first of several routes and each further route\'s box');
     assert.doesNotMatch(code.slice(code.indexOf('async function runOne(')), /wait_minutes \|\| 0\) \* 60000/, 'no second way to work a time out');
   });
+  // Part 22: an age is counted back from the moment the row is run, and the row carries who and when
+  test('a branch box is asked at the moment of the run, with the deal\'s and the contact\'s assignee and creation in the row', () => {
+    assert.match(code, /d\.custom_data AS deal_data, d\.created_at AS deal_created_at,/);
+    assert.match(code, /c\.custom_data AS contact_data, c\.onboarding_status, c\.assigned_to AS contact_assigned_to, c\.created_at AS contact_created_at\s+FROM journey_runs r/);
+    assert.match(code, /LEFT JOIN contacts c ON c\.id = d\.contact_id AND c\.workspace_id = d\.workspace_id/, 'a contact of another workspace is not read');
+  });
   test('a branch box does nothing to the deal: its answer picks the line, and a line that leads nowhere ends the workflow', () => {
-    assert.match(code, /async function doBranch\(pool, x\) \{\s+const yes = await branch\.holds\(pool, x, x\.config\);\s+return \{ status: 'done', detail: yes \? 'yes' : 'no', to: \(yes \? x\.next_id : x\.else_id\) \|\| null \};\s+\}/);
+    assert.match(code, /async function doBranch\(pool, x, now\) \{\s+const yes = await branch\.holds\(pool, x, x\.config, \{ now \}\);\s+return \{ status: 'done', detail: yes \? 'yes' : 'no', to: \(yes \? x\.next_id : x\.else_id\) \|\| null \};\s+\}/);
     const one = code.slice(code.indexOf('async function runOne('), code.indexOf('// ── taking deals in'));
-    assert.match(one, /const nextId = res\.to !== undefined \? res\.to : x\.next_id;\s+const \{ rows: \[next\] \} = nextId \? await pool\.query\('SELECT id, wait_minutes, kind, config FROM journey_nodes WHERE id = \$1 AND flow_id = \$2', \[nextId, x\.flow_id\]\) : \{ rows: \[\] \};\s+if \(!next\) \{ await end\('done'\);/);
+    assert.match(one, /const wanted = \(res\.targets !== undefined \? res\.targets : \[res\.to !== undefined \? res\.to : x\.next_id\]\)\.filter\(Boolean\);/);
+    assert.match(one, /const \{ rows: \[n\] \} = await pool\.query\('SELECT id, wait_minutes, kind, config FROM journey_nodes WHERE id = \$1 AND flow_id = \$2', \[nextId, x\.flow_id\]\);/, 'a box of this workflow only');
+    assert.match(one, /const \[next, \.\.\.more\] = nexts;\s+if \(!next\) \{ await end\('done'\);/);
     assert.match(one, /n\.kind, n\.title, n\.body, n\.config, n\.next_id, n\.else_id,/);
     assert.match(one, /d\.assigned_to, d\.urgency, d\.custom_data AS deal_data,/); assert.match(one, /c\.phone AS contact_phone, c\.journey_opt_out/);
-    assert.ok(one.indexOf('const stop = await stopReason(pool, x, now);') > 0 && one.indexOf('const stop = await stopReason(pool, x, now);') < one.indexOf('await doBranch(pool, x)'), 'where the workflow ends is asked before the question');
-    assert.ok(one.indexOf('await doBranch(pool, x)') < one.indexOf("await log.write(pool, { ...step, event: 'step'"), 'which way a deal went is written down');
+    assert.ok(one.indexOf('const stop = await stopReason(pool, x, now);') > 0 && one.indexOf('const stop = await stopReason(pool, x, now);') < one.indexOf('await doBranch(pool, x, now)'), 'where the workflow ends is asked before the question');
+    assert.ok(one.indexOf('await doBranch(pool, x, now)') < one.indexOf("await log.write(pool, { ...step, event: 'step'"), 'which way a deal went is written down');
   });
   test('the two questions a start can end a workflow on are the branch box\'s own', () => {
     // Part 13: every rule beside the stages is utils/journey-ends.js; the two that a branch box asks too are still its
@@ -835,8 +1055,8 @@ describe('the lines that carry the engine\'s guarantees', () => {
   });
   test('a question or a wait a crash interrupted is asked again; only a step that may have happened is not repeated', () => {
     const tick = code.slice(code.indexOf('async function runDue('));
-    assert.match(tick, /if \(s\.kind === 'branch' \|\| s\.kind === 'wait'\) \{ await pool\.query\(`UPDATE journey_runs SET status = 'waiting', updated_at = NOW\(\) WHERE id = \$1 AND status = 'working'`, \[s\.id\]\); continue; \}/);
-    assert.ok(tick.indexOf("if (s.kind === 'branch' || s.kind === 'wait')") < tick.indexOf("status: 'failed', detail: 'interrupted'") && tick.indexOf("status: 'failed', detail: 'interrupted'") > 0);
+    assert.match(tick, /if \(s\.kind === 'branch' \|\| s\.kind === 'router' \|\| s\.kind === 'wait'\) \{ await pool\.query\(`UPDATE journey_runs SET status = 'waiting', updated_at = NOW\(\) WHERE id = \$1 AND status = 'working'`, \[s\.id\]\); continue; \}/);
+    assert.ok(tick.indexOf("if (s.kind === 'branch' || s.kind === 'router' || s.kind === 'wait')") < tick.indexOf("status: 'failed', detail: 'interrupted'") && tick.indexOf("status: 'failed', detail: 'interrupted'") > 0);
   });
   // Found by the bug hunt of 2026-11-19: the rows a crashed tick had left were put right with nothing around them, so
   // one row that could not be written kept every tick from every other deal, in every workspace.

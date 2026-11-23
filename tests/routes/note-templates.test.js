@@ -7,6 +7,9 @@
 // Pinned: the list is the caller's workspace only, by name; a template is checked (name 1–80, text 1–20,000, a name
 // once per workspace whatever its capitals, at most 50); changing and deleting never reach another workspace; every
 // refusal carries a code the page turns into a sentence; who and where always come from the session.
+//
+// Part 8 (2026-11-20): a template is a text OR a questionnaire — a list of questions set up once, of which the user
+// later only writes the answers. Pinned at the end: how the questions are cleaned, checked, stored and sent back.
 const { test, describe, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { loadRoute, serve } = require('../helpers/load-route');
@@ -18,8 +21,10 @@ const pool = {
   query: async (sql, p = []) => {
     const t = String(sql).replace(/\s+/g, ' ').trim();
     state.calls.push({ sql: t, params: p });
-    const view = r => ({ id: r.id, name: r.name, content: r.content, created_by: r.created_by, updated_at: r.updated_at });
-    if (t.startsWith('SELECT id, name, content, created_by, updated_at FROM note_templates WHERE workspace_id = $1 ORDER BY name_key, id')) {
+    const view = r => ({ id: r.id, name: r.name, content: r.content, questions: r.questions ?? null, created_by: r.created_by, updated_at: r.updated_at });
+    // a jsonb column takes JSON text; a list handed over as it is would be read as a Postgres array — the real one fails there
+    const json = v => { if (v !== null && typeof v !== 'string') throw new Error('questions must be handed over as JSON text or null'); return v === null ? null : JSON.parse(v); };
+    if (t.startsWith('SELECT id, name, content, questions, created_by, updated_at FROM note_templates WHERE workspace_id = $1 ORDER BY name_key, id')) {
       return { rows: state.rows.filter(r => r.workspace_id === p[0]).sort((a, b) => (a.name_key < b.name_key ? -1 : a.name_key > b.name_key ? 1 : a.id - b.id)).map(view) };
     }
     if (t.startsWith('SELECT COUNT(*)::int AS n FROM note_templates WHERE workspace_id = $1')) return { rows: [{ n: state.rows.filter(r => r.workspace_id === p[0]).length }] };
@@ -27,14 +32,14 @@ const pool = {
     if (t.startsWith('SELECT id FROM note_templates WHERE workspace_id = $1 AND name_key = $2 AND id <> $3')) {
       return { rows: state.rows.filter(r => r.workspace_id === p[0] && r.name_key === p[1] && r.id !== p[2]).map(r => ({ id: r.id })) };
     }
-    if (t.startsWith('INSERT INTO note_templates (workspace_id, name, name_key, content, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING')) {
+    if (t.startsWith('INSERT INTO note_templates (workspace_id, name, name_key, content, questions, created_by) VALUES ($1,$2,$3,$4,$5::jsonb,$6) RETURNING')) {
       if (state.rows.some(r => r.workspace_id === p[0] && r.name_key === p[2])) throw Object.assign(new Error('duplicate key'), { code: '23505' });
-      const row = { id: state.next++, workspace_id: p[0], name: p[1], name_key: p[2], content: p[3], created_by: p[4], updated_at: '2026-11-18T10:00:00.000Z' };
+      const row = { id: state.next++, workspace_id: p[0], name: p[1], name_key: p[2], content: p[3], questions: json(p[4]), created_by: p[5], updated_at: '2026-11-18T10:00:00.000Z' };
       state.rows.push(row); return { rows: [view(row)] };
     }
-    if (t.startsWith('UPDATE note_templates SET name = $3, name_key = $4, content = $5, updated_at = NOW() WHERE id = $1 AND workspace_id = $2 RETURNING')) {
+    if (t.startsWith('UPDATE note_templates SET name = $3, name_key = $4, content = $5, questions = $6::jsonb, updated_at = NOW() WHERE id = $1 AND workspace_id = $2 RETURNING')) {
       const row = state.rows.find(r => r.id === p[0] && r.workspace_id === p[1]); if (!row) return { rows: [] };
-      row.name = p[2]; row.name_key = p[3]; row.content = p[4]; row.updated_at = '2026-11-18T11:00:00.000Z'; return { rows: [view(row)] };
+      row.name = p[2]; row.name_key = p[3]; row.content = p[4]; row.questions = json(p[5]); row.updated_at = '2026-11-18T11:00:00.000Z'; return { rows: [view(row)] };
     }
     if (t.startsWith('DELETE FROM note_templates WHERE id = $1 AND workspace_id = $2')) {
       const i = state.rows.findIndex(r => r.id === p[0] && r.workspace_id === p[1]); if (i < 0) return { rowCount: 0, rows: [] };
@@ -69,7 +74,7 @@ describe('the list', () => {
     const r = await member.request('GET', '/api/note-templates');
     assert.deepEqual(r.body.templates.map(t => t.name), ['Erstgespräch', 'zweites Gespräch']);
     assert.deepEqual((await other.request('GET', '/api/note-templates')).body.templates.map(t => t.name), ['Other']);
-    assert.deepEqual(Object.keys(r.body.templates[0]).sort(), ['content', 'created_by', 'id', 'name', 'updated_at']);
+    assert.deepEqual(Object.keys(r.body.templates[0]).sort(), ['content', 'created_by', 'id', 'name', 'questions', 'updated_at']);
   });
 });
 
@@ -77,7 +82,7 @@ describe('adding', () => {
   test('any member adds one: the name trimmed, the text kept as typed (line breaks, markup as text)', async () => {
     const r = await add(member, { name: '  Discovery call ', content: QUESTIONS + '<b>not markup</b>' });
     assert.equal(r.status, 201, JSON.stringify(r.body));
-    assert.deepEqual(r.body.template, { id: 1, name: 'Discovery call', content: QUESTIONS + '<b>not markup</b>', created_by: 3, updated_at: '2026-11-18T10:00:00.000Z' });
+    assert.deepEqual(r.body.template, { id: 1, name: 'Discovery call', content: QUESTIONS + '<b>not markup</b>', questions: null, created_by: 3, updated_at: '2026-11-18T10:00:00.000Z' });
     assert.deepEqual(state.rows[0].workspace_id, WS, 'the workspace comes from the session');
   });
   test('who and where never come from the body', async () => {
@@ -108,7 +113,7 @@ describe('adding', () => {
     assert.equal(state.rows[0].name, 'Erstgespräch Überblick', 'the name itself is kept as typed');
     const code = read('routes/note-templates.js').replace(/\/\*[\s\S]*?\*\//, '');   // the code without its header
     assert.doesNotMatch(code, /LOWER\(/, 'no lower-casing left to the database');
-    assert.match(code, /return \{ name, key: name\.toLowerCase\(\), content: b\.content \};/);
+    assert.match(code, /return \{ name, key: name\.toLowerCase\(\), content: b\.content, questions: null \};/);
   });
   test('two people adding the same name at the same moment: the index decides, and the loser hears "name taken"', async () => {
     const keep = pool.query;
@@ -168,6 +173,84 @@ describe('deleting', () => {
     await add(other, { name: 'Theirs', content: 'x' });
     for (const id of ['1', '999', 'abc']) assert.equal((await member.request('DELETE', `/api/note-templates/${id}`)).status, 404, id);
     assert.equal(state.rows.length, 1);
+  });
+});
+
+// ── Part 8: a questionnaire ──────────────────────────────────────────────────
+describe('a questionnaire: questions set up once (Part 8)', () => {
+  const ASKED = ['What is the budget?', 'Is the financing clarified?', 'When should the move happen?'];
+
+  test('added with its questions in their order; the answer and the list carry them', async () => {
+    const r = await add(member, { name: 'First call', questions: ASKED });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.deepEqual(r.body.template.questions, ASKED);
+    assert.deepEqual((await member.request('GET', '/api/note-templates')).body.templates[0].questions, ASKED);
+  });
+  test('its text is made by the route: the questions as plain text, a blank line between them — never taken from the body', async () => {
+    const r = await add(member, { name: 'First call', questions: ASKED, content: 'something else' });
+    assert.equal(r.body.template.content, 'What is the budget?\n\nIs the financing clarified?\n\nWhen should the move happen?');
+    assert.equal(state.rows[0].content, r.body.template.content);
+  });
+  test('each question is one line: trimmed, line breaks and runs of spaces made one space; empty rows are left out', async () => {
+    const r = await add(member, { name: 'A', questions: ['  Budget?  ', '', '   ', 'Who\ndecides\t and   when?', '<b>markup stays text</b>'] });
+    assert.deepEqual(r.body.template.questions, ['Budget?', 'Who decides and when?', '<b>markup stays text</b>']);
+  });
+  test('the list goes to the database as JSON text, a text template as nothing', async () => {
+    await add(member, { name: 'Q', questions: ['One?', 'Two?'] });
+    await add(member, { name: 'T', content: 'text' });
+    const [q, t] = writes();
+    assert.equal(q.params[4], '["One?","Two?"]'); assert.equal(t.params[4], null);
+    assert.match(read('routes/note-templates.js'), /^const stored = questions => \(questions \? JSON\.stringify\(questions\) : null\);$/m);
+  });
+  test('a text template has no questions; `questions: null` in a body is a text template too', async () => {
+    assert.equal((await add(member, { name: 'T', content: 'text' })).body.template.questions, null);
+    const r = await add(member, { name: 'T2', content: 'text', questions: null });
+    assert.equal(r.status, 201); assert.deepEqual([r.body.template.content, r.body.template.questions], ['text', null]);
+  });
+  test('refused with the code "questions", nothing written: no list, a list of something else, no question left, too many, one too long', async () => {
+    for (const questions of ['Budget?', 5, { 0: 'Budget?' }, true, [], ['', '   ', '\n'], ['Budget?', 5], ['Budget?', null], ['Budget?', ['nested']],
+      Array.from({ length: 41 }, (_, i) => `Question ${i}?`), ['q'.repeat(301)]]) {
+      const r = await add(member, { name: 'A', questions, content: 'a text does not rescue it' });
+      assert.equal(r.status, 400, JSON.stringify(questions).slice(0, 60)); assert.equal(r.body.code, 'questions');
+    }
+    assert.deepEqual(writes(), []);
+    const most = await add(member, { name: 'Most', questions: Array.from({ length: 40 }, (_, i) => `${i}`.padEnd(300, 'q')) });
+    assert.equal(most.status, 201, 'the limits themselves are allowed');
+    assert.ok(most.body.template.content.length <= 20000, 'and the text made from them fits a template\'s text');
+    assert.equal((await add(member, { name: 'Empty rows do not count', questions: [...Array.from({ length: 40 }, (_, i) => `Q${i}?`), '', ' '] })).status, 201);
+  });
+  test('the name is checked first, as for a text', async () => {
+    assert.equal((await add(member, { name: ' ', questions: ASKED })).body.code, 'name');
+    await add(member, { name: 'First call', questions: ASKED });
+    assert.equal((await add(member, { name: 'FIRST CALL', questions: ASKED })).body.code, 'name_taken');
+  });
+  test('changing: the questions are replaced; a text becomes a questionnaire and a questionnaire a text again', async () => {
+    await add(member, { name: 'First call', content: 'Budget:' });
+    const asked = await member.request('PUT', '/api/note-templates/1', { name: 'First call', questions: ['Budget?', 'Timeline?'] });
+    assert.deepEqual([asked.status, asked.body.template.questions, asked.body.template.content], [200, ['Budget?', 'Timeline?'], 'Budget?\n\nTimeline?']);
+    const fewer = await member.request('PUT', '/api/note-templates/1', { name: 'First call', questions: ['Timeline?'] });
+    assert.deepEqual([fewer.body.template.questions, fewer.body.template.content], [['Timeline?'], 'Timeline?']);
+    const text = await member.request('PUT', '/api/note-templates/1', { name: 'First call', content: 'Plain again' });
+    assert.deepEqual([text.body.template.questions, text.body.template.content, state.rows[0].questions], [null, 'Plain again', null]);
+    const bad = await member.request('PUT', '/api/note-templates/1', { name: 'First call', questions: [] });
+    assert.equal(bad.body.code, 'questions'); assert.equal(state.rows[0].content, 'Plain again');
+  });
+  test('another workspace never sees or changes them', async () => {
+    await add(member, { name: 'First call', questions: ASKED });
+    assert.deepEqual((await other.request('GET', '/api/note-templates')).body.templates, []);
+    assert.equal((await other.request('PUT', '/api/note-templates/1', { name: 'Theirs', questions: ['x'] })).status, 404);
+    assert.deepEqual(state.rows[0].questions, ASKED);
+  });
+  test('db.js: the questions are a column added afterwards; the table\'s own statement is as it was shipped', () => {
+    const db = read('db.js');
+    const at = db.indexOf('CREATE TABLE IF NOT EXISTS note_templates'), table = db.slice(at, db.indexOf(')\n  `);', at));
+    assert.doesNotMatch(table, /questions/);
+    assert.match(db, /await pool\.query\(`ALTER TABLE note_templates ADD COLUMN IF NOT EXISTS questions JSONB`\);/);
+    assert.ok(db.indexOf('ADD COLUMN IF NOT EXISTS questions JSONB') > at, 'after the table exists');
+  });
+  test('the limits are the page\'s too', () => {
+    assert.match(read('routes/note-templates.js'), /^const MAX_QUESTIONS = 40, MAX_QUESTION = 300;$/m);
+    assert.match(read('public/js/note-templates.js'), /^const NTPL_MAX_QUESTIONS = 40, NTPL_MAX_QUESTION = 300;/m);
   });
 });
 

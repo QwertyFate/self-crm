@@ -20,7 +20,7 @@ const dict = new Function(sliceConst('public/js/core.js', 'TRANSLATIONS').replac
 const count = (src, needle) => src.split(needle).length - 1;
 const pageStart = html.indexOf('<section id="page-journey"');
 const page = html.slice(pageStart, html.indexOf('</section>', pageStart));
-const ACTIONS = ['call', 'email', 'whatsapp', 'sms', 'task', 'move', 'wait', 'branch'];   // 'wait': a box that only takes time (Part 10); 'branch': a question with two lines out (Part 11)
+const ACTIONS = ['call', 'email', 'whatsapp', 'sms', 'task', 'move', 'wait', 'branch', 'router'];   // 'wait': a box that only takes time (Part 10); 'router': several routes out (Part 24); 'branch': a question with two lines out (Part 11)
 const constOf = name => new Function(`${sliceConst('public/js/journey.js', name)} return ${name};`)();
 
 // the sandbox: the page's own state, a recording api/ui/document, a window whose fields the test fills, and the real t/tf/esc/icon
@@ -169,6 +169,17 @@ describe('both dictionaries', () => {
     const details = constOf('JOURNEY_DETAILS'), fs = require('node:fs'), path = require('node:path'), utils = path.join(__dirname, '..', '..', 'utils');
     const engine = fs.readdirSync(utils).filter(f => /^journey-.*\.js$/.test(f) || f === 'fonio-calls.js').map(f => fs.readFileSync(path.join(utils, f), 'utf8')).join('\n');
     for (const [word, key] of Object.entries(details)) { assert.ok(dict.en[key] && dict.de[key], key); assert.ok(engine.includes(`'${word}'`), `the engine writes '${word}'`); }
+  });
+  // Part 26: what a router's entry in the record says
+  test('a router\'s entry says which routes a deal went down — by the numbers on the router\'s feet — or that none fitted', () => {
+    fill();
+    assert.deepEqual(['routes:2', 'routes:1,3', 'routes:1,2,3,4,5,6', 'else', 'paths_limit'].map(F.journeyDetailText),
+      ['went down route 2', 'went down routes 1, 3', 'went down routes 1, 2, 3, 4, 5, 6', 'no route fitted: on along "else"', 'at too many places of the workflow at once: a route was left out']);
+    for (const odd of ['routes:', 'routes:a', 'routes:1,', 'routes:1,,2', 'routes: 1', 'routes:1;2', 'Routes:1', 'routes']) assert.equal(F.journeyDetailText(odd), odd, `what is no list of numbers is shown as it is: ${odd}`);
+    fill({ lang: 'de' });
+    assert.deepEqual(['routes:2', 'routes:1,3', 'else', 'paths_limit'].map(F.journeyDetailText), ['Route 2 genommen', 'Routen 1, 3 genommen', 'keine Route passte: weiter über „sonst“', 'an zu vielen Stellen des Workflows zugleich: eine Route wurde ausgelassen']);
+    assert.match(read('utils/journey-run.js'), /detail: `routes:\$\{went\.map\(r => r\.no\)\.join\(','\)\}`/, 'the engine writes the routes\' places, comma by comma');
+    assert.equal(F.journeyStepText({ kind: 'router', title: 'Who gets what' }), 'Router: Who gets what');
   });
   test('why an email waits is said in both languages: a limit of the sending address, or a pause', () => {
     const details = constOf('JOURNEY_DETAILS');
@@ -343,7 +354,7 @@ describe('the board', () => {
     assert.match(tail, /if \(!journeyManage \|\| e\.button !== 0 \|\| !e\.target\.closest\) return;/, 'a member moves nothing');
     assert.match(tail, /if \(!d\.moved && Math\.hypot\(dx, dy\) < 5\) return;/);
     assert.match(tail, /journeyDragEnd = Date\.now\(\);/); assert.match(tail, /if \(Date\.now\(\) - journeyDragEnd < 350\) return;/);
-    assert.match(tail, /if \(add\) openJourneyAdd\(Number\(add\.dataset\.out\), add, add\.dataset\.side\);\s+else if \(box\) openJourneyBox\(Number\(box\.dataset\.box\)\);\s+else if \(line && journeyManage\) ui\.menu\(\{ x: e\.clientX, y: e\.clientY \}, \[\{ label: t\('jr_line_remove'\)/);
+    assert.match(tail, /if \(add\) openJourneyAdd\(Number\(add\.dataset\.out\), add, add\.dataset\.side, add\.dataset\.route\);\s+else if \(box\) openJourneyBox\(Number\(box\.dataset\.box\)\);\s+else if \(line && journeyManage\) ui\.menu\(\{ x: e\.clientX, y: e\.clientY \}, \[\{ label: t\('jr_line_remove'\)/);
     assert.match(tail, /const under = document\.elementFromPoint\(e\.clientX, e\.clientY\), target = under && under\.closest \? under\.closest\('\[data-node\]'\) : null;/);
   });
 });
@@ -652,14 +663,14 @@ describe('a workflow\'s name', () => {
 });
 
 describe('adding a step', () => {
-  test('the "+" lists the eight kinds of step, fonio\'s call first, then the wait and the branch; choosing one opens its form', () => {
+  test('the "+" lists the nine kinds of step, fonio\'s call first, then the wait, the branch and the router; choosing one opens its form', () => {
     fill({ manage: true });
     const anchor = { id: 'plus' };
     F.openJourneyAdd(2, anchor);
     const [, at, items] = F.__page().log.find(c => c[0] === 'menu');
     assert.equal(at, anchor);
     assert.equal(items[0].heading, 'Add step');
-    assert.deepEqual(items.slice(1).map(i => [i.label, i.icon]), [['Call (fonio)', 'phone'], ['Email', 'mail'], ['WhatsApp', 'message-circle'], ['SMS', 'message'], ['Task', 'check-square'], ['Move the deal', 'arrow-up-right'], ['Wait', 'clock'], ['If / else', 'help']]);
+    assert.deepEqual(items.slice(1).map(i => [i.label, i.icon]), [['Call (fonio)', 'phone'], ['Email', 'mail'], ['WhatsApp', 'message-circle'], ['SMS', 'message'], ['Task', 'check-square'], ['Move the deal', 'arrow-up-right'], ['Wait', 'clock'], ['If / else', 'help'], ['Router', 'columns']]);
     items[2].onSelect();
     assert.equal(modals()[0].title, 'New step: Email');
   });

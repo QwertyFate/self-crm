@@ -20,16 +20,25 @@
      wait      nothing happens: the box only takes time (Part 10) — its wait,
                and then, when set, until a time of day on chosen weekdays
                (config.until, .weekdays; .tz is the zone of who saved it)
+     router    several routes out, each with its own question (Part 23,
+               utils/journey-router.js): config.routes = [{ id, name, when,
+               next_id }] — a deal goes down every route whose question is
+               answered with yes — and else_id, where it goes when none is.
+               The board draws it since Part 24: it is one of ACTIONS.
    Every box but the start has a wait: how long after the box before it it
    happens (wait_minutes, 0 = right away).
 
    THE ORDER IS THE LINES. A box names the box that comes after it (next_id):
    one line out of every box — two out of a branch box, whose second line is
    else_id (`side: 'else'` names it when a box is added behind it or a line is
-   drawn). A new box is put in behind a box of the same
-   workflow and takes over that box's line — or stands alone until a line is
-   drawn to it (after_id null). Deleting a box joins the box before it to the
-   box after it. A line is drawn or taken away with PUT /nodes/:id/next; it
+   drawn). A router box has no next_id: each of its routes has its own line
+   (`side: 'route'` with `route`: the route's id — kept in the box's config,
+   and never taken from what a window sends), and its "otherwise" line is
+   else_id (`side: 'else'`). A new box is put in behind a box of the same
+   workflow and takes over that box's line (a new router with its first
+   route) — or stands alone until a line is drawn to it (after_id null).
+   Deleting a box joins the box before it to the box after it (a router has
+   no box after it: what led to it then leads nowhere). A line is drawn or taken away with PUT /nodes/:id/next; it
    never leads to a start, to the box itself, or round in a circle. A box's
    place on the board is its own (x, y), kept when it is dragged.
 
@@ -72,10 +81,11 @@
                                  flow_name, deal_id, deal_title, kind, title, status, detail, actor_name }],
                                  more } — ?flow_id, ?deal_id, ?group=steps|deals|flow, ?q, ?before, ?limit (everyone)
      POST   /flows/:id/include   { deal_id } → { success: true }: the deal starts at the first step (everyone)
-     POST   /flows/:id/nodes     { after_id | null, kind, title, body, wait_minutes, config } → 201 { flow }
+     POST   /flows/:id/nodes     { after_id | null, kind, title, body, wait_minutes, config } → 201 { flow };
+                                 side 'else', or 'route' with route: which line of the box it is put behind
      PUT    /nodes/:id           the box's own fields (a start: { config }) → { flow }
      PUT    /nodes/:id/place     { x, y } → { success: true }
-     PUT    /nodes/:id/next      { next_id | null } → { flow }
+     PUT    /nodes/:id/next      { next_id | null } → { flow }; side 'else', or 'route' with route: which line
      POST   /nodes/:id/test      an email box, sent once to the caller's own address with sample values. It is an
                                  email like any other (Part 17, utils/journey-sends.js): counted, and not sent —
                                  409 paused while sending from the address is paused, 409 limit while its day is
@@ -92,6 +102,7 @@ const mail        = require('../utils/journey-mail');
 const baseUrl     = require('../utils/base-url');
 const triggers    = require('../utils/journey-triggers');   // everything that can start a workflow (Part 9)
 const branch      = require('../utils/journey-branch');     // a box that asks a question and has two lines out (Part 11)
+const routerBox   = require('../utils/journey-router');     // a box with several routes out, each with its own question (Part 23)
 const vars        = require('../utils/journey-vars');       // the variables a step's text can use, and their sample values (Part 14)
 const log         = require('../utils/journey-log');        // the whole record of what the workflows do (Part 15)
 const sends       = require('../utils/journey-sends');      // the sending limits, the count and the pause of the address (Part 17)
@@ -99,7 +110,7 @@ const { notifyUser } = require('../notifications');         // owners and admins
 
 router.use(requireAuth);
 
-const ACTIONS = ['call', 'email', 'whatsapp', 'sms', 'task', 'move', 'wait', 'branch'];
+const ACTIONS = ['call', 'email', 'whatsapp', 'sms', 'task', 'move', 'wait', 'branch', 'router'];
 const MAX_FLOWS = 20, MAX_NODES = 60, MAX_NAME = 80, MAX_TITLE = 120, MAX_BODY = 20000, MAX_WAIT = 365 * 24 * 60, MAX_IDS = 20;
 const FLOW_COLUMNS = 'id, name, active, updated_at';
 const NODE_COLUMNS = 'id, flow_id, kind, title, body, wait_minutes, config, next_id, x, y, else_id';
@@ -115,8 +126,10 @@ const ERRORS = {
   body:          [400, `The text has up to ${MAX_BODY} characters`],
   wait:          [400, `The wait is a whole number of minutes from 0 to ${MAX_WAIT}`],
   branch:        [400, 'A branch box asks one of the known questions, with what that question needs'],
+  router:        [400, `A router has 1 to ${routerBox.MAX_ROUTES} routes, each with a name of up to ${routerBox.MAX_NAME} characters and a known question or none`],
   until:         [400, 'A Wait box waits some time, or until a time of day (HH:MM) on days from 1 (Monday) to 7 (Sunday)'],
   stage:         [400, 'The stage is not one of this workspace'],
+  user:          [400, 'A person in the list is not one of this workspace'],
   webhooks:      [400, 'A lead webhook in the list is not one of this workspace'],
   start:         [400, 'The start names what starts the workflow, with everything that start needs'],
   field:         [400, 'The field is not one of this workspace, or not of the kind the start needs'],
@@ -149,11 +162,12 @@ function requireManage(req, res, next) {
 }
 
 // The body as an action box of `kind`: { title, body, wait, config } or { code }. tz: the zone of who saves it, kept
-// with a Wait box's time of day.
-function actionOf(kind, body, tz) {
+// with a Wait box's time of day. stored: the box's config as it is saved (null for a new box) — a router's routes
+// keep their lines by it.
+function actionOf(kind, body, tz, stored = null) {
   const b = body && typeof body === 'object' ? body : {};
   const title = typeof b.title === 'string' ? b.title.trim() : '';
-  if (title.length > MAX_TITLE || (!title && !['move', 'wait', 'branch'].includes(kind))) return { code: 'title' };   // a move is named by its stage, a wait by its time, a branch by its question
+  if (title.length > MAX_TITLE || (!title && !['move', 'wait', 'branch', 'router'].includes(kind))) return { code: 'title' };   // a move is named by its stage, a wait by its time, a branch by its question, a router by its routes
   const text = b.body === undefined || b.body === null ? '' : b.body;
   if (typeof text !== 'string' || text.length > MAX_BODY) return { code: 'body' };
   const wait = b.wait_minutes === undefined ? 0 : b.wait_minutes;
@@ -171,7 +185,12 @@ function actionOf(kind, body, tz) {
     config.stage_id = stageId;
   }
   if (kind === 'branch') {
-    const asked = branch.checkBranch(b.config);
+    const asked = branch.checkBranch(b.config, { tz: typeof tz === 'string' && tz ? tz : triggers.FALLBACK_ZONE });   // a day is compared on the saver's clock
+    if (asked.code) return { code: asked.code };
+    return { title, body: text, wait, config: asked.config };
+  }
+  if (kind === 'router') {   // its routes with their questions; the lines stay what is saved, whatever was sent
+    const asked = routerBox.checkRouter(b.config, stored, { tz: typeof tz === 'string' && tz ? tz : triggers.FALLBACK_ZONE });
     if (asked.code) return { code: asked.code };
     return { title, body: text, wait, config: asked.config };
   }
@@ -209,6 +228,7 @@ async function foreignIds(db, table, wid, ids) {
 async function foreignRefs(db, wid, kind, config, flowId = null) {
   if (kind === 'start') return triggers.foreignRefs(db, wid, flowId, config);
   if (kind === 'branch') return branch.foreignRefs(db, wid, config);
+  if (kind === 'router') return routerBox.foreignRefs(db, wid, config);   // what each route's question names
   return (await foreignIds(db, 'pipeline_stages', wid, config.stage_id ? [config.stage_id] : [])).length ? 'stage' : null;
 }
 
@@ -323,7 +343,9 @@ router.get('/flows/:id/activity', async (req, res, next) => {
     const id = idOf(req.params.id);
     const { rows: [flow] } = id ? await pool.query('SELECT id FROM journey_flows WHERE id = $1 AND workspace_id = $2', [id, req.workspaceId]) : { rows: [] };
     if (!flow) return refuse(res, 'not_found');
-    const { rows: counts } = await pool.query('SELECT status, COUNT(*)::int AS n FROM journey_runs WHERE flow_id = $1 AND workspace_id = $2 GROUP BY status', [id, req.workspaceId]);
+    // how many DEALS wait, are through or were stopped: a deal on several routes of a router has a row per route, and
+    // the row that stands for it is the one without root_id (Part 26) — the list under it shows every place a deal waits at
+    const { rows: counts } = await pool.query('SELECT status, COUNT(*)::int AS n FROM journey_runs WHERE flow_id = $1 AND workspace_id = $2 AND root_id IS NULL GROUP BY status', [id, req.workspaceId]);
     const { rows: waiting } = await pool.query(
       `SELECT r.deal_id, d.title AS deal_title, r.due_at, n.kind, n.title
          FROM journey_runs r JOIN deals d ON d.id = r.deal_id LEFT JOIN journey_nodes n ON n.id = r.node_id
@@ -368,7 +390,9 @@ router.post('/flows/:id/nodes', requireManage, async (req, res, next) => {
     const box = actionOf(kind, req.body, req.userTimezone);
     if (box.code) return refuse(res, box.code);
     const loose = req.body.after_id === null || req.body.after_id === undefined;   // a box that stands alone until a line is drawn to it
-    const elseSide = req.body.side === 'else';   // behind a branch box's "no" line
+    const elseSide = req.body.side === 'else';   // behind a branch box's "no" line, or a router's "otherwise"
+    const routeId = req.body.side === 'route' && Number.isInteger(req.body.route) ? req.body.route : null;   // behind one route of a router
+    if (!loose && req.body.side === 'route' && !routeId) return refuse(res, 'after');
     const afterId = loose ? null : typeof req.body.after_id === 'number' ? idOf(req.body.after_id) : null;
     if (!loose && !afterId) return refuse(res, 'after');
     const foreign = await foreignRefs(pool, req.workspaceId, kind, box.config);
@@ -378,17 +402,25 @@ router.post('/flows/:id/nodes', requireManage, async (req, res, next) => {
       const { rows: [flow] } = await db.query('SELECT id FROM journey_flows WHERE id = $1 AND workspace_id = $2 FOR UPDATE', [flowId, req.workspaceId]);
       if (!flow) return 'not_found';
       const { rows: [after] } = loose ? { rows: [{ id: null, next_id: null }] }
-        : elseSide ? await db.query(`SELECT id, else_id AS next_id FROM journey_nodes WHERE id = $1 AND flow_id = $2 AND workspace_id = $3 AND kind = 'branch'`, [afterId, flowId, req.workspaceId])   // only a branch box has that line
-        : await db.query('SELECT id, next_id FROM journey_nodes WHERE id = $1 AND flow_id = $2 AND workspace_id = $3', [afterId, flowId, req.workspaceId]);
+        : elseSide ? await db.query(`SELECT id, else_id AS next_id FROM journey_nodes WHERE id = $1 AND flow_id = $2 AND workspace_id = $3 AND kind IN ('branch','router')`, [afterId, flowId, req.workspaceId])   // only a branch box and a router have that line
+        : routeId ? await db.query(`SELECT id, config FROM journey_nodes WHERE id = $1 AND flow_id = $2 AND workspace_id = $3 AND kind = 'router'`, [afterId, flowId, req.workspaceId])   // only a router has routes
+        : await db.query(`SELECT id, next_id FROM journey_nodes WHERE id = $1 AND flow_id = $2 AND workspace_id = $3 AND kind <> 'router'`, [afterId, flowId, req.workspaceId]);   // a router has no line of its own
       if (!after) return 'after';
+      if (!loose && routeId) {   // the line of that route, as the router's config has it
+        const route = (after.config && Array.isArray(after.config.routes) ? after.config.routes : []).find(r => r && r.id === routeId);
+        if (!route) return 'after';
+        after.next_id = route.next_id ?? null;
+      }
       const { rows: [count] } = await db.query('SELECT COUNT(*)::int AS n FROM journey_nodes WHERE flow_id = $1 AND workspace_id = $2', [flowId, req.workspaceId]);
       if (count.n >= MAX_NODES) return 'nodes_limit';
-      // the new box takes over the line of the box it is put behind
+      // the new box takes over the line of the box it is put behind — a router, which has no line of its own, with its first route
+      const routed = kind === 'router' && after.next_id ? routerBox.setLine(box.config, box.config.routes[0].id, after.next_id) : null;
       const { rows: [made] } = await db.query(
         `INSERT INTO journey_nodes (workspace_id, flow_id, kind, title, body, wait_minutes, config, next_id) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8) RETURNING id`,
-        [req.workspaceId, flowId, kind, box.title, box.body, box.wait, JSON.stringify(box.config), after.next_id]
+        [req.workspaceId, flowId, kind, box.title, box.body, box.wait, JSON.stringify(routed || box.config), kind === 'router' ? null : after.next_id]
       );
       if (after.id && elseSide) await db.query('UPDATE journey_nodes SET else_id = $3 WHERE id = $1 AND workspace_id = $2', [after.id, req.workspaceId, made.id]);
+      else if (after.id && routeId) await db.query('UPDATE journey_nodes SET config = $3::jsonb WHERE id = $1 AND workspace_id = $2', [after.id, req.workspaceId, JSON.stringify(routerBox.setLine(after.config, routeId, made.id))]);
       else if (after.id) await db.query('UPDATE journey_nodes SET next_id = $3 WHERE id = $1 AND workspace_id = $2', [after.id, req.workspaceId, made.id]);
       await db.query('UPDATE journey_flows SET updated_at = NOW() WHERE id = $1 AND workspace_id = $2', [flowId, req.workspaceId]);
       madeId = made.id;
@@ -406,7 +438,7 @@ router.put('/nodes/:id', requireManage, async (req, res, next) => {
     const node = id ? await nodeOf(req.workspaceId, id) : null;
     if (!node) return refuse(res, 'not_found');
     if (node.kind === 'start' && node.active) return refuse(res, 'active');   // who is taken in was decided when it was switched on
-    const box = node.kind === 'start' ? { title: '', body: '', wait: 0, ...startOf(req.body, req.userTimezone) } : actionOf(node.kind, req.body, req.userTimezone);
+    const box = node.kind === 'start' ? { title: '', body: '', wait: 0, ...startOf(req.body, req.userTimezone) } : actionOf(node.kind, req.body, req.userTimezone, node.config);   // a router's routes keep their saved lines
     if (box.code) return refuse(res, box.code);
     const foreign = await foreignRefs(pool, req.workspaceId, node.kind, box.config, node.flow_id);
     if (foreign) return refuse(res, foreign);
@@ -433,7 +465,8 @@ router.put('/nodes/:id/place', requireManage, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// The line out of a box: to another box of its workflow, or (null) nowhere. side 'else': a branch box's "no" line.
+// The line out of a box: to another box of its workflow, or (null) nowhere. side 'else': a branch box's "no" line or
+// a router's "otherwise"; side 'route' with route (the route's id): the line of one route of a router.
 router.put('/nodes/:id/next', requireManage, async (req, res, next) => {
   try {
     const id = idOf(req.params.id);
@@ -442,23 +475,29 @@ router.put('/nodes/:id/next', requireManage, async (req, res, next) => {
     const raw = req.body?.next_id;
     const nextId = raw === null || raw === undefined ? null : (typeof raw === 'number' && idOf(raw)) || 0;   // 0: not an id at all
     if (nextId === 0 || nextId === id) return refuse(res, 'line');
-    const elseSide = req.body?.side === 'else';
-    if (elseSide && node.kind !== 'branch') return refuse(res, 'line');   // only a branch box has a second line
+    const elseSide = req.body?.side === 'else', routeSide = req.body?.side === 'route';
+    if (elseSide && !['branch', 'router'].includes(node.kind)) return refuse(res, 'line');   // only a branch box and a router have a second line
+    if (routeSide && node.kind !== 'router') return refuse(res, 'line');                     // only a router has routes
+    if (!routeSide && !elseSide && node.kind === 'router') return refuse(res, 'line');       // … and no line of its own: its lines are its routes'
+    // a route's line is kept in the router's config: the config as it will be, or null when the box has no such route
+    const routed = routeSide ? routerBox.setLine(node.config, Number.isInteger(req.body.route) ? req.body.route : null, nextId) : null;
+    if (routeSide && !routed) return refuse(res, 'line');
     if (nextId) {
-      const { rows } = await pool.query('SELECT id, kind, next_id, else_id FROM journey_nodes WHERE flow_id = $1 AND workspace_id = $2', [node.flow_id, req.workspaceId]);
+      const { rows } = await pool.query('SELECT id, kind, next_id, else_id, config FROM journey_nodes WHERE flow_id = $1 AND workspace_id = $2', [node.flow_id, req.workspaceId]);
       const byId = new Map(rows.map(n => [n.id, n])), target = byId.get(nextId);
       if (!target || target.kind === 'start') return refuse(res, 'line');
-      // following every line from the target — both lines of a branch box — must not lead back to this box
+      // following every line from the target — both lines of a branch box, every route of a router — must not lead back to this box
       const seen = new Set(), todo = [target];
       while (todo.length) {
         const at = todo.pop();
         if (!at || seen.has(at.id)) continue;
         if (at.id === id) return refuse(res, 'line');
         seen.add(at.id);
-        todo.push(byId.get(at.next_id), byId.get(at.else_id));
+        todo.push(byId.get(at.next_id), byId.get(at.else_id), ...(at.kind === 'router' ? routerBox.lines(at.config).map(to => byId.get(to)) : []));
       }
     }
     if (elseSide) await pool.query('UPDATE journey_nodes SET else_id = $3 WHERE id = $1 AND workspace_id = $2', [id, req.workspaceId, nextId]);
+    else if (routeSide) await pool.query('UPDATE journey_nodes SET config = $3::jsonb WHERE id = $1 AND workspace_id = $2', [id, req.workspaceId, JSON.stringify(routed)]);
     else await pool.query('UPDATE journey_nodes SET next_id = $3 WHERE id = $1 AND workspace_id = $2', [id, req.workspaceId, nextId]);
     await pool.query('UPDATE journey_flows SET updated_at = NOW() WHERE id = $1 AND workspace_id = $2', [node.flow_id, req.workspaceId]);
     await note(req, { flowId: node.flow_id, nodeId: id, kind: node.kind, title: node.title, detail: 'line_changed' });
@@ -521,18 +560,27 @@ router.delete('/nodes/:id', requireManage, async (req, res, next) => {
     await together(async db => {
       // the box before it is joined to the box after it, and a deal that waits at it goes on to that box
       await db.query('UPDATE journey_nodes SET next_id = $3 WHERE next_id = $1 AND workspace_id = $2', [id, req.workspaceId, node.next_id]);
-      await db.query('UPDATE journey_nodes SET else_id = $3 WHERE else_id = $1 AND workspace_id = $2', [id, req.workspaceId, node.next_id]);   // a branch's "no" line that led to it
+      await db.query('UPDATE journey_nodes SET else_id = $3 WHERE else_id = $1 AND workspace_id = $2', [id, req.workspaceId, node.next_id]);   // a branch's "no" line that led to it, a router's "otherwise"
+      // a router's route that led to it (Part 23): that line is kept in the router's config
+      const { rows: routers } = await db.query(`SELECT id, config FROM journey_nodes WHERE flow_id = $1 AND workspace_id = $2 AND kind = 'router' AND id <> $3`, [node.flow_id, req.workspaceId, id]);
+      for (const r of routers) {
+        const led = routerBox.relink(r.config, id, node.next_id);
+        if (led.changed) await db.query('UPDATE journey_nodes SET config = $3::jsonb WHERE id = $1 AND workspace_id = $2', [r.id, req.workspaceId, JSON.stringify(led.config)]);
+      }
       // A deal that waits at it goes on to the box behind it — due as if it had reached THAT box when it reached this
-      // one: the deleted box's wait no longer counts, the next box's own wait does. With no box behind, the workflow
-      // is done for it now. When it reached this box is its due time less the box's wait — but never before the row
-      // was last put somewhere (a wait that was made longer meanwhile must not make the next step early).
+      // one: the deleted box's wait no longer counts, the next box's own wait does. With no box behind (the last box
+      // of a line, and every router: its lines are its routes'), that path is through now — the engine says whether
+      // the workflow is over for the deal with it, or whether it is still on its way down another route of a router
+      // (Part 23, utils/journey-run.js pathDone). When it reached this box is its due time less the box's wait — but
+      // never before the row was last put somewhere (a wait that was made longer meanwhile must not make the next
+      // step early).
       const { rows: [behind] } = node.next_id ? await db.query('SELECT id, wait_minutes, kind, config FROM journey_nodes WHERE id = $1 AND workspace_id = $2', [node.next_id, req.workspaceId]) : { rows: [] };
       const { rows: waiting } = await db.query(
-        `SELECT r.id, r.deal_id, r.due_at, r.updated_at, n.wait_minutes FROM journey_runs r JOIN journey_nodes n ON n.id = r.node_id WHERE r.node_id = $1 AND r.workspace_id = $2 AND r.status = 'waiting'`, [id, req.workspaceId]
+        `SELECT r.id, r.deal_id, r.due_at, r.updated_at, r.root_id, n.wait_minutes FROM journey_runs r JOIN journey_nodes n ON n.id = r.node_id WHERE r.node_id = $1 AND r.workspace_id = $2 AND r.status = 'waiting'`, [id, req.workspaceId]
       );
       for (const r of waiting) {
-        put.push({ dealId: r.deal_id, over: !behind });
-        if (!behind) { await db.query(`UPDATE journey_runs SET status = 'done', node_id = NULL, due_at = NULL, updated_at = NOW() WHERE id = $1 AND workspace_id = $2`, [r.id, req.workspaceId]); continue; }
+        if (!behind) { put.push({ dealId: r.deal_id, over: (await journeyRun.pathDone(db, { id: r.id, root_id: r.root_id })).over }); continue; }
+        put.push({ dealId: r.deal_id, over: false });
         const since = r.updated_at ? new Date(r.updated_at).getTime() : 0;
         const reached = r.due_at ? Math.max(new Date(r.due_at).getTime() - Number(r.wait_minutes || 0) * 60000, since) : Date.now();
         await db.query('UPDATE journey_runs SET node_id = $3, due_at = $4, updated_at = NOW() WHERE id = $1 AND workspace_id = $2', [r.id, req.workspaceId, behind.id, journeyRun.dueOf(behind, reached)]);
@@ -542,7 +590,7 @@ router.delete('/nodes/:id', requireManage, async (req, res, next) => {
       await db.query('UPDATE journey_flows SET updated_at = NOW() WHERE id = $1 AND workspace_id = $2', [node.flow_id, req.workspaceId]);
     });
     // the record: the step is gone (it names it by its kind and title — its id leads nowhere any more), and every
-    // deal that waited at it was put on, or was through with the workflow
+    // deal that waited at it was put on, or was through with the workflow (through with one route of several is no end)
     await note(req, { flowId: node.flow_id, kind: node.kind, title: node.title, detail: 'step_deleted' });
     for (const p of put) {
       const entry = { workspaceId: req.workspaceId, flowId: node.flow_id, dealId: p.dealId };

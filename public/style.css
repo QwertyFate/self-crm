@@ -2821,6 +2821,16 @@ body:has(#app.rail:not(.hidden)) #loading-overlay { left: var(--sb-width-rail); 
 .ntpl-row:last-child { border-bottom: 0; }
 .ntpl-what { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .ntpl-what .muted { font-size: var(--fs-sm); }
+/* the template form's two kinds and the rows of a questionnaire (Part 8): number, question, up, down, remove */
+.ntpl-kind { align-self: flex-start; }
+.ntpl-qs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ntpl-q { display: flex; align-items: center; gap: 4px; }
+.ntpl-q .input { flex: 1 1 auto; min-width: 0; margin-right: 2px; }
+.ntpl-q-no { flex: 0 0 26px; text-align: right; padding-right: 4px; color: var(--text-3); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.ntpl-q .iconbtn:disabled { opacity: .35; cursor: default; background: none; color: var(--text-2); }
+/* the window a questionnaire opens (Part 9): the question is the label, in the text's own colour, over a low answer box */
+.ntpl-a .label { color: var(--text); font-size: var(--fs-md); }
+.ntpl-a .textarea { min-height: 58px; }
 /* the editor's auto-save line, left of Cancel and Save: quiet, red only when a save failed; in a narrow panel the
    buttons drop under the help line instead of squeezing it */
 .note-state { font-size: var(--fs-sm); color: var(--text-3); }
@@ -2995,6 +3005,7 @@ body:has(#app.rail:not(.hidden)) #loading-overlay { left: var(--sb-width-rail); 
 [data-kind="move"]     { --jr-c: var(--violet);   --jr-bg: var(--violet-bg);  --jr-bd: var(--violet-bd); }
 [data-kind="wait"]     { --jr-c: var(--neutral);  --jr-bg: var(--neutral-bg); --jr-bd: var(--neutral-bd); }
 [data-kind="branch"]   { --jr-c: var(--brand-ink); --jr-bg: var(--brand-subtle); --jr-bd: var(--brand-line); }
+[data-kind="router"]   { --jr-c: var(--brand-ink); --jr-bg: var(--brand-subtle); --jr-bd: var(--brand-line); }
 #journey-toolbar:empty { display: none; }
 .jr-pick { width: auto; min-width: 220px; max-width: 100%; }
 /* the ground the workflow stands on: a quiet dotted grid */
@@ -3031,6 +3042,26 @@ body:has(#app.rail:not(.hidden)) #loading-overlay { left: var(--sb-width-rail); 
 .jr-out.jr-side.is-no  { left: 75%; }
 .jr-out.jr-side:hover { color: var(--on-primary); }
 .jr-out.jr-side .ic { width: 11px; height: 11px; }
+/* a router's feet (Part 24): one per route — its number — and "else", side by side where their lines leave (each
+   foot's place is its own left, written on it). Up to seven stand under one box, so they are narrow and carry no "+". */
+.jr-side.is-route, .jr-side.is-else { min-width: 22px; padding: 0 6px; justify-content: center; }
+.jr-side.is-route { color: var(--brand-ink); }
+/* the routes as the box lists them: each route's number, then its name or its question */
+.jr-routes { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
+.jr-route { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: var(--fs-sm); color: var(--text-2); }
+.jr-route b { flex: none; min-width: 16px; color: var(--brand-ink); font-weight: 650; text-align: center; }
+.jr-route span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jr-view .jr-route span { white-space: normal; }
+/* a router's window (Part 25): its routes row by row — the number, the name with the condition under it, and the
+   buttons that move or remove the row */
+.jr-rts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.jr-rt { display: flex; align-items: flex-start; gap: 6px; }
+.jr-rt-no { flex: 0 0 22px; height: 22px; margin-top: 7px; display: grid; place-items: center; border: 1px solid var(--border-strong); border-radius: 11px; color: var(--brand-ink); font-size: var(--fs-xs); font-weight: 650; }
+.jr-rt-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.jr-rt-cond { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.jr-rt-says { min-width: 0; color: var(--text-2); font-size: var(--fs-sm); }
+.jr-rt .iconbtn { margin-top: 3px; }
+.jr-rt .iconbtn:disabled { opacity: .35; cursor: default; background: none; color: var(--text-2); }
 /* a box: one action. The start is navy in both themes, and dashed while nothing is chosen for it */
 .jr-box { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface);
   color: var(--text); font: inherit; text-align: left; cursor: pointer; box-shadow: var(--shadow-sm); transition: border-color var(--dur-fast); }

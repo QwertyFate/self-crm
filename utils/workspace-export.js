@@ -77,7 +77,11 @@
        stay_stage_ids (stages), pipeline_id, flow_id and
        stop_set.other_flow.flow_id (workflows), webhook_ids (lead webhooks —
        which are NOT in the bundle: a start limited to some of them has to
-       become "every lead webhook" or be set anew). A field is named by its
+       become "every lead webhook" or be set anew), user_ids (people, where a
+       box asks who a deal or a contact is assigned to), and in a router box
+       routes[].next_id (boxes of the same workflow — the routes' lines) with
+       each route's own question in routes[].when, which names the same
+       kinds of ids. A field is named by its
        key, which travels as it is. fonio_calls.stage_at_send is a stage's id
        without a foreign key.
      · journey_runs.event_key and the ids in a call's request / result_body

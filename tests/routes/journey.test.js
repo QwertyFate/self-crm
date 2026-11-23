@@ -40,7 +40,7 @@ const DEALS = [{ id: 60, workspace_id: WS, title: 'Wohnung 3' }, { id: 61, works
 const PIPELINES = [{ id: 3, workspace_id: WS }, { id: 90, workspace_id: OTHER }];
 const FIELDS = [{ table: 'deal_fields', workspace_id: WS, field_key: 'finanzierung', type: 'text', name: 'Finanzierung' }, { table: 'deal_fields', workspace_id: WS, field_key: 'einzug', type: 'date', name: 'Einzug <am>' },
   { table: 'custom_fields', workspace_id: WS, field_key: 'kundenstatus', type: 'text', name: 'Kundenstatus' }, { table: 'deal_fields', workspace_id: OTHER, field_key: 'fremd', type: 'date', name: 'Fremd' }];
-const state = { flows: [], nodes: [], runs: [], sender: null, nextFlow: 1, nextNode: 1, calls: [], engine: [], include: { run: { id: 1 } }, log: [], nextLog: 1, logBroken: false, mail: [], sends: [], told: [] };
+const state = { flows: [], nodes: [], runs: [], sender: null, nextFlow: 1, nextNode: 1, calls: [], engine: [], include: { run: { id: 1 } }, over: null, log: [], nextLog: 1, logBroken: false, mail: [], sends: [], told: [] };
 // Part 17: the limits, the count and the pause of the sending address (the statements of utils/journey-sends.js).
 // state.mail holds the connection's row beside state.sender, state.sends the counted emails, state.told who was told.
 const limits = createSends({ get mail() { return state.mail; }, get sends() { return state.sends; },
@@ -96,8 +96,8 @@ const run = async (sql, p = []) => {
     return { rowCount: 1, rows: [{ name: gone.name }] };
   }
   if (t === 'SELECT id FROM journey_flows WHERE id = $1 AND workspace_id = $2 FOR UPDATE' || t === 'SELECT id FROM journey_flows WHERE id = $1 AND workspace_id = $2') return { rows: flowOf(p[0], p[1]) ? [{ id: p[0] }] : [] };
-  if (t === 'SELECT id, next_id FROM journey_nodes WHERE id = $1 AND flow_id = $2 AND workspace_id = $3') {
-    return { rows: state.nodes.filter(n => n.id === p[0] && n.flow_id === p[1] && n.workspace_id === p[2]).map(n => ({ id: n.id, next_id: n.next_id })) };
+  if (t === "SELECT id, next_id FROM journey_nodes WHERE id = $1 AND flow_id = $2 AND workspace_id = $3 AND kind <> 'router'") {
+    return { rows: state.nodes.filter(n => n.id === p[0] && n.flow_id === p[1] && n.workspace_id === p[2] && n.kind !== 'router').map(n => ({ id: n.id, next_id: n.next_id })) };
   }
   if (t === 'SELECT COUNT(*)::int AS n FROM journey_nodes WHERE flow_id = $1 AND workspace_id = $2') return { rows: [{ n: state.nodes.filter(n => n.flow_id === p[0] && n.workspace_id === p[1]).length }] };
   if (t === 'INSERT INTO journey_nodes (workspace_id, flow_id, kind, title, body, wait_minutes, config, next_id) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8) RETURNING id') {
@@ -107,28 +107,35 @@ const run = async (sql, p = []) => {
   if (t === 'UPDATE journey_nodes SET next_id = $3 WHERE id = $1 AND workspace_id = $2') { const n = nodeAt(p[0], p[1]); if (n) n.next_id = p[2]; return { rows: [] }; }
   // Part 11: a branch box's second line
   if (t === 'UPDATE journey_nodes SET else_id = $3 WHERE id = $1 AND workspace_id = $2') { const n = nodeAt(p[0], p[1]); if (n) n.else_id = p[2]; return { rows: [] }; }
-  if (t === "SELECT id, else_id AS next_id FROM journey_nodes WHERE id = $1 AND flow_id = $2 AND workspace_id = $3 AND kind = 'branch'") {
-    return { rows: state.nodes.filter(n => n.id === p[0] && n.flow_id === p[1] && n.workspace_id === p[2] && n.kind === 'branch').map(n => ({ id: n.id, next_id: n.else_id ?? null })) };
+  if (t === "SELECT id, else_id AS next_id FROM journey_nodes WHERE id = $1 AND flow_id = $2 AND workspace_id = $3 AND kind IN ('branch','router')") {
+    return { rows: state.nodes.filter(n => n.id === p[0] && n.flow_id === p[1] && n.workspace_id === p[2] && ['branch', 'router'].includes(n.kind)).map(n => ({ id: n.id, next_id: n.else_id ?? null })) };
   }
+  // Part 23: a router box — its routes' lines are kept in its config (a copy is handed out, as a database does)
+  if (t === "SELECT id, config FROM journey_nodes WHERE id = $1 AND flow_id = $2 AND workspace_id = $3 AND kind = 'router'") {
+    return { rows: state.nodes.filter(n => n.id === p[0] && n.flow_id === p[1] && n.workspace_id === p[2] && n.kind === 'router').map(n => ({ id: n.id, config: structuredClone(n.config) })) };
+  }
+  if (t === "SELECT id, config FROM journey_nodes WHERE flow_id = $1 AND workspace_id = $2 AND kind = 'router' AND id <> $3") {
+    return { rows: state.nodes.filter(n => n.flow_id === p[0] && n.workspace_id === p[1] && n.kind === 'router' && n.id !== p[2]).map(n => ({ id: n.id, config: structuredClone(n.config) })) };
+  }
+  if (t === 'UPDATE journey_nodes SET config = $3::jsonb WHERE id = $1 AND workspace_id = $2') { const n = nodeAt(p[0], p[1]); if (n) n.config = JSON.parse(p[2]); return { rows: [] }; }
   if (t === 'UPDATE journey_nodes SET else_id = $3 WHERE else_id = $1 AND workspace_id = $2') { for (const n of state.nodes) if (n.else_id === p[0] && n.workspace_id === p[1]) n.else_id = p[2]; return { rows: [] }; }
   if (t === 'UPDATE journey_flows SET updated_at = NOW() WHERE id = $1 AND workspace_id = $2') return { rows: [] };
   if (t === 'SELECT n.id, n.kind, n.flow_id, n.next_id, n.title, n.body, n.config, f.active FROM journey_nodes n JOIN journey_flows f ON f.id = n.flow_id WHERE n.id = $1 AND n.workspace_id = $2') {
-    const n = nodeAt(p[0], p[1]); return { rows: n ? [{ id: n.id, kind: n.kind, flow_id: n.flow_id, next_id: n.next_id, title: n.title, body: n.body, config: n.config, active: state.flows.find(f => f.id === n.flow_id).active }] : [] };
+    const n = nodeAt(p[0], p[1]); return { rows: n ? [{ id: n.id, kind: n.kind, flow_id: n.flow_id, next_id: n.next_id, title: n.title, body: n.body, config: structuredClone(n.config), active: state.flows.find(f => f.id === n.flow_id).active }] : [] };
   }
   if (t === 'UPDATE journey_nodes SET title = $3, body = $4, wait_minutes = $5, config = $6::jsonb, updated_at = NOW() WHERE id = $1 AND workspace_id = $2') {
     const n = nodeAt(p[0], p[1]); if (n) Object.assign(n, { title: p[2], body: p[3], wait_minutes: p[4], config: JSON.parse(p[5]) }); return { rows: [] };
   }
   if (t === 'UPDATE journey_nodes SET x = $3, y = $4 WHERE id = $1 AND workspace_id = $2') { const n = nodeAt(p[0], p[1]); if (!n) return { rowCount: 0, rows: [] }; n.x = p[2]; n.y = p[3]; return { rowCount: 1, rows: [] }; }
-  if (t === 'SELECT id, kind, next_id, else_id FROM journey_nodes WHERE flow_id = $1 AND workspace_id = $2') return { rows: state.nodes.filter(n => n.flow_id === p[0] && n.workspace_id === p[1]).map(n => ({ id: n.id, kind: n.kind, else_id: n.else_id ?? null, next_id: n.next_id })) };
+  if (t === 'SELECT id, kind, next_id, else_id, config FROM journey_nodes WHERE flow_id = $1 AND workspace_id = $2') return { rows: state.nodes.filter(n => n.flow_id === p[0] && n.workspace_id === p[1]).map(n => ({ id: n.id, kind: n.kind, else_id: n.else_id ?? null, next_id: n.next_id, config: structuredClone(n.config) })) };
   if (t === 'UPDATE journey_nodes SET next_id = $3 WHERE next_id = $1 AND workspace_id = $2') { for (const n of state.nodes) if (n.next_id === p[0] && n.workspace_id === p[1]) n.next_id = p[2]; return { rows: [] }; }
   if (t === 'UPDATE journey_runs SET node_id = $3 WHERE node_id = $1 AND workspace_id = $2') { for (const r of state.runs) if (r.node_id === p[0] && r.workspace_id === p[1]) r.node_id = p[2]; return { rows: [] }; }
   // a deal that waits at a deleted box: the box behind it with its wait, the rows that wait, and each row put on
   if (t === 'SELECT id, wait_minutes, kind, config FROM journey_nodes WHERE id = $1 AND workspace_id = $2') { const n = nodeAt(p[0], p[1]); return { rows: n ? [{ id: n.id, wait_minutes: n.wait_minutes, kind: n.kind, config: n.config }] : [] }; }
-  if (t === "SELECT r.id, r.deal_id, r.due_at, r.updated_at, n.wait_minutes FROM journey_runs r JOIN journey_nodes n ON n.id = r.node_id WHERE r.node_id = $1 AND r.workspace_id = $2 AND r.status = 'waiting'") {
-    return { rows: state.runs.filter(r => r.node_id === p[0] && r.workspace_id === p[1] && (r.status || 'waiting') === 'waiting').map(r => ({ id: r.id, deal_id: r.deal_id ?? null, due_at: r.due_at ?? null, updated_at: r.updated_at ?? null, wait_minutes: nodeAt(p[0], p[1]).wait_minutes })) };
+  if (t === "SELECT r.id, r.deal_id, r.due_at, r.updated_at, r.root_id, n.wait_minutes FROM journey_runs r JOIN journey_nodes n ON n.id = r.node_id WHERE r.node_id = $1 AND r.workspace_id = $2 AND r.status = 'waiting'") {
+    return { rows: state.runs.filter(r => r.node_id === p[0] && r.workspace_id === p[1] && (r.status || 'waiting') === 'waiting').map(r => ({ id: r.id, deal_id: r.deal_id ?? null, due_at: r.due_at ?? null, updated_at: r.updated_at ?? null, root_id: r.root_id ?? null, wait_minutes: nodeAt(p[0], p[1]).wait_minutes })) };
   }
   if (t === 'UPDATE journey_runs SET node_id = $3, due_at = $4, updated_at = NOW() WHERE id = $1 AND workspace_id = $2') { const r = state.runs.find(x => x.id === p[0] && x.workspace_id === p[1]); Object.assign(r, { node_id: p[2], due_at: p[3] }); return { rows: [] }; }
-  if (t === "UPDATE journey_runs SET status = 'done', node_id = NULL, due_at = NULL, updated_at = NOW() WHERE id = $1 AND workspace_id = $2") { const r = state.runs.find(x => x.id === p[0] && x.workspace_id === p[1]); Object.assign(r, { status: 'done', node_id: null, due_at: null }); return { rows: [] }; }
   if (t === 'DELETE FROM journey_nodes WHERE id = $1 AND workspace_id = $2') { state.nodes = state.nodes.filter(n => !(n.id === p[0] && n.workspace_id === p[1])); return { rows: [] }; }
   if (t === 'SELECT id FROM pipeline_stages WHERE workspace_id = $1 AND id = ANY($2::int[])') return { rows: STAGES.filter(s => s.workspace_id === p[0] && p[1].includes(s.id)).map(s => ({ id: s.id })) };
   if (t === 'SELECT id FROM workspace_webhook WHERE workspace_id = $1 AND id = ANY($2::int[])') return { rows: HOOKS.filter(h => h.workspace_id === p[0] && p[1].includes(h.id)).map(h => ({ id: h.id })) };
@@ -137,12 +144,17 @@ const run = async (sql, p = []) => {
   // Part 14: which of the fields a text names are the workspace's own (utils/journey-vars.js)
   const named = /^SELECT field_key, name FROM (deal_fields|custom_fields) WHERE workspace_id = \$1 AND LOWER\(field_key\) = ANY\(\$2::text\[\]\)$/.exec(t);
   if (named) return { rows: FIELDS.filter(f => f.table === named[1] && f.workspace_id === p[0] && p[1].includes(f.field_key.toLowerCase())).map(f => ({ field_key: f.field_key, name: f.name })) };
+  // Part 22: the people a branch box names — at home in the workspace (2 is its admin, 7 a member through user_workspaces only)
+  if (t === 'SELECT u.id FROM users u WHERE u.id = ANY($2::int[]) AND (u.workspace_id = $1 OR EXISTS (SELECT 1 FROM user_workspaces uw WHERE uw.user_id = u.id AND uw.workspace_id = $1))') {
+    const here = { [WS]: [1, 2, 3, 7], [OTHER]: [9] }[p[0]] || [];
+    return { rows: here.filter(id => p[1].includes(id)).map(id => ({ id })) };
+  }
   const fieldOf = /^SELECT type FROM (deal_fields|custom_fields) WHERE workspace_id = \$1 AND field_key = \$2$/.exec(t);
   if (fieldOf) return { rows: FIELDS.filter(f => f.table === fieldOf[1] && f.workspace_id === p[0] && f.field_key === p[1]).map(f => ({ type: f.type })) };
   if (t === "SELECT f.id, s.config FROM journey_flows f LEFT JOIN journey_nodes s ON s.flow_id = f.id AND s.kind = 'start' WHERE f.workspace_id = $1") {
     return { rows: own(state.flows, p[0]).map(f => ({ id: f.id, config: state.nodes.find(n => n.flow_id === f.id && n.kind === 'start')?.config ?? null })) };
   }
-  if (t === 'SELECT status, COUNT(*)::int AS n FROM journey_runs WHERE flow_id = $1 AND workspace_id = $2 GROUP BY status') return { rows: [{ status: 'waiting', n: 2 }, { status: 'done', n: 5 }] };
+  if (t === 'SELECT status, COUNT(*)::int AS n FROM journey_runs WHERE flow_id = $1 AND workspace_id = $2 AND root_id IS NULL GROUP BY status') return { rows: [{ status: 'waiting', n: 2 }, { status: 'done', n: 5 }] };
   if (t.startsWith('SELECT r.deal_id, d.title AS deal_title, r.due_at, n.kind, n.title FROM journey_runs r JOIN deals d')) return { rows: [{ deal_id: 60, deal_title: 'Wohnung 3', due_at: '2026-11-20T09:00:00.000Z', kind: 'email', title: 'Second mail' }] };
   if (t.startsWith('SELECT l.deal_id, d.title AS deal_title, l.kind, l.title, l.status, l.detail, l.created_at FROM journey_log l')) return { rows: [{ deal_id: 60, deal_title: 'Wohnung 3', kind: 'email', title: 'Welcome', status: 'done', detail: 'lead@example.de', created_at: '2026-11-19T09:00:00.000Z' }] };
   if (t === 'SELECT email, refresh_token_sealed FROM workspace_mail WHERE workspace_id = $1') return { rows: state.sender && p[0] === WS ? [state.sender] : [] };
@@ -154,8 +166,18 @@ const run = async (sql, p = []) => {
 const pool = { query: run, connect: async () => ({ query: run, release() {} }) };
 const writes = () => state.calls.filter(c => /^(INSERT|UPDATE|DELETE)/.test(c.sql));
 
-// the engine's two calls, recorded; everything else of it is the real thing
-const engine = { ...realRun, baseline: async (db, flow) => { state.engine.push(['baseline', flow]); return 0; }, include: async (db, what) => { state.engine.push(['include', what]); return state.include; } };
+// the engine's calls, recorded; everything else of it is the real thing. pathDone (Part 23): a path of a deal is
+// through — the engine deletes a row that is one route of several, or marks the deal's own row done, and says whether
+// the workflow is over for the deal. Here: over unless the test says otherwise (state.over), a row of one route of
+// several (root_id) never is; the deal's own row is marked done when it is over.
+const engine = { ...realRun, baseline: async (db, flow) => { state.engine.push(['baseline', flow]); return 0; }, include: async (db, what) => { state.engine.push(['include', what]); return state.include; },
+  pathDone: async (db, row) => {
+    state.engine.push(['pathDone', row, typeof db.query === 'function' && db !== pool]);   // … asked inside the route's own transaction
+    const over = state.over ? state.over(row) : !row.root_id, r = state.runs.find(x => x.id === row.id);
+    if (r && row.root_id) state.runs = state.runs.filter(x => x !== r);
+    else if (r && over) Object.assign(r, { status: 'done', node_id: null, due_at: null });
+    return { over };
+  } };
 
 // a fake Google for the test email
 const realFetch = globalThis.fetch;
@@ -185,7 +207,7 @@ after(async () => {
   globalThis.fetch = realFetch;
   for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
 });
-beforeEach(() => { Object.assign(state, { flows: [], nodes: [], runs: [], sender: null, nextFlow: 1, nextNode: 1, calls: [], engine: [], include: { run: { id: 1 } }, log: [], nextLog: 1, logBroken: false, mail: [], sends: [], told: [] }); Object.assign(process.env, ENV); fakeGoogle(); });
+beforeEach(() => { Object.assign(state, { flows: [], nodes: [], runs: [], sender: null, nextFlow: 1, nextNode: 1, calls: [], engine: [], include: { run: { id: 1 } }, over: null, log: [], nextLog: 1, logBroken: false, mail: [], sends: [], told: [] }); Object.assign(process.env, ENV); fakeGoogle(); });
 
 const newFlow = (srv = owner, name = 'New lead') => srv.request('POST', '/api/journey/flows', { name });
 const addBox = (flowId, body, srv = owner) => srv.request('POST', `/api/journey/flows/${flowId}/nodes`, body);
@@ -697,6 +719,119 @@ describe('a branch box', () => {
     assert.equal(state.nodes.length, 1, 'only the start is there');
     assert.equal(writes().filter(c => /^INSERT INTO journey_nodes \(workspace_id, flow_id, kind, title/.test(c.sql)).length, 0);
   });
+  // Part 20 (2026-11-23): the same question about a field of the deal's contact, and a comparison for both.
+  test('a question about a contact field, and a comparison for both field questions: kept with the field, the comparison and its value', async () => {
+    await newFlow();
+    const cases = [
+      [{ test: 'contact_field', field_key: 'kundenstatus', stage_ids: [31], x: 1 }, { test: 'contact_field', field_key: 'kundenstatus' }],
+      [{ test: 'contact_field', field_key: 'kundenstatus', value: ' Kunde ' }, { test: 'contact_field', field_key: 'kundenstatus', value: 'Kunde' }],
+      [{ test: 'contact_field', field_key: 'kundenstatus', op: 'is', value: 'Kunde' }, { test: 'contact_field', field_key: 'kundenstatus', value: 'Kunde' }],
+      [{ test: 'contact_field', field_key: 'kundenstatus', op: 'any', value: 'Kunde' }, { test: 'contact_field', field_key: 'kundenstatus' }],
+      [{ test: 'contact_field', field_key: 'kundenstatus', op: 'empty', value: 'Kunde' }, { test: 'contact_field', field_key: 'kundenstatus', op: 'empty' }],
+      [{ test: 'contact_field', field_key: 'kundenstatus', op: 'not_contains', value: 'alt' }, { test: 'contact_field', field_key: 'kundenstatus', op: 'not_contains', value: 'alt' }],
+      [{ test: 'contact_field', field_key: 'kundenstatus', op: 'gte', value: '300.000' }, { test: 'contact_field', field_key: 'kundenstatus', op: 'gte', value: '300.000' }],
+      [{ test: 'field', field_key: 'einzug', op: 'lt', value: '31.12.2027' }, { test: 'field', field_key: 'einzug', op: 'lt', value: '31.12.2027' }],
+      [{ test: 'field', field_key: 'finanzierung', op: 'starts', value: 'Bank' }, { test: 'field', field_key: 'finanzierung', op: 'starts', value: 'Bank' }],
+    ];
+    for (const [config, kept] of cases) {
+      const r = await addBox(1, { kind: 'branch', wait_minutes: 0, config, after_id: null });
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+      assert.deepEqual(r.body.flow.nodes.at(-1).config, kept, JSON.stringify(config));
+    }
+    const before = state.nodes.length;
+    const refused = [[{ test: 'contact_field' }, 'field'], [{ test: 'contact_field', field_key: 'two words' }, 'field'], [{ test: 'contact_field', field_key: 'kundenstatus', op: 'weather', value: 'x' }, 'branch'],
+      [{ test: 'contact_field', field_key: 'kundenstatus', op: 'contains' }, 'branch'], [{ test: 'contact_field', field_key: 'kundenstatus', op: 'is', value: '  ' }, 'branch'],
+      [{ test: 'contact_field', field_key: 'kundenstatus', op: 'gt', value: 'viel' }, 'branch'], [{ test: 'field', field_key: 'finanzierung', op: 'lte', value: '31.13.2027' }, 'branch'],
+      [{ test: 'field', field_key: 'finanzierung', op: ['is'], value: 'x' }, 'branch'],
+      // a contact field is looked for among the contact fields, a deal field among the deal fields — and only this workspace's
+      [{ test: 'contact_field', field_key: 'finanzierung' }, 'field'], [{ test: 'contact_field', field_key: 'fremd' }, 'field'], [{ test: 'contact_field', field_key: "x'; DROP TABLE contacts; --", op: 'empty' }, 'field'],
+      [{ test: 'field', field_key: 'kundenstatus', op: 'empty' }, 'field']];
+    for (const [config, code] of refused) {
+      const r = await addBox(1, { kind: 'branch', config, after_id: null });
+      assert.deepEqual([r.status, r.body.code], [400, code], JSON.stringify(config));
+    }
+    assert.equal(state.nodes.length, before, 'a refusal writes nothing');
+    const asked = state.calls.filter(c => /^SELECT type FROM custom_fields WHERE workspace_id = \$1 AND field_key = \$2$/.test(c.sql));
+    assert.ok(asked.length >= 9 && asked.every(c => c.params[0] === WS && c.params.length === 2), 'the contact field\'s key is a value of the question to the database, never a part of it');
+    // changing a box asks the same
+    const id = state.nodes.at(-1).id;
+    assert.equal((await put(id, { config: { test: 'contact_field', field_key: 'finanzierung', op: 'empty' } })).body.code, 'field');
+    assert.deepEqual((await put(id, { config: { test: 'contact_field', field_key: 'kundenstatus', op: 'is_not', value: 'Kunde' } })).body.flow.nodes.at(-1).config, { test: 'contact_field', field_key: 'kundenstatus', op: 'is_not', value: 'Kunde' });
+    assert.equal((await addBox(1, { kind: 'branch', config: { test: 'contact_field', field_key: 'kundenstatus' }, after_id: null }, member)).status, 403, 'a member sets up no question');
+  });
+  // Part 21 (2026-11-23): what every contact has — name, email, phone, company.
+  test('a question about a contact\'s name, email, phone or company: kept as its own word, and the database is not asked for a field', async () => {
+    await newFlow();
+    const before = state.calls.filter(c => /^SELECT type FROM (deal_fields|custom_fields)/.test(c.sql)).length;
+    for (const base of ['name', 'email', 'phone', 'company']) {
+      const r = await addBox(1, { kind: 'branch', wait_minutes: 0, config: { test: 'contact_field', base, field_key: 'fremd', op: 'contains', value: ' x ' }, after_id: null });
+      assert.equal(r.status, 201, JSON.stringify(r.body));
+      assert.deepEqual(r.body.flow.nodes.at(-1).config, { test: 'contact_field', base, op: 'contains', value: 'x' }, base);
+    }
+    assert.deepEqual((await addBox(1, { kind: 'branch', config: { test: 'contact_field', base: 'company' }, after_id: null })).body.flow.nodes.at(-1).config, { test: 'contact_field', base: 'company' });
+    assert.equal(state.calls.filter(c => /^SELECT type FROM (deal_fields|custom_fields)/.test(c.sql)).length, before, 'nothing to look up');
+    const n = state.nodes.length;
+    for (const [config, code] of [[{ test: 'contact_field', base: 'city' }, 'field'], [{ test: 'contact_field', base: 'constructor', field_key: 'kundenstatus' }, 'field'], [{ test: 'contact_field', base: ['email'] }, 'field'],
+      [{ test: 'contact_field', base: 'email', op: 'starts' }, 'branch'], [{ test: 'contact_field', base: 'phone', op: 'gt', value: 'viel' }, 'branch'], [{ test: 'field', base: 'company' }, 'field']]) {
+      const r = await addBox(1, { kind: 'branch', config, after_id: null });
+      assert.deepEqual([r.status, r.body.code], [400, code], JSON.stringify(config));
+    }
+    assert.equal(state.nodes.length, n, 'a refusal writes nothing');
+    const id = state.nodes.at(-1).id;
+    assert.deepEqual((await put(id, { config: { test: 'contact_field', base: 'email', op: 'empty' } })).body.flow.nodes.at(-1).config, { test: 'contact_field', base: 'email', op: 'empty' });
+    assert.deepEqual((await put(id, { config: { test: 'contact_field', field_key: 'kundenstatus' } })).body.flow.nodes.at(-1).config, { test: 'contact_field', field_key: 'kundenstatus' }, 'and back to a field of the workspace: the word is gone');
+  });
+  // Part 22 (2026-11-23): who the deal or its contact is assigned to, and when it was created.
+  test('who it is assigned to: the people are kept once each, must be this workspace\'s own, and "nobody" names none', async () => {
+    await newFlow();
+    for (const test of ['deal_owner', 'contact_owner']) {
+      for (const [config, kept] of [[{ test, op: 'is', user_ids: [3, 1, 3], stage_ids: [31] }, { test, op: 'is', user_ids: [3, 1] }], [{ test, op: 'is_not', user_ids: [7] }, { test, op: 'is_not', user_ids: [7] }],
+        [{ test, op: 'nobody', user_ids: [9] }, { test, op: 'nobody' }]]) {
+        const r = await addBox(1, { kind: 'branch', wait_minutes: 0, config, after_id: null });
+        assert.equal(r.status, 201, JSON.stringify(r.body));
+        assert.deepEqual(r.body.flow.nodes.at(-1).config, kept, JSON.stringify(config));
+      }
+    }
+    const n = state.nodes.length;
+    const refused = [[{ test: 'deal_owner' }, 'branch'], [{ test: 'deal_owner', op: 'anybody', user_ids: [1] }, 'branch'], [{ test: 'contact_owner', op: ['is'], user_ids: [1] }, 'branch'],
+      [{ test: 'deal_owner', op: 'is' }, 'user'], [{ test: 'deal_owner', op: 'is', user_ids: [] }, 'user'], [{ test: 'contact_owner', op: 'is_not', user_ids: ['1'] }, 'user'], [{ test: 'deal_owner', op: 'is', user_ids: [0] }, 'user'],
+      [{ test: 'deal_owner', op: 'is', user_ids: Array.from({ length: 21 }, (_, i) => i + 1) }, 'user'],
+      [{ test: 'deal_owner', op: 'is', user_ids: [1, 9] }, 'user'], [{ test: 'contact_owner', op: 'is_not', user_ids: [12345] }, 'user']];   // 9: another workspace's; 12345: nobody
+    for (const [config, code] of refused) {
+      const r = await addBox(1, { kind: 'branch', config, after_id: null });
+      assert.deepEqual([r.status, r.body.code], [400, code], JSON.stringify(config));
+    }
+    assert.equal(state.nodes.length, n, 'a refusal writes nothing');
+    assert.equal((await other.request('POST', '/api/journey/flows/1/nodes', { kind: 'branch', config: { test: 'deal_owner', op: 'is', user_ids: [9] }, after_id: null })).status, 404, 'another workspace has no such workflow');
+    const asked = state.calls.filter(c => /^SELECT u\.id FROM users u WHERE u\.id = ANY\(\$2::int\[\]\)/.test(c.sql));
+    assert.ok(asked.filter(c => c.params[0] === WS).length >= 6 && asked.every(c => c.params.length === 2 && Array.isArray(c.params[1])), 'asked of this workspace, the ids as a value');
+    assert.deepEqual(asked.filter(c => c.params[0] !== WS).map(c => c.params), [[OTHER, [9]]], 'the other workspace\'s request asked about its own people only');
+    assert.equal((await put(state.nodes.at(-1).id, { config: { test: 'deal_owner', op: 'is', user_ids: [9] } })).body.code, 'user', 'changing a box asks the same');
+  });
+  test('when it was created: a length of time in minutes, or a day with the clock of whoever saves the box — never a zone that was sent', async () => {
+    await newFlow();
+    const vienna = await serve({ '/api/journey': loadRoute('journey.js', { pool, user: { id: 1, workspaceId: WS, role: 'owner', timezone: 'Europe/Vienna' } }) });
+    try {
+      for (const test of ['deal_age', 'contact_age']) {
+        for (const [config, kept] of [[{ test, op: 'older', minutes: 43200, date: '2026-12-31', tz: 'Asia/Tokyo' }, { test, op: 'older', minutes: 43200 }], [{ test, op: 'newer', minutes: 1 }, { test, op: 'newer', minutes: 1 }],
+          [{ test, op: 'before', date: '2026-12-31', minutes: 5, tz: 'Asia/Tokyo' }, { test, op: 'before', date: '2026-12-31', tz: 'Europe/Vienna' }], [{ test, op: 'after', date: '2028-02-29' }, { test, op: 'after', date: '2028-02-29', tz: 'Europe/Vienna' }]]) {
+          const r = await vienna.request('POST', '/api/journey/flows/1/nodes', { kind: 'branch', wait_minutes: 0, config, after_id: null });
+          assert.equal(r.status, 201, JSON.stringify(r.body));
+          assert.deepEqual(r.body.flow.nodes.at(-1).config, kept, JSON.stringify(config));
+        }
+      }
+    } finally { await vienna.close(); }
+    assert.equal((await addBox(1, { kind: 'branch', config: { test: 'deal_age', op: 'before', date: '2026-12-31' }, after_id: null })).body.flow.nodes.at(-1).config.tz, 'Europe/Berlin', 'a person without a zone: the fallback');
+    const n = state.nodes.length;
+    for (const config of [{ test: 'deal_age' }, { test: 'deal_age', op: 'between', minutes: 5 }, { test: 'deal_age', op: 'older' }, { test: 'deal_age', op: 'older', minutes: 0 }, { test: 'contact_age', op: 'newer', minutes: 1.5 },
+      { test: 'deal_age', op: 'older', minutes: '60' }, { test: 'deal_age', op: 'older', minutes: 3650 * 1440 + 1 }, { test: 'deal_age', op: 'before' }, { test: 'deal_age', op: 'before', date: '2026-02-30' },
+      { test: 'contact_age', op: 'after', date: '31.12.2026' }, { test: 'deal_age', op: 'after', date: '2026-12-31T00:00' }, { test: 'deal_age', op: 'after', date: 20261231 }]) {
+      const r = await addBox(1, { kind: 'branch', config, after_id: null });
+      assert.deepEqual([r.status, r.body.code], [400, 'branch'], JSON.stringify(config));
+    }
+    assert.equal(state.nodes.length, n, 'a refusal writes nothing');
+    assert.equal((await addBox(1, { kind: 'branch', config: { test: 'deal_age', op: 'older', minutes: 3650 * 1440 }, after_id: null })).status, 201, 'ten years are the most');
+  });
   test('what a question names must be this workspace\'s own: its stages, and one of its deal fields', async () => {
     await newFlow();
     for (const [config, code] of [[{ test: 'stage', stage_ids: [31, 91] }, 'stage'], [{ test: 'stage', stage_ids: [12345] }, 'stage'], [{ test: 'field', field_key: 'fremd' }, 'field'],
@@ -782,11 +917,242 @@ describe('a branch box', () => {
   });
   test('the lines that make it so', () => {
     const code = read('routes/journey.js');
-    assert.match(code, /const ACTIONS = \['call', 'email', 'whatsapp', 'sms', 'task', 'move', 'wait', 'branch'\];/);
-    assert.match(code, /if \(elseSide && node\.kind !== 'branch'\) return refuse\(res, 'line'\);/);
-    assert.match(code, /todo\.push\(byId\.get\(at\.next_id\), byId\.get\(at\.else_id\)\);/, 'the circle is looked for along both lines');
+    assert.match(code, /const ACTIONS = \['call', 'email', 'whatsapp', 'sms', 'task', 'move', 'wait', 'branch', 'router'\];/);
+    assert.match(code, /if \(elseSide && !\['branch', 'router'\]\.includes\(node\.kind\)\) return refuse\(res, 'line'\);/);   // Part 23: a router's "otherwise" is that line too
+    assert.match(code, /todo\.push\(byId\.get\(at\.next_id\), byId\.get\(at\.else_id\), \.\.\.\(at\.kind === 'router' \? routerBox\.lines\(at\.config\)\.map\(to => byId\.get\(to\)\) : \[\]\)\);/, 'the circle is looked for along both lines, and along every route of a router');
     assert.match(code, /if \(kind === 'branch'\) return branch\.foreignRefs\(db, wid, config\);/);
     assert.match(read('db.js'), /ALTER TABLE journey_nodes ADD COLUMN IF NOT EXISTS else_id INTEGER REFERENCES journey_nodes\(id\) ON DELETE SET NULL/);
+  });
+});
+
+// Part 23 (2026-11-23): a box with several routes out, each with its own question — a deal goes down every route
+// whose question is answered with yes (the engine: tests/unit/journey-run.test.js; the box itself:
+// tests/unit/journey-router.test.js). Here: how it is saved, its lines — one per route, kept in its config, and
+// "otherwise" (else_id) — and what deleting does. The board cannot draw it yet, so it is no kind of the page's list.
+describe('a router box (Part 23)', () => {
+  const ROUTER = { kind: 'router', wait_minutes: 0, config: { routes: [{ name: 'Has phone', when: { test: 'has_phone' } }, { name: 'Has email', when: { test: 'has_email' } }, { name: 'Everyone' }] } };
+  const next = (id, body, srv = owner) => srv.request('PUT', `/api/journey/nodes/${id}/next`, body);
+  const del = (id, srv = owner) => srv.request('DELETE', `/api/journey/nodes/${id}`);
+  const box = id => state.nodes.find(n => n.id === id);
+  const routes = id => box(id).config.routes;
+  const lines = id => routes(id).map(r => [r.id, r.next_id]);
+  const mail = (title, more) => addBox(1, { ...EMAIL, title, ...more });
+  // start (1) → router (2), and three boxes that stand alone (3, 4, 5)
+  const board = async () => { await newFlow(); await addBox(1, { ...ROUTER, after_id: 1 }); for (const t of ['a', 'b', 'c']) await mail(t, { after_id: null }); };
+
+  test('it needs no title: its routes are numbered from 1 and lead nowhere yet; a name is trimmed, a question kept as a branch box keeps it', async () => {
+    await newFlow();
+    const r = await addBox(1, { ...ROUTER, wait_minutes: 60, config: { routes: [{ name: '  Has   phone ', when: { test: 'has_phone', stage_ids: [31], x: 1 } }, { when: { test: 'field', field_key: 'finanzierung', op: 'contains', value: ' Bank ' } },
+      { name: 'Everyone', when: null, next_id: 1 }, { id: 7, name: 'An id of its own choosing' }] }, after_id: 1 });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const made = r.body.flow.nodes.at(-1);
+    assert.deepEqual([made.kind, made.title, made.wait_minutes, made.next_id, made.else_id], ['router', '', 60, null, null]);
+    assert.deepEqual(made.config, { routes: [{ id: 1, name: 'Has phone', when: { test: 'has_phone' }, next_id: null }, { id: 2, name: '', when: { test: 'field', field_key: 'finanzierung', op: 'contains', value: 'Bank' }, next_id: null },
+      { id: 3, name: 'Everyone', when: null, next_id: null }, { id: 4, name: 'An id of its own choosing', when: null, next_id: null }] }, 'a line is never taken from what is sent, and neither is a number');
+    assert.equal(box(1).next_id, 2, 'it stands behind the start');
+    assert.equal((await addBox(1, { ...ROUTER, title: ' Split ', after_id: null })).body.flow.nodes.at(-1).title, 'Split', 'a name may be given to it');
+    assert.equal((await addBox(1, { kind: 'router', config: { routes: [{}] }, after_id: null })).status, 201, 'one route without a name and without a question is enough');
+    assert.equal((await addBox(1, { kind: 'router', config: { routes: Array.from({ length: 6 }, (_, i) => ({ name: `R${i}` })) }, after_id: null })).body.flow.nodes.at(-1).config.routes.length, 6, 'six are the most');
+    assert.deepEqual(state.log.filter(e => e.detail === 'step_added').map(e => e.kind), ['router', 'router', 'router', 'router'], 'the record names it by its kind');
+  });
+  test('a question that compares a day keeps the clock of whoever saves the router — never a zone that was sent', async () => {
+    await newFlow();
+    const day = { test: 'deal_age', op: 'before', date: '2026-12-31', tz: 'Asia/Tokyo' };
+    assert.deepEqual((await addBox(1, { kind: 'router', config: { routes: [{ when: day }] }, after_id: null })).body.flow.nodes.at(-1).config.routes[0].when, { test: 'deal_age', op: 'before', date: '2026-12-31', tz: 'Europe/Berlin' });
+    const vienna = await serve({ '/api/journey': loadRoute('journey.js', { pool, user: { id: 1, workspaceId: WS, role: 'owner', timezone: 'Europe/Vienna' } }) });
+    try {
+      assert.equal((await vienna.request('POST', '/api/journey/flows/1/nodes', { kind: 'router', config: { routes: [{ when: day }] }, after_id: null })).body.flow.nodes.at(-1).config.routes[0].when.tz, 'Europe/Vienna');
+      assert.equal((await vienna.request('PUT', '/api/journey/nodes/2', { config: { routes: [{ id: 1, when: { ...day, op: 'after' } }] } })).body.flow.nodes[1].config.routes[0].when.tz, 'Europe/Vienna', 'changing it: the clock of whoever changes it');
+    } finally { await vienna.close(); }
+  });
+  test('refused with a code, nothing written: no routes, too many, a name that is none, a question nobody knows or one that names another workspace\'s', async () => {
+    await newFlow();
+    const seven = Array.from({ length: 7 }, () => ({}));
+    const cases = [[undefined, 'router'], [{}, 'router'], [{ routes: [] }, 'router'], [{ routes: 'all' }, 'router'], [{ routes: seven }, 'router'], [{ routes: ['Has phone'] }, 'router'], [{ routes: [null] }, 'router'], [[{ name: 'a' }], 'router'],
+      [{ routes: [{ name: 'x'.repeat(61) }] }, 'router'], [{ routes: [{ name: 7 }] }, 'router'], [{ routes: [{ name: ['a'] }] }, 'router'],
+      [{ routes: [{}, { when: { test: 'weather' } }] }, 'branch'], [{ routes: [{ when: 'has_phone' }] }, 'branch'], [{ routes: [{ when: { test: 'urgency', min_urgency: 9 } }] }, 'branch'],
+      [{ routes: [{ when: { test: 'field', field_key: 'two words' } }] }, 'field'], [{ routes: [{ when: { test: 'stage', stage_ids: [] } }] }, 'stage'],
+      // what a route's question names must be this workspace's own
+      [{ routes: [{ when: { test: 'has_phone' } }, { when: { test: 'stage', stage_ids: [31, 91] } }] }, 'stage'], [{ routes: [{ when: { test: 'field', field_key: 'fremd' } }] }, 'field'],
+      [{ routes: [{ when: { test: 'contact_field', field_key: 'finanzierung' } }] }, 'field'], [{ routes: [{}, {}, { when: { test: 'deal_owner', op: 'is', user_ids: [1, 9] } }] }, 'user']];
+    for (const [config, code] of cases) {
+      const r = await addBox(1, { kind: 'router', config, after_id: 1 });
+      assert.deepEqual([r.status, r.body.code], [400, code], JSON.stringify(config));
+    }
+    assert.equal((await addBox(1, { kind: 'router', config: { routes: [{ name: 'x'.repeat(60) }] }, wait_minutes: -1, after_id: 1 })).body.code, 'wait', 'it has a wait like every box');
+    assert.equal(state.nodes.length, 1, 'only the start is there');
+    assert.equal(writes().filter(c => /^INSERT INTO journey_nodes \(workspace_id, flow_id, kind, title/.test(c.sql)).length, 0);
+    assert.equal((await addBox(1, { ...ROUTER, after_id: 1 }, member)).status, 403, 'a member sets up no router');
+    assert.equal((await addBox(1, { ...ROUTER, after_id: null }, other)).status, 404, 'another workspace has no such workflow');
+    assert.equal((await addBox(1, { kind: 'router', config: { routes: [{ name: 'x'.repeat(60) }] }, after_id: 1 })).status, 201, 'sixty characters are the most');
+  });
+  test('changing it: a kept route keeps its line, a removed one loses it, a new one gets a number nobody has had — and no line comes from what is sent', async () => {
+    await board();
+    await next(2, { next_id: 3, side: 'route', route: 1 }); await next(2, { next_id: 4, side: 'route', route: 2 }); await next(2, { next_id: 5, side: 'route', route: 3 }); await next(2, { next_id: 4, side: 'else' });
+    const r = await put(2, { title: 'Split', wait_minutes: 30, config: { routes: [{ id: 3, name: 'Everyone else', next_id: 999 }, { name: 'New', next_id: 3 }, { id: 1, when: { test: 'has_email' }, next_id: null }, { id: 77, name: 'No such route' }] } });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(r.body.flow.nodes[1].config, { routes: [{ id: 3, name: 'Everyone else', when: null, next_id: 5 }, { id: 4, name: 'New', when: null, next_id: null }, { id: 1, name: '', when: { test: 'has_email' }, next_id: 3 },
+      { id: 5, name: 'No such route', when: null, next_id: null }] }, 'route 2 is gone with its line; the new ones are 4 and 5, not 2 again');
+    assert.deepEqual([box(2).kind, box(2).title, box(2).wait_minutes, box(2).next_id, box(2).else_id], ['router', 'Split', 30, null, 4], 'its kind and its "otherwise" line stay');
+    const before = JSON.stringify(box(2).config);
+    for (const [config, code] of [[{ routes: [{ id: 3 }, { id: 3 }] }, 'router'], [{ routes: [] }, 'router'], [{ routes: [{ id: 1, when: { test: 'weather' } }] }, 'branch'], [{ routes: [{ id: 1, when: { test: 'stage', stage_ids: [91] } }] }, 'stage'], [undefined, 'router']]) {
+      assert.equal((await put(2, { config })).body.code, code, JSON.stringify(config));
+    }
+    assert.equal(JSON.stringify(box(2).config), before, 'a refusal changes nothing');
+    assert.equal((await put(2, { config: { routes: [{ id: 3 }] } }, member)).status, 403);
+    assert.equal((await put(2, { config: { routes: [{ id: 3 }] } }, other)).status, 404);
+    assert.deepEqual((await put(2, { config: { routes: [{ id: 3 }] } })).body.flow.nodes[1].config, { routes: [{ id: 3, name: '', when: null, next_id: 5 }] }, 'down to one route: its line is still its own');
+    assert.deepEqual((await put(2, { config: { routes: [{}, { id: 3 }, {}] } })).body.flow.nodes[1].config.routes.map(x => [x.id, x.next_id]), [[4, null], [3, 5], [5, null]], 'new routes are numbered above every route the box has, in their order');
+  });
+  test('a route\'s line is drawn and taken away by the route\'s number; "otherwise" is the box\'s second line; a router has no line of its own', async () => {
+    await board();
+    assert.deepEqual(lines(2), [[1, null], [2, null], [3, null]]);
+    assert.equal((await next(2, { next_id: 3, side: 'route', route: 1 })).status, 200);
+    assert.deepEqual((await next(2, { next_id: 4, side: 'route', route: 3 })).body.flow.nodes[1].config.routes.map(x => x.next_id), [3, null, 4]);
+    assert.equal((await next(2, { next_id: 4, side: 'route', route: 2 })).status, 200, 'two routes may lead to the same box');
+    assert.deepEqual(lines(2), [[1, 3], [2, 4], [3, 4]]);
+    assert.deepEqual((await next(2, { next_id: null, side: 'route', route: 2 })).body.flow.nodes[1].config.routes.map(x => x.next_id), [3, null, 4], 'taken away: that route leads nowhere');
+    assert.deepEqual(routes(2).map(x => [x.name, x.when]), [['Has phone', { test: 'has_phone' }], ['Has email', { test: 'has_email' }], ['Everyone', null]], 'a line changes nothing else of a route');
+    assert.equal((await next(2, { next_id: 5, side: 'else' })).status, 200);
+    assert.deepEqual([box(2).else_id, box(2).next_id], [5, null]);
+    assert.equal((await next(2, { next_id: null, side: 'else' })).status, 200);
+    assert.equal(box(2).else_id, null);
+    const before = JSON.stringify(state.nodes.map(n => [n.next_id, n.else_id, n.config]));
+    for (const [id, body, why] of [[2, { next_id: 5 }, 'a router has no plain line'], [2, { next_id: null }, 'nor one to take away'], [2, { next_id: 5, side: 'route' }, 'which route is not said'],
+      [2, { next_id: 5, side: 'route', route: 9 }, 'no such route'], [2, { next_id: 5, side: 'route', route: '1' }, 'the number as text'], [2, { next_id: null, side: 'route', route: 0 }, 'no route 0'],
+      [3, { next_id: 4, side: 'route', route: 1 }, 'an email box has no routes'], [1, { next_id: 3, side: 'route', route: 1 }, 'nor has the start'], [3, { next_id: 4, side: 'else' }, 'nor an "otherwise"'],
+      [2, { next_id: 2, side: 'route', route: 1 }, 'to itself'], [2, { next_id: 1, side: 'route', route: 1 }, 'to the start'], [2, { next_id: 999, side: 'route', route: 1 }, 'to no box'], [2, { next_id: '3', side: 'route', route: 1 }, 'an id as text']]) {
+      const r = await next(id, body);
+      assert.deepEqual([r.status, r.body.code], [400, 'line'], why);
+    }
+    assert.equal(JSON.stringify(state.nodes.map(n => [n.next_id, n.else_id, n.config])), before, 'nothing changed');
+    assert.equal((await next(2, { next_id: 3, side: 'route', route: 1 }, member)).status, 403);
+    assert.equal((await next(2, { next_id: 3, side: 'route', route: 1 }, other)).status, 404);
+    assert.ok(state.log.filter(e => e.detail === 'line_changed' && e.kind === 'router').length >= 6, 'every line drawn or taken away is in the record');
+  });
+  test('no line leads round in a circle — not through a route, not through "otherwise", and not into another workflow', async () => {
+    await newFlow(); await mail('before', { after_id: 1 }); await addBox(1, { ...ROUTER, after_id: 2 });   // start (1) → before (2) → router (3)
+    for (const t of ['a', 'b', 'c']) await mail(t, { after_id: null });                                  // 4, 5, 6 stand alone
+    await newFlow(owner, 'B');                                                                            // its start is 7
+    await next(3, { next_id: 4, side: 'route', route: 1 }); await next(4, { next_id: 5 }); await next(3, { next_id: 6, side: 'else' });   // route 1 → a → b; otherwise → c
+    const before = JSON.stringify(state.nodes.map(n => [n.next_id, n.else_id, n.config]));
+    for (const [id, body, why] of [[5, { next_id: 3 }, 'the end of a route back to the router'], [4, { next_id: 2 }, 'a box of a route back to what stands before the router'], [6, { next_id: 3 }, '"otherwise" back to the router'],
+      [6, { next_id: 2 }, '"otherwise" back to what stands before it'], [3, { next_id: 2, side: 'route', route: 2 }, 'a route to the box that leads to the router'], [3, { next_id: 2, side: 'else' }, '"otherwise" to it'],
+      [3, { next_id: 7, side: 'route', route: 2 }, 'a route into another workflow']]) {
+      const r = await next(id, body);
+      assert.deepEqual([r.status, r.body.code], [400, 'line'], why);
+    }
+    assert.equal(JSON.stringify(state.nodes.map(n => [n.next_id, n.else_id, n.config])), before, 'nothing changed');
+    assert.equal((await next(3, { next_id: 5, side: 'route', route: 2 })).status, 200, 'two routes may meet again in one box');
+    assert.equal((await next(6, { next_id: 5 })).status, 200, 'and so may "otherwise"');
+    assert.equal((await next(5, { next_id: 6 })).body.code, 'line', 'but then not lead back');
+    // a second router behind a route: the circle is looked for through its routes too
+    await addBox(1, { ...ROUTER, after_id: 5 });                                                          // 8, behind b
+    assert.equal((await next(8, { next_id: 6, side: 'route', route: 3 })).body.code, 'line', 'c leads to b, and b to this second router: its route to c would close the circle');
+    await next(6, { next_id: null });                                                                     // c leads nowhere any more
+    assert.equal((await next(8, { next_id: 6, side: 'route', route: 3 })).status, 200);
+    assert.equal((await next(6, { next_id: 4 })).body.code, 'line', 'c would lead to a, a to b, b to the second router, and its third route back to c');
+    assert.equal((await next(8, { next_id: 3, side: 'else' })).body.code, 'line', 'and its "otherwise" not back to the first router');
+  });
+  test('a new box is put in behind one route, or behind "otherwise", and takes over that line; behind the router as such there is no place', async () => {
+    await newFlow(); await addBox(1, { ...ROUTER, after_id: 1 });                                        // start (1) → router (2)
+    assert.equal((await mail('first', { after_id: 2, side: 'route', route: 2 })).status, 201);            // 3
+    assert.deepEqual([lines(2), box(3).next_id], [[[1, null], [2, 3], [3, null]], null]);
+    await mail('second', { after_id: 2, side: 'route', route: 2 });                                       // 4: in front of 3
+    assert.deepEqual([lines(2), box(4).next_id, box(3).next_id], [[[1, null], [2, 4], [3, null]], 3, null], 'it takes over the route\'s line');
+    await mail('else', { after_id: 2, side: 'else' });                                                    // 5
+    await mail('else first', { after_id: 2, side: 'else' });                                              // 6: in front of 5
+    assert.deepEqual([box(2).else_id, box(6).next_id, box(5).next_id, box(2).next_id], [6, 5, null, null]);
+    assert.deepEqual(routes(2).map(x => [x.id, x.name]), [[1, 'Has phone'], [2, 'Has email'], [3, 'Everyone']], 'nothing else of the routes changed');
+    const n = state.nodes.length;
+    for (const [more, why] of [[{ after_id: 2 }, 'behind the router as such'], [{ after_id: 2, side: 'route' }, 'which route is not said'], [{ after_id: 2, side: 'route', route: 9 }, 'no such route'],
+      [{ after_id: 2, side: 'route', route: '2' }, 'the number as text'], [{ after_id: 3, side: 'route', route: 1 }, 'an email box has no routes'], [{ after_id: 3, side: 'else' }, 'nor an "otherwise"'], [{ after_id: 1, side: 'route', route: 1 }, 'nor has the start'],
+      [{ after_id: 3, side: 'route' }, 'behind a route that is not named, of a box that has none: not a plain add'], [{ after_id: 3, side: 'route', route: null }, 'nor with no route at all']]) {
+      const r = await mail('nowhere', more);
+      assert.deepEqual([r.status, r.body.code], [400, 'after'], why);
+    }
+    assert.equal(state.nodes.length, n, 'a refusal writes nothing');
+    assert.equal((await mail('alone', { after_id: null, side: 'route', route: 9 })).status, 201, 'a box that stands alone is behind nothing: what side is no question');
+  });
+  test('a router put in behind a box hands that box\'s line to its first route — behind a route or "otherwise" alike — and has none of its own', async () => {
+    await newFlow(); await mail('a', { after_id: 1 }); await mail('b', { after_id: 2 });                  // start → a (2) → b (3)
+    await addBox(1, { ...ROUTER, after_id: 2 });                                                          // 4: between a and b
+    assert.deepEqual([box(2).next_id, box(4).next_id, lines(4)], [4, null, [[1, 3], [2, null], [3, null]]]);
+    await addBox(1, { ...ROUTER, after_id: 4, side: 'route', route: 1 });                                 // 5: in front of b, on route 1
+    assert.deepEqual([lines(4), box(5).next_id, lines(5)], [[[1, 5], [2, null], [3, null]], null, [[1, 3], [2, null], [3, null]]]);
+    await mail('c', { after_id: 4, side: 'else' });                                                       // 6
+    await addBox(1, { ...ROUTER, after_id: 4, side: 'else' });                                            // 7: in front of c, on "otherwise"
+    assert.deepEqual([box(4).else_id, box(7).next_id, box(7).else_id, lines(7)], [7, null, null, [[1, 6], [2, null], [3, null]]]);
+    await addBox(1, { ...ROUTER, after_id: 3 });                                                          // 8: behind b, which has no line
+    assert.deepEqual([box(3).next_id, lines(8)], [8, [[1, null], [2, null], [3, null]]]);
+  });
+  test('a deleted box is taken out of every route\'s line: the route then leads to what stood behind it, or nowhere', async () => {
+    await board();                                                                                        // router 2; a 3, b 4, c 5
+    await addBox(1, { ...ROUTER, after_id: null });                                                       // a second router, 6
+    await next(2, { next_id: 3, side: 'route', route: 1 }); await next(2, { next_id: 3, side: 'route', route: 2 }); await next(2, { next_id: 5, side: 'route', route: 3 });
+    await next(6, { next_id: 3, side: 'route', route: 3 }); await next(6, { next_id: 3, side: 'else' }); await next(3, { next_id: 4 });   // a → b
+    await newFlow(owner, 'B'); await addBox(2, { ...ROUTER, after_id: null });                            // another workflow's router, 8
+    state.runs = [{ id: 1, workspace_id: WS, node_id: 3, deal_id: 60 }];
+    await del(3);
+    assert.deepEqual([lines(2), lines(6), box(6).else_id], [[[1, 4], [2, 4], [3, 5]], [[1, null], [2, null], [3, 4]], 4], 'every route that led to it, of both routers, and "otherwise"');
+    assert.equal(state.runs[0].node_id, 4, 'a deal that waited at it goes on there');
+    assert.deepEqual(writes().filter(c => c.sql === 'UPDATE journey_nodes SET config = $3::jsonb WHERE id = $1 AND workspace_id = $2').slice(-2).map(c => c.params.slice(0, 2)), [[2, WS], [6, WS]], 'only the routers that had such a line are written, each in this workspace');
+    await del(4);
+    assert.deepEqual([lines(2), lines(6), box(6).else_id], [[[1, null], [2, null], [3, 5]], [[1, null], [2, null], [3, null]], null], 'the last box of a route: the line simply ends');
+    assert.deepEqual(lines(8), [[1, null], [2, null], [3, null]], 'another workflow\'s router is not looked at');
+    const asked = state.calls.filter(c => c.sql === "SELECT id, config FROM journey_nodes WHERE flow_id = $1 AND workspace_id = $2 AND kind = 'router' AND id <> $3");
+    assert.deepEqual(asked.map(c => c.params), [[1, WS, 3], [1, WS, 4]], 'the routers of the deleted box\'s own workflow, in this workspace');
+  });
+  test('deleting a router: nothing stands behind it — what led to it leads nowhere, and a deal that waited at it is through with that path', async () => {
+    await newFlow(); await addBox(1, { ...ROUTER, after_id: 1 });                                         // start (1) → router (2)
+    await mail('a', { after_id: 2, side: 'route', route: 1 }); await mail('b', { after_id: 2, side: 'else' });   // 3, 4
+    await addBox(1, { ...ROUTER, after_id: null }); await next(5, { next_id: 2, side: 'route', route: 2 });      // another router (5) whose route leads to it
+    await addBox(1, { kind: 'branch', config: { test: 'meeting' }, after_id: null }); await next(6, { next_id: 2, side: 'else' });   // a branch (6) whose "no" leads to it
+    state.runs = [{ id: 1, workspace_id: WS, node_id: 2, deal_id: 60, status: 'waiting' },                 // the deal's own row
+      { id: 2, workspace_id: WS, node_id: 2, deal_id: 60, status: 'waiting', root_id: 1 },                 // the same deal on another route of an earlier router
+      { id: 3, workspace_id: WS, node_id: 2, deal_id: 61, status: 'waiting' },
+      { id: 4, workspace_id: WS, node_id: 2, deal_id: 61, status: 'working' },                             // its step is being done this moment: no "waited there"
+      { id: 5, workspace_id: OTHER, node_id: 2, deal_id: 90, status: 'waiting' }];                         // never another workspace's
+    state.over = row => row.id === 3;   // deal 60 is still on its way down another route; deal 61 is through
+    state.log.length = 0; state.engine.length = 0;
+    const r = await del(2);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(state.engine, [['pathDone', { id: 1, root_id: null }, true], ['pathDone', { id: 2, root_id: 1 }, true], ['pathDone', { id: 3, root_id: null }, true]], 'the engine is told of each row that waited, inside the route\'s own transaction');
+    assert.deepEqual([box(1).next_id, lines(5), box(6).else_id, box(3).next_id, box(4).next_id], [null, [[1, null], [2, null], [3, null]], null, null, null], 'what led to it leads nowhere; what it led to stands alone');
+    assert.ok(!box(2));
+    assert.deepEqual(state.log.map(e => [e.event, e.detail, e.kind, e.deal_id, e.status]), [['flow', 'step_deleted', 'router', null, ''], ['moved', 'step_deleted', 'router', 60, ''], ['moved', 'step_deleted', 'router', 60, ''],
+      ['moved', 'step_deleted', 'router', 61, ''], ['ended', null, '', 61, 'done']], 'the workflow is over only for the deal the engine says it is over for');
+    assert.deepEqual(state.runs.map(x => [x.id, x.node_id, x.status]), [[1, null, 'waiting'], [3, null, 'done'], [4, null, 'working'], [5, 2, 'waiting']],
+      'the row of one route of several is gone (the engine\'s doing), the row that is over is done, the row being worked on follows, another workspace\'s stays');
+    assert.ok(!state.calls.some(c => /UPDATE journey_runs SET status = 'done'/.test(c.sql)), 'the route itself marks no row done any more');
+  });
+  test('the last box of a line, deleted: the same question to the engine, whatever its kind', async () => {
+    await newFlow(); await mail('a', { after_id: 1 });
+    state.runs = [{ id: 7, workspace_id: WS, node_id: 2, deal_id: 60, status: 'waiting', root_id: 4 }, { id: 8, workspace_id: WS, node_id: 2, deal_id: 61, status: 'waiting' }];
+    state.log.length = 0; state.engine.length = 0;
+    await del(2);
+    assert.deepEqual(state.engine.map(c => c.slice(0, 2)), [['pathDone', { id: 7, root_id: 4 }], ['pathDone', { id: 8, root_id: null }]]);
+    assert.deepEqual(state.log.filter(e => e.event !== 'flow').map(e => [e.event, e.deal_id, e.status]), [['moved', 60, ''], ['moved', 61, ''], ['ended', 61, 'done']], 'one route of several that ends is no end of the workflow');
+  });
+  test('the lines that make it so', () => {
+    const code = read('routes/journey.js'), page = read('public/js/journey.js'), core = read('public/js/core.js');
+    assert.match(code, /^const ACTIONS = \['call', 'email', 'whatsapp', 'sms', 'task', 'move', 'wait', 'branch', 'router'\];/m, 'the board draws it since Part 24: one of the kinds the page offers');
+    assert.doesNotMatch(code, /SERVER_KINDS/);
+    assert.match(code, /^const routerBox\s+= require\('\.\.\/utils\/journey-router'\);/m);
+    assert.match(code, /if \(kind === 'router'\) return routerBox\.foreignRefs\(db, wid, config\);/);
+    assert.match(code, /actionOf\(node\.kind, req\.body, req\.userTimezone, node\.config\)/, 'a changed router is checked against what is saved');
+    assert.match(code, /if \(routeSide && node\.kind !== 'router'\) return refuse\(res, 'line'\);/);
+    assert.match(code, /if \(!routeSide && !elseSide && node\.kind === 'router'\) return refuse\(res, 'line'\);/);
+    assert.match(code, /over: \(await journeyRun\.pathDone\(db, \{ id: r\.id, root_id: r\.root_id \}\)\)\.over/);
+    assert.ok(!/UPDATE journey_runs SET status = 'done'/.test(code), 'when a path is through is the engine\'s to say');
+    assert.match(page, /router: 'jr_err_router'/);
+    assert.match(core, /jr_err_router:'This router could not be saved\. It needs 1 to 6 routes, each with a name of up to 60 characters\.'/);
+    assert.match(core, /jr_err_router:'Dieser Router konnte nicht gespeichert werden\. Er braucht 1 bis 6 Routen, jede mit einem Namen von höchstens 60 Zeichen\.'/);
+  });
+  test('the refusal says how many routes and how long a name, by the box\'s own limits', async () => {
+    await newFlow();
+    const r = await addBox(1, { kind: 'router', config: { routes: [] }, after_id: 1 });
+    assert.deepEqual(r.body, { error: 'A router has 1 to 6 routes, each with a name of up to 60 characters and a known question or none', code: 'router' });
   });
 });
 
@@ -970,6 +1336,10 @@ describe('what a workflow did', () => {
     const r = await member.request('GET', '/api/journey/flows/1/activity');
     assert.equal(r.status, 200);
     assert.deepEqual(r.body.counts, { waiting: 2, done: 5 });
+    // Part 26: the numbers count DEALS — a deal on several routes of a router has a row per route, and only the row
+    // that stands for it (no root_id) is counted; the list under them shows every place a deal waits at
+    assert.ok(state.calls.some(c => c.sql === 'SELECT status, COUNT(*)::int AS n FROM journey_runs WHERE flow_id = $1 AND workspace_id = $2 AND root_id IS NULL GROUP BY status' && c.params[0] === 1 && c.params[1] === WS));
+    assert.ok(state.calls.some(c => /FROM journey_runs r JOIN deals d ON d\.id = r\.deal_id LEFT JOIN journey_nodes n ON n\.id = r\.node_id WHERE r\.flow_id = \$1 AND r\.workspace_id = \$2 AND r\.status IN \('waiting','working'\)/.test(c.sql) && !/root_id/.test(c.sql)), 'the waiting list has every route\'s row');
     assert.deepEqual(r.body.waiting, [{ deal_id: 60, deal_title: 'Wohnung 3', due_at: '2026-11-20T09:00:00.000Z', kind: 'email', title: 'Second mail' }]);
     assert.equal(r.body.log[0].detail, 'lead@example.de');
     assert.equal((await other.request('GET', '/api/journey/flows/1/activity')).status, 404, 'never another workspace\'s');

@@ -375,7 +375,7 @@ describe('how it is built', () => {
     const engine = read('utils/journey-run.js');
     const one = engine.slice(engine.indexOf('async function runOne('), engine.indexOf('// ── taking deals in'));
     assert.match(one, /d\.stage_id, d\.contact_id, d\.assigned_to, d\.urgency, d\.custom_data AS deal_data,/);
-    assert.match(one, /c\.journey_opt_out,\s+c\.custom_data AS contact_data, c\.onboarding_status\s+FROM journey_runs r/);
+    assert.match(one, /c\.journey_opt_out,\s+c\.custom_data AS contact_data, c\.onboarding_status, c\.assigned_to AS contact_assigned_to, c\.created_at AS contact_created_at\s+FROM journey_runs r/);
     assert.match(one, /SELECT r\.id, r\.workspace_id, r\.flow_id, r\.deal_id, r\.node_id, r\.started_at,/);
     assert.match(engine, /async function stopReason\(pool, x, now = new Date\(\)\) \{/);
   });

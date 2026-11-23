@@ -21,6 +21,14 @@
    says on its box are journey-branch.js. The chain puts a "no" side one
    column to the right of everything its "yes" side needed.
 
+   A ROUTER (Parts 23–24)  One kind of box has SEVERAL lines out: its routes,
+   each with its own question, and "otherwise". A deal goes down every route
+   whose question says yes. Under the box stands one foot per route — its
+   number — and one for "otherwise"; each is the handle of its own line. A
+   route's line is kept in the box's settings (config.routes[].next_id), the
+   "otherwise" line is else_id. What the box says, its feet and its window
+   are journey-router.js. The chain puts the routes side by side.
+
    THE BOARD (Part 5)  Every box has its place (journeyPlaces: where it was
    dragged to, or where the chain puts it). An owner or admin drags a box to
    move it; the round "+" under a box adds a step behind it when clicked, and
@@ -87,15 +95,15 @@
                  journeyStepText, journeyDetailText, journeyWhen
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const JOURNEY_ACTIONS = ['call', 'email', 'whatsapp', 'sms', 'task', 'move', 'wait', 'branch'];   // the route's ACTIONS, in the order of the "Add step" list
-const JOURNEY_ICONS = { start: 'flag', call: 'phone', email: 'mail', whatsapp: 'message-circle', sms: 'message', task: 'check-square', move: 'arrow-up-right', wait: 'clock', branch: 'help' };
+const JOURNEY_ACTIONS = ['call', 'email', 'whatsapp', 'sms', 'task', 'move', 'wait', 'branch', 'router'];   // the route's ACTIONS, in the order of the "Add step" list
+const JOURNEY_ICONS = { start: 'flag', call: 'phone', email: 'mail', whatsapp: 'message-circle', sms: 'message', task: 'check-square', move: 'arrow-up-right', wait: 'clock', branch: 'help', router: 'columns' };
 const JOURNEY_WAIT_DAYS = { 1: 'fonio_day_1', 2: 'fonio_day_2', 3: 'fonio_day_3', 4: 'fonio_day_4', 5: 'fonio_day_5', 6: 'fonio_day_6', 7: 'fonio_day_7' };   // the weekdays a Wait box can wait for
 const JOURNEY_UNITS = { min: 1, hours: 60, days: 1440 };   // a unit of the wait, in minutes
 const JOURNEY_MAX_NAME = 80, JOURNEY_MAX_TITLE = 120, JOURNEY_MAX_TEXT = 20000, JOURNEY_MAX_WAIT = 365 * 24 * 60;   // the route's limits (routes/journey.js)
 const JOURNEY_BOX_W = 300, JOURNEY_PAD = 40, JOURNEY_STEP_Y = 150, JOURNEY_MAX_PLACE = 20000;   // the board: a box's width, the room around, the chain's rhythm
 // The route's refusal codes as sentences.
 const JOURNEY_ERRORS = { forbidden: 'jr_err_forbidden', name: 'jr_err_name', limit: 'jr_err_limit', nodes_limit: 'jr_err_nodes_limit', after: 'jr_err_after', kind: 'jr_err_kind', title: 'jr_err_title',
-  body: 'jr_err_body', wait: 'jr_err_wait', until: 'jr_err_until', branch: 'jr_err_branch', stage: 'jr_err_stage', webhooks: 'jr_err_webhooks', start: 'jr_err_start', field: 'jr_err_field', pipeline: 'jr_err_pipeline', flow: 'jr_err_flow', loop: 'jr_err_loop',
+  body: 'jr_err_body', wait: 'jr_err_wait', until: 'jr_err_until', branch: 'jr_err_branch', router: 'jr_err_router', stage: 'jr_err_stage', user: 'jr_err_user', webhooks: 'jr_err_webhooks', start: 'jr_err_start', field: 'jr_err_field', pipeline: 'jr_err_pipeline', flow: 'jr_err_flow', loop: 'jr_err_loop',
   start_fixed: 'jr_err_start_fixed', active: 'jr_start_locked', inactive: 'jr_err_inactive',
   deal: 'jr_err_deal', place: 'jr_err_place', line: 'jr_err_line', not_email: 'jr_err_generic', not_connected: 'jm_err_not_connected', no_address: 'jm_err_no_address', gone: 'jm_err_gone',
   rejected: 'jm_err_rejected', unreachable: 'jm_err_unreachable', paused: 'jm_err_paused', not_found: 'jr_err_gone', history: 'jh_err_query' };
@@ -103,6 +111,8 @@ const JOURNEY_ERRORS = { forbidden: 'jr_err_forbidden', name: 'jr_err_name', lim
 const JOURNEY_DETAILS = { no_sender: 'jr_d_no_sender', no_email: 'jr_d_no_email', opted_out: 'jr_d_opted_out', fonio_off: 'jr_d_fonio_off', gone: 'jr_d_gone', unreachable: 'jr_d_unreachable',
   stage_gone: 'jr_d_stage_gone', already_there: 'jr_d_already_there', interrupted: 'jr_d_interrupted', error: 'jr_d_error', scheduled: 'jr_d_scheduled', assigned: 'jr_d_assigned', unassigned: 'jr_d_unassigned',
   waited: 'jr_d_waited', yes: 'jr_d_yes', no: 'jr_d_no',
+  // a router (Part 26): no route fitted, and a route that was left out because the deal was at too many places at once
+  else: 'jr_d_else', paths_limit: 'jr_d_paths_limit',
   // why fonio did not call (utils/fonio-calls.js scheduleForJourney), and a kind of step this server does not know
   no_contact: 'jr_d_no_contact', no_phone: 'jr_d_no_phone', bad_number: 'jr_d_bad_number', number_not_allowed: 'jr_d_number_not_allowed', already_scheduled: 'jr_d_already_scheduled', no_hours: 'jr_d_no_hours',
   skipped: 'jr_d_skipped', unknown_kind: 'jr_d_unknown_kind',
@@ -126,6 +136,7 @@ function resetJourneyUI() {
   if (typeof resetJourneyMail === 'function') resetJourneyMail();
   if (typeof resetJourneyFixed === 'function') resetJourneyFixed();   // the integrations' workflows (journey-fixed.js, loaded after this file)
   if (typeof resetJourneyStart === 'function') resetJourneyStart();   // the fields a start chooses from (journey-start.js)
+  if (typeof resetJourneyBranch === 'function') resetJourneyBranch();   // the people a branch box can name (journey-branch.js)
 }
 
 function journeyErrorText(res) {
@@ -193,13 +204,22 @@ function journeyStageName(stageId) {
 // A workflow's boxes as its lines order them, from the start: `chain` is every box a line leads to, in the order
 // they are reached — behind a branch box (Part 11) its "yes" side first, then its "no" side — and `loose` are the
 // boxes no line leads to. `at` says where the chain puts a box: its column and its row. A "no" side stands in the
-// column right of everything its "yes" side needed; `width` is how many columns the whole chain came to.
+// column right of everything its "yes" side needed; `width` is how many columns the whole chain came to. Behind a
+// router (Part 24) its routes stand side by side in their order, "otherwise" last — each as wide as it needs.
 function journeyLayout(flow) {
   const nodes = flow && Array.isArray(flow.nodes) ? flow.nodes : [];
   const byId = new Map(nodes.map(n => [n.id, n])), at = new Map(), chain = [];
   const walk = (n, col, row) => {
     for (; n && !at.has(n.id); n = byId.get(n.next_id), row++) {
       at.set(n.id, { col, row }); chain.push(n);
+      if (n.kind === 'router') {
+        let wide = 0;
+        for (const id of [...(n.config && Array.isArray(n.config.routes) ? n.config.routes : []).map(r => r && r.next_id), n.else_id]) {
+          const to = byId.get(id);
+          if (to && !at.has(to.id)) wide += walk(to, col + wide, row + 1);
+        }
+        return Math.max(1, wide);
+      }
       if (n.kind !== 'branch') continue;
       const yes = walk(byId.get(n.next_id), col, row + 1), no = byId.get(n.else_id);
       return yes + (no && !at.has(no.id) ? walk(no, col + yes, row + 1) : 0);
@@ -240,15 +260,28 @@ function journeyLinePath(a, b, part = 0.5) {
 }
 const journeyClamp = v => Math.max(0, Math.min(JOURNEY_MAX_PLACE, Math.round(v)));
 // Where on a box's foot one of its lines leaves, as a part of the box's width: the middle — for a branch box a
-// quarter in from the left ("yes", its next_id) and a quarter in from the right ("no", its else_id).
-function journeyPart(node, side) {
+// quarter in from the left ("yes", its next_id) and a quarter in from the right ("no", its else_id). A router's
+// feet stand side by side, evenly: one per route in their order (side 'route', route: the route's id), then
+// "otherwise" (side 'else'); a route it does not have leaves from the middle.
+function journeyPart(node, side, route) {
+  if (node && node.kind === 'router') {
+    const routes = node.config && Array.isArray(node.config.routes) ? node.config.routes : [];
+    const i = side === 'else' ? routes.length : routes.findIndex(r => r && r.id === route);
+    return i < 0 ? 0.5 : Math.round((i + 0.5) / (routes.length + 1) * 10000) / 10000;
+  }
   return node && node.kind === 'branch' ? (side === 'else' ? 0.75 : 0.25) : 0.5;
 }
 // Every line of a workflow: from which box, along which of its lines ('next', or 'else' for a branch box's "no"),
-// to which box, and where on the foot it leaves.
+// to which box, and where on the foot it leaves. A router has no line of its own: one per route that leads
+// somewhere (side 'route', route: its id) and its "otherwise" (side 'else').
 function journeyEdges(flow) {
   const edges = [];
   for (const n of flow && Array.isArray(flow.nodes) ? flow.nodes : []) {
+    if (n.kind === 'router') {
+      for (const r of n.config && Array.isArray(n.config.routes) ? n.config.routes : []) if (r && r.next_id) edges.push({ from: n.id, to: r.next_id, side: 'route', route: r.id, part: journeyPart(n, 'route', r.id) });
+      if (n.else_id) edges.push({ from: n.id, to: n.else_id, side: 'else', part: journeyPart(n, 'else') });
+      continue;
+    }
     if (n.next_id) edges.push({ from: n.id, to: n.next_id, side: 'next', part: journeyPart(n, 'next') });
     if (n.kind === 'branch' && n.else_id) edges.push({ from: n.id, to: n.else_id, side: 'else', part: journeyPart(n, 'else') });
   }
@@ -260,6 +293,7 @@ async function loadJourney() {
   // and what the integrations do, as workflows nobody edits here (journey-fixed.js)
   const [data, list, fonio] = await Promise.all([api.get('/api/journey'), api.get('/api/pipelines'), api.get('/api/integrations/fonio'),
     typeof loadJourneyMail === 'function' ? loadJourneyMail() : null, typeof loadJourneyFixed === 'function' ? loadJourneyFixed() : null,
+    typeof loadJourneyPeople === 'function' ? loadJourneyPeople() : null,   // who a branch box can name (journey-branch.js)
     typeof loadJourneyStart === 'function' ? loadJourneyStart() : null]);   // the fields a start can choose from (journey-start.js)
   if (Array.isArray(list)) pipelines = list;   // the stages may have changed in Settings since they were last read
   const ok = !!data && !data.error && Array.isArray(data.flows);
@@ -300,14 +334,14 @@ function journeyBoxHtml(node) {
       </button>`;
   }
   const pause = node.kind === 'wait' ? journeyWaitLines(node) : null;   // a Wait box says its time, and has no "after …" of its own
-  const asks = node.kind === 'branch' ? journeyBranchLines(node) : null;   // a branch box says its question (journey-branch.js)
+  const asks = node.kind === 'branch' ? journeyBranchLines(node) : node.kind === 'router' ? journeyRouterLines(node) : null;   // a branch box says its question (journey-branch.js), a router its routes (journey-router.js)
   const raw = String(node.body || ''), flat = pause ? pause.text : asks ? asks.text : (node.kind === 'email' ? raw.replace(/<(style|script)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ') : raw).replace(/\s+/g, ' ').trim();
   const title = pause ? pause.title : asks ? asks.title : node.kind === 'move' ? tf('jr_move_to', { stage: journeyStageName(node.config && node.config.stage_id) || t('jr_stage_gone') }) : node.title;
   const mailOn = typeof journeyMail !== 'undefined' && !!journeyMail && !!journeyMail.connection;
   const warn = node.kind === 'call' && !journeyFonio ? t('jr_warn_fonio') : node.kind === 'email' && !mailOn ? t('jr_warn_mail') : '';
   return `<button type="button" class="jr-box" data-box="${Number(node.id)}" data-kind="${esc(node.kind)}">${head}
       <span class="jr-what"><span class="jr-meta"><b>${esc(t('jr_kind_' + node.kind))}</b>${pause ? '' : `<span>${esc(journeyWaitText(node.wait_minutes))}</span>`}</span>
-        <span class="jr-title">${esc(title)}</span>${flat ? `<span class="jr-text">${esc(flat.slice(0, 160))}</span>` : ''}${warn ? `<span class="jr-warn">${icon('alert')}${esc(warn)}</span>` : ''}</span>
+        <span class="jr-title">${esc(title)}</span>${node.kind === 'router' ? journeyRouterListHtml(node) : flat ? `<span class="jr-text">${esc(flat.slice(0, 160))}</span>` : ''}${warn ? `<span class="jr-warn">${icon('alert')}${esc(warn)}</span>` : ''}</span>
     </button>`;
 }
 
@@ -320,6 +354,7 @@ function journeyBoardHtml(flow) {
     ? `<button type="button" class="jr-out jr-side is-${side === 'else' ? 'no' : 'yes'}" data-out="${Number(id)}" data-side="${side}" aria-label="${esc(t(aria))}" title="${esc(t(aria))}"><span>${esc(t(word))}</span>${icon('plus')}</button>`
     : `<span class="jr-side is-${side === 'else' ? 'no' : 'yes'}">${esc(t(word))}</span>`);
   const out = n => (n.kind === 'branch' ? foot(n.id, 'next', 'jr_side_yes', 'jr_out_yes_aria') + foot(n.id, 'else', 'jr_side_no', 'jr_out_no_aria')
+    : n.kind === 'router' ? journeyRouterFeetHtml(n)   // one foot per route, and "otherwise" (journey-router.js)
     : journeyManage ? `<button type="button" class="jr-out" data-out="${Number(n.id)}" aria-label="${esc(t('jr_out_aria'))}" title="${esc(t('jr_out_aria'))}">${icon('plus')}</button>` : '');
   const nodes = (flow.nodes || []).map(n => `<div class="jr-node" data-node="${Number(n.id)}" style="left:${places[n.id].x}px;top:${places[n.id].y}px">${journeyBoxHtml(n)}${out(n)}</div>`).join('');
   return `<div class="jr-canvas${journeyManage ? ' can-edit' : ''}" style="width:${size.w}px;height:${size.h}px"><svg class="jr-lines" width="${size.w}" height="${size.h}" aria-hidden="true">${JOURNEY_ARROW}</svg>${nodes}</div>`;
@@ -339,7 +374,7 @@ function journeyLinesHtml(flow, rects) {
     const a = rects[e.from], b = rects[e.to];
     if (!a || !b) return '';
     const d = journeyLinePath(a, b, e.part), ends = `data-from="${Number(e.from)}" data-to="${Number(e.to)}" data-part="${e.part}"`;
-    return `<path class="jr-line" ${ends} d="${d}" marker-end="url(#jr-arrow)"/>${journeyManage ? `<path class="jr-line-hit" data-line="${Number(e.from)}" data-side="${e.side}" ${ends} d="${d}"/>` : ''}`;
+    return `<path class="jr-line" ${ends} d="${d}" marker-end="url(#jr-arrow)"/>${journeyManage ? `<path class="jr-line-hit" data-line="${Number(e.from)}" data-side="${e.side}"${e.side === 'route' ? ` data-route="${Number(e.route)}"` : ''} ${ends} d="${d}"/>` : ''}`;
   }).join('') + '<path class="jr-line jr-line-new" id="jr-line-new" d="" marker-end="url(#jr-arrow)"/>';
 }
 // The lines, from each box to the box after it — from a branch box to both.
@@ -414,9 +449,15 @@ function journeyStepText(r) {
   return `${word}${r && r.title ? `${word ? ': ' : ''}${r.title}` : ''}`;
 }
 // The engine's short word about a step as a sentence. What Google answered to a refused email is said as Google
-// said it; a word nobody knows is shown as it is.
+// said it; the routes a deal went down at a router are named by their numbers ('routes:1,3' — the numbers on the
+// router's feet at that moment); a word nobody knows is shown as it is.
 function journeyDetailText(d) {
-  return !d ? '' : Object.hasOwn(JOURNEY_DETAILS, d) ? t(JOURNEY_DETAILS[d]) : String(d).startsWith('rejected: ') ? tf('jr_d_rejected', { detail: String(d).slice(10) }) : String(d);
+  if (!d) return '';
+  if (Object.hasOwn(JOURNEY_DETAILS, d)) return t(JOURNEY_DETAILS[d]);
+  if (String(d).startsWith('rejected: ')) return tf('jr_d_rejected', { detail: String(d).slice(10) });
+  const went = /^routes:(\d+(?:,\d+)*)$/.exec(String(d));
+  if (went) return tf(went[1].includes(',') ? 'jr_d_routes' : 'jr_d_route', { list: went[1].split(',').join(', ') });
+  return String(d);
 }
 // The top of the "Activity" window: how many deals wait, are through or were stopped, and who waits for which step.
 // What happened so far stands under it: the workflow's record (journey-history.js).
@@ -521,16 +562,18 @@ async function deleteJourneyFlow() {
 }
 
 // "Add step": the kinds of step, under the "+" that was pressed. The new step goes in right behind that box — behind
-// a branch box on the side whose handle it was (side 'else': its "no" line).
-function openJourneyAdd(afterId, anchor, side) {
+// a branch box on the side whose handle it was (side 'else': its "no" line), behind a router on the route whose foot
+// it was (side 'route', route: its id) or on its "otherwise" (side 'else').
+function openJourneyAdd(afterId, anchor, side, route) {
   if (!journeyManage || !journeyFlow()) return;
-  const behind = side === 'else' ? { afterId, side: 'else' } : { afterId };
+  const behind = side === 'else' ? { afterId, side: 'else' } : side === 'route' ? { afterId, side: 'route', route: Number(route) } : { afterId };
   ui.menu(anchor, [{ heading: t('jr_add') }, ...JOURNEY_ACTIONS.map(kind => ({ label: t('jr_kind_' + kind), icon: JOURNEY_ICONS[kind], onSelect: () => openJourneyBox(null, { kind, ...behind }) }))]);
 }
-// Where a new step goes, as the route is told: behind which box, and on a branch box's "no" side when that was chosen.
+// Where a new step goes, as the route is told: behind which box, and on a branch box's "no" side — or a router's
+// "otherwise" — or on one route of a router, when that was chosen.
 function journeyBehind(fresh) {
   const after_id = fresh.afterId == null ? null : Number(fresh.afterId);
-  return fresh.side === 'else' ? { after_id, side: 'else' } : { after_id };
+  return fresh.side === 'else' ? { after_id, side: 'else' } : fresh.side === 'route' ? { after_id, side: 'route', route: Number(fresh.route) } : { after_id };
 }
 
 // An email's text as the preview frame shows it: every variable filled with a sample value (journey-vars.js) — or,
@@ -556,6 +599,7 @@ function openJourneyBox(id, fresh) {
   if (!journeyManage) return journeyBoxView(node);
   if ((node ? node.kind : fresh.kind) === 'wait') return openJourneyWait(node, fresh);
   if ((node ? node.kind : fresh.kind) === 'branch') return openJourneyBranch(node, fresh);   // its question and its window: journey-branch.js
+  if ((node ? node.kind : fresh.kind) === 'router') return openJourneyRouter(node, fresh);   // its routes: journey-router.js
 
   const kind = node ? node.kind : fresh.kind, move = kind === 'move', email = kind === 'email', wait = journeyWaitParts(node ? node.wait_minutes : 0);
   const start = { n: String(wait.n), unit: wait.unit, title: node ? node.title : kind === 'call' ? t('jr_call_default') : '', text: node ? String(node.body || '') : '',
@@ -678,6 +722,7 @@ function openJourneyWait(node, fresh) {
 // A box, to read: for everyone who may not change workflows, and for a start while its workflow runs (why: the line under it).
 function journeyBoxView(node, why = 'jr_err_forbidden') {
   const startBox = node.kind === 'start', lines = startBox ? journeyStartLines(node) : [], pause = node.kind === 'wait' ? journeyWaitLines(node) : node.kind === 'branch' ? journeyBranchLines(node) : null;   // a box that says itself in two lines
+  if (node.kind === 'router') return journeyRouterView(node, why);   // a router says its routes one by one (journey-router.js)
   const timed = !startBox && node.kind !== 'wait';   // a Wait box is its own time
   const title = startBox ? lines[0] : pause ? pause.title : node.kind === 'move' ? tf('jr_move_to', { stage: journeyStageName(node.config && node.config.stage_id) || t('jr_stage_gone') }) : node.title;
   return ui.modal({ title: t('jr_title_view'), size: 'md',
@@ -700,15 +745,15 @@ async function journeyDropBox(d) {
   const res = await journeySend(() => api.put(`/api/journey/nodes/${d.id}/place`, { x: d.nx, y: d.ny }));
   if (!res || res.error) ui.toast(journeyErrorText(res));
 }
-// d.side 'else': the line is a branch box's "no" line.
+// d.side 'else': the line is a branch box's "no" line or a router's "otherwise"; 'route': the line of a router's route d.route.
 async function journeyDropLine(d, targetId) {
   if (!targetId || targetId === d.id) return renderJourney();
-  const res = await journeySend(() => api.put(`/api/journey/nodes/${d.id}/next`, d.side === 'else' ? { next_id: targetId, side: 'else' } : { next_id: targetId }));
+  const res = await journeySend(() => api.put(`/api/journey/nodes/${d.id}/next`, d.side === 'else' ? { next_id: targetId, side: 'else' } : d.side === 'route' ? { next_id: targetId, side: 'route', route: Number(d.route) } : { next_id: targetId }));
   if (!res || res.error || !res.flow) { ui.toast(journeyErrorText(res)); return renderJourney(); }
   journeyApply(res.flow);
 }
-async function journeyRemoveLine(fromId, side) {
-  const res = await journeySend(() => api.put(`/api/journey/nodes/${fromId}/next`, side === 'else' ? { next_id: null, side: 'else' } : { next_id: null }));
+async function journeyRemoveLine(fromId, side, route) {
+  const res = await journeySend(() => api.put(`/api/journey/nodes/${fromId}/next`, side === 'else' ? { next_id: null, side: 'else' } : side === 'route' ? { next_id: null, side: 'route', route: Number(route) } : { next_id: null }));
   if (!res || res.error || !res.flow) return ui.toast(journeyErrorText(res));
   journeyApply(res.flow);
 }
@@ -726,7 +771,7 @@ function journeyDragBegin(d) {
     d.el.classList.add('is-dragging');
   } else {
     const flow = journeyFlow();
-    d.part = journeyPart(flow && flow.nodes.find(n => n.id === d.id), d.side);
+    d.part = journeyPart(flow && flow.nodes.find(n => n.id === d.id), d.side, d.route);
     d.line = d.canvas.querySelector('#jr-line-new');
   }
   return true;
@@ -765,7 +810,7 @@ document.addEventListener('pointerdown', e => {
   if (!canvas) return;
   const out = e.target.closest('[data-out]'), node = e.target.closest('[data-node]');
   const held = { sx: e.clientX, sy: e.clientY, moved: false, canvas, frame: 0 };
-  if (out) journeyDrag = { ...held, kind: 'line', id: Number(out.dataset.out), side: out.dataset.side === 'else' ? 'else' : 'next' };
+  if (out) journeyDrag = { ...held, kind: 'line', id: Number(out.dataset.out), side: out.dataset.side === 'else' ? 'else' : out.dataset.side === 'route' ? 'route' : 'next', route: Number(out.dataset.route) || null };
   else if (node) journeyDrag = { ...held, kind: 'box', id: Number(node.dataset.node), el: node };
 });
 document.addEventListener('pointermove', e => {
@@ -809,7 +854,7 @@ document.addEventListener('click', e => {
   if (!board) return;
   if (Date.now() - journeyDragEnd < 350) return;   // the click that ends a drag
   const add = e.target.closest('[data-out]'), box = e.target.closest('[data-box]'), line = e.target.closest('[data-line]');
-  if (add) openJourneyAdd(Number(add.dataset.out), add, add.dataset.side);
+  if (add) openJourneyAdd(Number(add.dataset.out), add, add.dataset.side, add.dataset.route);
   else if (box) openJourneyBox(Number(box.dataset.box));
-  else if (line && journeyManage) ui.menu({ x: e.clientX, y: e.clientY }, [{ label: t('jr_line_remove'), icon: 'x', danger: true, onSelect: () => journeyRemoveLine(Number(line.dataset.line), line.dataset.side) }]);
+  else if (line && journeyManage) ui.menu({ x: e.clientX, y: e.clientY }, [{ label: t('jr_line_remove'), icon: 'x', danger: true, onSelect: () => journeyRemoveLine(Number(line.dataset.line), line.dataset.side, line.dataset.route) }]);
 });

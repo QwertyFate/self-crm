@@ -781,6 +781,10 @@ async function initDb() {
     )
   `);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS note_templates_name ON note_templates (workspace_id, name_key)`);
+  // A template is a text or a QUESTIONNAIRE (NOTE_EDITOR_CHANGES Part 8, 2026-11-20). questions: NULL for a text; for
+  // a questionnaire the list of its questions in their order, ["What is the budget?", …]. content then holds the
+  // same questions as plain text, so a row always has a text.
+  await pool.query(`ALTER TABLE note_templates ADD COLUMN IF NOT EXISTS questions JSONB`);
 
   // Customer Journey (CUSTOMER_JOURNEY_CHANGES Part 3, 2026-11-19; routes/journey.js): the workspace's WORKFLOWS.
   // A workflow (journey_flows) is a chain of boxes (journey_nodes), one action per box. kind: start (one per
@@ -884,6 +888,12 @@ async function initDb() {
   await pool.query(`ALTER TABLE journey_runs ADD COLUMN IF NOT EXISTS event_key TEXT NOT NULL DEFAULT ''`);
   await pool.query(`ALTER TABLE journey_runs DROP CONSTRAINT IF EXISTS journey_runs_flow_id_deal_id_key`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS journey_runs_once_idx ON journey_runs (flow_id, deal_id, event_key)`);
+  // A deal on several routes of a router at once (CUSTOMER_JOURNEY_CHANGES Part 23, utils/journey-run.js): the row
+  // the start made stands for the deal (root_id NULL); every further route it goes down is a row of its own that
+  // names that row (root_id) and is deleted when the route is through. Its event_key is the root's with '~' and a
+  // random tail, so the index above holds for it too.
+  await pool.query(`ALTER TABLE journey_runs ADD COLUMN IF NOT EXISTS root_id INTEGER REFERENCES journey_runs(id) ON DELETE CASCADE`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS journey_runs_root_idx ON journey_runs (root_id) WHERE root_id IS NOT NULL`);
   // What a start that waits for a CHANGE last saw (who a deal is assigned to, a field's value, a task's status …):
   // the CRM keeps no history of those, so the value is remembered per workflow and thing (subject: the id of the
   // deal, contact, meeting or task). n counts its changes (the key of a change), since is when it last changed.
