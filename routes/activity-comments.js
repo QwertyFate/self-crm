@@ -14,6 +14,13 @@
    loosely — the same @ab can notify in one place and not the other. Worth
    unifying if you touch mentions.
 
+   WHO SEES A COMMENT. A comment follows its activity, and the activity follows
+   its deal or contact (utils/visibility.js): when the workspace holds members
+   to what is assigned to them, a member gets no comments of a note they cannot
+   see (an empty tree), cannot comment on it (404 'Activity not found', as for
+   a note that does not exist) and cannot delete a comment under it (404).
+   Owners, admins and workspaces without the switch run the statements unchanged.
+
    ENDPOINTS
      GET    /?activity_id=    required; returns the tree
      POST   /                 { activity_id, parent_id?, content }
@@ -24,8 +31,16 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const visibility  = require('../utils/visibility');    // members held to what is assigned to them
 
 router.use(requireAuth);
+
+// For a held member: "and the activity `col` points at is one this member sees". Nothing for everyone else.
+function onSeenActivity(req, params, col) {
+  if (!visibility.restricted(req)) return '';
+  params.push(req.userId);
+  return ` AND EXISTS (SELECT 1 FROM activities va WHERE va.id = ${col} AND ${visibility.rules.linked({ deal: 'va.deal_id', contact: 'va.contact_id' }, params.length)})`;
+}
 
 async function notifyMentionsInComment(workspaceId, actorId, actorName, content, commentId, activityId) {
   try {
@@ -47,7 +62,7 @@ async function notifyMentionsInComment(workspaceId, actorId, actorName, content,
     if (users.length === 0) return;
 
     const { rows: [activity] } = await pool.query(`
-      SELECT a.contact_id, c.name AS contact_name
+      SELECT a.contact_id, a.deal_id, c.name AS contact_name
       FROM activities a
       LEFT JOIN contacts c ON c.id = a.contact_id
       WHERE a.id = $1
@@ -56,14 +71,10 @@ async function notifyMentionsInComment(workspaceId, actorId, actorName, content,
     const preview = plain.replace(/@\w+/g, '').trim().slice(0, 100).replace(/\s+\S*$/, '') || 'a comment';
     const contactName = activity?.contact_name || 'a contact';
 
-    let dealId = null;
-    if (activity?.contact_id) {
-      const { rows: deals } = await pool.query(
-        'SELECT id FROM deals WHERE contact_id = $1 AND workspace_id = $2 ORDER BY updated_at DESC LIMIT 1',
-        [activity.contact_id, workspaceId]
-      );
-      if (deals.length) dealId = deals[0].id;
-    }
+    // The notification points at what the commented note hangs on: its own deal, else its contact. It used to point at
+    // the contact's most recently updated deal, which can be somebody else's: the bell of a member held to their
+    // own (routes/notifications.js) then hid a mention about a note they see, or showed one about a note they do not.
+    const dealId = activity?.deal_id || null;
 
     const body = `In ${contactName}: "${preview}"`;
 
@@ -91,13 +102,14 @@ router.get('/', async (req, res, next) => {
     const activityId = parseInt(req.query.activity_id);
     if (!activityId) return res.status(400).json({ error: 'activity_id required' });
 
+    const params = [activityId, req.workspaceId];
     const { rows } = await pool.query(`
       SELECT ac.*, u.name AS created_by_name
       FROM activity_comments ac
       LEFT JOIN users u ON u.id = ac.created_by
-      WHERE ac.activity_id = $1 AND ac.workspace_id = $2
+      WHERE ac.activity_id = $1 AND ac.workspace_id = $2${onSeenActivity(req, params, 'ac.activity_id')}
       ORDER BY ac.created_at ASC
-    `, [activityId, req.workspaceId]);
+    `, params);
 
     const map = {};
     const roots = [];
@@ -122,9 +134,10 @@ router.post('/', async (req, res, next) => {
     if (!activity_id) return res.status(400).json({ error: 'activity_id required' });
     if (!content?.trim()) return res.status(400).json({ error: 'Content required' });
 
+    const found = [activity_id, req.workspaceId];
     const { rows: [activity] } = await pool.query(
-      'SELECT id FROM activities WHERE id=$1 AND workspace_id=$2',
-      [activity_id, req.workspaceId]
+      `SELECT id FROM activities WHERE id=$1 AND workspace_id=$2${visibility.linked(req, found, { deal: 'activities.deal_id', contact: 'activities.contact_id' })}`,
+      found
     );
     if (!activity) return res.status(404).json({ error: 'Activity not found' });
 
@@ -150,9 +163,10 @@ router.post('/', async (req, res, next) => {
 
 router.delete('/:id', async (req, res, next) => {
   try {
+    const params = [req.params.id, req.workspaceId];
     const result = await pool.query(
-      'DELETE FROM activity_comments WHERE id=$1 AND workspace_id=$2',
-      [req.params.id, req.workspaceId]
+      `DELETE FROM activity_comments WHERE id=$1 AND workspace_id=$2${onSeenActivity(req, params, 'activity_comments.activity_id')}`,
+      params
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });

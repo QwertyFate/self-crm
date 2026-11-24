@@ -14,6 +14,15 @@
    THE ENGINE  every upload fires dokument.hinzugefuegt (utils/engine.js), and a
    'vertrag' document makes vertrag.unterschrieben carry a real dokument_url.
 
+   WHO SEES A DOCUMENT. When the workspace holds members to what is assigned to
+   them (utils/visibility.js): the contact must be one the member sees (404
+   otherwise, in every handler — ownContact), and on a contact they see a
+   document bound to a deal follows that deal, so somebody else's deal's
+   contract is left out of the list and is a 404 to download or delete. An
+   upload may only be bound to a deal the member sees (answered like a deal
+   that is not this contact's). Owners, admins and workspaces without the
+   switch run the statements unchanged.
+
    ENDPOINTS (session; every query scoped to the workspace)
      GET    /:contactId/documents                 list (+ uploader name)
      POST   /:contactId/documents                 multipart "file"; fields typ (vertrag|aufnahme|sonstiges), deal_id
@@ -30,6 +39,7 @@ const storage     = require('../storage');
 const engine      = require('../utils/engine');
 const baseUrl     = require('../utils/base-url');
 const { DOCUMENT_TYPES } = require('../utils/kunde');
+const visibility  = require('../utils/visibility');    // members held to what is assigned to them
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_BYTES } });
@@ -38,11 +48,15 @@ router.use(requireAuth);
 
 const intId = v => (/^\d+$/.test(String(v)) ? Number(v) : null);
 
-// The contact must be in the caller's workspace — every handler starts here.
+// What a document hangs on, as a bare statement on its table names the columns.
+const ON_DOCUMENTS = { deal: 'contact_documents.deal_id', contact: 'contact_documents.contact_id' };
+
+// The contact must be in the caller's workspace, and one the caller sees — every handler starts here.
 async function ownContact(req, res) {
   const id = intId(req.params.contactId);
   if (id === null) { res.status(400).json({ error: 'Invalid contact id' }); return null; }
-  const { rows: [c] } = await pool.query('SELECT id, contact_type FROM contacts WHERE id=$1 AND workspace_id=$2', [id, req.workspaceId]);
+  const params = [id, req.workspaceId];
+  const { rows: [c] } = await pool.query(`SELECT id, contact_type FROM contacts WHERE id=$1 AND workspace_id=$2${visibility.contacts(req, params, 'contacts')}`, params);
   if (!c) { res.status(404).json({ error: 'Not found' }); return null; }
   return c;
 }
@@ -50,13 +64,14 @@ async function ownContact(req, res) {
 router.get('/:contactId/documents', async (req, res, next) => {
   try {
     const c = await ownContact(req, res); if (!c) return;
+    const params = [c.id, req.workspaceId];
     const { rows } = await pool.query(
       `SELECT d.id, d.contact_id, d.deal_id, d.typ, d.file_name, d.file_size, d.file_type, d.uploaded_by, d.created_at, u.name AS uploaded_by_name
          FROM contact_documents d
          LEFT JOIN users u ON u.id = d.uploaded_by
-        WHERE d.contact_id = $1 AND d.workspace_id = $2
+        WHERE d.contact_id = $1 AND d.workspace_id = $2${visibility.linked(req, params, { deal: 'd.deal_id', contact: 'd.contact_id' })}
         ORDER BY d.created_at DESC, d.id DESC`,
-      [c.id, req.workspaceId]
+      params
     );
     res.json(rows);
   } catch (e) { next(e); }
@@ -82,7 +97,8 @@ router.post('/:contactId/documents', (req, res, next) => {
     if (req.body?.deal_id != null && String(req.body.deal_id) !== '') {
       dealId = intId(req.body.deal_id);
       if (dealId === null) return res.status(400).json({ error: 'Invalid deal id' });
-      const { rows: [d] } = await pool.query('SELECT id FROM deals WHERE id=$1 AND workspace_id=$2 AND contact_id=$3', [dealId, req.workspaceId, c.id]);
+      const params = [dealId, req.workspaceId, c.id];
+      const { rows: [d] } = await pool.query(`SELECT id FROM deals WHERE id=$1 AND workspace_id=$2 AND contact_id=$3${visibility.deals(req, params, 'deals')}`, params);
       if (!d) return res.status(400).json({ error: 'The deal does not belong to this contact' });
     }
 
@@ -105,8 +121,9 @@ router.get('/:contactId/documents/:id/download', async (req, res, next) => {
     const c = await ownContact(req, res); if (!c) return;
     const id = intId(req.params.id);
     if (id === null) return res.status(400).json({ error: 'Invalid document id' });
+    const params = [id, c.id, req.workspaceId];
     const { rows: [d] } = await pool.query(
-      'SELECT storage_path FROM contact_documents WHERE id=$1 AND contact_id=$2 AND workspace_id=$3', [id, c.id, req.workspaceId]
+      `SELECT storage_path FROM contact_documents WHERE id=$1 AND contact_id=$2 AND workspace_id=$3${visibility.linked(req, params, ON_DOCUMENTS)}`, params
     );
     if (!d) return res.status(404).json({ error: 'Not found' });
     const url = await storage.signedDocumentUrl(d.storage_path, 600);
@@ -119,8 +136,9 @@ router.delete('/:contactId/documents/:id', async (req, res, next) => {
     const c = await ownContact(req, res); if (!c) return;
     const id = intId(req.params.id);
     if (id === null) return res.status(400).json({ error: 'Invalid document id' });
+    const params = [id, c.id, req.workspaceId];
     const { rows: [d] } = await pool.query(
-      'SELECT id, storage_path FROM contact_documents WHERE id=$1 AND contact_id=$2 AND workspace_id=$3', [id, c.id, req.workspaceId]
+      `SELECT id, storage_path FROM contact_documents WHERE id=$1 AND contact_id=$2 AND workspace_id=$3${visibility.linked(req, params, ON_DOCUMENTS)}`, params
     );
     if (!d) return res.status(404).json({ error: 'Not found' });
     await storage.deleteDocument(d.storage_path);

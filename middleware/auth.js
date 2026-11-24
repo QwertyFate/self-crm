@@ -13,6 +13,10 @@
           req.userId       who is asking
           req.workspaceId  THE TENANT BOUNDARY — every query must filter on it
           req.userRole     'owner' | 'admin' | 'member', for role checks
+          req.ownOnly      true when this caller is a MEMBER of a workspace
+                           whose owner switched on "members only see what is
+                           assigned to them" (workspaces.members_own_only).
+                           utils/visibility.js turns it into SQL.
           req.userTimezone users.timezone, what a due/event time this user
                            types is stamped with (routes/tasks.js, activities.js).
                            Never undefined: the default zone when none is set.
@@ -34,9 +38,10 @@ module.exports = async function requireAuth(req, res, next) {
     if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
 
     const { rows: [membership] } = await pool.query(
-      `SELECT uw.role, uw.workspace_id, u.timezone
+      `SELECT uw.role, uw.workspace_id, u.timezone, w.members_own_only
        FROM user_workspaces uw
        JOIN users u ON u.id = uw.user_id
+       JOIN workspaces w ON w.id = uw.workspace_id
        WHERE uw.user_id = $1 AND uw.workspace_id = $2`,
       [req.session.userId, req.session.workspaceId]
     );
@@ -49,6 +54,7 @@ module.exports = async function requireAuth(req, res, next) {
     req.userId      = req.session.userId;
     req.workspaceId = membership.workspace_id;
     req.userRole    = membership.role;
+    req.ownOnly     = membership.role === 'member' && membership.members_own_only === true;
     req.userTimezone = membership.timezone || 'Europe/Berlin';
     next();
   } catch (e) {

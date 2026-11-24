@@ -33,6 +33,16 @@
    DROPS keys it does not know (which is why guide.js's guide_seen never
    persists).
 
+   WHOSE ROWS ARE COUNTED. When the workspace holds members to the deals and
+   contacts assigned to them (utils/visibility.js), such a member's page shows
+   THEIR numbers: every statement in /summary and /trend that counts, sums or
+   lists deals, contacts or tasks carries the rule, so nothing of anybody
+   else's is counted, summed, charted or named. HOW a number is worked out is
+   not touched — only whose rows go in. "Deals by owner" still lists every
+   member of the workspace (who is in the team is no secret); the member's own
+   row carries their deals, everybody else's reads 0. Owners, admins and
+   workspaces without the switch run the statements unchanged.
+
    ENDPOINTS
      GET   /summary?months=3|6|12&pipeline_id=
      GET   /trend?period=week|month|year
@@ -44,8 +54,15 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const visibility     = require('../utils/visibility');        // members held to what is assigned to them
+const taskVisibility = require('../utils/task-visibility');   // … and the tasks that hang on it
 
 router.use(requireAuth);
+
+// One statement with its parameters: `text(params)` writes the SQL and may put a visibility piece into it, which
+// pushes the member's id as the LAST parameter — so the piece is asked for where the statement's own placeholders
+// end. For whoever is not held to their own the pieces are '' and the statement is exactly the one that shipped.
+const ask = (params, text) => pool.query(text(params), params);
 
 // The window the KPI deltas compare. Only 3, 6 and 12 are offered (the reference's ranges);
 // anything else falls back to 6 so a hand-written query string can never reach SQL.
@@ -76,12 +93,15 @@ router.get('/summary', async (req, res, next) => {
     const wonIds     = (config.won_stage_ids  || []).map(Number);
     const lostIds    = (config.lost_stage_ids || []).map(Number);
     const valueField = safeValueField(config.value_field, await dealFieldKeys(wid));
+    // Whose rows: '' for everyone but a member held to their own (see the header).
+    const ownDeals    = (params, alias = 'deals')    => visibility.deals(req, params, alias);
+    const ownContacts = (params, alias = 'contacts') => visibility.contacts(req, params, alias);
 
-    const { rows: [{ total_contacts }] } = await pool.query(
-      `SELECT COUNT(*) AS total_contacts FROM contacts WHERE workspace_id=$1`, [wid]
+    const { rows: [{ total_contacts }] } = await ask([wid], p =>
+      `SELECT COUNT(*) AS total_contacts FROM contacts WHERE workspace_id=$1${ownContacts(p)}`
     );
-    const { rows: [{ new_contacts }] } = await pool.query(
-      `SELECT COUNT(*) AS new_contacts FROM contacts WHERE workspace_id=$1 AND created_at >= date_trunc('month', NOW())`, [wid]
+    const { rows: [{ new_contacts }] } = await ask([wid], p =>
+      `SELECT COUNT(*) AS new_contacts FROM contacts WHERE workspace_id=$1 AND created_at >= date_trunc('month', NOW())${ownContacts(p)}`
     );
 
     let valExpr = 'NULL::numeric';
@@ -91,9 +111,9 @@ router.get('/summary', async (req, res, next) => {
       valExpr = `(custom_data->>'${valueField}')::numeric`;
     }
 
-    const { rows: dealRows } = await pool.query(
+    const { rows: dealRows } = await ask([wid], p =>
       `SELECT stage_id, COUNT(*) AS cnt, COALESCE(SUM(${valExpr}),0) AS val
-       FROM deals WHERE workspace_id=$1 GROUP BY stage_id`, [wid]
+       FROM deals WHERE workspace_id=$1${ownDeals(p)} GROUP BY stage_id`
     );
 
     let open_deals = 0, won_deals = 0, lost_deals = 0;
@@ -118,43 +138,43 @@ router.get('/summary', async (req, res, next) => {
     // Deals created in the window, and in the window before it. created_at is the only date a
     // deal carries, so these two are the only metrics that can honestly be compared over time —
     // won/lost/open are current-stage snapshots until a deal records when it was closed.
-    const { rows: [{ new_deals }] } = await pool.query(
+    const { rows: [{ new_deals }] } = await ask([wid, months], p =>
       `SELECT COUNT(*) AS new_deals FROM deals
-       WHERE workspace_id=$1 AND created_at >= NOW() - ($2 || ' months')::interval`, [wid, months]
+       WHERE workspace_id=$1 AND created_at >= NOW() - ($2 || ' months')::interval${ownDeals(p)}`
     );
-    const { rows: [{ prev_new_deals }] } = await pool.query(
+    const { rows: [{ prev_new_deals }] } = await ask([wid, months * 2, months], p =>
       `SELECT COUNT(*) AS prev_new_deals FROM deals
        WHERE workspace_id=$1 AND created_at >= NOW() - ($2 || ' months')::interval
-                            AND created_at <  NOW() - ($3 || ' months')::interval`, [wid, months * 2, months]
+                            AND created_at <  NOW() - ($3 || ' months')::interval${ownDeals(p)}`
     );
 
     let avg_value = null, avg_deal_size = null, prev_avg_deal_size = null, cohort_deals = 0;
     if (valueField) {
-      const { rows: [{ av }] } = await pool.query(
-        `SELECT AVG(${valExpr}) AS av FROM deals WHERE workspace_id=$1 AND ${valExpr} IS NOT NULL`, [wid]
+      const { rows: [{ av }] } = await ask([wid], p =>
+        `SELECT AVG(${valExpr}) AS av FROM deals WHERE workspace_id=$1 AND ${valExpr} IS NOT NULL${ownDeals(p)}`
       );
       avg_value = av ? parseFloat(av) : null;
-      const { rows: [cur] } = await pool.query(
+      const { rows: [cur] } = await ask([wid, months], p =>
         `SELECT AVG(${valExpr}) AS avg_deal_size, COUNT(*) AS n FROM deals
-         WHERE workspace_id=$1 AND ${valExpr} IS NOT NULL AND created_at >= NOW() - ($2 || ' months')::interval`, [wid, months]
+         WHERE workspace_id=$1 AND ${valExpr} IS NOT NULL AND created_at >= NOW() - ($2 || ' months')::interval${ownDeals(p)}`
       );
       avg_deal_size = cur.avg_deal_size ? parseFloat(cur.avg_deal_size) : null;
       cohort_deals  = parseInt(cur.n) || 0;
-      const { rows: [prev] } = await pool.query(
+      const { rows: [prev] } = await ask([wid, months * 2, months], p =>
         `SELECT AVG(${valExpr}) AS prev_avg_deal_size FROM deals
          WHERE workspace_id=$1 AND ${valExpr} IS NOT NULL
            AND created_at >= NOW() - ($2 || ' months')::interval
-           AND created_at <  NOW() - ($3 || ' months')::interval`, [wid, months * 2, months]
+           AND created_at <  NOW() - ($3 || ' months')::interval${ownDeals(p)}`
       );
       prev_avg_deal_size = prev.prev_avg_deal_size ? parseFloat(prev.prev_avg_deal_size) : null;
     }
 
-    const { rows: [tk] } = await pool.query(
+    const { rows: [tk] } = await ask([wid], p =>
       `SELECT
          COUNT(*)                                                        AS total_tasks,
          COUNT(*) FILTER (WHERE status='done')                          AS done_tasks,
          COUNT(*) FILTER (WHERE due_date < NOW() AND status != 'done')  AS overdue_tasks
-       FROM tasks WHERE workspace_id=$1`, [wid]
+       FROM tasks WHERE workspace_id=$1${taskVisibility.tasks(req, p, 'tasks')}`
     );
 
     const pipelineValExpr = valueField === 'value'
@@ -162,20 +182,21 @@ router.get('/summary', async (req, res, next) => {
       : valueField
         ? `(d.custom_data->>'${valueField}')::numeric`
         : '0';
-    const { rows: by_pipeline } = await pool.query(
+    // the rule sits in the JOIN, not the WHERE: a pipeline with none of the member's deals still gets its row (0)
+    const { rows: by_pipeline } = await ask([wid], q =>
       `SELECT p.name AS pipeline_name,
               COUNT(d.id) AS cnt,
               COALESCE(SUM(${pipelineValExpr}),0) AS val
        FROM pipelines p
-       LEFT JOIN deals d ON d.pipeline_id = p.id AND d.workspace_id = p.workspace_id
+       LEFT JOIN deals d ON d.pipeline_id = p.id AND d.workspace_id = p.workspace_id${ownDeals(q, 'd')}
        WHERE p.workspace_id=$1
        GROUP BY p.id, p.name, p.position
-       ORDER BY p.position`, [wid]
+       ORDER BY p.position`
     );
 
     // The reference's "Deals by owner": every member of the workspace, including anyone with
     // nothing in the window, counted over the deals they own that were created in it.
-    const { rows: ownerRows } = await pool.query(
+    const { rows: ownerRows } = await ask([wid, wonIds, lostIds, months], p =>
       `SELECT u.id, u.name,
               COUNT(d.id)                                                        AS cnt,
               COUNT(d.id) FILTER (WHERE d.stage_id = ANY($2::int[]))             AS won_count,
@@ -184,10 +205,10 @@ router.get('/summary', async (req, res, next) => {
        FROM user_workspaces uw
        JOIN users u ON u.id = uw.user_id
        LEFT JOIN deals d ON d.assigned_to = u.id AND d.workspace_id = uw.workspace_id
-            AND d.created_at >= NOW() - ($4 || ' months')::interval
+            AND d.created_at >= NOW() - ($4 || ' months')::interval${ownDeals(p, 'd')}
        WHERE uw.workspace_id = $1
        GROUP BY u.id, u.name
-       ORDER BY cnt DESC, u.name ASC`, [wid, wonIds, lostIds, months]
+       ORDER BY cnt DESC, u.name ASC`
     );
     const by_owner = ownerRows.map(r => {
       const deals = parseInt(r.cnt) || 0, won = parseInt(r.won_count) || 0, lost = parseInt(r.lost_count) || 0;
@@ -209,7 +230,7 @@ router.get('/summary', async (req, res, next) => {
     // The reference's "Top open deals": the largest deals still in play. Probability and
     // expected close (its other two columns) have no column on this app's deals.
     const closedIds = [...wonIds, ...lostIds];
-    const { rows: topRows } = await pool.query(
+    const { rows: topRows } = await ask([wid, closedIds], p =>
       `SELECT d.id, d.title, ${valExpr} AS val,
               c.name AS contact_name, c.company AS contact_company,
               ps.name AS stage_name, ps.color AS stage_color,
@@ -219,9 +240,9 @@ router.get('/summary', async (req, res, next) => {
        LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
        LEFT JOIN users           u  ON u.id  = d.assigned_to
        WHERE d.workspace_id = $1
-         AND (d.stage_id IS NULL OR NOT (d.stage_id = ANY($2::int[])))
+         AND (d.stage_id IS NULL OR NOT (d.stage_id = ANY($2::int[])))${ownDeals(p, 'd')}
        ORDER BY val DESC NULLS LAST, d.created_at DESC
-       LIMIT 8`, [wid, closedIds]
+       LIMIT 8`
     );
     const top_open_deals = topRows.map(r => ({
       id: r.id, title: r.title,
@@ -235,15 +256,15 @@ router.get('/summary', async (req, res, next) => {
     // no closed-at timestamp on a deal, so the honest equivalent is the creation cohort: of the
     // deals created in month M, what share of the ones that have since been decided were won.
     // Months with nothing decided report null rather than a misleading 0 %.
-    const { rows: rateRows } = await pool.query(
+    const { rows: rateRows } = await ask([wid, wonIds, lostIds, months], p =>
       `SELECT to_char(date_trunc('month', created_at), 'YYYY-MM')       AS ym,
               COUNT(*)                                                  AS created,
               COUNT(*) FILTER (WHERE stage_id = ANY($2::int[]))         AS won,
               COUNT(*) FILTER (WHERE stage_id = ANY($3::int[]))         AS lost
        FROM deals
        WHERE workspace_id=$1
-         AND created_at >= date_trunc('month', NOW() - (($4::int - 1) || ' months')::interval)
-       GROUP BY 1 ORDER BY 1`, [wid, wonIds, lostIds, months]
+         AND created_at >= date_trunc('month', NOW() - (($4::int - 1) || ' months')::interval)${ownDeals(p)}
+       GROUP BY 1 ORDER BY 1`
     );
     const rateBy = new Map(rateRows.map(r => [r.ym, r]));
     const nowMonth = new Date();
@@ -276,18 +297,18 @@ router.get('/summary', async (req, res, next) => {
         `SELECT id, name, color FROM pipeline_stages
          WHERE workspace_id=$1 AND pipeline_id=$2 ORDER BY position`, [wid, funnelPipeId]
       );
-      const { rows: fnCohort } = await pool.query(
+      const { rows: fnCohort } = await ask([wid, funnelPipeId, months], p =>
         `SELECT stage_id, COUNT(*) AS cnt, COALESCE(SUM(${valExpr}),0) AS val
          FROM deals
          WHERE workspace_id=$1 AND pipeline_id=$2
-           AND created_at >= NOW() - ($3 || ' months')::interval
-         GROUP BY stage_id`, [wid, funnelPipeId, months]
+           AND created_at >= NOW() - ($3 || ' months')::interval${ownDeals(p)}
+         GROUP BY stage_id`
       );
-      const { rows: fnNow } = await pool.query(
+      const { rows: fnNow } = await ask([wid, funnelPipeId], p =>
         `SELECT d.stage_id, COUNT(*) AS cnt, COALESCE(SUM(${pipelineValExpr}),0) AS val
          FROM deals d
-         WHERE d.workspace_id=$1 AND d.pipeline_id=$2
-         GROUP BY d.stage_id`, [wid, funnelPipeId]
+         WHERE d.workspace_id=$1 AND d.pipeline_id=$2${ownDeals(p, 'd')}
+         GROUP BY d.stage_id`
       );
       const cohortCnt = new Map(fnCohort.map(r => [Number(r.stage_id), parseInt(r.cnt) || 0]));
       const nowAt     = new Map(fnNow.map(r => [Number(r.stage_id), r]));
@@ -392,18 +413,20 @@ router.get('/trend', async (req, res, next) => {
       ) AS gs(p)
       LEFT JOIN (
         SELECT date_trunc('${p.trunc}', created_at) AS p, COUNT(*) AS cnt
-        FROM {TABLE} WHERE workspace_id=$1
+        FROM {TABLE} WHERE workspace_id=$1{OWN}
           AND created_at >= date_trunc('${p.trunc}', NOW() - INTERVAL '${p.interval}')
         GROUP BY 1
       ) t ON t.p = gs.p
       ORDER BY gs.p`;
 
-    const { rows: contacts } = await pool.query(seriesSQL.replace('{TABLE}', 'contacts'), [wid]);
-    const { rows: deals }    = await pool.query(seriesSQL.replace('{TABLE}', 'deals'),    [wid]);
+    // {OWN}: for a member held to their own, only the contacts and deals they see are charted ('' for everyone else).
+    // A function, not a string: a replacement STRING would read the piece's own $2 as a pattern.
+    const { rows: contacts } = await ask([wid], q => seriesSQL.replace('{TABLE}', 'contacts').replace('{OWN}', () => visibility.contacts(req, q, 'contacts')));
+    const { rows: deals }    = await ask([wid], q => seriesSQL.replace('{TABLE}', 'deals').replace('{OWN}', () => visibility.deals(req, q, 'deals')));
 
     let value_trend = null;
     if (valueField) {
-      const { rows } = await pool.query(`
+      const { rows } = await ask([wid], q => `
         SELECT gs.p::date AS period, COALESCE(t.val, 0) AS val
         FROM generate_series(
           date_trunc('${p.trunc}', NOW() - INTERVAL '${p.interval}'),
@@ -412,11 +435,11 @@ router.get('/trend', async (req, res, next) => {
         ) AS gs(p)
         LEFT JOIN (
           SELECT date_trunc('${p.trunc}', created_at) AS p, COALESCE(SUM(${valExpr}),0) AS val
-          FROM deals WHERE workspace_id=$1
+          FROM deals WHERE workspace_id=$1${visibility.deals(req, q, 'deals')}
             AND created_at >= date_trunc('${p.trunc}', NOW() - INTERVAL '${p.interval}')
           GROUP BY 1
         ) t ON t.p = gs.p
-        ORDER BY gs.p`, [wid]);
+        ORDER BY gs.p`);
       value_trend = rows;
     }
 

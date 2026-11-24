@@ -32,7 +32,7 @@
 
    FUNCTION MAP
      shell        switchSettingsTab, loadSettings, saveWorkspaceName,
-                  deleteWorkspace
+                  deleteWorkspace, saveOwnOnly
      pipelines    renderPipelinesSettings, openNewPipelineModal, editPipeline,
                   saveNewPipeline, deletePipeline, addPipelineStage,
                   editPipelineStage, deletePipelineStage,
@@ -122,6 +122,10 @@ async function loadSettings() {
     inviteRoleSelect.querySelectorAll('option').forEach(o => { o.textContent = roleLabel(o.value); });
   }
   if (canManageInvites) loadInvites(inviteRows);
+  // "Members only see what is assigned to them": the same people who manage invites set it.
+  document.getElementById('visibility-card')?.classList.toggle('hidden', !canManageInvites);
+  const ownOnlyEl = document.getElementById('own-only-toggle');
+  if (ownOnlyEl) ownOnlyEl.checked = currentWorkspace?.members_own_only === true;
   if (isOwner) {
     const wsCard = document.getElementById('workspace-name-card');
     if (wsCard) wsCard.classList.remove('hidden');
@@ -152,6 +156,24 @@ async function saveWorkspaceName() {
   currentWorkspace.name = res.name; setSidebarWorkspace(res.name);
   msgEl.textContent = t('msg_saved'); msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden');
   setTimeout(() => msgEl.classList.add('hidden'), 2500);
+}
+
+// The tick box saves itself. A refusal puts the box back, so it never shows a state the server does not have.
+async function saveOwnOnly() {
+  const box = document.getElementById('own-only-toggle'), msgEl = document.getElementById('own-only-msg');
+  if (!box) return;
+  const own_only = box.checked;
+  box.disabled = true;
+  const res = await api.patch('/api/workspace/member-visibility', { own_only });
+  box.disabled = false;
+  if (!res || res.error) {
+    box.checked = !own_only;
+    if (msgEl) { msgEl.textContent = t('own_only_not_saved'); msgEl.className = 'workspace-name-msg error'; msgEl.classList.remove('hidden'); }
+    return;
+  }
+  currentWorkspace.members_own_only = own_only;
+  if (msgEl) { msgEl.textContent = t('msg_saved'); msgEl.className = 'workspace-name-msg success'; msgEl.classList.remove('hidden'); }
+  setTimeout(() => msgEl?.classList.add('hidden'), 2500);
 }
 
 function renderPipelinesSettings() {
@@ -217,9 +239,12 @@ async function saveNewPipeline(e) {
   if (sel) { sel.innerHTML = pipelines.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join(''); if (currentPipelineId) sel.value = currentPipelineId; }
 }
 
+// A pipeline is deleted only while no deal is in it: the server refuses otherwise and says how many there are.
 async function deletePipeline(id) {
   if (!confirm(t('stg_delete_pipeline_confirm'))) return;
-  await api.del(`/api/pipelines/${id}`);
+  const res = await api.del(`/api/pipelines/${id}`);
+  if (res?.code === 'has_deals') { alert(Number(res.deals) === 1 ? t('stg_pipeline_has_deal') : tf('stg_pipeline_has_deals', { n: Number(res.deals) || 0 })); return; }
+  if (!res || res.error) { alert(t('stg_pipeline_not_deleted')); return; }
   pipelines = pipelines.filter(p => p.id !== id);
   if (currentPipelineId === id) { currentPipelineId = pipelines[0]?.id || null; deals = []; }
   renderPipelinesSettings();

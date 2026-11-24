@@ -344,6 +344,8 @@ async function runImport() {
   const dealsCreated = res.deals_created || 0;
   let message = tf(res.imported === 1 ? 'imp_done_one' : 'imp_done_many', { n: res.imported });
   if (dealsCreated > 0) message += ' ' + tf(dealsCreated === 1 ? 'imp_deals_created_one' : 'imp_deals_created_many', { n: dealsCreated });
+  const skipped = res.skipped || 0;   // rows whose email is a contact this member is not allowed to see
+  if (skipped > 0) message += ' ' + tf(skipped === 1 ? 'imp_skipped_one' : 'imp_skipped_many', { n: skipped });
   document.getElementById('import-done-text').textContent = message;
   showImportStep('done'); invalidate();
 }

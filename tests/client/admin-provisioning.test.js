@@ -91,7 +91,7 @@ describe('markup: the tab bar and the provisioning panel', () => {
     const called = new Set([...fromPanel, ...fromTabs, ...generated]);
 
     assert.deepEqual([...new Set(fromPanel)].sort(),
-      ['addProvField', 'loadProvisionList', 'submitProvision'],
+      ['addProvField', 'checkImportFile', 'loadProvisionList', 'submitProvision'],   // checkImportFile: "Import into a workspace" (tests/client/admin-import.test.js)
       'the panel wires up exactly these handlers');
     for (const fn of called) {
       assert.match(inline, new RegExp(`function\\s+${fn}\\s*\\(`), `${fn}() is referenced but not defined`);

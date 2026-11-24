@@ -17,6 +17,14 @@
    DELETING A STAGE does not delete its deals: the FK is ON DELETE SET NULL, so
    they stay with stage_id = null and show up as unstaged.
 
+   DELETING A PIPELINE is possible only while NO DEAL is in it (2026-11-24,
+   PIPELINE_DELETE_CHANGES): 409 { error, code: 'has_deals', deals: n }
+   otherwise. A pipeline's deals would go with it (deals.pipeline_id is ON
+   DELETE CASCADE) — until then "delete" took every deal along. The pipeline's
+   row is held while its deals are counted, so a deal made in the very same
+   moment either counts, or finds the pipeline gone and is not made: none is
+   ever deleted with a pipeline. Its stages go with it.
+
    ENDPOINTS
      GET    /                          pipelines with nested stages
      POST   / · PUT /:id · DELETE /:id
@@ -107,15 +115,30 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
+// Only an empty pipeline is deleted (see the header). One transaction: the pipeline's row is held (FOR UPDATE — a
+// deal that is being made for it waits, and one that was just made is seen), its deals are counted, and only with
+// none is it deleted.
 router.delete('/:id', async (req, res, next) => {
+  const id = /^[1-9]\d{0,9}$/.test(String(req.params.id)) ? Number(req.params.id) : null;
+  if (!id) return res.status(404).json({ error: 'Not found' });
+  let client;
   try {
-    const result = await pool.query(
-      'DELETE FROM pipelines WHERE id=$1 AND workspace_id=$2',
-      [req.params.id, req.workspaceId]
-    );
-    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+    client = await pool.connect();
+    await client.query('BEGIN');
+    const { rows: [held] } = await client.query('SELECT id FROM pipelines WHERE id=$1 AND workspace_id=$2 FOR UPDATE', [id, req.workspaceId]);
+    if (!held) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Not found' }); }
+    const { rows: [{ n }] } = await client.query('SELECT COUNT(*)::int AS n FROM deals WHERE pipeline_id=$1', [id]);
+    if (n > 0) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: `This pipeline still has ${n} deal${n === 1 ? '' : 's'}. Move or delete them first.`, code: 'has_deals', deals: n });
+    }
+    await client.query('DELETE FROM pipelines WHERE id=$1 AND workspace_id=$2', [id, req.workspaceId]);
+    await client.query('COMMIT');
     res.json({ success: true });
-  } catch (e) { next(e); }
+  } catch (e) {
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    next(e);
+  } finally { if (client) client.release(); }
 });
 
 router.post('/:id/stages', async (req, res, next) => {

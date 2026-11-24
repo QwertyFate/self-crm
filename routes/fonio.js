@@ -63,6 +63,17 @@
    or removing it cancels every waiting call at once — the history keeps them,
    with the reason.
 
+   WHO SEES A CALL. When the workspace holds members to what is assigned to
+   them (utils/visibility.js), a member's history and call log (GET /calls,
+   GET /log) hold only the calls of deals and contacts they see: a call follows
+   its deal when it names one, else its contact. A call that names neither —
+   a conversation with a number the CRM does not know — is for owners and
+   admins only, so such a member cannot connect one to a contact either
+   (POST /log/:id/contact answers 404). "Call this contact" (GET /calls/check,
+   POST /calls) answers 404 for a contact, or a deal, the member cannot see,
+   and no call is planned. Owners, admins and workspaces without the switch
+   run every statement unchanged.
+
    ENDPOINTS
      GET    /                    { configured, settings, can_manage } (everyone; key_hint for owner/admin)
      PUT    /                    save, merged over what is saved (owner/admin); variables and stage_rules are
@@ -97,6 +108,7 @@ const fonioMeeting = require('../utils/fonio-meeting');   // a meeting agreed in
 const fonioStage  = require('../utils/fonio-stage');      // the deal after the call: stage and urgency by what came out (Part 39)
 const engine      = require('../utils/engine');           // hears of a deal a call moved into one of its trigger stages
 const { notifyUser } = require('../notifications');
+const visibility  = require('../utils/visibility');       // members held to what is assigned to them
 
 const MAX_DELAY  = 7 * 24 * 60;                 // minutes: a week
 const HHMM       = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -117,6 +129,9 @@ function requireManage(req, res, next) {
   if (!canManage(req.userRole)) return res.status(403).json({ error: 'Owner or admin only' });
   next();
 }
+// What holds a member to the calls of their own deals and contacts, for the lists in utils/fonio-calls.js: a call
+// follows its deal, else its contact; one that names neither is not shown to them. Nothing for everyone else.
+const ownCalls = req => (params, t) => visibility.linked(req, params, { deal: `${t}.deal_id`, contact: `${t}.contact_id`, orphans: false });
 
 // A key as pasted, trimmed: 10 to 2000 visible characters, no spaces (fonio's spec calls it a bearer JWT, which can
 // be long). Whether fonio accepts it is asked after this.
@@ -332,7 +347,7 @@ router.get('/sources', requireAuth, requireManage, async (req, res, next) => {
 });
 
 router.get('/calls', requireAuth, async (req, res, next) => {
-  try { res.json({ calls: await fonioCalls.listCalls(pool, req.workspaceId), can_manage: canManage(req.userRole) }); }
+  try { res.json({ calls: await fonioCalls.listCalls(pool, req.workspaceId, { scope: ownCalls(req) }), can_manage: canManage(req.userRole) }); }
   catch (err) { next(err); }
 });
 
@@ -372,11 +387,19 @@ function handIds(src) {
   const dealId = none ? null : id(sent);
   return contactId && (none || dealId) ? { contactId, dealId } : null;
 }
+// A member held to their own calls only a contact they see, and rides only a deal they see along: true when this
+// request names one they do not (answered like a contact or deal that is not there, before anything is planned).
+async function handHidden(req, res, ids) {
+  if (!(await visibility.seesContact(pool, req, ids.contactId))) { refuseHand(res, 'no_contact'); return true; }
+  if (ids.dealId && !(await visibility.seesDeal(pool, req, ids.dealId))) { res.status(404).json({ error: 'Not found' }); return true; }
+  return false;
+}
 
 router.get('/calls/check', requireAuth, async (req, res, next) => {
   try {
     const ids = handIds(req.query);
     if (!ids) return refuseHand(res, 'contact');
+    if (await handHidden(req, res, ids)) return;
     const out = await fonioCalls.checkByHand(pool, { workspaceId: req.workspaceId, ...ids });
     if (out.code) return refuseHand(res, out.code);
     res.json(out);
@@ -387,6 +410,7 @@ router.post('/calls', requireAuth, async (req, res, next) => {
   try {
     const ids = handIds(req.body);
     if (!ids) return refuseHand(res, 'contact');
+    if (await handHidden(req, res, ids)) return;
     const out = await fonioCalls.scheduleByHand(pool, { workspaceId: req.workspaceId, ...ids, userId: req.userId });
     if (out.code) return refuseHand(res, out.code);
     res.status(201).json({ success: true, call: out.call, contact: out.contact, number: out.number, deal_id: out.deal_id });
@@ -394,8 +418,9 @@ router.post('/calls', requireAuth, async (req, res, next) => {
 });
 
 // The call log (Part 16): everyone in the workspace reads it, as everyone reads the calls and the notes.
+// A member held to their own reads the calls of the deals and contacts they see (ownCalls).
 router.get('/log', requireAuth, async (req, res, next) => {
-  try { res.json({ entries: await fonioCalls.listLog(pool, req.workspaceId), can_manage: canManage(req.userRole) }); }
+  try { res.json({ entries: await fonioCalls.listLog(pool, req.workspaceId, { scope: ownCalls(req) }), can_manage: canManage(req.userRole) }); }
   catch (err) { next(err); }
 });
 
@@ -417,6 +442,8 @@ router.post('/log/:id/contact', requireAuth, async (req, res, next) => {
     const id = Number(req.params.id), contactId = Number(req.body?.contact_id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Bad call id' });
     if (!Number.isInteger(contactId) || contactId <= 0) return res.status(400).json({ error: 'Bad contact id' });
+    // a call without a contact is not shown to a member held to their own, so there is none they could connect
+    if (visibility.restricted(req)) return res.status(404).json({ error: 'Call not found', code: 'not_found' });
     const note = row => fonioResult.resultNote({ inbound: row.direction === 'inbound', duration: row.duration || '', summary: row.summary || '',
       transcript: row.transcript || '', link: row.conversation_link });
     const out = await fonioCalls.connectOther(pool, req.workspaceId, id, contactId, note);

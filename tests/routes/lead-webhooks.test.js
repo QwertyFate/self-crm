@@ -6,7 +6,7 @@
 // keeps its key and settings, and Cal.com/Calendly keep using the OLDEST row for a booking that creates a contact.
 const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const { loadRoute, serve } = require('../helpers/load-route');
+const { loadRoute, serve, inject } = require('../helpers/load-route');
 
 const WID = 7;
 
@@ -368,5 +368,118 @@ describe('calContactFor: a booking that creates a contact uses the OLDEST webhoo
     assert.match(whSql, /ORDER BY id ASC LIMIT 1/);
     assert.equal(out.createdContact, true);
     assert.equal(out.createdDealId, 70);
+  });
+});
+
+// Two leads with the same new email at the same moment become ONE contact (FACEBOOK_CHANGES Part 3b, 2026-11-24):
+// "is there a contact with this email?" and the insert that follows are one step per workspace and email, held by a
+// lock of the database's own. Here the pool has a connect() of its own, so the test sees how the step is bracketed;
+// that the lock really holds two requests apart is shown on a real Postgres (the log names the harness).
+describe('POST /api/integrations/receive/:key: looking for the email and inserting are one locked step', () => {
+  function lockedDb({ known = null, failInsert = false, deal = false } = {}) {
+    const seq = [];
+    const hook = { id: 5, workspace_id: WID, webhook_key: 'k5', name: 'Facebook', field_map: { name: 'full_name', email: 'email', phone: 'phone' }, create_deal: deal, pipeline_id: deal ? 3 : null, stage_id: deal ? 30 : null, active: true };
+    const pool = {
+      query: async (sql, params) => {
+        const t = String(sql).replace(/\s+/g, ' ').trim();
+        seq.push(['pool', t, params]);
+        if (/FROM workspace_webhook WHERE webhook_key=\$1 AND active=true/.test(t)) return { rows: [hook] };
+        if (/INSERT INTO webhook_logs/.test(t)) return { rows: [] };
+        if (/^INSERT INTO deals/.test(t)) return { rows: [{ id: 77 }] };
+        if (/fonio/.test(t)) return { rows: [] };   // fonio is not connected here
+        if (/contacts/.test(t) && !/engine|kunde/i.test(t)) throw new Error('a contact statement outside the locked step: ' + t);
+        throw new Error('the Engine is not set up here');   // whatever the Engine asks first ends its telling
+      },
+      connect: async () => { seq.push(['connect']); return {
+        query: async (sql, params) => {
+          const t = String(sql).replace(/\s+/g, ' ').trim();
+          seq.push(['client', t, params]);
+          if (/^SELECT id, name, email, phone, company, contact_type FROM contacts WHERE workspace_id=\$1 AND email=\$2$/.test(t)) return { rows: known ? [known] : [] };
+          if (/^INSERT INTO contacts/.test(t)) { if (failInsert) throw new Error('disk full'); return { rows: [{ id: 55, name: params[1] }] }; }
+          if (/^UPDATE contacts SET name=\$1/.test(t)) return { rows: [{ id: known.id, name: params[0] }] };
+          if (t === 'BEGIN' || t === 'COMMIT' || t === 'ROLLBACK' || t === 'SELECT pg_advisory_xact_lock($1::int, hashtext($2))') return { rows: [] };
+          throw new Error('unexpected on the client: ' + t);
+        },
+        release: () => seq.push(['release']),
+      }; },
+    };
+    return { pool, seq };
+  }
+  const steps = seq => seq.filter(s => s[0] !== 'pool').map(s => (s[0] === 'client' ? s[1].split(' ').slice(0, 3).join(' ') : s[0]));
+  // The Engine is a stand-in that writes down when it is told (seq, when one is handed in): the real one would ask a
+  // pool of its own, which this test could not see.
+  const post = async (pool, body, seq = null) => {
+    const restore = inject('utils/engine.js', { dispatchContactCreated: async a => { if (seq) seq.push(['engine', 'created', a]); }, dispatchContactUpdated: async a => { if (seq) seq.push(['engine', 'updated', a]); } });
+    const server = await serve({ '/api/integrations': loadRoute('integrations.js', { pool }) });
+    try { return await server.request('POST', '/api/integrations/receive/k5', body); } finally { await server.close(); restore(); }
+  };
+
+  test('a new email: begin, the lock for this workspace and this email, look, insert, commit — on one connection, which is given back', async () => {
+    const { pool, seq } = lockedDb();
+    const r = await post(pool, { full_name: 'Priya Shah', email: ' Priya@Example.DE ' });
+    assert.deepEqual([r.status, r.body], [200, { success: true, contact_id: 55, deal_id: null }]);
+    assert.deepEqual(steps(seq), ['connect', 'BEGIN', 'SELECT pg_advisory_xact_lock($1::int, hashtext($2))', 'SELECT id, name,', 'INSERT INTO contacts', 'COMMIT', 'release']);
+    assert.deepEqual(seq.find(s => /pg_advisory_xact_lock/.test(s[1] || ''))[2], [WID, 'priya@example.de'], 'the lock is this workspace\'s and this email\'s, as it is stored');
+    assert.equal(seq.filter(s => s[0] === 'connect').length, 1);
+  });
+  test('a known email: found and updated inside the same step', async () => {
+    const { pool, seq } = lockedDb({ known: { id: 40, name: 'Priya', email: 'priya@example.de', phone: '030', company: null, contact_type: 'contact' } });
+    const r = await post(pool, { full_name: 'Priya Shah', email: 'priya@example.de' });
+    assert.deepEqual([r.status, r.body.contact_id], [200, 40]);
+    assert.deepEqual(steps(seq), ['connect', 'BEGIN', 'SELECT pg_advisory_xact_lock($1::int, hashtext($2))', 'SELECT id, name,', 'UPDATE contacts SET', 'COMMIT', 'release']);
+  });
+  test('the Engine is told only after the step is written, the log is written after it too', async () => {
+    const { pool, seq } = lockedDb();
+    await post(pool, { full_name: 'Priya Shah', email: 'priya@example.de' });
+    const iCommit = seq.findIndex(s => s[1] === 'COMMIT'), iRelease = seq.findIndex(s => s[0] === 'release');
+    const after = seq.map((s, i) => [s, i]).filter(([s]) => s[0] === 'pool' && !/FROM workspace_webhook WHERE webhook_key/.test(s[1]));
+    assert.ok(after.length >= 1 && after.every(([, i]) => i > iCommit && i > iRelease), 'nothing else is asked of the database while the lock is held');
+    assert.ok(after.some(([s]) => /INSERT INTO webhook_logs/.test(s[1])));
+  });
+  test('the Engine hears of a new contact, and of a known one that changed, only once the step is written and the connection given back', async () => {
+    const fresh = lockedDb();
+    await post(fresh.pool, { full_name: 'Priya Shah', email: 'priya@example.de' }, fresh.seq);
+    const at = (seq, kind) => seq.findIndex(s => s[0] === kind);
+    assert.deepEqual(fresh.seq.filter(s => s[0] === 'engine'), [['engine', 'created', { workspaceId: WID, contactId: 55 }]]);
+    assert.ok(at(fresh.seq, 'engine') > at(fresh.seq, 'release'), 'told inside the step, the Engine would look for a contact that is not written yet');
+    const changed = lockedDb({ known: { id: 40, name: 'Priya', email: 'priya@example.de', phone: '030', company: null, contact_type: 'contact' } });
+    await post(changed.pool, { full_name: 'Priya', email: 'priya@example.de', phone: '0171' }, changed.seq);
+    const told = changed.seq.filter(s => s[0] === 'engine');
+    assert.deepEqual([told.length, told[0][1], told[0][2].contactId, told[0][2].changed.length > 0], [1, 'updated', 40, true]);
+    assert.ok(at(changed.seq, 'engine') > at(changed.seq, 'release'));
+  });
+  test('a known email with another name: the deal that is made carries the name as it is now', async () => {
+    const { pool, seq } = lockedDb({ deal: true, known: { id: 40, name: 'Priya', email: 'priya@example.de', phone: null, company: null, contact_type: 'contact' } });
+    const r = await post(pool, { full_name: 'Priya Shah', email: 'priya@example.de' });
+    assert.deepEqual([r.status, r.body], [200, { success: true, contact_id: 40, deal_id: 77 }]);
+    const deal = seq.find(s => s[0] === 'pool' && /^INSERT INTO deals/.test(s[1]));
+    assert.deepEqual(deal[2], [WID, 40, 3, 30, 'Priya Shah']);
+  });
+  test('the insert fails: rolled back, the connection given back, and the delivery says so', async () => {
+    const { pool, seq } = lockedDb({ failInsert: true });
+    const logged = [];
+    const realError = console.error; console.error = (...a) => logged.push(a);
+    let r; try { r = await post(pool, { full_name: 'Priya Shah', email: 'priya@example.de' }); } finally { console.error = realError; }
+    assert.equal(r.status, 500);
+    assert.deepEqual(steps(seq), ['connect', 'BEGIN', 'SELECT pg_advisory_xact_lock($1::int, hashtext($2))', 'SELECT id, name,', 'INSERT INTO contacts', 'ROLLBACK', 'release']);
+    assert.equal(seq.some(s => s[0] === 'pool' && /INSERT INTO webhook_logs/.test(s[1])), false, 'no success is logged');
+    assert.deepEqual([logged.length, logged[0][0], logged[0][1].message], [1, 'Webhook error:', 'disk full'], 'the error that goes on is the database\'s own');
+  });
+  test('a lead without an email takes no lock: there is nothing to look for', async () => {
+    const seq = [];
+    const pool = { query: async (sql, params) => { seq.push(String(sql)); if (/FROM workspace_webhook WHERE webhook_key=\$1 AND active=true/.test(sql)) return { rows: [{ id: 5, workspace_id: WID, field_map: { name: 'full_name' }, create_deal: false, active: true }] };
+      if (/INSERT INTO contacts/.test(sql)) { assert.equal(params[2], null); return { rows: [{ id: 56, name: 'Priya' }] }; } if (/INSERT INTO webhook_logs/.test(sql)) return { rows: [] }; throw new Error('no'); },
+      connect: async () => { throw new Error('no connection is taken'); } };
+    const r = await post(pool, { full_name: 'Priya' });
+    assert.deepEqual([r.status, r.body.contact_id], [200, 56]);
+  });
+  test('the helper gives a fake pool a connect() only when it has none, and answers only a transaction\'s own statements itself', async () => {
+    const { withConnect } = require('../helpers/load-route');
+    const asked = [], plain = { query: async sql => { asked.push(sql); return { rows: [{ n: 1 }] }; } };
+    const client = await withConnect(plain).connect();
+    for (const sql of ['BEGIN', 'COMMIT', 'ROLLBACK', 'SELECT pg_advisory_xact_lock($1::int, hashtext($2))']) assert.deepEqual(await client.query(sql), { rows: [], rowCount: 0 });
+    assert.deepEqual([await client.query('SELECT 1'), asked], [{ rows: [{ n: 1 }] }, ['SELECT 1']]);
+    const own = async () => 'mine', kept = { query: async () => ({ rows: [] }), connect: own };
+    assert.equal(withConnect(kept).connect, own);
   });
 });

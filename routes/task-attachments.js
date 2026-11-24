@@ -18,6 +18,12 @@
    NOT CHECKED  file type. And the URL is public: anyone with the link can read
    the file without a CRM session.
 
+   WHO SEES A TASK'S FILES. They follow the task: when the workspace holds
+   members to the deals and contacts assigned to them, a task that names
+   somebody else's deal or contact is not theirs to see (utils/task-visibility.js),
+   and all three handlers answer 404 for it before anything is read, uploaded or
+   deleted. Everyone else runs the statements unchanged, with no extra question.
+
    ENDPOINTS
      GET    /:taskId/attachments
      POST   /:taskId/attachments       multipart, field name "file"
@@ -30,6 +36,7 @@ const multer      = require('multer');
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
 const { uploadFile, deleteFile } = require('../storage');
+const { seesTask } = require('../utils/task-visibility');   // members held to what is assigned to them
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -40,6 +47,7 @@ router.use(requireAuth);
 
 router.get('/:taskId/attachments', async (req, res, next) => {
   try {
+    if (!(await seesTask(pool, req, req.params.taskId))) return res.status(404).json({ error: 'Not found' });
     const { rows } = await pool.query(
       `SELECT ta.*, u.name AS uploaded_by_name
        FROM task_attachments ta
@@ -56,6 +64,7 @@ router.post('/:taskId/attachments', upload.single('file'), async (req, res, next
   try {
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'No file uploaded' });
+    if (!(await seesTask(pool, req, req.params.taskId))) return res.status(404).json({ error: 'Not found' });
 
     const { publicUrl, storagePath } = await uploadFile(
       req.workspaceId, req.params.taskId,
@@ -80,6 +89,7 @@ router.post('/:taskId/attachments', upload.single('file'), async (req, res, next
 
 router.delete('/:taskId/attachments/:id', async (req, res, next) => {
   try {
+    if (!(await seesTask(pool, req, req.params.taskId))) return res.status(404).json({ error: 'Not found' });
     const { rows: [att] } = await pool.query(
       'SELECT * FROM task_attachments WHERE id=$1 AND task_id=$2 AND workspace_id=$3',
       [req.params.id, req.params.taskId, req.workspaceId]

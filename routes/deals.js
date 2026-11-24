@@ -30,6 +30,14 @@
 
    urgency is an integer 0-4, clamped by clampUrgency() — never trust the body.
 
+   WHO SEES A DEAL. When the workspace holds members to what is assigned to
+   them (utils/visibility.js), every statement here that reads or changes a
+   deal by id, and the list, carries visibility.deals(): a deal that is not the
+   member's is a 404, exactly as if it did not exist. A member may hand a deal
+   to someone else (it then leaves their view) but may only put it on a contact
+   they can see. Owners, admins and workspaces without the switch run the
+   statements unchanged.
+
    ENDPOINTS
      GET    /?pipeline_id=&contact_id=
      GET    /:id                      + its linked listings
@@ -50,6 +58,7 @@ const { notify }  = require('../notifications');
 const engine      = require('../utils/engine');
 const baseUrl     = require('../utils/base-url');
 const fonioCalls  = require('../utils/fonio-calls');   // fonio calls a new deal's contact (FONIO_CHANGES Part 3)
+const visibility  = require('../utils/visibility');    // members held to what is assigned to them
 
 router.use(requireAuth);
 
@@ -90,7 +99,7 @@ router.get('/', async (req, res, next) => {
       LEFT JOIN contacts       s  ON s.id  = d.supplier_id
       LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
       LEFT JOIN users           u  ON u.id  = d.assigned_to
-      WHERE d.workspace_id = $1 ${filter}
+      WHERE d.workspace_id = $1 ${filter}${visibility.deals(req, params)}
       ORDER BY d.created_at DESC
     `, params);
     res.json(rows);
@@ -99,6 +108,7 @@ router.get('/', async (req, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
+    const params = [req.params.id, req.workspaceId];
     const { rows: [deal] } = await pool.query(`
       SELECT d.*,
              c.name  AS contact_name,  c.email AS contact_email, c.phone AS contact_phone, c.company AS contact_company,
@@ -110,8 +120,8 @@ router.get('/:id', async (req, res, next) => {
       LEFT JOIN contacts       s  ON s.id  = d.supplier_id
       LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
       LEFT JOIN users           u  ON u.id  = d.assigned_to
-      WHERE d.id = $1 AND d.workspace_id = $2
-    `, [req.params.id, req.workspaceId]);
+      WHERE d.id = $1 AND d.workspace_id = $2${visibility.deals(req, params)}
+    `, params);
     if (!deal) return res.status(404).json({ error: 'Not found' });
     const { rows: objects } = await pool.query(
       'SELECT o.id, o.name, o.custom_data FROM deal_objects dobj JOIN objects o ON o.id=dobj.object_id WHERE dobj.deal_id=$1',
@@ -126,6 +136,7 @@ router.post('/', async (req, res, next) => {
     const { contact_id, supplier_id, pipeline_id, stage_id, title, value, assigned_to, custom_data, urgency } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
     if (!pipeline_id)   return res.status(400).json({ error: 'Pipeline required' });
+    if (contact_id && !(await visibility.seesContact(pool, req, contact_id))) return res.status(404).json({ error: 'Contact not found' });
     const assignee = assigned_to ? Number(assigned_to) : req.userId;
     const { rows: [row] } = await pool.query(
       'INSERT INTO deals (workspace_id,contact_id,supplier_id,pipeline_id,stage_id,title,value,assigned_to,urgency,custom_data) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id',
@@ -149,14 +160,17 @@ router.put('/:id', async (req, res, next) => {
   try {
     const { contact_id, supplier_id, pipeline_id, stage_id, title, value, assigned_to, custom_data, urgency } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: 'Title required' });
+    const read = [req.params.id, req.workspaceId];
     const { rows: [before] } = await pool.query(
-      'SELECT stage_id, contact_id, title FROM deals WHERE id=$1 AND workspace_id=$2',
-      [req.params.id, req.workspaceId]
+      `SELECT stage_id, contact_id, title FROM deals WHERE id=$1 AND workspace_id=$2${visibility.deals(req, read, 'deals')}`,
+      read
     );
     if (!before) return res.status(404).json({ error: 'Not found' });
+    if (contact_id && !(await visibility.seesContact(pool, req, contact_id))) return res.status(404).json({ error: 'Contact not found' });
+    const write = [contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assigned_to||null, clampUrgency(urgency), JSON.stringify(custom_data||{}), req.params.id, req.workspaceId];
     const result = await pool.query(
-      'UPDATE deals SET contact_id=$1,supplier_id=$2,pipeline_id=$3,stage_id=$4,title=$5,value=$6,assigned_to=$7,urgency=$8,custom_data=$9,updated_at=NOW() WHERE id=$10 AND workspace_id=$11',
-      [contact_id||null, supplier_id||null, pipeline_id, stage_id||null, title.trim(), value||null, assigned_to||null, clampUrgency(urgency), JSON.stringify(custom_data||{}), req.params.id, req.workspaceId]
+      `UPDATE deals SET contact_id=$1,supplier_id=$2,pipeline_id=$3,stage_id=$4,title=$5,value=$6,assigned_to=$7,urgency=$8,custom_data=$9,updated_at=NOW() WHERE id=$10 AND workspace_id=$11${visibility.deals(req, write, 'deals')}`,
+      write
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     notify(req.workspaceId, req.userId, {
@@ -174,14 +188,16 @@ router.put('/:id', async (req, res, next) => {
 
 router.patch('/:id/stage', async (req, res, next) => {
   try {
+    const read = [req.params.id, req.workspaceId];
     const { rows: [before] } = await pool.query(
-      'SELECT stage_id, contact_id, title FROM deals WHERE id=$1 AND workspace_id=$2',
-      [req.params.id, req.workspaceId]
+      `SELECT stage_id, contact_id, title FROM deals WHERE id=$1 AND workspace_id=$2${visibility.deals(req, read, 'deals')}`,
+      read
     );
     if (!before) return res.status(404).json({ error: 'Not found' });
+    const write = [req.body.stage_id||null, req.params.id, req.workspaceId];
     const result = await pool.query(
-      'UPDATE deals SET stage_id=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3',
-      [req.body.stage_id||null, req.params.id, req.workspaceId]
+      `UPDATE deals SET stage_id=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3${visibility.deals(req, write, 'deals')}`,
+      write
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     notify(req.workspaceId, req.userId, {
@@ -200,9 +216,10 @@ router.patch('/:id/stage', async (req, res, next) => {
 router.patch('/:id/urgency', async (req, res, next) => {
   try {
     const urgency = clampUrgency(req.body.urgency);
+    const params = [urgency, req.params.id, req.workspaceId];
     const result = await pool.query(
-      'UPDATE deals SET urgency=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3',
-      [urgency, req.params.id, req.workspaceId]
+      `UPDATE deals SET urgency=$1, updated_at=NOW() WHERE id=$2 AND workspace_id=$3${visibility.deals(req, params, 'deals')}`,
+      params
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, urgency });
@@ -211,9 +228,10 @@ router.patch('/:id/urgency', async (req, res, next) => {
 
 router.delete('/:id', async (req, res, next) => {
   try {
+    const params = [req.params.id, req.workspaceId];
     const result = await pool.query(
-      'DELETE FROM deals WHERE id=$1 AND workspace_id=$2',
-      [req.params.id, req.workspaceId]
+      `DELETE FROM deals WHERE id=$1 AND workspace_id=$2${visibility.deals(req, params, 'deals')}`,
+      params
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
@@ -222,6 +240,7 @@ router.delete('/:id', async (req, res, next) => {
 
 router.get('/:id/objects', async (req, res, next) => {
   try {
+    if (!(await visibility.seesDeal(pool, req, req.params.id))) return res.status(404).json({ error: 'Not found' });
     const { rows } = await pool.query(
       'SELECT o.* FROM deal_objects dobj JOIN objects o ON o.id=dobj.object_id WHERE dobj.deal_id=$1',
       [req.params.id]
@@ -234,6 +253,7 @@ router.post('/:id/objects', async (req, res, next) => {
   try {
     const { object_id } = req.body;
     if (!object_id) return res.status(400).json({ error: 'object_id required' });
+    if (!(await visibility.seesDeal(pool, req, req.params.id))) return res.status(404).json({ error: 'Not found' });
     await pool.query(
       'INSERT INTO deal_objects (deal_id, object_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
       [req.params.id, object_id]
@@ -244,6 +264,7 @@ router.post('/:id/objects', async (req, res, next) => {
 
 router.delete('/:id/objects/:objectId', async (req, res, next) => {
   try {
+    if (!(await visibility.seesDeal(pool, req, req.params.id))) return res.status(404).json({ error: 'Not found' });
     await pool.query(
       'DELETE FROM deal_objects WHERE deal_id=$1 AND object_id=$2',
       [req.params.id, req.params.objectId]

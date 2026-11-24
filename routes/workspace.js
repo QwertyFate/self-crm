@@ -38,6 +38,9 @@
      PATCH  /contact-columns · /object-columns · /task-statuses ·
             /kanban-fields · /miro-url · /whatsapp-template      any member
      PATCH  /supplier-name · /object-name                        owner
+     PATCH  /member-visibility      owner or admin · { own_only: true|false }
+                                    "members only see what is assigned to them"
+                                    (utils/visibility.js)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const express     = require('express');
@@ -276,6 +279,18 @@ router.delete('/', async (req, res, next) => {
     } finally {
       client.release();
     }
+  } catch (e) { next(e); }
+});
+
+// Members only see the deals and contacts assigned to them — or everything, as before. The value must be a
+// real true or false: a missing or misspelt field never switches a workspace's visibility by accident.
+router.patch('/member-visibility', async (req, res, next) => {
+  try {
+    if (req.userRole !== 'owner' && req.userRole !== 'admin') return res.status(403).json({ error: 'Owner or admin only' });
+    const { own_only } = req.body || {};
+    if (typeof own_only !== 'boolean') return res.status(400).json({ error: 'own_only must be true or false' });
+    await pool.query('UPDATE workspaces SET members_own_only=$1 WHERE id=$2', [own_only, req.workspaceId]);
+    res.json({ success: true, own_only });
   } catch (e) { next(e); }
 });
 

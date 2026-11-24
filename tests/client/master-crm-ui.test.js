@@ -38,7 +38,7 @@ describe('Part 2: the console tab', () => {
   test('a sixth tab after Engine Monitor, its hidden panel, and showAdminTab loads the log', () => {
     assert.match(admin, /id="tabbtn-monitor"[^>]*>Engine Monitor<\/button>\s*<button class="admin-tab"\s+id="tabbtn-crm"\s+onclick="showAdminTab\('crm'\)">CRM access<\/button>/);
     assert.match(admin, /<div id="tab-crm" class="hidden">/);
-    assert.match(inline, /for \(const t of \['defaults', 'provisioning', 'tutorial', 'engine', 'monitor', 'crm'\]\)/);
+    assert.match(inline, /for \(const t of \['defaults', 'provisioning', 'tutorial', 'engine', 'monitor', 'crm', 'facebook', 'assistant'\]\)/);
     assert.match(inline, /if \(name === 'crm'\) loadCrmLog\(\);/);
   });
 

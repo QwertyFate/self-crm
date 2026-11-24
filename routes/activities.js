@@ -47,6 +47,16 @@
    CONTENT IS STORED AS THE CLIENT SENDS IT, including HTML, and nothing here
    sanitises it. See §8 of readmedev.md.
 
+   WHO SEES A NOTE. When the workspace holds members to what is assigned to
+   them (utils/visibility.js), a note follows what it hangs on: bound to a deal,
+   it is seen when that deal is seen; a contact-level note, when that contact is
+   seen; a note on neither is seen by everyone. The list, GET / PATCH / DELETE
+   by id carry visibility.linked(), so somebody else's note is left out or a
+   404. In the list the DERIVED deal (the contact's most recent one) and the
+   ?deal_id filter only ever look at deals the member sees. POST refuses (404,
+   nothing written) a deal or a contact the member cannot see. Owners, admins
+   and workspaces without the switch run the statements unchanged.
+
    ENDPOINTS  GET / (newest 200) · POST / · GET /:id · PATCH /:id · DELETE /:id
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -54,8 +64,13 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const visibility  = require('../utils/visibility');    // members held to what is assigned to them
 
 router.use(requireAuth);
+
+// What a note hangs on, as its own statement names the columns.
+const ON_A          = { deal: 'a.deal_id', contact: 'a.contact_id' };
+const ON_ACTIVITIES = { deal: 'activities.deal_id', contact: 'activities.contact_id' };
 
 async function notifyMentions(workspaceId, actorId, actorName, content, activityId) {
   try {
@@ -87,7 +102,7 @@ async function notifyMentions(workspaceId, actorId, actorName, content, activity
     if (!matched.length) return;
 
     const { rows: [activity] } = await pool.query(`
-      SELECT a.contact_id, a.type, c.name AS contact_name
+      SELECT a.contact_id, a.deal_id, a.type, c.name AS contact_name
       FROM activities a
       LEFT JOIN contacts c ON c.id = a.contact_id
       WHERE a.id = $1
@@ -96,14 +111,10 @@ async function notifyMentions(workspaceId, actorId, actorName, content, activity
     const preview = plain.replace(/@\w+/g, '').trim().slice(0, 120).replace(/\s+\S*$/, '') || 'a note';
     const contactName = activity?.contact_name || 'a contact';
 
-    let dealId = null;
-    if (activity?.contact_id) {
-      const { rows: deals } = await pool.query(
-        'SELECT id FROM deals WHERE contact_id = $1 AND workspace_id = $2 ORDER BY updated_at DESC LIMIT 1',
-        [activity.contact_id, workspaceId]
-      );
-      if (deals.length) dealId = deals[0].id;
-    }
+    // The notification points at what the note itself hangs on: its own deal, else its contact. It used to point at
+    // the contact's most recently updated deal, which can be somebody else's: the bell of a member held to their
+    // own (routes/notifications.js) then hid a mention about a note they see, or showed one about a note they do not.
+    const dealId = activity?.deal_id || null;
 
     const body = `In ${contactName}: "${preview}"`;
 
@@ -134,6 +145,11 @@ router.get('/', async (req, res, next) => {
     const contactFilter = req.query.contact_id === undefined ? null : parseInt(req.query.contact_id, 10);
     if (req.query.deal_id    !== undefined && !Number.isInteger(dealFilter))    return res.status(400).json({ error: 'deal_id must be a number' });
     if (req.query.contact_id !== undefined && !Number.isInteger(contactFilter)) return res.status(400).json({ error: 'contact_id must be a number' });
+    // A held member: only notes on what they see ($4 = the member), and the two places that look a deal up
+    // by itself — the derived deal and the ?deal_id filter's contact — look only among deals they see.
+    const params = [req.workspaceId, dealFilter, contactFilter];
+    const seen   = visibility.linked(req, params, ON_A);
+    const mine   = visibility.restricted(req) ? ` AND ${visibility.rules.deal('deals', params.length)}` : '';
     const { rows } = await pool.query(`
       SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
              a.completed, a.source, a.cancelled_at, a.calcom_uid, a.calcom_event_type_id,
@@ -148,14 +164,14 @@ router.get('/', async (req, res, next) => {
       LEFT JOIN deals db ON db.id = a.deal_id
       LEFT JOIN LATERAL (
         SELECT id, title FROM deals
-        WHERE deals.contact_id = a.contact_id AND deals.workspace_id = a.workspace_id
+        WHERE deals.contact_id = a.contact_id AND deals.workspace_id = a.workspace_id${mine}
         ORDER BY deals.updated_at DESC LIMIT 1
       ) d ON true
       WHERE a.workspace_id = $1
-        AND ($2::int IS NULL OR a.deal_id = $2 OR (a.deal_id IS NULL AND a.contact_id = (SELECT contact_id FROM deals WHERE id = $2 AND workspace_id = $1)))
-        AND ($3::int IS NULL OR a.contact_id = $3)
+        AND ($2::int IS NULL OR a.deal_id = $2 OR (a.deal_id IS NULL AND a.contact_id = (SELECT contact_id FROM deals WHERE id = $2 AND workspace_id = $1${mine})))
+        AND ($3::int IS NULL OR a.contact_id = $3)${seen}
       ORDER BY a.created_at DESC LIMIT 200
-    `, [req.workspaceId, dealFilter, contactFilter]);
+    `, params);
     res.json(rows);
   } catch (e) { next(e); }
 });
@@ -168,6 +184,12 @@ router.post('/', async (req, res, next) => {
     // in THIS workspace; a note with a deal but no contact takes the deal's contact.
     const dealId = deal_id ? parseInt(deal_id, 10) || null : null;
     let contactId = contact_id || null;
+    // A held member writes only on what they see: the deal when one is named AND the contact when one is named
+    // (a note on their own deal must not carry somebody else's contact into their list).
+    if (visibility.restricted(req)) {
+      if (dealId && !(await visibility.seesDeal(pool, req, dealId))) return res.status(404).json({ error: 'Not found' });
+      if (contactId && !(/^\d+$/.test(String(contactId)) && await visibility.seesContact(pool, req, Number(contactId)))) return res.status(404).json({ error: 'Not found' });
+    }
     if (dealId) {
       const { rows: [d] } = await pool.query('SELECT contact_id FROM deals WHERE id=$1 AND workspace_id=$2', [dealId, req.workspaceId]);
       if (!d) return res.status(400).json({ error: 'Deal not found in this workspace' });
@@ -189,6 +211,7 @@ router.post('/', async (req, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
+    const params = [req.params.id, req.workspaceId];
     const { rows: [row] } = await pool.query(`
       SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
              a.completed, a.source, a.cancelled_at, a.calcom_uid, a.calcom_event_type_id,
@@ -196,8 +219,8 @@ router.get('/:id', async (req, res, next) => {
              COALESCE(u.name, CASE WHEN a.source = 'engine' THEN 'Upgrads Engine' WHEN a.source = 'notetaker' THEN 'Notetaker' WHEN a.source = 'fonio' THEN 'fonio' END) AS logged_by_name, u.email AS logged_by_email
       FROM activities a
       LEFT JOIN users u ON u.id = a.created_by
-      WHERE a.id = $1 AND a.workspace_id = $2
-    `, [req.params.id, req.workspaceId]);
+      WHERE a.id = $1 AND a.workspace_id = $2${visibility.linked(req, params, ON_A)}
+    `, params);
     if (!row) return res.status(404).json({ error: 'Not found' });
     res.json(row);
   } catch (e) { next(e); }
@@ -212,6 +235,12 @@ router.patch('/:id', async (req, res, next) => {
     }
     if (type && !['note','call','email','whatsapp','meeting'].includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
+    const params =
+       [type ?? null, content ?? null, req.params.id, req.workspaceId, event_date ?? null, completed ?? null, event_date === null,
+        event_time ?? null, event_time === null,
+        // re-stamp the zone only when a date or time was actually sent — a bare
+        // "completed" tick must not relabel a time it did not touch
+        event_date !== undefined || event_time !== undefined, req.userTimezone || 'Europe/Berlin'];
     const result = await pool.query(
        `UPDATE activities SET
           type        = COALESCE($1, type),
@@ -220,12 +249,8 @@ router.patch('/:id', async (req, res, next) => {
           event_time  = CASE WHEN $9 THEN NULL ELSE COALESCE($8, event_time) END,
           event_tz    = CASE WHEN $10 THEN $11 ELSE event_tz END,
           completed   = COALESCE($6, completed)
-        WHERE id=$3 AND workspace_id=$4 RETURNING id`,
-       [type ?? null, content ?? null, req.params.id, req.workspaceId, event_date ?? null, completed ?? null, event_date === null,
-        event_time ?? null, event_time === null,
-        // re-stamp the zone only when a date or time was actually sent — a bare
-        // "completed" tick must not relabel a time it did not touch
-        event_date !== undefined || event_time !== undefined, req.userTimezone || 'Europe/Berlin']
+        WHERE id=$3 AND workspace_id=$4${visibility.linked(req, params, ON_ACTIVITIES)} RETURNING id`,
+       params
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Activity not found' });
 
@@ -241,9 +266,10 @@ router.patch('/:id', async (req, res, next) => {
 
 router.delete('/:id', async (req, res, next) => {
   try {
+    const params = [req.params.id, req.workspaceId];
     const result = await pool.query(
-      'DELETE FROM activities WHERE id=$1 AND workspace_id=$2',
-      [req.params.id, req.workspaceId]
+      `DELETE FROM activities WHERE id=$1 AND workspace_id=$2${visibility.linked(req, params, ON_ACTIVITIES)}`,
+      params
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });

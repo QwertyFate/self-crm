@@ -1049,6 +1049,17 @@
                 <ul id="invites-list" class="settings-list"></ul>
               </div>
 
+              <!-- Owner and admins only (settings.js shows it): members held to what is assigned to them -->
+              <div class="settings-card hidden" id="visibility-card">
+                <div class="settings-card-header"><h2 data-i18n="set_visibility">Who sees what</h2></div>
+                <p class="settings-hint" data-i18n="hint_visibility">Owners and admins always see every deal and contact.</p>
+                <div class="settings-card-body">
+                  <label class="switch-row"><input type="checkbox" id="own-only-toggle" class="switch" onchange="saveOwnOnly()"> <span data-i18n="own_only_toggle">Members only see the deals and contacts assigned to them</span></label>
+                  <span id="own-only-msg" class="workspace-name-msg hidden"></span>
+                </div>
+                <p class="settings-hint" data-i18n="own_only_note">A deal with nobody assigned is shown to the member its contact is assigned to. A lead that arrives with nobody assigned at all is seen only by owners and admins until it is assigned.</p>
+              </div>
+
             </div>
           </div>
 

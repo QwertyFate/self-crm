@@ -1,6 +1,12 @@
 // Upgrads Engine settings (Integrations page): Engine URL, on/off, the pipeline
 // stages that mean "contract signed", the webhook secret, the delivery log and
 // a test event. Reads are open to every member; writes need owner or admin.
+//
+// WHO SEES A DELIVERY. When the workspace holds members to what is assigned to them
+// (utils/visibility.js), such a member's delivery log holds only the deliveries of deals
+// and contacts they see (a delivery follows its deal, else its contact; one that names
+// neither — a test event, or one whose deal and contact are gone — is for owners and
+// admins). Everyone else runs the statement unchanged.
 const express     = require('express');
 const router      = express.Router();
 const crypto      = require('crypto');
@@ -10,6 +16,7 @@ const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
 const engine      = require('../utils/engine');
 const { hashKey } = require('../middleware/engine-auth');   // the same digest the Engine API's lookup uses
+const visibility  = require('../utils/visibility');         // members held to what is assigned to them
 
 router.use(requireAuth);
 
@@ -165,6 +172,7 @@ router.post('/settings/regenerate-secret', requireManage, async (req, res, next)
 
 router.get('/deliveries', async (req, res, next) => {
   try {
+    const params = [req.workspaceId];
     const { rows } = await pool.query(
       `SELECT d.id, d.event, d.event_id, d.status, d.attempts, d.last_status_code, d.last_error,
               d.deal_id, d.contact_id, d.payload, d.created_at, d.delivered_at, d.next_attempt_at, d.last_attempt_at,
@@ -172,9 +180,9 @@ router.get('/deliveries', async (req, res, next) => {
        FROM engine_deliveries d
        LEFT JOIN deals    dl ON dl.id = d.deal_id    AND dl.workspace_id = d.workspace_id
        LEFT JOIN contacts c  ON c.id  = d.contact_id AND c.workspace_id  = d.workspace_id
-       WHERE d.workspace_id=$1
+       WHERE d.workspace_id=$1${visibility.linked(req, params, { deal: 'd.deal_id', contact: 'd.contact_id', orphans: false })}
        ORDER BY d.created_at DESC LIMIT 50`,
-      [req.workspaceId]
+      params
     );
     res.json({ deliveries: rows });
   } catch (err) { next(err); }

@@ -56,6 +56,16 @@
    Not here yet: cancel and reschedule from the CRM, a note for the invitation,
    the assignee as a guest, the Notetaker.
 
+   WHO SEES WHAT. When the workspace holds members to what is assigned to them
+   (utils/visibility.js), such a member books only for a deal and a contact
+   they see: somebody else's is answered exactly like one that does not exist
+   (400, code contact), and Calendly is never asked. GET /logs gives them only
+   the deliveries that name a deal or a contact they see; a delivery that names
+   nobody the CRM knows (a guest it did not take, a bad signature) is for
+   owners and admins. The status, the event types and the free times are the
+   connected account's own and stay open to everyone. Owners, admins and
+   workspaces without the switch run the statements unchanged.
+
    ENDPOINTS
      GET    /                  status (everyone): { connected, calendly, can_manage, blocked_by }
      POST   /connect           { token }       owner/admin; registers the booking webhook
@@ -78,6 +88,7 @@ const calendly    = require('../utils/calendly');   // the Calendly client
 const calcom      = require('../utils/calcom');     // the sealing of the token, shared with the Cal.com key
 const baseUrl     = require('../utils/base-url');   // the public origin Calendly must reach for the booking webhook
 const { booking } = require('./integrations');      // the Cal.com receiver's rules: the contact and deal, the host, telling the assignee
+const visibility  = require('../utils/visibility'); // members held to what is assigned to them
 
 const canManage = role => role === 'owner' || role === 'admin';
 function requireManage(req, res, next) {
@@ -306,12 +317,13 @@ async function logDelivery(wid, status, payload, captured, contactId, dealId, er
 
 router.get('/logs', requireAuth, async (req, res, next) => {
   try {
+    const params = [req.workspaceId];
     const { rows } = await pool.query(
       `SELECT l.id, l.status, l.captured, l.error, l.created_at, c.name AS contact_name, l.contact_id, l.deal_id
        FROM webhook_logs l LEFT JOIN contacts c ON c.id = l.contact_id
-       WHERE l.workspace_id=$1 AND l.source='calendly'
+       WHERE l.workspace_id=$1 AND l.source='calendly'${visibility.linked(req, params, { deal: 'l.deal_id', contact: 'l.contact_id', orphans: false })}
        ORDER BY l.created_at DESC LIMIT 30`,
-      [req.workspaceId]
+      params
     );
     res.json({ logs: rows });
   } catch (err) { next(err); }
@@ -473,13 +485,15 @@ router.post('/book', requireAuth, async (req, res, next) => {
     let contactId = body.contact_id ? parseInt(body.contact_id, 10) || null : null;
     let deal = null;
     if (dealId) {
-      const { rows: [d] } = await pool.query('SELECT id, title, contact_id, assigned_to FROM deals WHERE id=$1 AND workspace_id=$2', [dealId, wid]);
+      const asked = [dealId, wid];   // a held member's deal, or none: Calendly is asked nothing for somebody else's
+      const { rows: [d] } = await pool.query(`SELECT id, title, contact_id, assigned_to FROM deals WHERE id=$1 AND workspace_id=$2${visibility.deals(req, asked, 'deals')}`, asked);
       if (!d) return res.status(400).json({ error: 'Deal not found in this workspace', code: 'contact' });
       deal = d;
       if (!contactId) contactId = d.contact_id;
     }
     if (!contactId) return res.status(400).json({ error: 'A contact is required', code: 'contact' });
-    const { rows: [contact] } = await pool.query('SELECT id, name, email, phone FROM contacts WHERE id=$1 AND workspace_id=$2', [contactId, wid]);
+    const who = [contactId, wid];
+    const { rows: [contact] } = await pool.query(`SELECT id, name, email, phone FROM contacts WHERE id=$1 AND workspace_id=$2${visibility.contacts(req, who, 'contacts')}`, who);
     if (!contact) return res.status(400).json({ error: 'Contact not found in this workspace', code: 'contact' });
     const email = String(contact.email || '').trim();
     if (!email) return res.status(400).json({ error: 'The contact has no email address; Calendly needs one for the invitation', code: 'no_email' });

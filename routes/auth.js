@@ -81,7 +81,7 @@ router.get('/me', async (req, res, next) => {
     // notification_prefs: the settings screen ticks its boxes from these; without them every box showed as on
     if (user) { user.column_widths = user.column_widths || {}; user.deal_columns = user.deal_columns || []; user.timezone = user.timezone || 'Europe/Berlin'; user.notification_prefs = user.notification_prefs || {}; }
     const { rows: [workspace] } = await pool.query(
-      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses FROM workspaces WHERE id = $1',
+      'SELECT id, name, kanban_fields, contact_columns, whatsapp_template, deal_kanban_fields, miro_url, object_name, object_columns, supplier_name, task_statuses, members_own_only FROM workspaces WHERE id = $1',
       [req.session.workspaceId]
     );
 

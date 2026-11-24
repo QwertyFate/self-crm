@@ -613,6 +613,11 @@ async function initDb() {
   // honest answer for those.
   await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS provisioned_at TIMESTAMPTZ`);
 
+  // "Members only see what is assigned to them" (Settings → Team, owner or admin). Off for every
+  // existing workspace: everyone keeps seeing everything until somebody ticks it. middleware/auth.js
+  // reads it per request; utils/visibility.js turns it into the SQL the routes add.
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS members_own_only BOOLEAN NOT NULL DEFAULT false`);
+
   // The timezone a task's due_time / an activity's event_time was ENTERED in, stamped by the
   // server from users.timezone (middleware/auth.js → req.userTimezone). due_date/due_time are
   // naive wall-clock values; with the zone beside them the row is an unambiguous instant and
@@ -968,6 +973,105 @@ async function initDb() {
   // for every row that is not held back. The emails already held are the queue the next one is put behind.
   await pool.query(`ALTER TABLE journey_runs ADD COLUMN IF NOT EXISTS held TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS journey_runs_held_idx ON journey_runs (workspace_id, held) WHERE held IS NOT NULL`);
+
+  // Facebook lead ads (FACEBOOK_CHANGES Part 2, routes/admin-facebook.js): the Facebook Pages the platform's admin
+  // gave to workspaces. One Page belongs to one workspace, and its leads go to one of that workspace's lead webhooks
+  // (webhook_id; NULL once that webhook was deleted — the Page then needs another one). token: the Page's own
+  // token from Facebook, sealed (utils/calcom.js sealKey). The platform's one Facebook connection itself is in
+  // platform_settings, key "facebook".
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS facebook_pages (
+      page_id      TEXT PRIMARY KEY,
+      page_name    TEXT NOT NULL DEFAULT '',
+      workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      webhook_id   INTEGER REFERENCES workspace_webhook(id) ON DELETE SET NULL,
+      token        TEXT NOT NULL,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS facebook_pages_workspace_idx ON facebook_pages (workspace_id)`);
+  // The leads Facebook announced (FACEBOOK_CHANGES Part 3, utils/facebook-leads.js): one row per lead, by Facebook's
+  // own id, so that a lead announced twice is taken once. status: working (being fetched and handed over right
+  // now) | done (a contact: contact_id, deal_id) | test (kept as the lead webhook's sample) | skipped (nothing will
+  // come of it: reason) | failed (Facebook is asked to send it again: reason). detail: Facebook's or the server's
+  // words. workspace_id is NULL for a lead of a Page that is given to no workspace.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS facebook_leads (
+      leadgen_id   TEXT PRIMARY KEY,
+      page_id      TEXT NOT NULL,
+      form_id      TEXT,
+      workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
+      webhook_id   INTEGER REFERENCES workspace_webhook(id) ON DELETE SET NULL,
+      status       TEXT NOT NULL DEFAULT 'working',
+      reason       TEXT,
+      detail       TEXT,
+      tries        INTEGER NOT NULL DEFAULT 1,
+      contact_id   INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+      deal_id      INTEGER REFERENCES deals(id) ON DELETE SET NULL,
+      claimed_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS facebook_leads_page_idx ON facebook_leads (page_id, created_at DESC)`);
+
+  // The record of what the admin console brought into a workspace from an export file (WORKSPACE_IMPORT_CHANGES
+  // Part 2, utils/workspace-import.js): which file, into which workspace, how many rows of each kind were added,
+  // were here already, were left out. The platform's, not a workspace's: it outlives the workspace (its name is kept).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_imports (
+      id             SERIAL PRIMARY KEY,
+      workspace_id   INTEGER REFERENCES workspaces(id) ON DELETE SET NULL,
+      workspace_name TEXT NOT NULL DEFAULT '',
+      file_name      TEXT NOT NULL DEFAULT '',
+      source_name    TEXT NOT NULL DEFAULT '',
+      exported_at    TEXT,
+      counts         JSONB NOT NULL DEFAULT '{}',
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // The admin console's assistant (ASSISTANT_CHANGES Part 1, routes/admin-assistant.js, utils/assistant.js): the
+  // platform's, not a workspace's. assistant_chats: one conversation with Claude — messages is the conversation
+  // exactly as it is sent to Anthropic again with the next order, and only ever grows at its end; busy_at says a
+  // request is working on it right now (free again after five minutes, whatever became of that request).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS assistant_chats (
+      id         SERIAL PRIMARY KEY,
+      title      TEXT NOT NULL DEFAULT '',
+      messages   JSONB NOT NULL DEFAULT '[]',
+      busy_at    TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  // assistant_proposals: a workflow the assistant proposed for a workspace — the ONLY thing it can write. Nothing
+  // is in the workspace until the admin presses "Create" (status proposed → created, flow_id: the workflow that
+  // was made, flow_updated_at: its updated_at as it was written — "Undo" takes it away only while that still
+  // stands) and "Undo" (→ undone; "Create again" makes it again). spec: the workflow as it was proposed and
+  // checked; view: how the console shows it; asked: the admin's own words. The names are copied, so a row
+  // outlives its workspace and its conversation (SET NULL).
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS assistant_proposals (
+      id              SERIAL PRIMARY KEY,
+      chat_id         INTEGER REFERENCES assistant_chats(id) ON DELETE SET NULL,
+      workspace_id    INTEGER REFERENCES workspaces(id) ON DELETE SET NULL,
+      workspace_name  TEXT NOT NULL DEFAULT '',
+      name            TEXT NOT NULL,
+      asked           TEXT NOT NULL DEFAULT '',
+      explain         TEXT NOT NULL DEFAULT '',
+      spec            JSONB NOT NULL,
+      view            JSONB NOT NULL DEFAULT '{}',
+      notes           JSONB NOT NULL DEFAULT '[]',
+      status          TEXT NOT NULL DEFAULT 'proposed',
+      flow_id         INTEGER,
+      flow_updated_at TEXT,
+      made_at         TIMESTAMPTZ,
+      undone_at       TIMESTAMPTZ,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
 
   // The Notetaker (routes/integrations.js, utils/notetaker.js): a meeting booked on Google Meet with
   // "Mit Notetaker aufzeichnen" ticked. One row per meeting: the request, then what was last sent to the

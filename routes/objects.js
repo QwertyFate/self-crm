@@ -14,6 +14,14 @@
    stage, pipeline and contact) and its contacts — which is the detail drawer
    in one request.
 
+   WHO SEES WHAT ON A LISTING. Listings themselves are everybody's. Their links
+   are not: when the workspace holds members to the deals and contacts assigned
+   to them (utils/visibility.js), GET /:id and GET /:id/contacts show such a
+   member only the deals and contacts they see, and linking or unlinking a deal
+   or contact they do not see answers 404 with nothing written — the same as
+   for one that does not exist. Owners, admins and workspaces without the
+   switch run the statements unchanged.
+
    ENDPOINTS
      GET    /  ·  GET /:id  ·  POST /  ·  PUT /:id  ·  DELETE /:id
      POST   /:id/deals      { deal_id }      DELETE /:id/deals/:dealId
@@ -28,6 +36,7 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const visibility  = require('../utils/visibility');    // members held to what is assigned to them
 
 router.use(requireAuth);
 
@@ -49,6 +58,7 @@ router.get('/:id', async (req, res, next) => {
     );
     if (!obj) return res.status(404).json({ error: 'Not found' });
 
+    const dealParams = [req.params.id, req.workspaceId];
     const { rows: deals } = await pool.query(`
       SELECT d.id, d.title, d.value,
              ps.name AS stage_name, ps.color AS stage_color,
@@ -59,16 +69,17 @@ router.get('/:id', async (req, res, next) => {
       LEFT JOIN pipeline_stages ps ON ps.id = d.stage_id
       LEFT JOIN contacts        c  ON c.id  = d.contact_id
       LEFT JOIN pipelines       p  ON p.id  = d.pipeline_id
-      WHERE dobj.object_id = $1 AND d.workspace_id = $2
+      WHERE dobj.object_id = $1 AND d.workspace_id = $2${visibility.deals(req, dealParams)}
       ORDER BY d.created_at DESC
-    `, [req.params.id, req.workspaceId]);
+    `, dealParams);
 
+    const contactParams = [req.params.id, req.workspaceId];
     const { rows: linkedContacts } = await pool.query(
       `SELECT c.id, c.name, c.email, c.phone, c.company, c.contact_type
        FROM object_contacts oc JOIN contacts c ON c.id = oc.contact_id
-       WHERE oc.object_id = $1 AND c.workspace_id = $2
+       WHERE oc.object_id = $1 AND c.workspace_id = $2${visibility.contacts(req, contactParams)}
        ORDER BY oc.created_at`,
-      [req.params.id, req.workspaceId]
+      contactParams
     );
     res.json({ ...obj, deals, contacts: linkedContacts });
   } catch (e) { next(e); }
@@ -114,9 +125,10 @@ router.post('/:id/deals', async (req, res, next) => {
   try {
     const { deal_id } = req.body;
     if (!deal_id) return res.status(400).json({ error: 'deal_id required' });
+    const params = [deal_id, req.workspaceId];
     const { rows: [deal] } = await pool.query(
-      'SELECT id FROM deals WHERE id=$1 AND workspace_id=$2',
-      [deal_id, req.workspaceId]
+      `SELECT id FROM deals WHERE id=$1 AND workspace_id=$2${visibility.deals(req, params, 'deals')}`,
+      params
     );
     if (!deal) return res.status(404).json({ error: 'Deal not found' });
     await pool.query(
@@ -129,6 +141,7 @@ router.post('/:id/deals', async (req, res, next) => {
 
 router.delete('/:id/deals/:dealId', async (req, res, next) => {
   try {
+    if (!(await visibility.seesDeal(pool, req, req.params.dealId))) return res.status(404).json({ error: 'Not found' });
     await pool.query(
       'DELETE FROM deal_objects WHERE deal_id=$1 AND object_id=$2',
       [req.params.dealId, req.params.id]
@@ -139,12 +152,13 @@ router.delete('/:id/deals/:dealId', async (req, res, next) => {
 
 router.get('/:id/contacts', async (req, res, next) => {
   try {
+    const params = [req.params.id, req.workspaceId];
     const { rows } = await pool.query(
       `SELECT c.id, c.name, c.email, c.phone, c.company, c.contact_type
        FROM object_contacts oc JOIN contacts c ON c.id = oc.contact_id
-       WHERE oc.object_id = $1 AND c.workspace_id = $2
+       WHERE oc.object_id = $1 AND c.workspace_id = $2${visibility.contacts(req, params)}
        ORDER BY oc.created_at`,
-      [req.params.id, req.workspaceId]
+      params
     );
     res.json(rows);
   } catch (e) { next(e); }
@@ -154,6 +168,7 @@ router.post('/:id/contacts', async (req, res, next) => {
   try {
     const { contact_id } = req.body;
     if (!contact_id) return res.status(400).json({ error: 'contact_id required' });
+    if (!(await visibility.seesContact(pool, req, contact_id))) return res.status(404).json({ error: 'Not found' });
     await pool.query(
       'INSERT INTO object_contacts (object_id, contact_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
       [req.params.id, contact_id]
@@ -164,6 +179,7 @@ router.post('/:id/contacts', async (req, res, next) => {
 
 router.delete('/:id/contacts/:contactId', async (req, res, next) => {
   try {
+    if (!(await visibility.seesContact(pool, req, req.params.contactId))) return res.status(404).json({ error: 'Not found' });
     await pool.query(
       'DELETE FROM object_contacts WHERE object_id=$1 AND contact_id=$2',
       [req.params.id, req.params.contactId]

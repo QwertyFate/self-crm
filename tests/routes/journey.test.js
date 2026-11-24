@@ -1296,7 +1296,8 @@ describe('the record', () => {
   });
   test('"Activity" still says what the steps did: steps only, the newest hundred', () => {
     const code = read('routes/journey.js');
-    assert.match(code, /WHERE l\.flow_id = \$1 AND l\.workspace_id = \$2 AND l\.event = 'step' ORDER BY l\.id DESC LIMIT 100/);
+    // between the two: the piece that holds a member to their own deals — nothing for anyone else (member-visibility-rest.test.js)
+    assert.match(code, /WHERE l\.flow_id = \$1 AND l\.workspace_id = \$2 AND l\.event = 'step'\$\{visibility\.linked\(req, ofLog, \{ deal: 'l\.deal_id', orphans: false \}\)\} ORDER BY l\.id DESC LIMIT 100/);
   });
   test('the lines that make it so', () => {
     const code = read('routes/journey.js');
@@ -1306,7 +1307,7 @@ describe('the record', () => {
     const inTogether = [...code.matchAll(/await together\(async db => \{[\s\S]*?\n\s+\}\);/g)].map(m => m[0]);
     assert.equal(inTogether.length, 4);
     for (const block of inTogether) assert.doesNotMatch(block, /note\(|log\.record\(/, 'never inside statements that stand or fall together: an entry is written after the change has happened');
-    assert.match(code, /const out = await log\.history\(pool, req\.workspaceId, req\.query\);\s+if \(out\.code\) return refuse\(res, out\.code\);/);
+    assert.match(code, /const out = await log\.history\(pool, req\.workspaceId, req\.query, \{ scope: ownRecord\(req\) \}\);\s+if \(out\.code\) return refuse\(res, out\.code\);/);
     assert.match(code, /journeyRun\.include\(pool, \{ workspaceId: req\.workspaceId, flowId: id, dealId, actorId: req\.userId \}\)/);
     assert.match(read('server.js'), /app\.use\('\/api\/journey',\s+require\('\.\/routes\/journey'\)\);/);
   });
@@ -1550,7 +1551,8 @@ describe('wiring', () => {
     assert.ok(statements.length >= 28, String(statements.length));
     for (const s of statements) {
       assert.match(s, /workspace_id|VALUES \(\$1/, s.slice(0, 70));
-      assert.doesNotMatch(s, /\$\{(?!FLOW_COLUMNS\}|NODE_COLUMNS\}|table\})/, s.slice(0, 70));
+      // visibility.*: text written in utils/visibility.js, the member's id pushed as a value — never anything a caller sent
+      assert.doesNotMatch(s, /\$\{(?!FLOW_COLUMNS\}|NODE_COLUMNS\}|table\}|visibility\.(?:linked|deals)\(req, of(?:Counts|Waiting|Log)\b)/, s.slice(0, 70));
     }
     assert.doesNotMatch(code, /req\.(body|query|params)\.workspace/);
   });

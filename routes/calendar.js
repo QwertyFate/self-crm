@@ -24,6 +24,16 @@
    The LATERAL join on each activity finds that contact's most recently updated
    deal, so an entry can link straight to the deal it is about.
 
+   WHO SEES AN ENTRY. When the workspace holds members to what is assigned to
+   them (utils/visibility.js), an entry follows what it names: an activity or
+   a task on a deal is shown when the member sees that deal, else one on a
+   contact when they see that contact; an entry that names neither (a task of
+   the team, a note with a date) is shown to everyone. A subtask is shown only
+   when its parent task is (utils/task-visibility.js, as on the Tasks page). The LATERAL join only
+   offers such a member a deal they see, so an entry on their contact never
+   links to (or names) a colleague's deal on the same contact. Owners, admins
+   and workspaces without the switch run the statements unchanged.
+
    ENDPOINTS
      GET /?start=YYYY-MM-DD&end=YYYY-MM-DD   400 without both
      GET /today                              the same union at CURRENT_DATE
@@ -33,6 +43,8 @@ const express     = require('express');
 const router      = express.Router();
 const { pool }    = require('../db');
 const requireAuth = require('../middleware/auth');
+const visibility  = require('../utils/visibility');    // members held to what is assigned to them
+const taskVisibility = require('../utils/task-visibility');   // the same rule for tasks (a subtask also follows its parent)
 
 // The calendar feed is a union of two things the app schedules: activities that have an
 // event_date (optionally with an event_time), and tasks that have a due_date. Each row says
@@ -41,10 +53,21 @@ const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
 
+// What a member held to their own adds to the union (utils/visibility.js): which activities, which tasks, and which
+// deal the LATERAL join may offer. Three empty strings, and nothing pushed, for everyone else.
+function pieces(req, params) {
+  return {
+    activities: visibility.linked(req, params, { deal: 'a.deal_id', contact: 'a.contact_id' }),
+    deal:       visibility.deals(req, params, 'deals'),
+    tasks:      taskVisibility.tasks(req, params, 't'),   // the Tasks page's own rule, so both screens show the same tasks
+  };
+}
+
 router.get('/', async (req, res, next) => {
   try {
     const { start, end } = req.query;
     if (!start || !end) return res.status(400).json({ error: 'start and end dates required (YYYY-MM-DD)' });
+    const params = [req.workspaceId, start, end], mine = pieces(req, params);
 
     const { rows } = await pool.query(`
       SELECT 'activity' AS kind, a.id, a.type, a.content AS title, a.completed, a.created_by,
@@ -63,13 +86,13 @@ router.get('/', async (req, res, next) => {
       LEFT JOIN deals db ON db.id = a.deal_id
       LEFT JOIN LATERAL (
         SELECT id, title FROM deals
-        WHERE deals.contact_id = a.contact_id AND deals.workspace_id = a.workspace_id
+        WHERE deals.contact_id = a.contact_id AND deals.workspace_id = a.workspace_id${mine.deal}
         ORDER BY deals.updated_at DESC LIMIT 1
       ) d ON true
       WHERE a.workspace_id = $1
         AND a.event_date IS NOT NULL
         AND a.event_date >= $2::date
-        AND a.event_date <= $3::date
+        AND a.event_date <= $3::date${mine.activities}
       UNION ALL
       SELECT 'task' AS kind, t.id, 'task' AS type, t.title AS title,
              (t.status = 'done') AS completed,
@@ -90,9 +113,9 @@ router.get('/', async (req, res, next) => {
       WHERE t.workspace_id = $1
         AND t.due_date IS NOT NULL
         AND t.due_date >= $2::date
-        AND t.due_date <= $3::date
+        AND t.due_date <= $3::date${mine.tasks}
       ORDER BY event_date ASC, event_time ASC NULLS FIRST, kind ASC, id ASC
-    `, [req.workspaceId, start, end]);
+    `, params);
 
     res.json(rows);
   } catch (e) { next(e); }
@@ -100,6 +123,7 @@ router.get('/', async (req, res, next) => {
 
 router.get('/today', async (req, res, next) => {
   try {
+    const params = [req.workspaceId], mine = pieces(req, params);
     const { rows } = await pool.query(`
       SELECT 'activity' AS kind, a.id, a.type, a.content AS title, a.completed, a.created_by,
              TO_CHAR(a.event_date, 'YYYY-MM-DD') AS event_date,
@@ -117,11 +141,11 @@ router.get('/today', async (req, res, next) => {
       LEFT JOIN deals db ON db.id = a.deal_id
       LEFT JOIN LATERAL (
         SELECT id, title FROM deals
-        WHERE deals.contact_id = a.contact_id AND deals.workspace_id = a.workspace_id
+        WHERE deals.contact_id = a.contact_id AND deals.workspace_id = a.workspace_id${mine.deal}
         ORDER BY deals.updated_at DESC LIMIT 1
       ) d ON true
       WHERE a.workspace_id = $1
-        AND a.event_date = CURRENT_DATE
+        AND a.event_date = CURRENT_DATE${mine.activities}
       UNION ALL
       SELECT 'task' AS kind, t.id, 'task' AS type, t.title AS title,
              (t.status = 'done') AS completed,
@@ -140,9 +164,9 @@ router.get('/today', async (req, res, next) => {
       LEFT JOIN contacts ct ON ct.id = t.contact_id
       LEFT JOIN deals    dt ON dt.id = t.deal_id
       WHERE t.workspace_id = $1
-        AND t.due_date = CURRENT_DATE
+        AND t.due_date = CURRENT_DATE${mine.tasks}
       ORDER BY event_time ASC NULLS FIRST, kind ASC, id ASC
-    `, [req.workspaceId]);
+    `, params);
 
     res.json(rows);
   } catch (e) { next(e); }

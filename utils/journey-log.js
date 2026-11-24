@@ -38,7 +38,10 @@
 
    READING  history(): newest first, a page at a time (before = the last id
    seen), narrowed by workflow, deal, group of events and a text. Every value
-   is checked here and handed to the statement — never part of it.
+   is checked here and handed to the statement — never part of it. A caller
+   may hand in scope(params): one more condition written by the route (which
+   entries this person may read — routes/journey.js, utils/visibility.js), its
+   value pushed onto the statement's values. Without it: the whole record.
 
    Takes the pool; opens nothing itself.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -120,9 +123,11 @@ function checkQuery(query) {
 // The record of a workspace, newest first: { entries, more } or { code: 'history' }. One entry more than asked for is
 // read, to know whether older ones exist. The text is looked for as it is — no pattern, so nothing in it means more
 // than its letters.
-async function history(db, wid, query) {
+async function history(db, wid, query, { scope = null } = {}) {
   const ask = checkQuery(query);
   if (ask.code) return ask;
+  const params = [wid, ask.flowId, ask.dealId, ask.events, ask.q, ask.before, ask.limit + 1];
+  const held = scope ? scope(params) : '';
   const { rows } = await db.query(
     `SELECT l.id, l.created_at, l.event, l.flow_id, l.flow_name, l.deal_id, l.deal_title, l.kind, l.title, l.status, l.detail, l.actor_name
        FROM journey_log l
@@ -131,9 +136,9 @@ async function history(db, wid, query) {
         AND ($3::int IS NULL OR l.deal_id = $3)
         AND ($4::text[] IS NULL OR l.event = ANY($4::text[]))
         AND ($5::text IS NULL OR POSITION(LOWER($5) IN LOWER(l.deal_title)) > 0 OR POSITION(LOWER($5) IN LOWER(l.title)) > 0 OR POSITION(LOWER($5) IN LOWER(l.flow_name)) > 0)
-        AND ($6::int IS NULL OR l.id < $6)
+        AND ($6::int IS NULL OR l.id < $6)${held}
       ORDER BY l.id DESC LIMIT $7`,
-    [wid, ask.flowId, ask.dealId, ask.events, ask.q, ask.before, ask.limit + 1]
+    params
   );
   return { entries: rows.slice(0, ask.limit), more: rows.length > ask.limit };
 }

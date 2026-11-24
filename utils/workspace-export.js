@@ -55,8 +55,14 @@
                                      and its result link), workspace_mail and
                                      email_accounts (a Google sign-in, sealed
                                      under this server's secret), api_keys,
-                                     workspace_notetaker_ai
-     history about the workspace     webhook_logs, engine_deliveries,
+                                     workspace_notetaker_ai, facebook_pages
+                                     (the Facebook Pages the platform's admin
+                                     gave to the workspace, each with its
+                                     sealed token: given anew where it runs)
+     history about the workspace     facebook_leads (which leads Facebook
+                                     announced here and what became of them;
+                                     the contacts they made are in the bundle),
+                                     webhook_logs, engine_deliveries,
                                      engine_api_requests, idempotency_keys,
                                      notetaker_recordings, notifications,
                                      journey_sends (the emails counted against
@@ -68,7 +74,11 @@
      the team's chatter              chat_messages, chat_reads, break_scores
      access                          invite_codes, password_resets
      the platform's, not the         master_access_log, platform_invites,
-     workspace's                     platform_settings
+     workspace's                     platform_settings, assistant_chats and
+                                     assistant_proposals (the admin console's
+                                     conversations with its assistant and what
+                                     it proposed; a workflow that was made of
+                                     a proposal is in the bundle like any other)
      dead                            stages (contact stages, removed in Part 19)
 
    FOR WHOEVER IMPORTS A BUNDLE
@@ -151,13 +161,13 @@ const TABLES = [
 // every table db.js creates: tests/routes/admin-transfer.test.js fails when a new table is in neither.
 const LEFT_OUT = {
   workspace_webhook: 'secret', workspace_calcom: 'secret', workspace_calendly: 'secret', workspace_engine: 'secret', workspace_fonio: 'secret', workspace_mail: 'secret', email_accounts: 'secret',
-  api_keys: 'secret', workspace_notetaker_ai: 'secret',
+  api_keys: 'secret', workspace_notetaker_ai: 'secret', facebook_pages: 'secret',
   webhook_logs: 'history', engine_deliveries: 'history', engine_api_requests: 'history', idempotency_keys: 'history', notetaker_recordings: 'history', notifications: 'history',
-  journey_sends: 'history',
+  journey_sends: 'history', facebook_leads: 'history',
   journey_watch: 'rebuilt',
   chat_messages: 'chatter', chat_reads: 'chatter', break_scores: 'chatter',
   invite_codes: 'access', password_resets: 'access',
-  master_access_log: 'platform', platform_invites: 'platform', platform_settings: 'platform',
+  workspace_imports: 'platform', master_access_log: 'platform', platform_invites: 'platform', platform_settings: 'platform', assistant_chats: 'platform', assistant_proposals: 'platform',
   stages: 'dead',
 };
 

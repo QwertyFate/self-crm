@@ -274,6 +274,28 @@
     .prov-badge.no  { background: #f3f4f6; color: #6b7280; }
     .prov-badge.off { background: #fef2f2; color: #b91c1c; }
     .prov-table-wrap { overflow-x: auto; }
+
+    /* ── Assistant: the conversation and what it proposes ── */
+    #as-entries { max-height: 64vh; overflow-y: auto; margin-bottom: 14px; }
+    .as-entry { padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; background: var(--card-bg); }
+    .as-entry.as-you { margin-left: 12%; background: color-mix(in srgb, var(--primary) 6%, var(--card-bg)); }
+    .as-who { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+    .as-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.55; color: var(--text); }
+    .as-looked { margin: 0 0 4px 0; }
+    .as-card { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-top: 12px; background: color-mix(in srgb, var(--bg) 60%, var(--card-bg)); }
+    .as-card-head { margin-bottom: 6px; font-size: 15px; }
+    .as-steps { padding-left: 20px; margin: 12px 0; }
+    .as-steps li { margin-bottom: 10px; }
+    .as-steps .prov-hint { margin: 4px 0 0 0; }
+    .as-kind { display: inline-block; padding: 1px 8px; border-radius: 6px; background: var(--primary-light); color: var(--primary); font-size: 12px; font-weight: 700; }
+    .as-notes { border: 1px solid #fde68a; background: #fffbeb; color: #92400e; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin: 10px 0; }
+    .as-notes ul, .as-problems { margin: 6px 0 0 0; padding-left: 18px; }
+    .as-exact { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font-size: 12px; margin: 8px 0 0 0; }
+    .as-card-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+    .as-card-actions .prov-hint { margin: 0; }
+    .as-examples { padding-left: 18px; line-height: 1.6; }
+    .as-chats { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+    .as-asked { max-width: 320px; font-size: 13px; color: var(--muted); }
   </style>
 </head>
 <body>
@@ -317,6 +339,8 @@
         <button class="admin-tab"        id="tabbtn-engine"       onclick="showAdminTab('engine')">Engine API</button>
         <button class="admin-tab"        id="tabbtn-monitor"      onclick="showAdminTab('monitor')">Engine Monitor</button>
         <button class="admin-tab"        id="tabbtn-crm"          onclick="showAdminTab('crm')">CRM access</button>
+        <button class="admin-tab"        id="tabbtn-facebook"     onclick="showAdminTab('facebook')">Facebook</button>
+        <button class="admin-tab"        id="tabbtn-assistant"    onclick="showAdminTab('assistant')">Assistant</button>
       </div>
 
       <div id="tab-defaults">
@@ -495,6 +519,26 @@
               </tbody>
             </table>
           </div>
+        </div>
+
+        <div class="section" id="imp-section">
+          <h2 style="margin: 0 0 4px 0;">Import into a workspace</h2>
+          <p class="prov-hint">
+            Brings the <strong>data</strong> of an export file into a workspace that is here: its contacts, deals, notes
+            and their comments, with the pipelines and custom fields they need. No owner, no team and no settings come
+            along. <strong>An import only adds — nothing that is in the workspace is replaced, changed or deleted.</strong>
+            First the file is checked: the check only reads the file and says what an import would add. Then, if you
+            want it, "Import" adds exactly that.
+          </p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px">
+            <select id="imp-into" onchange="importChanged()"><option value="">— choose the workspace —</option></select>
+            <input type="file" id="imp-file" accept=".gz,.tgz,application/gzip" onchange="importChanged()" />
+            <button class="btn btn-primary" id="imp-check" onclick="checkImportFile()">Check the file</button>
+          </div>
+          <div id="imp-result" style="margin-top:14px"></div>
+          <div id="imp-actions" style="margin-top:14px"></div>
+          <h3 style="margin: 22px 0 4px 0; font-size: 15px;">Imports so far</h3>
+          <div id="imp-list" class="prov-hint">Loading…</div>
         </div>
       </div><!-- /#tab-provisioning -->
 
@@ -931,6 +975,106 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
         </div>
       </div><!-- /#tab-crm -->
 
+      <div id="tab-facebook" class="hidden">
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Facebook lead ads: one connection for the platform</h2>
+          <p class="prov-hint">
+            You sign in at Facebook once, here. The Pages you can advertise on are then given to workspaces, and the
+            leads of a Page arrive in its workspace. The customers never sign in at Facebook, so the Meta app needs no
+            review, as long as <strong>you</strong> have a role on it and access to each customer's Page.
+          </p>
+          <div id="fb-status" class="loading">Loading…</div>
+          <div id="fb-actions" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap"></div>
+          <div id="fb-error" style="margin-top:14px"></div>
+        </div>
+
+        <div class="section" id="fb-setup-section">
+          <h2 style="margin: 0 0 4px 0;">Setup in Meta's developer console</h2>
+          <p class="prov-hint">Once per server. The address below must be listed in the app exactly as it stands here.</p>
+          <ol class="prov-hint" style="padding-left:18px; line-height:1.7">
+            <li>An app with Facebook Login and the lead permissions available to it; you are its admin or developer.</li>
+            <li>Under "Valid OAuth Redirect URIs": <code id="fb-redirect">…</code></li>
+            <li>In the server's <code>.env</code>: <code>META_APP_ID</code> and <code>META_APP_SECRET</code>, then restart the server.</li>
+          </ol>
+          <p class="prov-hint">Asked for at sign-in: <code id="fb-scopes">…</code> · Graph API <code id="fb-version">…</code></p>
+        </div>
+
+        <div class="section" id="fb-receiver-section" style="display:none">
+          <h2 style="margin: 0 0 4px 0;">Receiving leads</h2>
+          <p class="prov-hint">
+            Facebook tells this server each time a lead arrives on a Page that is given to a workspace. For that, the Meta
+            app has to know this server's address. Once per server; the address must be reachable from the internet over https.
+          </p>
+          <div id="fb-receiver" class="loading">Loading…</div>
+          <div id="fb-receiver-actions" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap"></div>
+          <div id="fb-receiver-error" style="margin-top:14px"></div>
+          <details class="prov-hint" style="margin-top:14px">
+            <summary style="cursor:pointer">Set it up by hand</summary>
+            <ol style="padding-left:18px; line-height:1.7; margin-top:8px">
+              <li>In Meta's app dashboard, open the app, then "Webhooks", and choose "Page" in the list.</li>
+              <li>Callback URL: <code id="fb-receive-url">…</code></li>
+              <li>Verify token: <code id="fb-verify-token">…</code></li>
+              <li>Confirm, then subscribe to the field <code>leadgen</code>.</li>
+            </ol>
+          </details>
+        </div>
+
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Your Pages</h2>
+          <p class="prov-hint">
+            Read from Facebook each time this tab opens. Give a Page to a workspace and choose which of that workspace's
+            lead webhooks its leads go to: the field mapping of that webhook (Integrations → Webhook in the workspace)
+            turns a lead's answers into a contact. One Page belongs to one workspace; a workspace can have several Pages.
+            A Page can be given only where you may advertise on it. Giving a Page installs the app on it at Facebook:
+            from then on each of its leads arrives at the chosen lead webhook. "Leads" says whether the app is really on
+            the Page at Facebook right now, how many leads arrived, and what became of the last one.
+          </p>
+          <div style="overflow-x:auto">
+            <table class="prov-table">
+              <thead><tr><th>Page</th><th>Page ID</th><th>You may advertise</th><th>Workspace</th><th>Lead webhook</th><th>Leads</th><th></th></tr></thead>
+              <tbody id="fb-pages-body"><tr><td colspan="7" class="loading">Not connected.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div><!-- /#tab-facebook -->
+
+      <!-- Assistant: a Claude that looks at a workspace's setup and proposes a workflow for it (ASSISTANT_CHANGES;
+           routes/admin-assistant.js). It writes nothing into a workspace: a workflow is made by "Create" below. -->
+      <div id="tab-assistant" class="hidden">
+        <div class="section">
+          <h2 style="margin: 0 0 4px 0;">Assistant</h2>
+          <p class="prov-hint">
+            It can look at how a workspace is set up and propose a workflow for it. It cannot delete, change or switch
+            on anything: a workflow is made only when you press "Create", and it is made switched off.
+          </p>
+          <div id="as-status" class="loading">Loading…</div>
+        </div>
+
+        <div class="section" id="as-chat-section" style="display:none">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:12px">
+            <h2 style="margin:0">Conversation</h2>
+            <button class="btn" id="as-new" onclick="newAssistantChat()">New conversation</button>
+          </div>
+          <div id="as-entries"></div>
+          <div id="as-error"></div>
+          <textarea id="as-text" maxlength="4000" rows="3" placeholder="What should it look up or propose? Name the workspace." onkeydown="assistantKey(event)"></textarea>
+          <div style="margin-top:10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+            <button class="btn btn-primary" id="as-send" onclick="askAssistant()">Send</button>
+            <span class="prov-hint" style="margin:0">Enter sends, Shift+Enter starts a new line.</span>
+          </div>
+          <div id="as-chats" class="as-chats"></div>
+        </div>
+
+        <div class="section" id="as-made-section" style="display:none">
+          <h2 style="margin: 0 0 4px 0;">What the assistant made</h2>
+          <p class="prov-hint">
+            Every workflow it proposed, newest first. "Undo" takes a workflow away again while nobody has switched it on
+            or changed it in the workspace; "Create again" makes it once more.
+          </p>
+          <div id="as-made" class="loading">Loading…</div>
+        </div>
+      </div><!-- /#tab-assistant -->
+
       <div id="message" class="message" style="display: none;"></div>
     </div>
   </div>
@@ -960,6 +1104,7 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
         document.getElementById('admin-app').classList.remove('hidden');
         document.getElementById('admin-logout-btn').style.display = 'inline-flex';
         loadDashboard();
+        facebookReturn();   // back from Facebook's sign-in page: its tab, and what happened
       }
     }
 
@@ -1332,7 +1477,7 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
        ══════════════════════════════════════════════════════════════════════ */
 
     function showAdminTab(name) {
-      for (const t of ['defaults', 'provisioning', 'tutorial', 'engine', 'monitor', 'crm']) {
+      for (const t of ['defaults', 'provisioning', 'tutorial', 'engine', 'monitor', 'crm', 'facebook', 'assistant']) {
         document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== name);
         document.getElementById(`tabbtn-${t}`).classList.toggle('active', t === name);
       }
@@ -1340,6 +1485,8 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
       if (name === 'tutorial' || name === 'engine') fillTutorialHost();
       if (name === 'monitor') loadEngineMonitor();
       if (name === 'crm') loadCrmLog();
+      if (name === 'facebook') loadFacebook();
+      if (name === 'assistant') loadAssistant();
     }
 
     // The tutorial's snippets name this console's own host, so they are copy-and-run.
@@ -1652,6 +1799,9 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
         if (!res.ok) throw new Error((await res.json()).error || 'Could not load workspaces');
         const data = await res.json();
         body.innerHTML = renderProvisionRows(data.workspaces);
+        const into = document.getElementById('imp-into');   // "Import into a workspace" chooses among the same workspaces
+        if (into) into.innerHTML = importTargetOptions(data.workspaces, into.value);
+        loadImports();
       } catch (e) {
         body.innerHTML = `<tr><td colspan="9" class="message error">${esc(e.message)}</td></tr>`;
       }
@@ -1701,6 +1851,170 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
         btn.disabled = false;
         btn.textContent = was;
       }
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       IMPORT INTO A WORKSPACE (WORKSPACE_IMPORT_CHANGES Parts 1–2, 2026-11-24;
+       routes/admin-transfer.js, utils/workspace-import.js). DATA ONLY —
+       contacts, deals, notes and their comments, with the pipelines and
+       fields they need — into a workspace that is here. An import only adds:
+       nothing that is in the workspace is replaced, changed or deleted.
+         1. THE CHECK  POST /workspaces/:id/import/check: the export file is
+            sent as it is; the server reads it and says what an import would
+            add. Nothing is written.
+         2. THE IMPORT  POST /workspaces/:id/import: the SAME file once more,
+            only after a check that found nothing in the way, and only after
+            the admin said yes. Offered once per check: another file, another
+            workspace or an import that went through needs a new check.
+       "Imports so far" is the record (GET /workspaces/imports).
+       Everything the server (and so the file) names is shown as text, and
+       only a number becomes part of an address.
+       ══════════════════════════════════════════════════════════════════════ */
+    const IMPORT_MAX_BYTES = 100 * 1024 * 1024;   // what server.js takes on this address
+    // The export's tables in words. A table that is not here is shown by its own name.
+    const IMPORT_LABELS = {
+      custom_fields: 'Contact fields', deal_fields: 'Deal fields', pipelines: 'Pipelines', pipeline_stages: 'Stages', contacts: 'Contacts', deals: 'Deals',
+      activities: 'Notes and activities', activity_comments: 'Comments',
+      workspaces: 'Workspace settings', users: 'People (accounts)', user_workspaces: 'Memberships', task_fields: 'Task fields', object_fields: 'Object fields',
+      objects: 'Objects', object_contacts: 'Objects linked to contacts', deal_objects: 'Objects linked to deals', task_projects: 'Task projects',
+      task_project_statuses: 'Task statuses', task_lists: 'Task lists', tasks: 'Tasks', task_attachments: 'Task attachments', contact_documents: 'Contact documents',
+      note_templates: 'Note templates', journey_flows: 'Workflows', journey_nodes: 'Workflow boxes', journey_runs: 'Deals in workflows', journey_log: 'Workflow record',
+      fonio_calls: 'fonio calls', fonio_other_calls: 'Other fonio calls',
+    };
+    // What the check allowed: { id, name, file, adds } — the workspace, the very file that was checked, and what would be added. null: nothing to import.
+    let importReady = null;
+    const importLabel = name => (Object.prototype.hasOwnProperty.call(IMPORT_LABELS, name) ? IMPORT_LABELS[name] : String(name ?? ''));
+    const importCount = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Math.floor(Number(v)) : 0);
+    const importId = v => (/^[1-9]\d{0,9}$/.test(String(v)) ? Number(v) : null);   // a workspace's id, or nothing
+    const importFileName = file => String((file && file.name) || '').replace(/[^\w.() -]/g, '').slice(0, 200);   // as a header takes it, and as the server keeps it
+    const importSay = (text, type = 'error') => { document.getElementById('imp-result').innerHTML = text ? `<div class="message ${type}" style="display:block">${esc(text)}</div>` : ''; };
+    // The workspaces a file can go into, as the options of the list; `chosen` stays chosen while it is still there.
+    function importTargetOptions(workspaces, chosen) {
+      const rows = (Array.isArray(workspaces) ? workspaces : []).filter(w => w && importId(w.id));
+      return '<option value="">— choose the workspace —</option>' + rows.map(w => `<option value="${importId(w.id)}"${String(importId(w.id)) === String(chosen) ? ' selected' : ''}>${esc(w.name || '(no name)')} (#${importId(w.id)})</option>`).join('');
+    }
+    // "12 contacts, 5 deals, 30 notes" from rows of { name, adds } — the three kinds a person asks about, then how many rows else.
+    function importSummary(tables) {
+      const adds = name => importCount(((Array.isArray(tables) ? tables : []).find(t => t && t.name === name) || {}).adds);
+      const rest = (Array.isArray(tables) ? tables : []).filter(t => t && !['contacts', 'deals', 'activities'].includes(t.name)).reduce((n, t) => n + importCount(t.adds), 0);
+      const said = [[adds('contacts'), 'contact', 'contacts'], [adds('deals'), 'deal', 'deals'], [adds('activities'), 'note', 'notes']].map(([n, one, many]) => `${n} ${n === 1 ? one : many}`);
+      return said.join(', ') + (rest ? `, ${rest} other row${rest === 1 ? '' : 's'} (fields, pipelines, stages, comments)` : '');
+    }
+    // The table of kinds: what the file holds and what becomes of it. done: after an import (the past tense).
+    function importTableHtml(tables, done) {
+      const rows = (Array.isArray(tables) ? tables : []).filter(t => t && typeof t === 'object' && importCount(t.rows) > 0);
+      if (!rows.length) return '<p class="prov-hint" style="margin-top:10px">The file holds nothing an import brings in: no contacts, deals, notes, pipelines or fields.</p>';
+      return `<div class="prov-table-wrap" style="margin-top:10px"><table class="prov-table"><thead><tr><th>What</th><th>In the file</th><th>${done ? 'Added' : 'Would be added'}</th><th>Already here (kept as they ${done ? 'were' : 'are'})</th><th>Left out</th></tr></thead><tbody>${rows.map(t =>
+        `<tr><td>${esc(importLabel(t.name))}</td><td>${importCount(t.rows)}</td><td>${importCount(t.adds)}</td><td>${importCount(t.here)}</td><td>${importCount(t.left_out)}</td></tr>`).join('')}</tbody></table></div>`;
+    }
+    // What is said below the table, for a check and for an import alike: renamed pipelines, unassigned rows, what to know, what stays behind.
+    function importNotesHtml(d, done) {
+      const list = v => (Array.isArray(v) ? v.filter(x => typeof x === 'string' && x) : []);
+      const renamed = (d && Array.isArray(d.pipelines) ? d.pipelines : []).filter(p => p && typeof p === 'object' && String(p.name ?? '') !== String(p.as ?? ''));
+      const behind = (d && Array.isArray(d.not_included) ? d.not_included : []).filter(t => t && typeof t === 'object' && importCount(t.rows) > 0);
+      const unassigned = importCount(d && d.unassigned), warnings = list(d && d.warnings), parts = [];
+      if (renamed.length) parts.push(`<p style="margin-top:10px">${renamed.length === 1 ? 'A pipeline' : 'Pipelines'} that ${done ? 'arrived' : 'would arrive'} under another name, because one of that name is here:</p>
+        <ul style="margin:6px 0 0 18px">${renamed.map(p => `<li>${esc(p.name)} → <strong>${esc(p.as)}</strong></li>`).join('')}</ul>`);
+      if (unassigned) parts.push(`<p style="margin-top:10px">${unassigned === 1 ? `1 row ${done ? 'arrived' : 'arrives'}` : `${unassigned} rows ${done ? 'arrived' : 'arrive'}`} unassigned: people do not come along.</p>`);
+      if (warnings.length) parts.push(`<p style="margin-top:10px"><strong>${done ? 'To know about this import' : 'To know before importing'}</strong></p><ul class="prov-hint" style="margin:6px 0 0 18px; line-height:1.6">${warnings.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`);
+      if (behind.length) parts.push(`<p style="margin-top:10px"><strong>Not part of an import</strong> <span class="prov-hint">(in the file, and staying behind)</span></p>
+        <ul class="prov-hint" style="margin:6px 0 0 18px; line-height:1.6">${behind.map(t => `<li>${esc(importLabel(t.name))}: ${importCount(t.rows)}</li>`).join('')}</ul>`);
+      return parts.join('');
+    }
+    const importBlockersHtml = (lead, blockers) => `<div class="message error" style="display:block">${esc(lead)}<ul style="margin:6px 0 0 18px">${blockers.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
+    // What the check found: d is the server's answer to POST /workspaces/:id/import/check.
+    function renderImportCheck(d) {
+      const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+      const file = obj(d && d.file), into = obj(d && d.into);
+      const blockers = (d && Array.isArray(d.blockers) ? d.blockers : []).filter(x => typeof x === 'string' && x);
+      return (blockers.length ? importBlockersHtml('This file cannot be imported here:', blockers) : '')
+        + `<p style="margin-top:10px">From <strong>${esc(file.name || '(no name)')}</strong>${file.exported_at ? `, exported ${esc(fmtVisitTime(file.exported_at))}` : ''} — into <strong>${esc(into.name || '(no name)')}</strong>${importId(into.id) ? ` <span class="prov-hint">#${importId(into.id)}</span>` : ''}.</p>`
+        + importTableHtml(d && d.tables, false) + importNotesHtml(d, false);
+    }
+    // What an import did: d is the server's answer to POST /workspaces/:id/import.
+    function renderImportDone(d) {
+      const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+      const done = obj(d && d.imported), into = obj(done.into), file = obj(d && d.file);
+      return `<div class="message success" style="display:block">Imported into ${esc(into.name || '(no name)')}: ${esc(importSummary(done.tables))} were added. Nothing that was there before was changed.</div>
+        <p style="margin-top:10px">From <strong>${esc(file.name || '(no name)')}</strong>. The workspace's Contacts and Deals now show them.</p>`
+        + importTableHtml(done.tables, true) + importNotesHtml(done, true);
+    }
+    // The button of the import: there only while a check allows it.
+    function renderImportActions() {
+      if (!importReady) return '';
+      return `<button class="btn btn-primary" id="imp-run" onclick="importCheckedFile()">Import into ${esc(importReady.name || '(no name)')}</button> <span class="prov-hint">Adds ${esc(importReady.adds)}. Nothing that is in the workspace is changed.</span>`;
+    }
+    const drawImportActions = () => { document.getElementById('imp-actions').innerHTML = renderImportActions(); };
+    // Another workspace or another file was chosen: what was checked is no longer what would be imported.
+    function importChanged() {
+      importReady = null;
+      document.getElementById('imp-result').innerHTML = '';
+      drawImportActions();
+    }
+    // The chosen workspace and file, or a sentence about what is missing (said, and null handed back).
+    function importChosen() {
+      const input = document.getElementById('imp-file');
+      const id = importId(document.getElementById('imp-into').value);
+      if (!id) { importSay('Choose the workspace the file should go into.'); return null; }
+      const file = input && input.files && input.files[0];
+      if (!file) { importSay('Choose the export file (.tar.gz) first.'); return null; }
+      if (Number(file.size) > IMPORT_MAX_BYTES) { importSay('The file is larger than 100 MB: an export is never that large.'); return null; }
+      return { id, file };
+    }
+    // "Check the file": the chosen file's bytes go to the server as they are, for the chosen workspace; what comes
+    // back is shown. Nothing is written.
+    async function checkImportFile() {
+      importReady = null; drawImportActions();
+      const chosen = importChosen(), btn = document.getElementById('imp-check');
+      if (!chosen) return;
+      btn.disabled = true;
+      document.getElementById('imp-result').innerHTML = '<div class="loading">Checking the file…</div>';
+      let data;
+      try { data = await (await fetch(`${API_BASE}/workspaces/${chosen.id}/import/check`, { method: 'POST', headers: { 'Content-Type': 'application/gzip' }, body: chosen.file })).json(); }
+      catch (e) { data = { error: 'The server could not be reached, or it did not answer the check.' }; }
+      btn.disabled = false;
+      if (!data || data.error || !Array.isArray(data.tables)) return importSay((data && data.error) || 'That did not work.');
+      document.getElementById('imp-result').innerHTML = renderImportCheck(data);
+      const blocked = Array.isArray(data.blockers) && data.blockers.length > 0;
+      if (data.can_import === true && !blocked) importReady = { id: chosen.id, name: String((data.into && data.into.name) || ''), file: chosen.file, adds: importSummary(data.tables) };
+      drawImportActions();
+    }
+    // "Import into …": the file that was checked is sent once more, and its data is added to the workspace. Asked
+    // once before; offered once per check.
+    async function importCheckedFile() {
+      const ready = importReady;
+      if (!ready) return;
+      if (!confirm(`Add the data of this file to "${ready.name}"?\n\n${ready.adds} would be added.\nNothing that is in the workspace is changed, replaced or deleted. An import cannot be taken back with one click.`)) return;
+      importReady = null; drawImportActions();
+      document.getElementById('imp-result').innerHTML = '<div class="loading">Importing… this can take a moment.</div>';
+      let data;
+      try { data = await (await fetch(`${API_BASE}/workspaces/${ready.id}/import`, { method: 'POST', headers: { 'Content-Type': 'application/gzip', 'X-File-Name': importFileName(ready.file) }, body: ready.file })).json(); }
+      catch (e) { data = { error: 'The server could not be reached, or it did not answer. Whether the import went through is said under "Imports so far" — look there before trying again.', unknown: true }; }
+      if (data && data.imported && typeof data.imported === 'object' && Array.isArray(data.imported.tables)) {
+        document.getElementById('imp-result').innerHTML = renderImportDone(data);
+        loadProvisionList();   // the counts of the list, and "Imports so far"
+        return;
+      }
+      const blockers = data && Array.isArray(data.blockers) ? data.blockers.filter(x => typeof x === 'string' && x) : [];
+      const said = (data && data.error) || 'That did not work.';
+      document.getElementById('imp-result').innerHTML = blockers.length ? importBlockersHtml(said, blockers)
+        : `<div class="message error" style="display:block">${esc(said)}${data && data.unknown ? '' : ' Nothing was written.'}</div>`;
+      loadImports();
+    }
+    // "Imports so far": the record of what was brought in, newest first.
+    function renderImports(rows) {
+      const list = (Array.isArray(rows) ? rows : []).filter(r => r && typeof r === 'object');
+      if (!list.length) return 'Nothing has been imported yet.';
+      const added = counts => importSummary(Object.entries(counts && typeof counts === 'object' && !Array.isArray(counts) ? counts : {}).map(([name, c]) => ({ name, adds: c && c.adds })));
+      return `<div class="prov-table-wrap"><table class="prov-table"><thead><tr><th>When</th><th>File</th><th>From</th><th>Into</th><th>Added</th></tr></thead><tbody>${list.map(r =>
+        `<tr><td>${esc(fmtVisitTime(r.created_at))}</td><td>${esc(r.file_name || '—')}</td><td>${esc(r.source_name || '—')}${r.exported_at ? `<br><span class="prov-hint">exported ${esc(fmtVisitTime(r.exported_at))}</span>` : ''}</td>
+          <td>${esc(r.workspace_name || '—')}${importId(r.workspace_id) ? ` <span class="prov-hint">#${importId(r.workspace_id)}</span>` : ' <span class="prov-hint">(workspace deleted)</span>'}</td><td>${esc(added(r.counts))}</td></tr>`).join('')}</tbody></table></div>`;
+    }
+    async function loadImports() {
+      const box = document.getElementById('imp-list');
+      let data;
+      try { data = await (await fetch(`${API_BASE}/workspaces/imports`)).json(); } catch (e) { data = { error: 'The record of imports could not be loaded.' }; }
+      box.innerHTML = !data || data.error || !Array.isArray(data.imports) ? esc((data && data.error) || 'The record of imports could not be loaded.') : renderImports(data.imports);
     }
 
     /* ══════════════════════════════════════════════════════════════════════
@@ -1773,6 +2087,514 @@ function verify(secret, req, rawBody) {          // rawBody: Buffer or string of
     // admin.html has no shared core.js, so it needs its own escape. Every value
     // rendered above comes from the database (workspace and owner names are
     // user-supplied), so none of it may be interpolated raw.
+    /* ══════════════════════════════════════════════════════════════════════
+       Facebook — the platform's one Facebook connection (FACEBOOK_CHANGES Part 1;
+       routes/admin-facebook.js, utils/facebook.js).
+       GET /api/admin/facebook → the status; "Connect Facebook" asks the server
+       for Facebook's sign-in page and goes there; Facebook sends the browser
+       back to /adminconsole?facebook=<outcome>, which opens this tab and says
+       what happened. The Pages are read from Facebook when the tab opens.
+       Part 3: "Receiving leads" — GET /api/admin/facebook/receiver says where
+       Facebook is to tell this server of a new lead and whether the Meta app
+       is registered for it; "Register at Facebook" (POST) registers it.
+       ══════════════════════════════════════════════════════════════════════ */
+    const FB_OUTCOMES = {
+      connected:   ['success', 'Facebook is connected.'],
+      denied:      ['error', 'The sign-in at Facebook was cancelled. Nothing was connected.'],
+      state:       ['error', 'That sign-in did not start in this browser session, or it took too long. Start it again here.'],
+      login:       ['error', 'Log in to the console first, then connect Facebook.'],
+      unreachable: ['error', 'Facebook could not be reached. Try again in a moment.'],
+      failed:      ['error', 'Facebook did not accept the sign-in. Check the app\'s ID, secret and redirect address, then try again.'],
+    };
+    let facebookStatus = null;
+    let facebookTargets = [];   // every workspace with its lead webhooks: what a Page can be given to (Part 2)
+
+    // The status box: not set up / not connected / connected as …, with what is missing or runs out.
+    function renderFacebookStatus(data) {
+      if (!data || data.error) return `<span class="prov-badge off">Could not be loaded</span>`;
+      if (!data.configured) return `<span class="prov-badge off">Not set up</span> <span class="prov-hint">META_APP_ID and META_APP_SECRET are not in the server's .env yet (see below).</span>`;
+      const c = data.connection;
+      if (!c) return `<span class="prov-badge no">Not connected</span> <span class="prov-hint">No Facebook account is connected.</span>`;
+      const missing = Array.isArray(c.missing) && c.missing.length
+        ? `<p class="prov-hint" style="margin-top:8px"><strong>Not given at sign-in:</strong> ${c.missing.map(m => `<code>${esc(m)}</code>`).join(', ')}. Connect again and allow them, or leads cannot be read.</p>` : '';
+      const until = c.expires_at ? `<p class="prov-hint" style="margin-top:8px">The sign-in runs until ${esc(fmtProvDate(c.expires_at))}. Connect again before then: Facebook gives a person's sign-in about 60 days.</p>` : '';
+      return `<span class="prov-badge yes">Connected</span> as <strong>${esc(c.name || 'someone')}</strong> <span class="prov-hint">(Facebook user ${esc(c.user_id)}, since ${esc(fmtProvDate(c.connected_at))})</span>${missing}${until}`;
+    }
+    // The buttons that fit the status.
+    function renderFacebookActions(data) {
+      if (!data || data.error || !data.configured) return '';
+      return data.connection
+        ? `<button class="btn btn-primary" onclick="connectFacebook()">Connect again</button><button class="btn" onclick="disconnectFacebook()">Disconnect</button>`
+        : `<button class="btn btn-primary" onclick="connectFacebook()">Connect Facebook</button>`;
+    }
+    // "Receiving leads": is the Meta app registered to tell this server of a new lead? r is the server's answer —
+    // { callback_url, verify_token, registered: true | false | null, elsewhere, error } — or a refusal ({ error }).
+    function renderFacebookReceiver(r) {
+      if (!r || !r.callback_url) return `<span class="prov-badge off">Could not be loaded</span>${r && r.error ? ` <span class="prov-hint">${esc(r.error)}</span>` : ''}`;
+      const address = `<p class="prov-hint" style="margin-top:8px">This server's address for it: <code>${esc(r.callback_url)}</code></p>`;
+      if (r.registered === true) return `<span class="prov-badge yes">Registered at Facebook</span>${address}`;
+      if (r.registered === false) {
+        const elsewhere = r.elsewhere ? `<p class="prov-hint" style="margin-top:8px">The app is registered for another address: <code>${esc(r.elsewhere)}</code>. Registering here replaces it: an app has one address for Pages.</p>` : '';
+        return `<span class="prov-badge no">Not registered</span> <span class="prov-hint">Facebook does not tell this server of new leads yet.</span>${address}${elsewhere}`;
+      }
+      return `<span class="prov-badge off">Could not be checked</span> <span class="prov-hint">${esc(r.error || 'Facebook did not say.')}</span>${address}`;
+    }
+    // Its button: none while the address is not known.
+    function renderFacebookReceiverActions(r) {
+      if (!r || !r.callback_url) return '';
+      return r.registered === true
+        ? `<button class="btn" onclick="registerFacebookReceiver()">Register again</button>`
+        : `<button class="btn btn-primary" onclick="registerFacebookReceiver()">Register at Facebook</button>`;
+    }
+    // The workspaces as the options of a list, the chosen one marked.
+    function facebookWorkspaceOptions(targets, chosen) {
+      return `<option value="">— choose —</option>` + (Array.isArray(targets) ? targets : []).map(w => `<option value="${Number(w.id)}"${Number(w.id) === Number(chosen) ? ' selected' : ''}>${esc(w.name)}</option>`).join('');
+    }
+    // A workspace's lead webhooks as the options of a list — or the one line that says why there is nothing to choose.
+    function facebookWebhookOptions(workspace, chosen) {
+      if (!workspace) return `<option value="">— choose a workspace first —</option>`;
+      const hooks = Array.isArray(workspace.webhooks) ? workspace.webhooks : [];
+      if (!hooks.length) return `<option value="">This workspace has no lead webhook yet</option>`;
+      return `<option value="">— choose —</option>` + hooks.map(h => `<option value="${Number(h.id)}"${Number(h.id) === Number(chosen) ? ' selected' : ''}>${esc(h.name)}${h.active ? '' : ' (switched off)'}</option>`).join('');
+    }
+    // One Page: what it is, whether its leads can be read, and where it is given to — two lists and the buttons.
+    // Part 4 — what became of a lead, in words. The reasons are the ones utils/facebook-leads.js keeps.
+    const FB_LEAD_REASONS = {
+      no_page: 'the Page was given to no workspace then', no_webhook: 'its lead webhook was deleted', off: 'its lead webhook was switched off',
+      rejected: 'Facebook did not hand the lead out', unmapped: 'neither a name nor an email could be read — check the field mapping of the lead webhook',
+      unreachable: 'Facebook did not answer', gone: 'the Page\'s token was not accepted — save the Page again', facebook: 'Facebook said: later', error: 'this server could not take it',
+    };
+    function facebookLeadOutcome(last) {
+      const why = last && Object.prototype.hasOwnProperty.call(FB_LEAD_REASONS, last.reason) ? FB_LEAD_REASONS[last.reason] : 'no reason was kept';   // only a reason of the list's own
+      if (!last) return '';
+      if (last.status === 'done') return 'became a contact';
+      if (last.status === 'test') return 'kept as the lead webhook\'s test delivery';
+      if (last.status === 'skipped') return `nothing came of it: ${why}`;
+      if (last.status === 'failed') return `not taken yet: ${why}. Facebook sends it again`;
+      return 'is being taken right now';
+    }
+    const facebookCount = (n, one, many) => `${Number(n) || 0} ${Number(n) === 1 ? one : many}`;
+    // The "Leads" cell of a Page: is the app on it at Facebook (only for a Page that is given), and its leads so far.
+    function renderFacebookLeads(p) {
+      const parts = [], l = p && p.leads && Number(p.leads.total) > 0 ? p.leads : null;
+      if (p && p.assigned && 'installed' in p) {
+        parts.push(p.installed === true ? '<span class="prov-badge yes">Receiving</span>'
+          : p.installed === false ? '<span class="prov-badge no">Not installed</span> <span class="prov-hint">The app is not on this Page at Facebook: press Save to install it again.</span>'
+          : `<span class="prov-badge off">Could not be checked</span>${p.installed_note ? ` <span class="prov-hint">${esc(p.installed_note)}</span>` : ''}`);
+      }
+      if (l) {
+        const waiting = Number(l.waiting) > 0 ? `, ${facebookCount(l.waiting, 'is', 'are')} to be sent again` : '';
+        parts.push(`<div class="prov-hint">${facebookCount(l.total, 'lead', 'leads')}, ${facebookCount(l.contacts, 'contact', 'contacts')}${waiting}</div>`);
+        if (l.last) parts.push(`<div class="prov-hint">Last lead ${esc(fmtVisitTime(l.last.at))}: ${esc(facebookLeadOutcome(l.last))}${l.last.detail && l.last.status !== 'done' ? ` <span title="${esc(l.last.detail)}">(${esc(l.last.detail)})</span>` : ''}</div>`);
+      } else if (p && p.assigned) parts.push('<div class="prov-hint">No lead yet.</div>');
+      return parts.join('') || '<span class="prov-hint">—</span>';
+    }
+    function renderFacebookPageRow(p, targets) {
+      const a = p.assigned || null, id = /^\d+$/.test(String(p.id)) ? String(p.id) : '';   // only a number goes into a handler
+      const head = `<td>${esc(p.name || '(no name)')}</td><td><code>${esc(p.id)}</code></td><td>${p.can_advertise
+        ? '<span class="prov-badge yes">Yes</span>' : '<span class="prov-badge off">No</span> <span class="prov-hint">leads of this Page cannot be read</span>'}</td>`;
+      const back = a && id ? `<button class="btn" onclick="unassignFacebookPage('${id}')">Take back</button>` : '';
+      if (!p.can_advertise || !id) {
+        const why = !id ? 'This Page has an id the console cannot work with.' : a ? `Given to ${esc(a.workspace_name)}, but its leads cannot be read any more.` : 'Cannot be given to a workspace.';
+        return `<tr>${head}<td colspan="2" class="prov-hint">${why}</td><td>${renderFacebookLeads(p)}</td><td>${back}</td></tr>`;
+      }
+      const ws = (Array.isArray(targets) ? targets : []).find(w => a && Number(w.id) === Number(a.workspace_id));
+      return `<tr>${head}<td><select id="fb-ws-${id}" onchange="facebookWorkspaceChosen('${id}')">${facebookWorkspaceOptions(targets, a && a.workspace_id)}</select></td>
+        <td><select id="fb-wh-${id}">${facebookWebhookOptions(ws, a && a.webhook_id)}</select>${a && !a.webhook_id ? ' <span class="prov-hint">Its lead webhook was deleted: choose one.</span>' : ''}</td><td>${renderFacebookLeads(p)}</td>
+        <td style="white-space:nowrap"><button class="btn btn-primary" onclick="assignFacebookPage('${id}')">${a ? 'Save' : 'Give to workspace'}</button> ${back}</td></tr>`;
+    }
+    // The Pages table's rows: the account's Pages, then the Pages that were given but are no longer the account's.
+    function renderFacebookPages(data, targets) {
+      const pages = data && Array.isArray(data.pages) ? data.pages : [], lost = data && Array.isArray(data.lost) ? data.lost : [];
+      if (!pages.length && !lost.length) return `<tr><td colspan="7" class="loading">No Pages. The Facebook account that is connected manages none, or gave no access to them at sign-in.</td></tr>`;
+      return pages.map(p => renderFacebookPageRow(p, targets)).join('') + lost.map(p => {
+        const a = p.assigned || {}, id = /^\d+$/.test(String(p.id)) ? String(p.id) : '';
+        return `<tr><td>${esc(p.name || '(no name)')}</td><td><code>${esc(p.id)}</code></td><td><span class="prov-badge off">No longer one of your Pages</span></td>
+          <td>${esc(a.workspace_name || '—')}</td><td>${esc(a.webhook_name || '—')}</td><td>${renderFacebookLeads({ leads: p.leads })}</td><td>${id ? `<button class="btn" onclick="unassignFacebookPage('${id}')">Take back</button>` : ''}</td></tr>`;
+      }).join('');
+    }
+
+    async function loadFacebook() {
+      const status = document.getElementById('fb-status'), body = document.getElementById('fb-pages-body');
+      let data;
+      try { data = await (await fetch(`${API_BASE}/facebook`)).json(); } catch (e) { data = { error: true }; }
+      facebookStatus = data;
+      status.classList.remove('loading');
+      status.innerHTML = renderFacebookStatus(data);
+      document.getElementById('fb-actions').innerHTML = renderFacebookActions(data);
+      if (data && !data.error) {
+        document.getElementById('fb-redirect').textContent = data.redirect_uri || '';
+        document.getElementById('fb-scopes').textContent = (data.scopes || []).join(', ');
+        document.getElementById('fb-version').textContent = data.version || '';
+      }
+      // "Receiving leads" needs the app, not an account: shown as soon as the server is set up, and loaded by itself —
+      // whatever becomes of it, the rest of the tab stands
+      const configured = !!(data && !data.error && data.configured);
+      document.getElementById('fb-receiver-section').style.display = configured ? '' : 'none';
+      const receiver = configured ? loadFacebookReceiver() : null;
+      if (!data || data.error || !data.connection) { body.innerHTML = `<tr><td colspan="7" class="loading">Not connected.</td></tr>`; await receiver; return; }
+      body.innerHTML = `<tr><td colspan="7" class="loading">Loading…</td></tr>`;
+      const ask = async path => { try { return await (await fetch(`${API_BASE}${path}`)).json(); } catch (e) { return { error: 'The Pages could not be loaded.' }; } };
+      const [list, targets] = await Promise.all([ask('/facebook/pages'), ask('/facebook/targets')]);
+      facebookTargets = targets && Array.isArray(targets.workspaces) ? targets.workspaces : [];
+      body.innerHTML = list && list.error ? `<tr><td colspan="7" class="loading">${esc(list.error)}</td></tr>` : renderFacebookPages(list, facebookTargets);
+      await receiver;
+    }
+
+    // "Receiving leads" is read and drawn. Never an error: what cannot be read is said in its box.
+    async function loadFacebookReceiver() {
+      let r;
+      try { r = await (await fetch(`${API_BASE}/facebook/receiver`)).json(); } catch (e) { r = { error: 'The server could not be reached.' }; }
+      const box = document.getElementById('fb-receiver');
+      box.classList.remove('loading');
+      box.innerHTML = renderFacebookReceiver(r);
+      document.getElementById('fb-receiver-actions').innerHTML = renderFacebookReceiverActions(r);
+      if (r && r.callback_url) {
+        document.getElementById('fb-receive-url').textContent = r.callback_url;
+        document.getElementById('fb-verify-token').textContent = r.verify_token || '';
+      }
+    }
+
+    // "Register at Facebook": the Meta app is told this server's address. Facebook asks the address once before it agrees.
+    async function registerFacebookReceiver() {
+      facebookSay('', 'error', 'fb-receiver-error');
+      let data;
+      try { data = await (await fetch(`${API_BASE}/facebook/receiver`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json(); }
+      catch (e) { data = { error: 'The server could not be reached.' }; }
+      if (!data || data.error || !data.success) return facebookSay((data && data.error) || 'That did not work.', 'error', 'fb-receiver-error');
+      await loadFacebookReceiver();
+      facebookSay('Registered. Facebook now tells this server when a lead arrives on a Page that is given to a workspace.', 'success', 'fb-receiver-error');
+    }
+
+    // Another workspace was chosen for a Page: its lead webhooks are what the second list offers.
+    function facebookWorkspaceChosen(pageId) {
+      const ws = facebookTargets.find(w => String(w.id) === document.getElementById(`fb-ws-${pageId}`).value);
+      document.getElementById(`fb-wh-${pageId}`).innerHTML = facebookWebhookOptions(ws, null);
+    }
+    const facebookSay = (text, type = 'error', where = 'fb-error') => { document.getElementById(where).innerHTML = text ? `<div class="message ${type}" style="display:block">${esc(text)}</div>` : ''; };
+
+    async function assignFacebookPage(pageId) {
+      const workspace_id = Number(document.getElementById(`fb-ws-${pageId}`).value), webhook_id = Number(document.getElementById(`fb-wh-${pageId}`).value);
+      if (!workspace_id || !webhook_id) return facebookSay('Choose a workspace and one of its lead webhooks.');
+      let data;
+      try { data = await (await fetch(`${API_BASE}/facebook/pages/${encodeURIComponent(pageId)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workspace_id, webhook_id }) })).json(); }
+      catch (e) { data = { error: 'The server could not be reached.' }; }
+      if (!data || data.error || !data.success) return facebookSay((data && data.error) || 'That did not work.');
+      await loadFacebook();
+      facebookSay('The Page is given to the workspace.', 'success');
+    }
+
+    async function unassignFacebookPage(pageId) {
+      if (!confirm('Take this Page back? Its leads will no longer arrive in the workspace.')) return;
+      let data;
+      try { data = await (await fetch(`${API_BASE}/facebook/pages/${encodeURIComponent(pageId)}`, { method: 'DELETE' })).json(); }
+      catch (e) { data = { error: 'The server could not be reached.' }; }
+      if (!data || data.error) return facebookSay((data && data.error) || 'That did not work.');
+      await loadFacebook();
+      // taken back here whatever Facebook says; when it did not confirm, the app may still be installed on the Page
+      facebookSay(data.unsubscribed === false ? 'The Page is taken back. Facebook did not confirm that the app was taken off the Page: leads it still announces are not taken in.' : '', 'success');
+    }
+
+    async function connectFacebook() {
+      const box = document.getElementById('fb-error');
+      box.innerHTML = '';
+      let data;
+      try { data = await (await fetch(`${API_BASE}/facebook/connect`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json(); } catch (e) { data = { error: 'The server could not be reached.' }; }
+      if (!data || data.error || !data.url) { box.innerHTML = `<div class="message error" style="display:block">${esc((data && data.error) || 'That did not work.')}</div>`; return; }
+      location.href = data.url;   // Facebook's own sign-in page; it sends the browser back to this console
+    }
+
+    async function disconnectFacebook() {
+      if (!confirm('Disconnect Facebook? The console forgets the sign-in, and every Page is taken back from its workspace.')) return;
+      try { await fetch(`${API_BASE}/facebook`, { method: 'DELETE' }); } catch (e) { /* the reload below says what is true */ }
+      loadFacebook();
+    }
+
+    // Facebook sent the browser back: open the tab, say what happened, and take the word out of the address.
+    function facebookReturn() {
+      const outcome = new URLSearchParams(location.search).get('facebook');
+      if (!outcome) return false;
+      history.replaceState(null, '', location.pathname);
+      showAdminTab('facebook');
+      const [type, text] = Object.prototype.hasOwnProperty.call(FB_OUTCOMES, outcome) ? FB_OUTCOMES[outcome] : FB_OUTCOMES.failed;
+      document.getElementById('fb-error').innerHTML = `<div class="message ${type}" style="display:block">${esc(text)}</div>`;
+      return true;
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+       ASSISTANT (ASSISTANT_CHANGES; routes/admin-assistant.js)
+       A conversation with Claude, which can look at a workspace's setup and propose a workflow. A proposal is a
+       card; the workflow is written into the workspace only by "Create" here — switched off — and "Undo" takes it
+       away again while it is untouched. The assistant's words are shown as text, never as HTML, and everything
+       the server hands back goes through esc(); only a number ever goes into a handler.
+         GET  /assistant                       { configured, model, max_text, chats }
+         POST /assistant/ask                   { chat_id | null, text } → { chat_id, reply, looked_at, proposals }
+         GET  /assistant/chats/:id             { chat: { id, title, entries } }
+         GET  /assistant/proposals             { proposals }
+         POST /assistant/proposals/:id/create  { proposal }   ·   …/undo  { proposal }
+       ══════════════════════════════════════════════════════════════════════ */
+    let assistantInfo = null;      // what GET /assistant said, or null while it could not be read
+    let assistantChat = null;      // the id of the conversation that is open, or null for a new one
+    let assistantEntries = [];     // the open conversation: [{ role: 'you' | 'assistant', text, looked_at, proposals }]
+    let assistantBusy = false;     // an order is with the assistant: nothing else is sent meanwhile
+    let assistantMade = [];        // every proposal, newest first
+    let assistantMadeError = '';   // why that list could not be read
+    let assistantSaid = {};        // proposal id → { text, problems }: what the server refused, said on its card
+    let assistantActing = [];      // proposal ids a "Create" or "Undo" is running for
+
+    const ASSISTANT_EXAMPLES = [
+      'Which workspaces are there, and how is the workspace Musterfirma set up?',
+      'In the workspace Musterfirma: when a lead comes in through the lead webhook "Website", send a welcome email at once, wait 2 days, and if the deal is still in the first stage, make a task to call.',
+    ];
+    const assistantMax = () => (assistantInfo && Number.isInteger(assistantInfo.max_text) && assistantInfo.max_text > 0 ? assistantInfo.max_text : 4000);
+    // An id as a number that can go into a handler or an address — or null.
+    const assistantId = v => (/^[1-9]\d{0,14}$/.test(String(v)) ? Number(v) : null);
+
+    // One request to the assistant's routes: what the server said, or { error } when it said nothing readable.
+    async function assistantFetch(method, path, body) {
+      let res;
+      try { res = await fetch(`${API_BASE}${path}`, method === 'GET' ? undefined : { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }); }
+      catch (e) { return { error: 'The server could not be reached.' }; }
+      try { const data = await res.json(); if (data && typeof data === 'object') return data; } catch (e) { /* no JSON: said below */ }
+      return { error: res.status === 429 ? 'Too many orders in a short time. Try again in a few minutes.' : 'The server did not answer as expected.' };
+    }
+
+    // So many minutes in the largest unit that holds them whole: "2 days", "90 minutes", "1 hour". '' for none.
+    function assistantDuration(minutes) {
+      const n = Number(minutes);
+      if (!Number.isFinite(n) || n <= 0) return '';
+      const [count, one, many] = n % 1440 === 0 ? [n / 1440, 'day', 'days'] : n % 60 === 0 ? [n / 60, 'hour', 'hours'] : [n, 'minute', 'minutes'];
+      return `${count} ${count === 1 ? one : many}`;
+    }
+    // When a box happens after the box before it. A Wait box IS its time (and, where set, a time of day).
+    function assistantWait(box) {
+      const time = assistantDuration(box && box.wait_minutes);
+      if (box && box.kind === 'wait') {
+        const until = box.settings && typeof box.settings.until === 'string' ? `until ${box.settings.until}` : '';
+        return [time, until].filter(Boolean).join(', ');
+      }
+      return time ? `after ${time}` : 'at once';
+    }
+    // What the box with this key is called on the card: its title, else its label. null for a line that leads nowhere.
+    function assistantBoxName(p, key) {
+      if (typeof key !== 'string' || !key) return null;
+      const box = (p && Array.isArray(p.steps) ? p.steps : []).find(s => s && s.key === key);
+      return box ? String(box.title || box.label || box.key) : null;
+    }
+    // Where a box's lines lead, each as one line of plain text.
+    function assistantLines(p, box) {
+      const to = key => assistantBoxName(p, key) ?? 'ends here';
+      if (box.kind === 'router') return [...(Array.isArray(box.routes) ? box.routes : []).map((r, i) => `${(r && r.name) || `Route ${i + 1}`} → ${to(r && r.next)}`), `otherwise → ${to(box.else)}`];
+      if (box.kind === 'branch') return [`yes → ${to(box.next)}`, `no → ${to(box.else)}`];
+      const next = assistantBoxName(p, box.next);
+      return [next === null ? 'ends here' : `then: ${next}`];
+    }
+
+    function renderAssistantStatus(info, error) {
+      if (!info) return `<span class="prov-badge off">Could not be loaded</span>${error ? ` <span class="prov-hint">${esc(error)}</span>` : ''}`;
+      if (!info.configured) return '<span class="prov-badge off">Not set up</span> <span class="prov-hint">ANTHROPIC_API_KEY is not in the server\'s .env yet. Add it and restart the server.</span>';
+      return `<span class="prov-badge yes">Ready</span> <span class="prov-hint">Model <code>${esc(info.model || '')}</code>. An order goes to Anthropic together with what the assistant looks up for it: how workspaces are set up, never their contacts or deals.</span>`;
+    }
+    // What the server refused for this proposal, on its card.
+    function renderAssistantSaid(p) {
+      const said = assistantSaid[assistantId(p && p.id)];
+      if (!said) return '';
+      const problems = Array.isArray(said.problems) ? said.problems.filter(x => typeof x === 'string' && x) : [];
+      return `<div class="message error" style="display:block; margin-top:10px">${esc(said.text)}${problems.length ? `<ul class="as-problems">${problems.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}</div>`;
+    }
+    // A proposal's buttons, by what became of it: proposed → "Create", created → "Undo", undone → "Create again".
+    function renderAssistantActions(p) {
+      const id = assistantId(p && p.id), locked = id && assistantActing.includes(id) ? ' disabled' : '';
+      const where = esc(p.workspace_name || 'the workspace');
+      if (p.status === 'created') {
+        if (!p.workspace_id) return '<span class="prov-badge yes">Created</span> <span class="prov-hint">The workspace no longer exists.</span>';
+        return `<span class="prov-badge yes">Created, switched off</span> <span class="prov-hint">Review it under Workflows in ${where} before it is switched on.</span>${id ? ` <button class="btn"${locked} onclick="undoAssistantProposal(${id})">Undo</button>` : ''}`;
+      }
+      const undone = p.status === 'undone' ? '<span class="prov-badge no">Undone</span> ' : '';
+      if (!p.workspace_id) return `${undone}<span class="prov-hint">The workspace no longer exists.</span>`;
+      if (!id) return undone;
+      return undone ? `${undone}<button class="btn"${locked} onclick="createAssistantProposal(${id})">Create again</button>`
+        : `<button class="btn btn-primary"${locked} onclick="createAssistantProposal(${id})">Create in ${where} (switched off)</button>`;
+    }
+    // One box of a proposal: what it is, when it happens, why (the assistant's own sentence), and where it leads.
+    function renderAssistantStep(p, box) {
+      const when = box.kind === 'start' ? '' : assistantWait(box);
+      return `<li><span class="as-kind">${esc(box.label || box.kind || 'Step')}</span>${box.title ? ` <strong>${esc(box.title)}</strong>` : ''}${when ? ` <span class="prov-hint">${esc(when)}</span>` : ''}`
+        + (box.explain ? `<div class="as-text">${esc(box.explain)}</div>` : '')
+        + (box.body ? `<details class="prov-hint"><summary style="cursor:pointer">Its text</summary><div class="as-text">${esc(box.body)}</div></details>` : '')
+        + `<div class="prov-hint">${assistantLines(p, box).map(esc).join('<br>')}</div></li>`;
+    }
+    // A proposal as a card: its name and workspace, what it does, the start and every box, what is still to settle,
+    // the settings exactly as they will be saved, and its buttons.
+    function renderAssistantCard(p) {
+      if (!p || typeof p !== 'object') return '';
+      const steps = Array.isArray(p.steps) ? p.steps.filter(s => s && typeof s === 'object') : [];
+      const start = p.start && typeof p.start === 'object' ? { ...p.start, kind: 'start', label: p.start.label || 'Start' } : null;
+      const notes = Array.isArray(p.notes) ? p.notes.filter(n => typeof n === 'string' && n.trim()) : [];
+      const exact = JSON.stringify({ start: start ? { settings: start.settings ?? null, next: start.next ?? null } : null,
+        steps: steps.map(s => ({ key: s.key, kind: s.kind, title: s.title, body: s.body, wait_minutes: s.wait_minutes, settings: s.settings, next: s.next, else: s.else, routes: s.routes })) }, null, 2);
+      return `<div class="as-card"><div class="as-card-head"><strong>${esc(p.name || '(no name)')}</strong> <span class="prov-hint">a workflow for ${esc(p.workspace_name || 'a workspace that no longer exists')}</span></div>`
+        + (p.explain ? `<div class="as-text">${esc(p.explain)}</div>` : '')
+        + `<ol class="as-steps">${start ? renderAssistantStep(p, start) : ''}${steps.map(s => renderAssistantStep(p, s)).join('')}</ol>`
+        + (notes.length ? `<div class="as-notes"><strong>To settle before it is switched on</strong><ul>${notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></div>` : '')
+        + `<details class="prov-hint"><summary style="cursor:pointer">Exact settings</summary><pre class="as-exact">${esc(exact)}</pre></details>`
+        + `<div class="as-card-actions">${renderAssistantActions(p)}</div>${renderAssistantSaid(p)}</div>`;
+    }
+    // One turn of the conversation. The assistant's turn: what it looked at, what it said (as text), what it proposed.
+    function renderAssistantEntry(e) {
+      if (!e || typeof e !== 'object') return '';
+      const you = e.role === 'you';
+      const looked = !you && Array.isArray(e.looked_at) ? e.looked_at.filter(l => typeof l === 'string' && l).map(l => `<div class="prov-hint as-looked">${esc(l)}</div>`).join('') : '';
+      const cards = !you && Array.isArray(e.proposals) ? e.proposals.map(renderAssistantCard).join('') : '';
+      return `<div class="as-entry ${you ? 'as-you' : 'as-assistant'}"><div class="as-who">${you ? 'You' : 'Assistant'}</div>${looked}${e.text ? `<div class="as-text">${esc(e.text)}</div>` : ''}${cards}</div>`;
+    }
+    // The conversation: its turns, and "Working…" while an order is with the assistant. Empty: what an order can be.
+    function renderAssistantEntries(entries, busy) {
+      const list = Array.isArray(entries) ? entries : [];
+      if (!list.length && !busy) return `<div class="prov-hint">No conversation yet. An order can be as plain as:</div><ul class="prov-hint as-examples">${ASSISTANT_EXAMPLES.map(x => `<li>${esc(x)}</li>`).join('')}</ul>`;
+      return list.map(renderAssistantEntry).join('') + (busy ? '<div class="as-entry as-assistant"><div class="as-who">Assistant</div><span class="prov-hint">Working… This can take a minute.</span></div>' : '');
+    }
+    // The last conversations, to open again; the one that is open is marked.
+    function renderAssistantChats(chats, open, busy) {
+      const list = (Array.isArray(chats) ? chats : []).filter(c => c && assistantId(c.id));
+      if (!list.length) return '';
+      return '<span class="prov-hint" style="margin:0">Earlier conversations:</span>' + list.map(c => `<button class="btn${assistantId(c.id) === open ? ' btn-primary' : ''}"${busy ? ' disabled' : ''} onclick="openAssistantChat(${assistantId(c.id)})" title="${esc(fmtVisitTime(c.updated_at))}">${esc(String(c.title || 'Untitled').slice(0, 60))}</button>`).join('');
+    }
+    // "What the assistant made": every proposal with what became of it, and the same buttons as on its card.
+    function renderAssistantMade(list, error) {
+      if (error) return `<div class="message error" style="display:block">${esc(error)}</div>`;
+      const rows = (Array.isArray(list) ? list : []).filter(p => p && typeof p === 'object');
+      if (!rows.length) return '<div class="prov-hint">Nothing yet. A workflow the assistant proposes is listed here, with what became of it.</div>';
+      const asked = p => { const text = String(p.asked || ''); return `<td class="as-asked" title="${esc(text)}">${esc(text.length > 160 ? text.slice(0, 160) + '…' : text)}</td>`; };
+      return `<div style="overflow-x:auto"><table class="prov-table"><thead><tr><th>Workflow</th><th>Workspace</th><th>Order</th><th>Proposed</th><th></th></tr></thead><tbody>`
+        + rows.map(p => `<tr><td><strong>${esc(p.name || '(no name)')}</strong></td><td>${esc(p.workspace_name || '—')}</td>${asked(p)}<td>${esc(fmtVisitTime(p.created_at))}</td><td><div class="as-card-actions" style="margin:0">${renderAssistantActions(p)}</div>${renderAssistantSaid(p)}</td></tr>`).join('')
+        + '</tbody></table></div>';
+    }
+
+    const assistantSay = text => { document.getElementById('as-error').innerHTML = text ? `<div class="message error" style="display:block; margin-bottom:12px">${esc(text)}</div>` : ''; };
+    // Everything of the tab that changes is drawn from what is known now.
+    function drawAssistant() {
+      const ready = !!(assistantInfo && assistantInfo.configured), entries = document.getElementById('as-entries');
+      entries.innerHTML = renderAssistantEntries(assistantEntries, assistantBusy);
+      entries.scrollTop = entries.scrollHeight;   // the newest turn is the one in view
+      document.getElementById('as-chats').innerHTML = renderAssistantChats(assistantInfo && assistantInfo.chats, assistantChat, assistantBusy);
+      document.getElementById('as-made').innerHTML = renderAssistantMade(assistantMade, assistantMadeError);
+      for (const id of ['as-text', 'as-send', 'as-new']) document.getElementById(id).disabled = assistantBusy || !ready;
+    }
+    // A proposal as the server has it now takes the place of the one that is shown — on its card and in the list.
+    function assistantPut(p) {
+      if (!p || typeof p !== 'object' || !assistantId(p.id)) return;
+      for (const e of assistantEntries) if (e && Array.isArray(e.proposals)) e.proposals = e.proposals.map(x => (x && x.id === p.id ? p : x));
+      const at = assistantMade.findIndex(x => x && x.id === p.id);
+      if (at < 0) assistantMade.unshift(p); else assistantMade[at] = p;
+    }
+
+    // The tab is opened: is the assistant set up, the last conversations, and what it made. A conversation that is
+    // open stays as it is.
+    async function loadAssistant() {
+      const status = document.getElementById('as-status');
+      const info = await assistantFetch('GET', '/assistant');
+      assistantInfo = info && !info.error && typeof info.configured === 'boolean' ? info : null;
+      status.classList.remove('loading');
+      status.innerHTML = renderAssistantStatus(assistantInfo, info && info.error);
+      document.getElementById('as-chat-section').style.display = assistantInfo && assistantInfo.configured ? '' : 'none';
+      document.getElementById('as-made-section').style.display = assistantInfo ? '' : 'none';
+      if (!assistantInfo) return;
+      document.getElementById('as-text').maxLength = assistantMax();
+      drawAssistant();
+      await loadAssistantMade();
+    }
+    // The list of proposals is read again; the cards of the open conversation follow it.
+    async function loadAssistantMade() {
+      const data = await assistantFetch('GET', '/assistant/proposals');
+      const read = !!data && !data.error && Array.isArray(data.proposals);
+      assistantMadeError = read ? '' : (data && data.error) || 'The list could not be loaded.';
+      if (read) { assistantMade = []; for (const p of [...data.proposals].reverse()) assistantPut(p); }
+      document.getElementById('as-made').classList.remove('loading');
+      drawAssistant();
+    }
+    // The last conversations are read again (a new one has its title now). What cannot be read stays as it was.
+    async function refreshAssistantChats() {
+      const info = await assistantFetch('GET', '/assistant');
+      if (assistantInfo && info && !info.error && Array.isArray(info.chats)) assistantInfo.chats = info.chats;
+    }
+    function newAssistantChat() {
+      if (assistantBusy) return;
+      assistantChat = null; assistantEntries = [];
+      assistantSay('');
+      drawAssistant();
+    }
+    async function openAssistantChat(id) {
+      const n = assistantId(id);
+      if (assistantBusy || !n) return;
+      const data = await assistantFetch('GET', `/assistant/chats/${n}`);
+      if (!data || data.error || !data.chat || !Array.isArray(data.chat.entries)) return assistantSay((data && data.error) || 'That did not work.');
+      assistantChat = assistantId(data.chat.id) || n; assistantEntries = data.chat.entries;
+      assistantSay('');
+      for (const p of assistantMade) assistantPut(p);   // a card shows what became of its proposal since
+      drawAssistant();
+    }
+    // Enter sends the order; Shift+Enter is a new line in it.
+    function assistantKey(event) {
+      if (!event || event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      askAssistant();
+    }
+    // An order goes to the assistant. It is shown at once, the input is locked while the assistant works, and the
+    // answer — with what it looked at and what it proposes — is put under it. A refusal is said, and the order is
+    // back in the input unless the server kept it.
+    async function askAssistant() {
+      const input = document.getElementById('as-text'), text = String(input.value || '').trim();
+      if (assistantBusy || !text || !(assistantInfo && assistantInfo.configured)) return;
+      if (text.length > assistantMax()) return assistantSay(`An order has at most ${assistantMax()} characters. This one has ${text.length}.`);
+      assistantSay('');
+      assistantEntries.push({ role: 'you', text });
+      assistantBusy = true; input.value = '';
+      drawAssistant();
+      const data = await assistantFetch('POST', '/assistant/ask', { chat_id: assistantChat, text });
+      assistantBusy = false;
+      if (!data || data.error || typeof data.reply !== 'string') {
+        assistantEntries.pop();
+        input.value = text;
+        assistantChat = assistantId(data && data.chat_id) || assistantChat;   // a refused order whose look-ups were kept names its conversation
+        if (assistantChat) {   // what the server kept of this conversation is what is shown
+          const kept = await assistantFetch('GET', `/assistant/chats/${assistantChat}`);
+          if (kept && !kept.error && kept.chat && Array.isArray(kept.chat.entries)) {
+            assistantEntries = kept.chat.entries;
+            const last = [...assistantEntries].reverse().find(e => e && e.role === 'you');
+            if (last && last.text === text) input.value = '';
+            for (const p of assistantMade) assistantPut(p);
+          }
+        }
+        await refreshAssistantChats();
+        assistantSay((data && data.error) || 'That did not work.');
+        return drawAssistant();
+      }
+      assistantChat = assistantId(data.chat_id) || assistantChat;
+      const proposals = Array.isArray(data.proposals) ? data.proposals.filter(p => p && typeof p === 'object') : [];
+      assistantEntries.push({ role: 'assistant', text: data.reply, looked_at: Array.isArray(data.looked_at) ? data.looked_at : [], proposals });
+      for (const p of proposals) assistantPut(p);
+      await refreshAssistantChats();
+      drawAssistant();
+    }
+    // "Create" / "Create again" and "Undo": the server does it or says why not — on the proposal's own card.
+    async function actOnAssistantProposal(id, what) {
+      const n = assistantId(id);
+      if (!n || assistantActing.includes(n)) return;
+      assistantActing.push(n); delete assistantSaid[n];
+      drawAssistant();
+      const data = await assistantFetch('POST', `/assistant/proposals/${n}/${what}`, {});
+      assistantActing = assistantActing.filter(x => x !== n);
+      if (data && !data.error && data.proposal && typeof data.proposal === 'object') { assistantPut(data.proposal); return drawAssistant(); }
+      assistantSaid[n] = { text: (data && data.error) || 'That did not work.', problems: data && Array.isArray(data.problems) ? data.problems : [] };
+      await loadAssistantMade();   // a refusal can mean it became something else meanwhile: shown as it is now
+    }
+    function createAssistantProposal(id) { return actOnAssistantProposal(id, 'create'); }
+    function undoAssistantProposal(id) {
+      if (!confirm('Take this workflow away again? It is removed from the workspace. That works only while nobody has switched it on or changed it there.')) return;
+      return actOnAssistantProposal(id, 'undo');
+    }
+
     function esc(value) {
       return String(value ?? '').replace(/[&<>"']/g, c => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',

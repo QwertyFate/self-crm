@@ -168,6 +168,14 @@ const breakScoresLimiter = rateLimit({
   standardHeaders: true, legacyHeaders: false,
 });
 
+// The admin console's assistant (/api/admin/assistant/ask): every order is a paid request to Anthropic that can run
+// for a minute, so 20 in ten minutes per IP is plenty for a person and too little for a loop.
+const assistantAskLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, max: 20,
+  message: { error: 'Too many orders for the assistant. Please wait a few minutes.' },
+  standardHeaders: true, legacyHeaders: false,
+});
+
 // Express's json() default body limit is 100kb, too small for a CSV contact import
 // sent as a JSON array of rows; raise it just for that route (body-parser skips
 // re-parsing a request whose body it already read, so the global json() below still
@@ -185,6 +193,11 @@ app.use('/api/notetaker/webhook', express.raw({ type: '*/*', limit: '5mb' }));
 app.use('/api/integrations/fonio/receive', express.raw({ type: '*/*', limit: '1mb' }));
 // Calendly's booking webhooks are signed over the raw body (Calendly-Webhook-Signature), as Cal.com's are.
 app.use('/api/integrations/calendly/receive', express.raw({ type: '*/*', limit: '1mb' }));
+// A workspace export that is checked or imported in the admin console is sent as the file itself (.tar.gz): its
+// bytes, up to 100 MB, for routes/admin-transfer.js.
+app.use(/^\/api\/admin\/workspaces\/\d+\/import(?=\/|$)/, express.raw({ type: '*/*', limit: '100mb' }));   // (?=…): the slash after "import" must stay in the path, or Express does not run this for …/import/check
+// Facebook's "a lead arrived" is signed over the raw body (X-Hub-Signature-256), as Cal.com's bookings are.
+app.use('/api/integrations/facebook/receive', express.raw({ type: '*/*', limit: '1mb' }));
 // A lead webhook takes what any tool sends (LEAD_WEBHOOK_CHANGES Part 5): besides JSON (read by express.json()
 // below, as before) a form post, a multipart form, and JSON sent as text or with no content type at all.
 app.use('/api/integrations/receive', ...require('./utils/lead-mapping').bodyParsers(express));
@@ -232,6 +245,9 @@ app.use('/api/admin',         require('./routes/admin'));
 app.use('/api/admin',         require('./routes/admin-provision'));
 app.use('/api/admin',         require('./routes/admin-engine'));       // Engine Monitor: switches, request log, deliveries (cross-tenant)
 app.use('/api/admin',         require('./routes/admin-transfer'));     // workspace export: the bundle the local CRM imports
+app.use('/api/admin',         require('./routes/admin-facebook'));     // the platform's one Facebook connection, for lead ads
+app.use('/api/admin/assistant/ask', assistantAskLimiter);
+app.use('/api/admin',         require('./routes/admin-assistant'));    // the console's assistant: Claude looks at a workspace's setup and proposes a workflow
 app.use('/api/platform',      require('./routes/platform'));
 app.use('/api/contacts',      require('./routes/contacts'));
 app.use('/api/contacts',      require('./routes/contact-documents'));   // /:contactId/documents… — falls through contacts.js like task-attachments
@@ -260,6 +276,8 @@ app.use('/api/journey',       require('./routes/journey'));   // the Customer Jo
 app.use('/api/break-scores', breakScoresLimiter);
 app.use('/api/break-scores', require('./routes/break-scores'));   // the break's team board (public/js/break-game.js)
 app.use('/api/tasks',         require('./routes/task-attachments'));
+app.use('/api/integrations/facebook/receive', webhookIpLimiter);
+app.use('/api/integrations/facebook', require('./routes/facebook-receive'));   // PUBLIC: Facebook's "a lead arrived" for the Pages given to workspaces (FACEBOOK_CHANGES Part 3)
 app.use('/api/integrations/receive', webhookIpLimiter, webhookKeyLimiter);
 app.use('/api/integrations/calcom/receive', webhookIpLimiter, calcomTokenLimiter);
 app.use('/api/integrations/fonio/receive', webhookIpLimiter, fonioLinkLimiter);

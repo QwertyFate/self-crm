@@ -286,8 +286,11 @@ describe('server.js', () => {
   });
   test('GET /logs stays a lead log; GET /calcom/logs is the Cal.com log', () => {
     const r = require('fs').readFileSync(path.join(ROOT, 'routes', 'integrations.js'), 'utf8');
-    assert.match(r, /WHERE l\.workspace_id=\$1 AND l\.source='lead'\s*AND \(\$2::int IS NULL OR l\.webhook_id=\$2\)\s*ORDER BY l\.created_at DESC LIMIT 50/);
-    assert.match(r, /router\.get\('\/calcom\/logs', requireAuth,[\s\S]*?WHERE l\.workspace_id=\$1 AND l\.source='calcom'\s*ORDER BY l\.created_at DESC LIMIT 30/);
+    // between the source and the ORDER BY sits only the piece for members held to their own (empty for everyone else:
+    // tests/routes/member-visibility-calendar.test.js shows the statement they run is the one below)
+    const MINE = String.raw`\$\{visibility\.linked\(req, params, \{ deal: 'l\.deal_id', contact: 'l\.contact_id', orphans: false \}\)\}`;
+    assert.match(r, new RegExp(String.raw`WHERE l\.workspace_id=\$1 AND l\.source='lead'\s*AND \(\$2::int IS NULL OR l\.webhook_id=\$2\)${MINE}\s*ORDER BY l\.created_at DESC LIMIT 50`));
+    assert.match(r, new RegExp(String.raw`router\.get\('\/calcom\/logs', requireAuth,[\s\S]*?WHERE l\.workspace_id=\$1 AND l\.source='calcom'${MINE}\s*ORDER BY l\.created_at DESC LIMIT 30`));
     assert.match(r, /router\.post\('\/calcom\/receive\/:token', async \(req, res\) => \{/, 'no requireAuth on the receiver');
   });
 });

@@ -41,16 +41,29 @@ function inject(relativeFile, exportsObject) {
 // (e.g. the REAL notifications.js bound to the fake pool, to test notifySystem, or a
 // recording `notifyUser` to see who a route tells).
 function loadRoute(routeFile, { pool, user = { id: 1, workspaceId: 7, role: 'owner' }, notify = () => {}, notifications } = {}) {
+  withConnect(pool);
   inject('db.js', { pool });
   inject('notifications.js', notifications || { notify, notifyUser: async () => false });
   inject('middleware/auth.js', (req, _res, next) => {
     // userTimezone mirrors the real middleware: users.timezone, undefined when the test
     // does not set one (routes then fall back to the default zone, as for legacy rows).
-    req.userId = user.id; req.workspaceId = user.workspaceId; req.userRole = user.role; req.userTimezone = user.timezone; next();
+    // ownOnly mirrors the real middleware too: true only when the test says this member is held to their own.
+    req.userId = user.id; req.workspaceId = user.workspaceId; req.userRole = user.role; req.userTimezone = user.timezone;
+    req.ownOnly = user.ownOnly === true; next();
   });
   const abs = path.join(ROOT, 'routes', routeFile);
   delete require.cache[abs];            // drop any earlier copy so this one binds to *this* fake pool
   return require(abs);
+}
+
+// A fake pool that has no connect() of its own gets one: a client that asks the same fake, and answers a
+// transaction's own statements (BEGIN / COMMIT / ROLLBACK, an advisory lock) by itself. A fake describes WHAT a route
+// asks of the database; a test about HOW a route brackets it gives its pool a connect() of its own, which is kept.
+const BRACKETS = /^\s*(BEGIN|COMMIT|ROLLBACK|SELECT pg_advisory_xact_lock\()/i;
+function withConnect(pool) {
+  if (!pool || typeof pool.query !== 'function' || typeof pool.connect === 'function') return pool;
+  pool.connect = async () => ({ query: (sql, params) => (BRACKETS.test(String(sql)) ? Promise.resolve({ rows: [], rowCount: 0 }) : pool.query(sql, params)), release() {} });
+  return pool;
 }
 
 /**
@@ -89,4 +102,4 @@ async function serve(mounts) {
   };
 }
 
-module.exports = { loadRoute, serve, inject, ROOT };
+module.exports = { loadRoute, serve, inject, withConnect, ROOT };

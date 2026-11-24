@@ -27,6 +27,15 @@
        FIRST stage — the same rule as the inbound webhook. Change one, change
        both.
 
+   WHO SEES A CONTACT. When the workspace holds members to what is assigned to
+   them (utils/visibility.js), the list and every statement that reads or
+   changes a contact by id carry visibility.contacts(): somebody else's contact
+   is a 404. Deleting is narrower (visibility.ownContacts): a member deletes
+   only a contact assigned to them, not one they merely see through a deal. The
+   import leaves a row out when its email belongs to a contact the member cannot
+   see (`skipped` in the answer) instead of rewriting and taking that contact.
+   Owners, admins and workspaces without the switch run the statements unchanged.
+
    ENDPOINTS
      GET    /?contact_type=&contact_id=    list (+ assignee, + last activity)
      POST   /import                        bulk upsert, see above
@@ -43,6 +52,7 @@ const requireAuth = require('../middleware/auth');
 const { notify }  = require('../notifications');
 const engine      = require('../utils/engine');
 const { masterDataChanges } = require('../utils/kunde');
+const visibility  = require('../utils/visibility');    // members held to what is assigned to them
 
 router.use(requireAuth);
 
@@ -70,7 +80,7 @@ router.get('/', async (req, res, next) => {
              (SELECT MAX(a.created_at) FROM activities a WHERE a.contact_id = c.id) AS last_activity_at
       FROM contacts c
       LEFT JOIN users  u ON u.id = c.assigned_to
-      WHERE c.workspace_id = $1 ${filter}
+      WHERE c.workspace_id = $1 ${filter}${visibility.contacts(req, params)}
       ORDER BY c.created_at DESC
     `, params);
     res.json(rows);
@@ -101,6 +111,7 @@ router.post('/import', async (req, res, next) => {
 
       let count = 0;
       let dealsCreated = 0;
+      let skipped = 0;   // rows whose email is a contact this member cannot see
 
       let defaultStageId = stageId;
       if ((createDealsForNew || createDealsForUpdated) && pipelineId && !stageId) {
@@ -122,6 +133,7 @@ router.post('/import', async (req, res, next) => {
             [req.workspaceId, row.email.toLowerCase().trim()]
           );
 
+          if (existing && !(await visibility.seesContact(client, req, existing.id))) { skipped++; continue; }
           if (existing) {
             await client.query(
               'UPDATE contacts SET name=$1, phone=$2, company=$3, assigned_to=$4, custom_data=$5, updated_at=NOW() WHERE id=$6 AND workspace_id=$7',
@@ -165,7 +177,7 @@ router.post('/import', async (req, res, next) => {
       }
 
       await client.query('COMMIT');
-      res.status(201).json({ imported: count, deals_created: dealsCreated });
+      res.status(201).json({ imported: count, deals_created: dealsCreated, skipped });
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
@@ -177,15 +189,18 @@ router.post('/import', async (req, res, next) => {
 
 router.get('/:id', async (req, res, next) => {
   try {
+    const params = [req.params.id, req.workspaceId];
     const { rows: [contact] } = await pool.query(`
       SELECT c.*,
              u.name AS assigned_to_name, u.email AS assigned_to_email
       FROM contacts c
       LEFT JOIN users  u ON u.id = c.assigned_to
-      WHERE c.id = $1 AND c.workspace_id = $2
-    `, [req.params.id, req.workspaceId]);
+      WHERE c.id = $1 AND c.workspace_id = $2${visibility.contacts(req, params)}
+    `, params);
     if (!contact) return res.status(404).json({ error: 'Not found' });
 
+    // On a contact the member sees, a note bound to somebody else's deal stays out (it follows its deal).
+    const notes = [req.params.id, req.workspaceId];
     const { rows: activities } = await pool.query(`
       SELECT a.id, a.workspace_id, a.contact_id, a.type, a.content, a.created_by, a.created_at,
              a.completed, a.source, a.cancelled_at, a.calcom_uid, a.calcom_event_type_id,
@@ -195,9 +210,9 @@ router.get('/:id', async (req, res, next) => {
       FROM activities a
       LEFT JOIN users u ON u.id = a.created_by
       LEFT JOIN deals db ON db.id = a.deal_id
-      WHERE a.contact_id = $1 AND a.workspace_id = $2
+      WHERE a.contact_id = $1 AND a.workspace_id = $2${visibility.linked(req, notes, { deal: 'a.deal_id', contact: 'a.contact_id' })}
       ORDER BY a.created_at DESC
-    `, [req.params.id, req.workspaceId]);
+    `, notes);
 
     res.json({ ...contact, activities });
   } catch (e) { next(e); }
@@ -239,8 +254,9 @@ router.put('/:id', async (req, res, next) => {
     const { name, email, phone, company, assigned_to, custom_data, contact_type } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
     // Pre-read (scoped) so the Engine can be told WHAT changed; also a clean 404 before any write.
+    const read = [req.params.id, req.workspaceId];
     const { rows: [before] } = await pool.query(
-      'SELECT name, email, phone, company, contact_type FROM contacts WHERE id=$1 AND workspace_id=$2', [req.params.id, req.workspaceId]
+      `SELECT name, email, phone, company, contact_type FROM contacts WHERE id=$1 AND workspace_id=$2${visibility.contacts(req, read, 'contacts')}`, read
     );
     if (!before) return res.status(404).json({ error: 'Not found' });
     // The email: a new address is stored like on create (lowercased, trimmed: the lead webhook and the import match on
@@ -261,9 +277,10 @@ router.put('/:id', async (req, res, next) => {
     const changed = masterDataChanges(before, after);
     // akte_version counts master-data changes from every side (briefing §5.4 "detect concurrent
     // changes"): a CRM edit bumps it too, so the Engine's next precondition fails and it re-reads.
+    const write = [name, emailToStore, phone||null, company||null, assigned_to||null, JSON.stringify(custom_data||{}), contact_type||null, req.params.id, req.workspaceId, changed.length ? 1 : 0];
     const result = await pool.query(
-      'UPDATE contacts SET name=$1, email=$2, phone=$3, company=$4, assigned_to=$5, custom_data=$6, contact_type=COALESCE($7,contact_type), akte_version=akte_version+$10::int, updated_at=NOW() WHERE id=$8 AND workspace_id=$9',
-      [name, emailToStore, phone||null, company||null, assigned_to||null, JSON.stringify(custom_data||{}), contact_type||null, req.params.id, req.workspaceId, changed.length ? 1 : 0]
+      `UPDATE contacts SET name=$1, email=$2, phone=$3, company=$4, assigned_to=$5, custom_data=$6, contact_type=COALESCE($7,contact_type), akte_version=akte_version+$10::int, updated_at=NOW() WHERE id=$8 AND workspace_id=$9${visibility.contacts(req, write, 'contacts')}`,
+      write
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     if (before.contact_type !== 'contact' && after.contact_type === 'contact') fireContactCreated(req, req.params.id);   // a supplier became a client: new to the Engine
@@ -274,9 +291,10 @@ router.put('/:id', async (req, res, next) => {
 
 router.delete('/:id', async (req, res, next) => {
   try {
+    const params = [req.params.id, req.workspaceId];
     const result = await pool.query(
-      'DELETE FROM contacts WHERE id=$1 AND workspace_id=$2',
-      [req.params.id, req.workspaceId]
+      `DELETE FROM contacts WHERE id=$1 AND workspace_id=$2${visibility.ownContacts(req, params, 'contacts')}`,
+      params
     );
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
@@ -290,9 +308,10 @@ router.post('/bulk/delete', async (req, res, next) => {
       return res.status(400).json({ error: 'contactIds array required' });
     }
     const placeholders = contactIds.map((_, i) => `$${i + 2}`).join(',');
+    const params = [req.workspaceId, ...contactIds];
     const result = await pool.query(
-      `DELETE FROM contacts WHERE id IN (${placeholders}) AND workspace_id=$1`,
-      [req.workspaceId, ...contactIds]
+      `DELETE FROM contacts WHERE id IN (${placeholders}) AND workspace_id=$1${visibility.ownContacts(req, params, 'contacts')}`,
+      params
     );
     res.json({ deleted: result.rowCount });
   } catch (e) { next(e); }

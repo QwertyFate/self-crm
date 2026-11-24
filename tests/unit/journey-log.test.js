@@ -154,7 +154,10 @@ describe('how it is built', () => {
   test('its two statements carry the workspace, and nothing is put into either', () => {
     const statements = [...code.matchAll(/`([^`]*(?:INSERT INTO|SELECT l\.id)[^`]*)`/g)].map(m => m[1]);
     assert.equal(statements.length, 2);
-    for (const s of statements) { assert.doesNotMatch(s, /\$\{/, s.slice(0, 60)); assert.match(s, /workspace_id = \$1|VALUES \(\$1,/, s.slice(0, 60)); }
+    // ${held}: the one piece a caller's scope() may add to the reading (which entries a person may see); '' without one
+    for (const s of statements) { assert.doesNotMatch(s, /\$\{(?!held\})/, s.slice(0, 60)); assert.match(s, /workspace_id = \$1|VALUES \(\$1,/, s.slice(0, 60)); }
+    assert.equal(code.split('${held}').length - 1, 1);
+    assert.match(code, /const held = scope \? scope\(params\) : '';/);
     assert.match(code, /async function record\(db, e\) \{\s+try \{ return await write\(db, e\); \}\s+catch \(err\) \{ console\.error\('journey: an entry of the record could not be written:', err\?\.message \|\| err\); return null; \}\s+\}/);
   });
 });

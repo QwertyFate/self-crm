@@ -65,6 +65,17 @@
    the server's log. Deleting a workflow keeps its entries (they carry its
    name). Everyone in the workspace reads the record: GET /history.
 
+   WHO SEES WHAT A WORKFLOW DID. The workflows as drawn are for everyone. When
+   the workspace holds members to what is assigned to them
+   (utils/visibility.js), what names a DEAL follows that deal for such a
+   member: in GET /flows/:id/activity the counts, who waits and the step
+   entries are those of deals they see; GET /history shows the entries of
+   deals they see and the changes to the workflows themselves (an entry about
+   a deal that is gone is left out for them); POST /flows/:id/include answers
+   `deal` for a deal they cannot see, as for one that is not this workspace's,
+   and nothing is started. Owners, admins and workspaces without the switch
+   run every statement unchanged.
+
    Every refusal carries a `code` the page turns into a sentence.
 
    ENDPOINTS
@@ -107,6 +118,7 @@ const vars        = require('../utils/journey-vars');       // the variables a s
 const log         = require('../utils/journey-log');        // the whole record of what the workflows do (Part 15)
 const sends       = require('../utils/journey-sends');      // the sending limits, the count and the pause of the address (Part 17)
 const { notifyUser } = require('../notifications');         // owners and admins hear of a pause
+const visibility  = require('../utils/visibility');         // members held to what is assigned to them
 
 router.use(requireAuth);
 
@@ -345,25 +357,33 @@ router.get('/flows/:id/activity', async (req, res, next) => {
     if (!flow) return refuse(res, 'not_found');
     // how many DEALS wait, are through or were stopped: a deal on several routes of a router has a row per route, and
     // the row that stands for it is the one without root_id (Part 26) — the list under it shows every place a deal waits at
-    const { rows: counts } = await pool.query('SELECT status, COUNT(*)::int AS n FROM journey_runs WHERE flow_id = $1 AND workspace_id = $2 AND root_id IS NULL GROUP BY status', [id, req.workspaceId]);
+    // a member held to their own deals: all three are of the deals they see (nothing is added for anyone else)
+    const ofCounts = [id, req.workspaceId], ofWaiting = [id, req.workspaceId], ofLog = [id, req.workspaceId];
+    const { rows: counts } = await pool.query(`SELECT status, COUNT(*)::int AS n FROM journey_runs WHERE flow_id = $1 AND workspace_id = $2 AND root_id IS NULL${visibility.linked(req, ofCounts, { deal: 'journey_runs.deal_id', orphans: false })} GROUP BY status`, ofCounts);
     const { rows: waiting } = await pool.query(
       `SELECT r.deal_id, d.title AS deal_title, r.due_at, n.kind, n.title
          FROM journey_runs r JOIN deals d ON d.id = r.deal_id LEFT JOIN journey_nodes n ON n.id = r.node_id
-        WHERE r.flow_id = $1 AND r.workspace_id = $2 AND r.status IN ('waiting','working') ORDER BY r.due_at, r.id LIMIT 100`, [id, req.workspaceId]
+        WHERE r.flow_id = $1 AND r.workspace_id = $2 AND r.status IN ('waiting','working')${visibility.deals(req, ofWaiting)} ORDER BY r.due_at, r.id LIMIT 100`, ofWaiting
     );
     const { rows: log } = await pool.query(
       `SELECT l.deal_id, d.title AS deal_title, l.kind, l.title, l.status, l.detail, l.created_at
          FROM journey_log l LEFT JOIN deals d ON d.id = l.deal_id
-        WHERE l.flow_id = $1 AND l.workspace_id = $2 AND l.event = 'step' ORDER BY l.id DESC LIMIT 100`, [id, req.workspaceId]
+        WHERE l.flow_id = $1 AND l.workspace_id = $2 AND l.event = 'step'${visibility.linked(req, ofLog, { deal: 'l.deal_id', orphans: false })} ORDER BY l.id DESC LIMIT 100`, ofLog
     );
     res.json({ counts: Object.fromEntries(counts.map(c => [c.status, c.n])), waiting, log });
   } catch (err) { next(err); }
 });
 
-// The record: everything the workflows did and everything that was done to them, newest first. For everyone.
+// The record: everything the workflows did and everything that was done to them, newest first. For everyone — a
+// member held to their own deals reads the entries of the deals they see, and what was done to the workflows.
+const ownRecord = req => params => {
+  if (!visibility.restricted(req)) return '';
+  params.push(req.userId);
+  return ` AND (l.event = 'flow' OR EXISTS (SELECT 1 FROM deals ld WHERE ld.id = l.deal_id AND ${visibility.rules.deal('ld', params.length)}))`;
+};
 router.get('/history', async (req, res, next) => {
   try {
-    const out = await log.history(pool, req.workspaceId, req.query);
+    const out = await log.history(pool, req.workspaceId, req.query, { scope: ownRecord(req) });
     if (out.code) return refuse(res, out.code);
     res.json(out);
   } catch (err) { next(err); }
@@ -375,6 +395,7 @@ router.post('/flows/:id/include', async (req, res, next) => {
     const id = idOf(req.params.id), dealId = typeof req.body?.deal_id === 'number' ? idOf(req.body.deal_id) : null;
     if (!id) return refuse(res, 'not_found');
     if (!dealId) return refuse(res, 'deal');
+    if (!(await visibility.seesDeal(pool, req, dealId))) return refuse(res, 'deal');   // a deal the member cannot see is not theirs to put in
     const out = await journeyRun.include(pool, { workspaceId: req.workspaceId, flowId: id, dealId, actorId: req.userId });   // who put it in: for the record
     if (out.code) return refuse(res, out.code);
     res.json({ success: true });
@@ -600,5 +621,9 @@ router.delete('/nodes/:id', requireManage, async (req, res, next) => {
     res.json({ flow: await readFlow(req.workspaceId, node.flow_id) });
   } catch (err) { next(err); }
 });
+
+// What a box may be, for a workflow that is made in one piece and not box by box (utils/journey-create.js, through
+// routes/admin-assistant.js): the same checks, the same limits and the same sentences as the routes above.
+router.boxes = { ACTIONS, MAX_FLOWS, MAX_NODES, MAX_NAME, START_CONFIG, ERRORS, actionOf, startOf, foreignRefs, nameOf };
 
 module.exports = router;

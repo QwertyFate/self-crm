@@ -771,7 +771,11 @@ async function cancelOne(pool, wid, id, userId) {
   return row || null;
 }
 
-async function listCalls(pool, wid, { limit = 50 } = {}) {
+// scope(params, alias): what holds a member to the calls of their own deals and contacts (utils/visibility.js, handed
+// in by routes/fonio.js) — a piece of SQL after the WHERE, its value pushed onto params. Without it: every call.
+async function listCalls(pool, wid, { limit = 50, scope = null } = {}) {
+  const params = [wid, limit];
+  const held = scope ? scope(params, 'f') : '';
   const { rows } = await pool.query(
     `SELECT f.id, f.trigger, f.status, f.reason, f.raw_number, f.to_number, f.message, f.due_at, f.sent_at, f.attempts,
             f.created_at, f.deal_id, f.contact_id, f.call_outcome, f.follow_up_of, f.follow_up_no, c.name AS contact_name,
@@ -780,9 +784,9 @@ async function listCalls(pool, wid, { limit = 50 } = {}) {
        LEFT JOIN contacts c ON c.id = f.contact_id
        LEFT JOIN deals d ON d.id = f.deal_id
        LEFT JOIN users u ON u.id = f.cancelled_by
-      WHERE f.workspace_id = $1
+      WHERE f.workspace_id = $1${held}
       ORDER BY f.created_at DESC, f.id DESC
-      LIMIT $2`, [wid, limit]
+      LIMIT $2`, params
   );
   return rows;
 }
@@ -946,29 +950,32 @@ async function callDetail(pool, wid, kind, id) {
 
 // The call log (Part 16): every call fonio made for the CRM (fonio_calls, status sent) and every conversation the CRM
 // did not start (fonio_other_calls), newest first, with the contact and deal each is connected to. The transcript is
-// not part of it: it is in the note, or waits in the row until a contact is connected.
-async function listLog(pool, wid, { limit = 100 } = {}) {
+// not part of it: it is in the note, or waits in the row until a contact is connected. scope(params, alias) as in
+// listCalls: each of the three statements gets its own piece and its own values.
+async function listLog(pool, wid, { limit = 100, scope = null } = {}) {
+  const held = alias => { const params = [wid, limit]; return [scope ? scope(params, alias) : '', params]; };
+  const [heldSent, askSent] = held('f'), [heldOther, askOther] = held('o'), [heldWaiting, askWaiting] = held('f');
   const [sent, other, waiting] = await Promise.all([
     pool.query(
       `SELECT f.id, f.sent_at AS at, f.to_number AS number, f.contact_id, c.name AS contact_name, f.deal_id, d.title AS deal_title,
               f.conversation_link AS link, f.result_at, f.note_activity_id
          FROM fonio_calls f LEFT JOIN contacts c ON c.id = f.contact_id LEFT JOIN deals d ON d.id = f.deal_id
-        WHERE f.workspace_id = $1 AND f.status = 'sent'
-        ORDER BY f.sent_at DESC, f.id DESC LIMIT $2`, [wid, limit]
+        WHERE f.workspace_id = $1 AND f.status = 'sent'${heldSent}
+        ORDER BY f.sent_at DESC, f.id DESC LIMIT $2`, askSent
     ),
     pool.query(
       `SELECT o.id, o.created_at AS at, o.direction, o.number, o.caller_name, o.contact_id, c.name AS contact_name, o.deal_id,
               d.title AS deal_title, o.conversation_link AS link, o.duration, o.summary, o.note_activity_id
          FROM fonio_other_calls o LEFT JOIN contacts c ON c.id = o.contact_id LEFT JOIN deals d ON d.id = o.deal_id
-        WHERE o.workspace_id = $1
-        ORDER BY o.created_at DESC, o.id DESC LIMIT $2`, [wid, limit]
+        WHERE o.workspace_id = $1${heldOther}
+        ORDER BY o.created_at DESC, o.id DESC LIMIT $2`, askOther
     ),
     // the calls still to come (Part 24): the soonest first
     pool.query(
       `SELECT f.id, f.due_at AS at, f.to_number AS number, f.contact_id, c.name AS contact_name, u.name AS asked_by_name, f.deal_id, d.title AS deal_title, f.trigger
          FROM fonio_calls f LEFT JOIN contacts c ON c.id = f.contact_id LEFT JOIN deals d ON d.id = f.deal_id LEFT JOIN users u ON u.id = f.asked_by
-        WHERE f.workspace_id = $1 AND f.status IN ('scheduled','sending')
-        ORDER BY f.due_at, f.id LIMIT $2`, [wid, limit]
+        WHERE f.workspace_id = $1 AND f.status IN ('scheduled','sending')${heldWaiting}
+        ORDER BY f.due_at, f.id LIMIT $2`, askWaiting
     ),
   ]);
   const entry = (r, by_crm) => ({
